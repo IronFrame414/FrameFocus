@@ -19,4 +19,15 @@ Plan:
 
 ---
 
-## §0 — status: starting
+## §2 item 1 — DONE (commit: remove header Send to Client)
+- `estimate-builder.tsx` draft-manager branch: removed the `est-send` "Send to Client" button. Send
+  path is now solely Review & Send → Send to client (`est-review-send`, renders for draft/review).
+  "Mark as Sent" (`est-mark-sent`) KEPT. `review`-status "Approve & Send" untouched (out of scope).
+  `openSendModal` still used by Approve & Send. type-check PASS.
+
+## §0 — DONE (commit: rename mockups dir)
+- `git mv docs/design/current-state → docs/design/mockups` (47 files).
+- README rewritten: "DESIGN MOCKUPS, NOT shipped screenshots" with the four-way proof + "compare CODE
+  vs handoffs, never these images."
+- Path refs updated: `redesign-structure-audit.md` (§B + 2), `ui-gap-log.md` (2). False matches left
+  alone: `client-portal.ts:189` / `context19.md:36` use the words "current-state" as prose, not the path.
