@@ -48,7 +48,7 @@ export interface IncidentDetail extends IncidentListItem {
 
 export type IncidentPhoto = Pick<
   Database['public']['Tables']['files']['Row'],
-  'id' | 'file_name' | 'file_path' | 'mime_type' | 'created_at'
+  'id' | 'file_name' | 'file_path' | 'mime_type' | 'created_at' | 'markup_data'
 >;
 
 const LIST_SELECT = '*, project:projects(name), reporter:company_members(display_name)';
@@ -103,7 +103,7 @@ export async function getIncidentPhotos(incidentId: string): Promise<IncidentPho
   const supabase = await createClient();
   const { data, error } = await supabase
     .from('files')
-    .select('id, file_name, file_path, mime_type, created_at')
+    .select('id, file_name, file_path, mime_type, created_at, markup_data')
     // .filter — safety_incident_id is not in database.ts until regen.
     .filter('safety_incident_id', 'eq', incidentId)
     .like('mime_type', 'image/%')

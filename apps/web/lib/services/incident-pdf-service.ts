@@ -6,7 +6,7 @@ import type { Database } from '@framefocus/shared/types/database';
 import { IncidentDocument, type IncidentPdfData } from '@/lib/safety/incident-template';
 import { getIncident, getIncidentPhotos } from '@/lib/services/safety';
 import { getCompanyTimeSettings } from '@/lib/services/company';
-import { downloadImageBase64 } from '@/lib/change-orders/co-data';
+import { downloadPhotoBase64 } from '@/lib/change-orders/co-data';
 
 // 6C §7 — incident PDF pipeline. Same shape as the 6B daily-log pipeline:
 // render → upload new artifact (category 'safety') → repoint pdf_file_id →
@@ -48,8 +48,8 @@ export async function regenerateIncidentPdf(
   const embeddable = photos.filter((p) => EMBEDDABLE_MIME_TYPES.has(p.mime_type));
   const embedded: { dataUri: string }[] = [];
   for (const photo of embeddable.slice(0, MAX_EMBEDDED_PHOTOS)) {
-    const base64 = await downloadImageBase64(rls, BUCKET, photo.file_path);
-    if (base64) embedded.push({ dataUri: `data:${photo.mime_type};base64,${base64}` });
+    const embed = await downloadPhotoBase64(rls, BUCKET, photo);
+    if (embed) embedded.push({ dataUri: `data:${embed.mimeType};base64,${embed.base64}` });
   }
 
   const data: IncidentPdfData = {

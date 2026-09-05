@@ -11,7 +11,7 @@ import {
 } from '@/lib/services/daily-logs';
 import { getDeliveriesForProjectDay } from '@/lib/services/deliveries';
 import { getCompanyTimeSettings } from '@/lib/services/company';
-import { downloadImageBase64 } from '@/lib/change-orders/co-data';
+import { downloadPhotoBase64 } from '@/lib/change-orders/co-data';
 
 // 6B — daily-log PDF pipeline, server-only (6B-1 §2.3 + Phase 2 Q5 decision).
 // Regenerate-on-edit, ONE current PDF per log: upload the new artifact, insert
@@ -71,8 +71,8 @@ export async function regenerateDailyLogPdf(
   const embeddable = photos.filter((p) => EMBEDDABLE_MIME_TYPES.has(p.mime_type));
   const embedded: { dataUri: string }[] = [];
   for (const photo of embeddable.slice(0, MAX_EMBEDDED_PHOTOS)) {
-    const base64 = await downloadImageBase64(rls, BUCKET, photo.file_path);
-    if (base64) embedded.push({ dataUri: `data:${photo.mime_type};base64,${base64}` });
+    const embed = await downloadPhotoBase64(rls, BUCKET, photo);
+    if (embed) embedded.push({ dataUri: `data:${embed.mimeType};base64,${embed.base64}` });
   }
 
   const hoursByMember = new Map(presence.map((p) => [p.member_id, p]));

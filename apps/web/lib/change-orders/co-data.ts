@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@framefocus/shared/types/database';
+import { hasMarkup, derivativePathFor } from '@framefocus/shared/utils/markup';
 
 // Signed-artifact spec §6 — assembles everything the CO renderer needs as one
 // serializable object. Mirrors proposal-data.ts: takes the Supabase client as a
@@ -260,4 +261,34 @@ export async function downloadImageBase64(
   if (error || !data) return null;
   const buf = Buffer.from(await data.arrayBuffer());
   return buf.toString('base64');
+}
+
+// ---------------------------------------------------------------------------
+// TECH_DEBT #100 — PDF photo embedding serves the flattened markup derivative.
+//
+// The three photo PDF services (delivery, daily-log, incident) embedded
+// `photo.file_path` directly, so a photo annotated on any surface printed as
+// its UNMARKED original. This is the server-side arm of #100: a different
+// mechanism from the client-side `markup=1` protocol on /api/files/signed-url,
+// because here we download BYTES rather than sign a URL — but the same rule.
+//
+// When the photo is annotated (hasMarkup), download the `.markup.jpg`
+// derivative and declare it as JPEG (the flatten is always a JPEG canvas
+// export). DEGRADE to the original bytes if the derivative is absent — its
+// write can fail independently of `markup_data` (A-23t). Shared here, next to
+// the byte downloader every caller already imports, so none of the three
+// services re-implements the swap (PARITY: share the mechanism).
+// ---------------------------------------------------------------------------
+export async function downloadPhotoBase64(
+  rls: SupabaseClient<Database>,
+  bucket: 'project-files',
+  photo: { file_path: string; mime_type: string; markup_data: unknown }
+): Promise<{ base64: string; mimeType: string } | null> {
+  if (hasMarkup(photo.markup_data)) {
+    const derivative = await downloadImageBase64(rls, bucket, derivativePathFor(photo.file_path));
+    if (derivative) return { base64: derivative, mimeType: 'image/jpeg' };
+    // derivative missing/unreadable → degrade to the original bytes below.
+  }
+  const base64 = await downloadImageBase64(rls, bucket, photo.file_path);
+  return base64 ? { base64, mimeType: photo.mime_type } : null;
 }
