@@ -115,15 +115,19 @@ describe('the decoration supplies every name the caller cannot see', () => {
     }
 
     // Named specifically, not just counted: this is the one that was blank.
+    // The crew member's DISPLAYED name is company_members.display_name (punch.ts
+    // reads that, not profiles.first/last), which the seed reconciles to
+    // "QA Crew A" [S176 rename]. Was 'Casey Crew' — stale; the seed/app is the
+    // source of truth for the displayed name.
     const authored = decorated.find((i) => i.title === AUTHORED)!;
     expect(authored.assignee, 'the crew-assigned item is the regression').not.toBeNull();
-    expect(authored.assignee!.display_name).toBe('Casey Crew');
+    expect(authored.assignee!.display_name).toBe('QA Crew A');
 
     // And the paired one, whose assignee IS the sub — readable either way, so it
     // is the control that shows the decorator did not simply replace everything.
     const assigned = decorated.find((i) => i.title === ASSIGNED)!;
     expect(assigned.assignee).not.toBeNull();
-    expect(assigned.assignee!.display_name).not.toBe('Casey Crew');
+    expect(assigned.assignee!.display_name).not.toBe('QA Crew A');
   });
 
   it('an item with no assignee stays null — absent is not the same as unresolvable', async () => {
