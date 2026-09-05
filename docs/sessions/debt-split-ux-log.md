@@ -156,3 +156,14 @@ storage object; toggle is a cookie; burst is client). So the rebuild-test migrat
 exercised this run — confirmed during build.
 
 ## Phase 3 — build. Order: Item 1 split → #13 close → #89 → #100 → #101 toggle → burst.
+
+## Phase 3 — Item 1 DONE (commit: split)
+- 3 files: `TECH_DEBT.md` (OPEN, 2800 ln, authority), `TECH_DEBT_CLOSED.md` (89 ln), `TECH_DEBT_IDEAS.md` (85 ln).
+- Content conserved: 2800+85+89=2974 = original 2915 + ~59 ln new cross-link/authority headers. No entry lost.
+- #155/#156 → IDEAS only (verified grep). #13 → CLOSED with S140/S158/S159 refs. #81 stays OPEN. #136 in CLOSED.
+- NO number renumbered (a move). Authority stated at top of OPEN: next free = max across all 3 + 1 = #157.
+- Every file points at the other two. `TECH_DEBT.md` path still resolves (=OPEN) → no broken refs.
+- Active pointers updated: CLAUDE.md Reference Documents, STATE.md Open-Tech-Debt note. Historical
+  context/spec refs left unrewritten (resolve via OPEN + cross-links; rewriting history is wrong).
+- NOTE: did NOT hunt for additional IDEAS candidates beyond the two named — reclassifying other open
+  items would be a deferred-decision judgment not in the prompt (a stop). Only #155/#156 moved.
