@@ -23,6 +23,30 @@ If not → STOP, it's a ruling.
 
 ---
 
+## §1 VISUAL PASS [S103] — the eight gaps. `next build` ✓ Compiled.
+
+Tokens matched to the mockup (grep-confirmed): category bar `#eef1f6`, subcategory `#fbfcfe`, row
+divider `#f4f6fa`, danger `#c0362c`; numbers stay `font.mono`. Whole-branch diff still modifies **no**
+`updateEstimateLineRow|Item` CALL — the two that appear in the diff (`total_price_override`, `notes`)
+are byte-identical RELOCATIONS (JSX moved around them), not edits.
+
+| Gap | Done | What |
+| --- | --- | --- |
+| 1 Category tinted bar | ✅ | Full-width `#eef1f6` bar; identity left, actions right-aligned; subtotal pill given white bg for contrast. |
+| 2 Subcategory bar (biggest) | ✅ | New lighter `#fbfcfe` bar — name + own subtotal left, "+ Add items"/"+ Add Line"/🗑 right. |
+| 3 Row rules | ✅ | Bottom rule on every row (`#f4f6fa`) + heavier rule under the column header (`#e4e8ef`). |
+| 4 Red trashcan everywhere | ✅ | Row + section delete now 🗑 (danger), matching category/subcategory; was `✕`. |
+| 5 Unpriced section | ✅ | Whole-card amber tint (1.5px `#f5cf8f` + glow + `#fffdf7`), "Unpriced" badge, greyed `$0.00`, centred empty state. |
+| 6 Notes bottom-right, one-row footer | ✅ | Footer is ONE row: + Add items / + Add Row / Discount left, "Internal notes" right. |
+| 7 TOTAL label stacked | ✅ | Mono "TOTAL" micro-label above the figure, right-aligned. |
+| 8 Remove page-level + Add items | ✅ | Floating top button removed; adding items is category/subcategory/section only. |
+
+**§2 count-line finding [reported, NOT restructured]:** "0 subcategories · 3 sections" is **CORRECT**.
+A category may hold sections directly (`estimate_line_items.subcategory_id = null`) as well as under
+subcategories, so a category with no subcategories and three direct sections is valid and the count is
+accurate. Did not restructure data to make the label read differently.
+**§2 footing:** `Rough Phase $86,947.99 = $28,632.79 + $58,315.20` — foots; no action (recorded).
+
 ## ✅ 9b COMPLETE [S103] — REVIEWER CHECKLIST (Josh is the verification step)
 
 **Open an estimate → Line Items tab, on a DRAFT estimate (edit affordances need `status==='draft'`).**
