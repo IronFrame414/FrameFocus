@@ -207,8 +207,24 @@ silently diverge. Only THREE surface-groups were still serving the raw original:
   `/api/files/signed-url` routes compiled). The client-imports-server build defect did NOT ship —
   `@framefocus/shared/utils/markup` is a pure util (type-only import), already used by client components.
 
-### (b) the 3 PDF services — TODO
-⚠️ Different mechanism from (a)/(c). The client-side `markup=1` protocol does NOT transfer: these are
-server-side, embedding `photo.file_path` via `downloadImageBase64(rls, BUCKET, path)`. The swap is
-server-side — resolve to `derivativePathFor(path)` when `hasMarkup`, degrade to original if the
-derivative download fails.
+### (b) the 3 PDF services DONE (commit: `[PDF] #100: photo PDFs embed the flattened markup derivative`)
+⚠️ Different mechanism from (a)/(c), as predicted — the `markup=1` protocol did NOT transfer. These
+download BYTES server-side, not sign a URL.
+- New shared helper `downloadPhotoBase64(rls, bucket, photo)` in `co-data.ts` (next to
+  `downloadImageBase64`, which all 3 services already import): `hasMarkup(markup_data)` → download
+  `derivativePathFor(path)` and declare `image/jpeg` (the flatten is always JPEG); **degrade to the
+  original bytes** if the derivative download returns null. ONE helper — no re-implementation across
+  the 3 services (PARITY).
+- Widened `DeliveryPhoto` (interface) / `LogPhoto` / `IncidentPhoto` (Pick) + their queries to carry
+  `markup_data`. Additive — `markup_data` is a real column in database.ts (no regen needed).
+- 4 embed call sites swapped: delivery ×2 (line + general), daily-log ×1, incident ×1. Each now sets
+  the dataUri mime from the helper's returned `mimeType` (JPEG for derivative, original otherwise).
+- VERIFIED: type-check PASS (exit 0); `next build` PASS (exit 0, ✓ Compiled successfully). Mandatory
+  test sweep: grep of `test/` + `e2e/` for the changed symbols found NOTHING — no existing test
+  encoded the old raw-original behaviour, so nothing to invert.
+
+### #100 COMPLETE — all three remaining surfaces (a)(b)(c) done. Bookkeeping note:
+The TECH_DEBT #100 entry's blanket "markup invisible everywhere but the editor" was already STALE
+(mobile/portal closed via #129/#139). With a/b/c now done, #100 is fully addressed and can be moved
+to CLOSED at branch reconciliation with refs to these three commits. (Not moving it now — one item
+at a time; the debt-file move is its own bookkeeping step.)
