@@ -220,3 +220,19 @@ mention token `@Josh`→`@Dave` (did NOT touch the assertion). Green in isolatio
   **s178 7/7** (was 7 skipped) → **+32 tests back from skipped to running.**
   ⚠️ Expect the full-suite SKIPPED count to drop 32→~0, because those two files were the only skip
   sources (25+7=32).
+
+## FIX 4 — s175-void-reissue B1 (`.limit(1)` rule, finding surfaced after UNBLOCK RUN 2) — DONE + VERIFIED
+Committed `9a5da5b`, AFTER UNBLOCK RUN 2's last log entry — this entry brings the log current.
+- **Defect:** B1 filtered only `source_estimate_id IS NOT NULL` with an UNORDERED `.limit(1)`. The
+  fixture holds S97 projects whose source estimate is accepted/voided, so the heap-first row
+  intermittently landed on a VOIDED one; the void-record arm fired instead of the converted-origin
+  refusal the test depends on. Category-2 of the CLAUDE.md `.limit(1)` rule (scope, don't just order).
+- **Fix:** query estimates by `status='converted'` (`project_id` not null) — the property the test
+  actually depends on. Convert sets `project_id` + `source_estimate_id` together.
+- **Proof:** deterministic **18/18 ×3** in isolation.
+
+---
+
+# RESUME RUN — full battery re-run after all four+one fixes, then §4 [session resumed]
+Prior session was cut off between the battery re-run and §4. On `main`, tip `9a5da5b`, tree clean,
+origin/main still `38b9c5a` (local 144 ahead). Re-running the FULL battery from cold before §4.
