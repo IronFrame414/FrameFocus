@@ -124,8 +124,19 @@ beforeAll(async () => {
   const otherProjectId = (other as { id: string }).id;
 
   const email = `josh+s133-pm2@worthprop.com`;
+  // SELF-HEAL [S103]: a killed prior run can strand this identity as a profile+user
+  // OR as an ORPHAN auth user (createUser landed, the invited-path profile never
+  // did — a profiles check alone misses it and the next createUser then fails with
+  // "already registered"). Remove whichever exists before creating fresh; a
+  // leftover from an aborted run must not poison the next.
   const { data: existing } = await admin.from('profiles').select('id, user_id').eq('email', email).maybeSingle();
-  if (existing) throw new Error(`${email} already exists — a previous run did not clean up`);
+  if (existing?.user_id) {
+    await admin.auth.admin.deleteUser((existing as { user_id: string }).user_id);
+  } else {
+    const { data: page } = await admin.auth.admin.listUsers({ page: 1, perPage: 1000 });
+    const orphan = page?.users?.find((u) => u.email === email);
+    if (orphan) await admin.auth.admin.deleteUser(orphan.id);
+  }
 
   // ⚠️ SEEDED THROUGH THE REAL INVITATION PATH [S135] — not by hand.
   //

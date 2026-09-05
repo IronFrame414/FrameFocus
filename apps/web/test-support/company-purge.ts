@@ -63,10 +63,21 @@ export const COMPANY_CHILDREN = [
   'proposal_views',
   'lien_release_template_boxes',
   'lien_release_templates',
+  // s178-storage-trash seeds a probe company with files in a project owned by a
+  // contact, and a killed run strands the chain. The FK order mirrors the proven
+  // deletion.ts walk: files (→ file_categories, projects, contacts) FIRST, then
+  // file_categories (→ projects), then project_contacts (→ projects, contacts),
+  // then projects (→ contacts), then contacts (→ companies). contact_addresses
+  // CASCADES from contacts, so it needs no entry. Found the design's way: the
+  // purge error named `contacts_company_id_fkey` [S103]. Fail loudly, extend.
+  'files',
   // 20261039 — seeded 14-per-company by `companies_seed_file_categories`, the
   // same shape as the lien templates above; found exactly the way the design
   // note promises (the constraint name in the purge error).
   'file_categories',
+  'project_contacts',
+  'projects',
+  'contacts',
   // 20261043 — the PO-line assignment table; harness POs would pin companies
   // through it exactly the way file_categories did. Same design: fail loudly,
   // extend the list — this entry lands WITH the migration, not after the red.
