@@ -1,6 +1,22 @@
-# TECH_DEBT.md — FrameFocus
+# TECH_DEBT.md — FrameFocus — OPEN register (owed work)
 
-<!-- ========================================================================= -->
+> **Split into three files [debt-split-and-ux, Josh].** This was one file; it is now three.
+> The move is a MOVE, not a renumber — every number is unchanged and in exactly one file.
+
+**The register is THREE files** — a number lives in exactly one; if it is not here, check the other two:
+- [`TECH_DEBT.md`](TECH_DEBT.md) — **OPEN**: owed work with a known fix.
+- [`TECH_DEBT_CLOSED.md`](TECH_DEBT_CLOSED.md) — **CLOSED**: done, kept for the audit trail.
+- [`TECH_DEBT_IDEAS.md`](TECH_DEBT_IDEAS.md) — **IDEAS**: deferred *decisions* (not deferred work).
+
+> **⚠️ NUMBERING AUTHORITY — read before allocating.** This file (`TECH_DEBT.md`, the OPEN
+> register) is the assignment authority, unchanged from CLAUDE.md's rule that *main's file is the
+> authority*. **Numbers are IMMUTABLE — never reused, reassigned, or compacted — and they span all
+> THREE files.** The next free number is **one above the highest number appearing in ANY of the
+> three files**. The highest currently allocated is **#156** (in `TECH_DEBT_IDEAS.md`), so the next
+> free number is **#157**. Branch-scoped provisional ids (`#N-<tag>`, per CLAUDE.md → 'Tech-debt
+> numbering') convert to a real number **from this authority, when the branch lands** — not before.
+
+---
 
 ## ~~NUMBERING RECONCILIATION `#147`–`#149` [S136]~~ — DISCHARGED AND REMOVED
 
@@ -55,72 +71,8 @@ Complete as of Session 40. All polish items closed. Module 4 build is unblocked.
 
 ## Open Tech Debt
 
-### Ruled genuine debt — the only two [S179]
-
-> **Why these two, and only these two.** `TECH_DEBT.md` is for things Josh has DECIDED to live with,
-> or decisions deliberately deferred — **not a backlog.** A debt file that lists in-flight or
-> schedulable work stops being a debt file. Josh ruled the split at S179: of everything that had
-> accumulated under the branch-scoped provisional ids below, exactly two are genuine debt (each a
-> **deferred decision**, not deferred work). Everything else — owed work with an obvious fix — moved
-> to the register (`docs/specs/outstanding-work-register.md`). The reclassified provisional entries
-> are superseded-in-place further down, with pointers, rather than deleted.
->
-> **Numbering:** real numbers taken per the header's authority — #154 was the highest allocated and
-> #155 was already earmarked "next free" when `feature/register-backlog` filed. #155 and #156 are
-> the conversion of the two items that landed on `main` as `#1-regbacklog` and `#1-email`; per the
-> S136 rule this is the "convert to a real number when the branch lands" step. ⚠️ Neither number is
-> reused. (Provisional ids on *other* unmerged branches remain their own reconciliation at merge.)
-
-- **#155 — CUSTOM COMPOSABLE ROLES. Ruled toward custom ROLES, not per-person grants; parked to
-  evaluate later.** Josh raised **per-person** visibility — an owner ticking, per employee, which
-  items they can see. Ruled **toward custom ROLES instead**, and parked. It is debt because the
-  **decision is deferred**, not the work. Was `#1-regbacklog` (register A14); converted S179.
-
-  **The reasoning, recorded so a future reader can meet it rather than re-derive it:**
-
-  - **Every gate in the platform keys on `get_my_role()`** — the 7H.6 margin rule, S121's
-    authored-by CO floor, the roster visibility floor, `budgetColumnsFor(role)`
-    (`apps/web/lib/services/invoices-shared.ts`). **Per-person overrides turn each of these from a
-    role lookup into a per-user, per-item lookup.**
-  - ⚠️ **RLS cannot restrict columns.** So a per-person permission on a *field* **multiplies the 1:1
-    side tables** (the pattern already used for `project_financials`, `project_budget_amounts`)
-    **rather than replacing them** — the mechanism does not generalise to arbitrary per-person field
-    grants.
-  - ⚠️ **Testing loses its fixed set.** The S121 audit caught a crew member reading 13 change orders
-    *with cost and markup* precisely because "crew" is a **knowable state** you can assert against.
-    Arbitrary per-person grants have no equivalent — there is no fixture that says "this is what
-    person X sees" to write a regression against.
-  - **Support answers stop being *"that is what a foreman sees"*** and become *"check that person's
-    checkboxes."*
-
-  ⚠️ **The underlying need is real and is why this is parked, not rejected:** a **bookkeeper who
-  needs invoices but not the schedule** fits none of the five roles cleanly. Custom roles serve that
-  need without abandoning the role model — which per-person grants would. Evaluate when a real
-  customer hits the bookkeeper case.
-
-- **#156 — THE SAFETY-INCIDENT NOTIFICATION FANS OUT TO EVERY SUPERVISOR ABOVE THE SUBMITTER, AND
-  WHO SHOULD BE TOLD HAS NOT BEEN RULED.** `app/api/safety-incidents/route.ts:141`
-  (`sendIncidentNotifications`) mails one message per recipient returned by
-  `computeIncidentRecipients` (`lib/services/incident-notify.ts:93`) — **every profile in
-  `owner`/`admin`/`project_manager`/`foreman` ranked above the submitter** (floor: an Owner-submitter
-  still notifies Admin, so nothing is silent). That is **three emails per incident in the four-person
-  fixture**, and far more on a real twenty-person company — it scales with the org chart, not with the
-  incident. Was `#1-email`; converted S179. **⚠️ The prompt that filed it referred to it as
-  `#3-email`; the ledger id it actually carried was `#1-email` — reconciled here to #156.**
-
-  **⚠️ RULED [Josh]: deliberately NOT fixed.** Who gets told about a jobsite injury is a **SAFETY
-  decision, not an email one.** Two things this entry must carry, because both are the reason it is
-  debt rather than a task:
-
-  1. ⚠️ **The send gate now HIDES the symptom** (`email-service.ts`, `a0596db`) — once test mail is
-     redirected, the volume stops reaching an inbox but the fan-out is unchanged, so the count looks
-     solved while the design question is still open; in production the gate does nothing to it at all.
-     This is exactly why it must not be forgotten: it was the single largest contributor to the ~430
-     harness sends that damaged sender reputation (`docs/specs/email-loop-diagnosis.md`).
-  2. ⚠️ **It is debt because the DECISION is deferred, not the work.** Narrowing it (direct-supervisor
-     + owner, or a digest) could mean a real injury reaches fewer people — the opposite failure. **Too
-     few people told is a safety problem; too many and everyone ignores them.** That judgement needs
-     Josh's knowledge of how a real crew operates, and it is **wrong in a way tests cannot catch.**
+> **#155 and #156 moved to [`TECH_DEBT_IDEAS.md`](TECH_DEBT_IDEAS.md)** — they are deferred
+> decisions, not owed work. Everything below is owed work with a known fix.
 
 ### Branch-scoped, awaiting real numbers — `fix/contacts-and-insurance` [S103]
 
@@ -2832,73 +2784,6 @@ non-role portal identity; then build the sub-facing surface that issues these in
   **⛔ THE ACTIONABLE PART: `updateProject` will keep showing up in dead-code sweeps, and deleting it is the real risk.** It is unreferenced by every honest static measure, so #153's method flags it and so will the next one. **Deleting it removes the guard along with the function** — and the next developer who needs a general project-field update writes a fresh, ungated `.update(updates)`, which is precisely the latent defect S62 found and S63 closed. **Keep it. It is dead weight on purpose.**
 
   **What would make this a real item:** a caller appearing that passes user-controlled keys into `updates`, or the **#82** DB trigger landing (at which point the service-layer guard becomes belt-and-braces and the question changes shape). **Cross-ref #82** — that entry's deferred DB backstop is the piece still genuinely owed; this one is not. Verified S123.
-
-## Closed Tech Debt
-
-<!-- Moved from Open Tech Debt [S122] — closed in S119/S121, relocated during housekeeping. -->
-
-- **#136 ✅ CLOSED [S121]** — raised S103, filed, never fixed; closed while fixing #117's payload half. `dashboard/expenses/page.tsx` now strips payable rows from **both** props for a role outside `SEES_BILLS`. **Fixing `billRows` alone was not enough and the payload test caught it:** the payables are also in `expenses`, because a payable IS an expense — which is why the client filtered them off the Receipts tab by id. #136's own filed fix ("pass `billRows` only when `seesBills`") would have emptied `payableIds` and made the Receipts tab **start showing** the rows it exists to hide; a test asserts that specific regression. **Two more instances of the same pattern were found by sweeping every `app/dashboard/**/page.tsx` that computes a role gate** — the CO list and the CO detail — both closed in the same commit, and `e2e/desktop-payload.spec.ts` now asserts on the RSC payload rather than the DOM, because a DOM assertion is what let all three ship. Original entry retained below.
-
-- **#136 (original entry)** **Desktop ships retainage rows to a crew member's browser — its protection is render-deep, not payload-deep.** `app/dashboard/expenses/page.tsx:83` passes `billRows={billRows}` to `ExpensesPageClient` **unconditionally**, with no role branch, and the page itself has no role redirect (only an auth check at `:25`). `getBillsAndCommitments()` has no role logic either — it is a predicate query whose `PAYABLE_OR_FILTER` includes `is_retainage.eq.true` (`payables-shared.ts:30`). So every role that reaches `/dashboard/expenses` receives every payable row RLS grants them, **in the RSC payload**, including subcontractor retainage accruals.
-
-  **What stops a crew member SEEING them is entirely render-level**, and it is two independent UI filters: the Bills & Commitments tab is gated to Owner/Admin/PM/Foreman (`expenses-page-client.tsx:77` — the comment reads *"Crew has nothing in 7C — receipts only"*), and the Receipts tab excludes anything in `payableIds` (`:99`). Both are correct and neither is a leak on screen. **The payload is the leak**: view-source, devtools, or any RSC-payload inspection reveals rows the UI declines to draw.
-
-  **Live before this became reachable, but only just.** Pre-**D-47** (migration `20260825000000`, S102) `expenses_select_scoped` gave crew only rows they **authored**, and `expenses_insert_authorized` restricts `is_retainage = true` to Owner/Admin — so crew authored none and RLS returned none, and `billRows` for a crew member was empty of retainage. D-47's widening is what put rows in that payload. **Verified S103 under impersonation: a crew member can now read 3 retainage rows, 0 of them authored by them.**
-
-  **Independent of mobile.** M6M's **D-49** filters `is_retainage` out of M-26 for every role, which fixes the mobile surface and does nothing for this one — the two are separate consumers of the same widened policy. Fix shape, cheapest first: pass `billRows` only when `seesBills` is true (one conditional in `page.tsx`, mirrors the tab gate already in the client), **or** close it properly by narrowing `expenses_select_scoped` to exclude `is_retainage` for crew/subcontractor — which would fix both surfaces and is the "Option C" M6M §4.13.3 records as considered-and-rejected for scope reasons, not correctness ones. **Same class as #117 and #132: a real figure protected by UI discipline rather than by RLS.** Observed Session 103.
-
-- **#143 — ✅ CLOSED [S119].** `scripts/seed-test-identities.mjs` now assigns **PM, foreman and crew** to the m-sections project idempotently, alongside the sub row S114 added. Running it created **exactly one row — the foreman's** (`assignment foreman → m-sections project — CREATED`; PM and crew reported `exists`), which is the diagnosis confirmed rather than assumed. All six identities now reach the project.
-  **The substitutions are reverted.** `e2e/m-writes.spec.ts`'s role-exclusion tests name the role they actually mean again: "a foreman gets the LIST but no create control", "a foreman READS the change order and gets no write controls", and A-58's self-verify runs as the foreman rather than a stand-in PM. The foreman also joined A-56's create-control loop (now five of six — admin is the one still absent, and only because it is not in the mobile suite's identity set).
-  **⚠️ THE GUARD NEEDED A NEW NEGATIVE, and this is the part worth reading.** `s118-fixture-reachability.live.ts` broke on the seed — by design; the test literally named *"#143 IS STILL OPEN"* failed, which is what it was built to do. But once every company-A identity reached every company-A project, the declared table contained no `false` at all, and **a `can_view_project()` that simply returned TRUE for everything would have satisfied it**. So the harness now also asserts the **cross-tenant negative**: no company-A identity may reach `QA B — isolation fixture`. Both directions, same sessions — the identities refused company B are the identities that reach company A, so a harness whose sessions were merely broken fails rather than passing the refusals for the wrong reason.
-  **The "exactly one punch list" item is closed too, by #144 rather than by a new fixture** — cleanup restores the project to one list, so A-67's case is the default starting state and is asserted. No extra project was created, which also avoided perturbing `m-hubs`' `{n} active` count.
-  _Original entry retained below as the reasoning of record._
-
-- **#143 (original)** **A seeded test identity — `josh+qa-foreman@worthprop.com` — cannot see the project the whole mobile suite drives, so every assertion made under it passes VACUOUSLY.** Discovered S117 while writing M6M Part C's write-path suite: five of twenty-one tests failed, and the failures were the finding rather than a build defect. `change_orders_select_visible` is `company_id + can_view_project()`, so the foreman's M-13 is **empty** — `getByTestId('m-co-row')` never resolves. Worse, `getProject()` returns **null** for that identity, so `/m/p/{PROJECT}/punch/new` **404s outright** before any punch code runs. Confirmed by contrast in the same run: `josh+pm@`'s row click succeeded, so the PM **is** assigned; `josh+crew@` is the identity the rest of the mobile suite already drives the project as.
-  **Why this is #127's class and not a one-off test bug.** #127 was *"missing sub/client test identities"* — a fixture gap that made criteria unprovable. This is the same failure one step further on: the identity **exists and signs in**, so nothing looks wrong, but it is not assigned to the project, and **an assertion of the form "role X does NOT see Y" passes for the wrong reason**. #127 at least failed loudly. This one is silent, and it is the more dangerous shape: **a role-exclusion suite is exactly where a vacuous pass is indistinguishable from a real one.** The S114 work that closed #127 seeded a member row, a project assignment and punch fixtures for the sub and client identities — the foreman was not part of that pass and never got the assignment.
-  **What it cost, concretely:** M6M A-56's create-control half and A-58's service-layer refusal are both still unproven partly because the natural identity for them cannot reach the fixture. The Part C suite works around it by asserting under **crew** wherever a role must actually see something, keeping the foreman only for route-guard tests where no project access is needed (M6M §4.11.11b, ruling 4). **That workaround is load-bearing and undocumented in the test file's absence** — hence this entry.
-  **Fix:** seed `josh+qa-foreman@` a `project_assignments` row on the rebuild-test fixture project, idempotently, in the same place S114 seeded the sub and client. Then revert the crew substitutions so the criteria are asserted under the role they name. **Audit the other identities while there** — `josh+qa-admin@` has not been checked and may be in the same state. **Cheap guard worth adding regardless:** a harness assertion that each seeded identity reaches the fixture project, so a missing assignment fails once and loudly instead of silently weakening every suite downstream. Observed Session 117.
-
-- **#144 — ✅ CLOSED [S119].** The suite now cleans up at **both ends**, and the live harnesses no longer depend on its leftovers.
-  **What changed.** `test/s118-m6m-write-criteria.live.ts` used to READ the Playwright suite's rows (A-55 scanned COs titled `E2E %`; A-67b matched an item to its list by name). That coupling was what blocked the obvious fix. It now **creates everything it asserts on** — a change order through `createChangeOrder`/`createCoLineItem`/`createCoLineRow` priced by `recalculateChangeOrderTotalsPrivileged`, and a punch list through `createPunchList`/`createPunchItem` — and removes it in `afterAll`. It runs standalone like every other `*.live.ts`, which was the stated goal. `e2e/m-writes.spec.ts` gained `cleanUpFixtures()` on `beforeAll` **and** `afterAll`, deleting children-first (`change_order_line_rows` before `change_order_line_items` — that FK has no CASCADE; punch items before lists; `files` rows after the items whose `completion_photo_file_id` referenced them, with the storage object removed before the row so no blob is orphaned). Scoped by name prefix AND project, so the fixture COs and the seeded D-57 punch data survive.
-  **PROVEN, not assumed — two runs back to back:** before, the project carried `{cos:15, punchLists:23, punchItems:23, files:17}`. Run 1's cleanup removed 16 COs / 27 lists / 27 items / 21 files. **Run 2's `beforeAll` sweep removed ZERO of everything** — the strongest available evidence that run 1 missed nothing — and the row counts after run 1 and after run 2 were **identical**: `{cos:2, coLines:2, coRows:3, punchLists:1, punchItems:1, files:0}`, exactly the documented fixture baseline. The live harnesses then passed **standalone with the leftovers gone**, which is the assertion that the decoupling is real rather than incidental.
-  **A bonus that closed a separate owed item:** because cleanup restores the project to **exactly one punch list**, A-67's "a project with exactly one list still asks" case is now the *default* starting state, and the test asserts it (1 existing list + the `__new__` sentinel = 2 options, none preselected). No separate seeded project was needed.
-  _Original entry retained below as the reasoning of record._
-
-- **#144 (original)** **`e2e/m-writes.spec.ts` writes PERMANENT fixture data on every run and never cleans up, so the shared project grows without bound.** Each run of the Part C suite adds ~5 change orders (with line items and rows) and ~5 punch lists with items to `eaf0e25b-…`, the project every mobile spec drives. Nothing removes them. **Raised S118 after it caused its first failure:** `m-details.spec.ts`'s D-55 change-order test flaked at the tail of a 220-test run — the page snapshot showed the row link present and correct, so the navigation simply did not finish inside Playwright's 5s default while the dev server rendered an ever-longer M-13. Fixed *proximately* by giving that block explicit 30s navigation timeouts, which is right on its own terms — the claim is "the row opens the detail page", not "the dev server renders it in five seconds" — but it treats the symptom.
-  **Why it will get worse rather than plateau.** The growth is linear in runs, and the assertions most exposed are the ones that compare counts: `m-hubs`' A-11b (the M-3 stat and the Punch tile must agree), A-11c (completing an item moves both figures), and M-13's own row rendering. **A-57, added this session, reads the rendered open count before and after a write** — it is relative, so it survives, but it is slower every run.
-  **⚠️ THE OBVIOUS FIX IS BLOCKED BY A COUPLING THIS SESSION INTRODUCED, and that is worth stating plainly rather than discovering later.** `test/s118-m6m-write-criteria.live.ts` READS the Playwright suite's leftovers — A-55 asserts `net_delta = Σ line totals` over COs titled `E2E %`, and A-67b matches an `E2E Item <stamp>` to its `E2E List <stamp>` by `punch_list_id`. Adding a plain `afterAll` cleanup to the Playwright spec would leave both with nothing to assert and they would throw their "run the Playwright suite first" error. **So the fix is not "delete what you created" — it is to decide which harness owns the data.** Two shapes, and the second is probably right: (a) the Playwright spec prunes rows from PREVIOUS runs at start-up and leaves the current run's behind, keeping the project bounded and the live harnesses fed; or (b) the live harnesses create their own COs and punch items through the service layer and assert the invariants on those, dropping the dependency entirely — which also makes them runnable without Playwright, as every other `*.live.ts` already is. Raised Session 118.
-
-- **#127** No permanent **subcontractor** or **client** identity in rebuild-test — closed Session 113. Both now exist on `nmyphyhmfttxkdoposvf` as real `profiles` rows with the role set: `josh+qa-sub@worthprop.com` (`subcontractor`) and `josh+qa-client@worthprop.com` (`client`), seeded idempotently by `scripts/seed-test-identities.mjs`. The sub also has a **linked `company_members` row** (`6600b2a9-…`) built the way production builds one — `subcontractors` insert → `subcontractors_create_member` trigger → `profile_id` linked as `handle_new_user()`’s invite branch does — plus a `project_assignments` row on the `QA A — isolation fixture` project. The client deliberately has **no member row** (`create_member_for_new_profile()` skips the role, and the seed asserts the absence). **The 32 roster rows the original entry warned about were not used and are not a substitute** — they remain `profile_id IS NULL` and cannot sign in. First use: `s113-punch-sub-visibility.live.ts` proves both arms of M6M D-57 by signing in, which is the reproducibility the entry existed to demand. Details: STATE.md → Test Data. Unblocks #141.
-- **#103** No foreman test identity in rebuild-test — closed Session 97 (commit `1f36996`), verified again Session 100. `josh+qa-foreman@worthprop.com` exists on `nmyphyhmfttxkdoposvf` with `profiles.role = 'foreman'` and a matching non-deleted `company_members` row, under Bishop Contracting. Seeded idempotently by `scripts/seed-test-identities.mjs`, which refuses to run against any project but rebuild-test. GATED.md Gate 2 recorded this at S97; the open entry here was stale drift. The foreman SELECT arm on `expense_payments` that S91 left NOT RUN is now runnable. Superseded gap for the two roles still missing: **#127**.
-- **#104** rebuild-test has only one company — closed Session 97 (commit `1f36996`), verified again Session 100. A second company exists: **Ridgeline Builders (TEST CO 2)** (`f079a1f4-12db-4bc8-ae95-2d647d688260`) with its own owner `josh+qa-b-owner@worthprop.com`. `companies` now returns 2. True cross-company isolation probes are possible and were run in S100's §7c evidence — the cross-tenant arm of `submit_delivery_check_in` was proved by impersonating the Company B owner against a Company A delivery. GATED.md Gate 2 recorded this at S97; the open entry here was stale drift.
-- **#111** instrument_rates date cap uses UTC `CURRENT_DATE` — closed Session 95, RESOLVED-MOOT. The future-dating ruling (money-representation.md P5 as amended 2026-07-31) removed the today-cap entirely: migration `20260731010000_rates_future_dating.sql` (applied to rebuild-test) redefined `instrument_rates_backdating_guard()` without the `effective_from > CURRENT_DATE` check, so the guard no longer references `CURRENT_DATE` at all — there is no today-boundary left for a timezone to trip. The floor check (later rates ≥ latest non-superseded rate) has no timezone component. #112 (unserialized floor) is unaffected and stays open-accepted.
-- **#79** contacts/subcontractors had no committed CREATE TABLE baseline (migration ...009 was a 2-line placeholder) — closed Session 56 (commit `c041afa`). Resolved via Option C: squashed all 37 prior migrations to a single prod-verified baseline (`20260101000000_baseline_schema.sql`, pg_dump of prod public schema), old migrations archived to `supabase/migrations_archive/`. Acceptance: clean `db push` to an empty project + prod/throwaway parity (tables 22, policies 64, functions 29, triggers 32).
-
-> One line per closed item: number, brief description, session closed, commit reference (where available). Full context lives in the commit and the matching `docs/sessions/contextN.md`.
->
-> **Note:** This list starts at Session 34. Items closed before Session 34 (e.g., #11, #22, #23, #26, #41, #42, #44, #45, #46, #48, #56) lived under the old "delete on close" convention and are not reconstructed here. They can be looked up via `git log --all --grep="#NN"` or by reading the relevant context file.
-
-- **#12** `packages/shared/types/index.ts` barrel anti-pattern — closed Session 35. Inline interfaces (`Profile`, `Company`, `PlatformAdmin`, `BaseEntity`, inline `SubscriptionStatus`, inline `CompanyUserRole`) had zero consumers except `utils/index.ts`, which was repointed to `CompanyRole` from `roles.ts`. Barrel reduced to `export * from './roles'; export * from './markup';`. Type-check clean.
-- **#35** `.env.local` doesn't persist across Codespace rebuilds — closed Session 34 (audit). Resolved via GitHub Codespaces secrets, which auto-inject 11 env vars on every new session. Confirmed working across Sessions 26, 28, 30, 31, 32. Documented in CLAUDE.md and STATE.md Environment Variables sections. No code change required.
-- **#59** Document the append-only audit log exception in CLAUDE.md — closed Session 31 (commit `bd6657a`). Convention added to CLAUDE.md Database Conventions section, immediately above the Trash-bin pattern block. Lists `ai_tag_logs` and `trial_emails` as current examples.
-- **#63** CLAUDE.md doc drift — closed Session 34. Stale sections ("Migrations Run", "Current Session Context") were already removed in earlier cleanup; remaining drift was the header date, Module 3 status line, table row, and OPENAI_API_KEY comment, all corrected this session. STATE.md is the live source of truth for current work.
-- **#65** Owner uniqueness not enforced at DB level — closed Session 35. Migration 024 added partial unique index `profiles_one_owner_per_company` on `profiles(company_id) WHERE role='owner' AND is_deleted=false`, and dropped the unmaintained `companies.owner_id` column (verified zero application reads/writes; signup trigger no longer references it). `profiles.role='owner'` is now the unambiguous source of truth.
-- **#43** `profiles_update_owner` Owner-only RLS policy — closed Session 36. Migration 025 dropped `profiles_update_own` (no self-updates), kept `profiles_update_owner` with WITH CHECK preventing Owner from demoting self, added `profiles_update_admin` allowing Admin to edit non-Owner/non-Admin/non-self profiles with role-promotion blocked. RLS-only — UI for team edits still depends on #14.
-- **#14** Team member edit UI (`/dashboard/team/[id]`) — closed Session 39 (commit `1ec46b5`). Page renders server-side with auth + self-lock + admin-viewing-privileged gates; client form handles all five editable fields (first/last name, phone, role, notes) with caller-scoped role dropdown. Smoke tested against Bishop Contracting: Owner→Crew, Admin→Crew, Owner self-lock, Admin self-lock, Admin→Owner block — all pass.
-- **#15** Team member delete UI — closed Session 39 (commit `1ec46b5`). Two-step inline confirmation (click Delete → "Confirm delete"/Cancel). Soft delete via `is_deleted=true` + auth ban. Verified: deleted user cannot log in; team list count drops.
-- **#16** Team member password reset UI — closed Session 39 (commit `1ec46b5`). "Send password reset email" button on edit page triggers `auth.resetPasswordForEmail`. Server action ran clean; email delivery blocked by Supabase rate limit during smoke test — infrastructure, not code. Separately discovered pre-existing bug in the sign-in page's Forgot Password link handler (see #70).
-- **#17** Team member notes field — closed Session 39 (commit `1ec46b5`). Textarea in edit form, writes to `profiles.notes` column added in Migration 026.
-- **#66** Ownership transfer — closed Session 40 (commit pending). Migration 027 + transfer-form on Owner-self team detail page. Spawned #71–#75.---
-- **#8** team-page-client.tsx local ROLE_LABELS — closed Session 76 (commit c5ac222). Now imports from @framefocus/shared; shared constant is a superset, all overlapping values identical, behavior unchanged.
-- **#10** invite-form.tsx Invitation import missing import type — closed Session 76 as stale. No Invitation import exists in invite-form.tsx; the only one (in team-page-client.tsx) already uses an inline type qualifier. Condition described never existed in current code.
-- **#50** Delete markup-test/page.tsx — closed Session 76 (commit e8ca00d). Module 3G complete; no references anywhere in codebase.
-- **#85** CO PDF bold line-item row — closed Session 79 (UI verification, no code change — bold row confirmed intentional, it is the line item vs. its detail breakdown, not a bug).
-- **#96** `files` company-wide RLS leak (select/insert/update policies project-scoped + category-gated; `client_visible` and gated-category recategorization Owner/Admin-only via trigger) — closed Session 90, commit `9fbcc1c` (migration `20260728000000_security_rls_96_99.sql`). **Applied to BOTH rebuild-test and production, Session 90.** The `storage.objects` arm is defense-in-depth (storage cannot see `files.category`); the table policy is the primary gate. Verified by impersonated RLS probe (`SET LOCAL role authenticated` + `request.jwt.claims`), negative and positive controls both pass. Record correction: the S89 probes cited in this item's original entry ran via Supabase MCP as `current_user=postgres` with RLS bypassed and were NOT valid behavioral evidence — the S90 impersonated probes are the evidentiary run.
-- **#97** `daily_logs` INSERT author spoofing — WITH CHECK now binds `author_member_id = get_my_member_id()` with Owner/Admin override — closed Session 90, commit `9fbcc1c` (same migration; applied to BOTH rebuild-test and production, Session 90).
-- **#98** `daily_logs` soft-delete reversal — `is_deleted`/`deleted_at` transitions blocked in both directions for non-Owner/Admin via BEFORE UPDATE column-scope trigger — closed Session 90, commit `9fbcc1c` (same migration; applied to BOTH rebuild-test and production, Session 90).
-- **#99** `daily_log_crew`/`daily_log_sub_entries` cross-company `member_id` — same-company EXISTS added to INSERT WITH CHECK and new explicit UPDATE WITH CHECK on both tables — closed Session 90, commit `9fbcc1c` (same migration; applied to BOTH rebuild-test and production, Session 90).
-- **#80** signed-CO deltas → `contract_value` reconciliation — closed by DERIVATION, not write-through: `projects.contract_value` is never mutated; revised = original + Σ(client-signed CO `net_delta`), derived by `apps/web/lib/services/contract-value.ts` (7B-spec §0 rules 1-2). Closed Session 90, commits `e57043c` (service) + `93d41d7` (call sites). Spec: `docs/specs/7B-spec.md`.
-- **#94** HEIC photos stored but never render — closed Session 90, commit `de3eaf9`: client-side `heic2any` conversion at upload in `uploadFile` (`files-client.ts`; dynamic import, quality 0.82, rename → `.jpg`, `mime_type 'image/jpeg'`), covering every photo call site (daily logs, safety, deliveries, 7A receipts, generic files). Grids, PDF embeds, and the 7A review popup render new uploads with no consumer changes. On conversion failure the original bytes upload as before (logged — never fails harder than pre-fix). Pre-fix HEIC rows were test data only; no backfill run (backfill page stood down, S90).
 
 ## Process notes
 

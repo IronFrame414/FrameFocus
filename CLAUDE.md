@@ -900,7 +900,7 @@ When generating code, migrations, or instructions for Josh:
 - `docs/roadmap/FrameFocus_Quick_Reference.docx` — scannable summary of features and workflows
 - `docs/roadmap/FrameFocus_Platform_Roadmap.xlsx` — planning spreadsheet
 - `docs/sessions/contextN.md` — one per session; read the most recent at session start
-- `STATE.md` — live repo state; tech debt in `TECH_DEBT.md`
+- `STATE.md` — live repo state; tech debt is split across `TECH_DEBT.md` (OPEN — owed work, and the numbering authority), `TECH_DEBT_CLOSED.md` (closed), and `TECH_DEBT_IDEAS.md` (deferred decisions). A number lives in exactly one; each file cross-links the other two.
 - `GATED.md` — register of gated/blocked work: what is blocked, behind what, and what unblocks it (Pre-M9 gate, test identities, 7D–7H readiness, deferred-by-decision, standing rulings)
 
 ```
