@@ -58,3 +58,51 @@ Migrations: rebuild-test only; check it's idle first; MCP apply_migration writes
 - There is NO derivative DB column; "has markup" = non-empty `markup_data` (`hasMarkup()`), derivative is
   the storage object `{path}.markup.jpg`. Any fix reuses `derivativePathFor()`/`hasMarkup()` — no schema.
 - **ACTION: rewrite #100 to the 3 surfaces above; build the derivative swap on each (shared helper).**
+
+## Phase 1 findings — batch B (last 2 investigations)
+
+### 2.4 — #101 /m expansion + desktop toggle — premise CONFIRMED moved; specifics established
+- Device decision is USER-AGENT ONLY (`lib/device.ts:59-70`), consulted at ONE place —
+  `middleware.ts:92-95` as the sign-in *landing default*. Routing is NOT device-gated: every route is
+  reachable by URL on any device; a desktop opening `/m` gets the mobile shell by design. So the 79px
+  desktop-shell problem is indeed moot (phones already land on /m).
+- (b) DESKTOP TOGGLE: nothing exists today. A persistent "view desktop" needs a NET-NEW cookie the
+  middleware reads at `:92-95` (e.g. `ff_surface=desktop`); middleware already has `cookies.getAll()`
+  (`:24-25`) and already fetches `role` (`:176-180`). Owner/Admin/PM = `MONEY_ROLES`. A client-only
+  toggle would NOT survive nav — must be a cookie. → this is the reversible mechanism to build.
+- (a) /m GAP (field-relevant, no /m equiv): **timesheet approval**, **costs (actual — visible to all
+  roles)**, read-access to **contracts/schedule detail**. Office/money screens (estimating, billing,
+  invoices, payments, profitability) are correctly desktop-only & Floor-gated.
+- Floor: `budgetColumnsFor()` NOT imported anywhere under /m — any money screen ported must ADOPT it
+  (share mechanism, per PARITY), not re-derive. A-5: `/m` uses `min-h-[44px]` inline, no auto-enforce.
+
+### 2.5 — Burst capture — constraint located; TWO assumptions corrected
+- Constraint is NOT the input nor the service — it's the SINGLE-SLOT store + confirm-and-return nav.
+  `capture-store.tsx:57-59` holds ONE `PendingShot` (each `hold()` overwrites); `onShot`
+  (`mobile-shell.tsx:328`) navigates to `/m/capture`; `capture-screen.tsx:135-176` is a terminal
+  "saved / take another" card. Burst = replace the single slot with a LIST, accumulate without
+  navigating. `uploadFile()` (`files-client.ts:69`) is single-file, no loop — caller loops N times;
+  its `id?` option gives idempotent UPSERT replay (per-photo retry).
+- ⚠️ CORRECTION to the prompt's premise: the clock→job routing DOES NOT feed capture today.
+  `projectInContext` (`capture-store.tsx:73-86`) reads ONLY the URL path `/m/p/{id}` or `?project=`.
+  The clocked-in project IS knowable — `getOpenSession()` (`time-tracking.ts:53`) →
+  `openSegment.project_id` (`timeclock-screen.tsx:423-426`) — but capture never reads it. "Auto-save to
+  the job I'm clocked into" only happens incidentally (if standing on that project's screen).
+  → Wiring the open segment's project_id as a fallback is the missing (additive, reversible) work.
+- ⚠️ CORRECTION: `capture="environment"` is ALREADY SET (`mobile-shell.tsx:546`, log-form.tsx:359,
+  incident-form.tsx:328, check-in-form.tsx:336, punch-actions.tsx:170; e2e asserts it). #101's "no
+  input sets capture" is STALE. No one-line fix needed.
+- #118 batch failure: online path has NO retry queue; offline branch uses `offline-sync.tsx` (idempotent
+  auto-retry). For a batch, photo 4/7 failing must be handled EXPLICITLY: per-photo status, keep failed
+  shots held, offer retry — route burst shots through the existing `offline-sync` queue (idempotent via
+  `uploadFile` `id`), NOT bare `uploadFile`. Do NOT silently drop, do NOT abort the rest.
+- Parity: capture is mobile-only presentation over shared `uploadFile` — keep batch/retry logic in
+  `lib/`, not owned by `app/m/`.
+
+## TECH_DEBT.md structure (for Item 1 split)
+2915 lines. `## Open Tech Debt` (L56) → `### Ruled genuine debt — the only two [S179]` = #155,#156
+(L58-124, the IDEAS), then many `### Branch-scoped, awaiting real numbers` pointer sections
+(L125-1945, superseded-in-place per S179), then `### Pre-Beta`(1946) `### Code Quality`(2138)
+`### UX Polish`(2209) `### Track for Module 4`(2249) `### Track for Module 5/6`(2434) `### Module 3
+Follow-Ups`(2463) `### Lower Priority / Existing`(2470) `#### #81`(2557). `## Closed Tech Debt`(L2836).
+`## Process notes`(L2903). ~70 files cite the literal path `TECH_DEBT.md` (mostly historical).
