@@ -2,7 +2,7 @@
 
 > **Branch:** `audit/redesign-structure` (cut from local `main` @ `638f814`). **Read-only.** No code changed.
 > **Method:** structural — compare RENDERED STRUCTURE (column/pane count · top-level containers in order · interaction shape), **not** element presence. The two prior "43/46 conform" audits failed by comparing elements ("has a grouped list with subtotals") instead of layout ("is it `[rail|list|tray]` or `[table]`").
-> **Ground truth:** the **shipped component CODE** under `apps/web/app/`, per Josh's ruling. See §B — the `current-state/*.png` are NOT reliable shipped evidence.
+> **Ground truth:** the **shipped component CODE** under `apps/web/app/`, per Josh's ruling. See §B — the `mockups/*.png` (formerly mislabelled `current-state/`) are NOT reliable shipped evidence.
 > **Precedence (later wins):** Desktop-UI handoff < Estimates handoff < Estimate-Items-PO handoff. Spec `docs/specs/desktop-redesign-spec.md` records deliberate deviations (⛔ WILL NOT BUILD) — those are conformance, not gaps.
 
 ---
@@ -22,7 +22,9 @@ The run began from a premise (§3 of the brief) that four screens were confirmed
 
 ---
 
-## §B — ⚠️ The load-bearing finding: `current-state/*.png` are the DESIGN, not the shipped app
+## §B — ⚠️ The load-bearing finding: `mockups/*.png` (was `current-state/`) are the DESIGN, not the shipped app
+
+> **[Renamed this session]** The directory has since been renamed `docs/design/current-state/` → `docs/design/mockups/` and its README corrected, so it can no longer mislabel itself. Paths below use the new name.
 
 All four audit passes independently converged on this, with near-irrefutable evidence:
 
@@ -153,5 +155,5 @@ Approx **46 screens**. Tally (ruled-conformance PARTIALs counted as effectively 
 
 - **Anchor #3 (material-list portion) — UNSURE, could not confirm as a gap.** The add-flow material list (17b, `add-item-2.png`), the convert-to-project PO drafting (18a), and the PO page itself (18b) are **all built and match the handoff**. I could not locate an unbuilt "material list portion." Given #1/#2 turned out to be a **copied/stale estimate**, the most likely explanation is that this observation came from the same stale render. **Please point at the specific surface** if a real gap remains — I did not want to report "not built" when the code shows it built (that is the exact confident-wrong failure this run exists to prevent).
 - **"Mark as Sent" (anchor #4) — OPEN by your ruling.** It currently sits in the estimate header (`estimate-builder.tsx:236`) alongside the (to-be-removed) "Send to Client". Decision owed: collapse it into the Review & Send sheet, or keep it as the quick freeze-without-emailing action.
-- **`current-state/*.png` provenance (§B)** — recommend reconciling before anyone treats these as shipped evidence again.
+- **`mockups/*.png` provenance (§B)** — recommend reconciling before anyone treats these as shipped evidence again. (Directory renamed + README corrected this session.)
 - **Estimate Scope/Terms/Proposal tabs** — confirmed present, not deep structure-audited; call if you want them verified.

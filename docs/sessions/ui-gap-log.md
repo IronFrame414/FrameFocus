@@ -64,7 +64,7 @@ The shipped Schedule capture faithfully renders handoff 15b — the **Timeline/C
 three-view toggle (Timeline active), the company Gantt, and the "Resumes when permit clears" hold
 bar**. All three are explicit ⛔ WILL NOT BUILD in `desktop-redesign-spec.md:1213–1214` (company
 schedule is calendar-only; no `hold_reason` column). So either the app shipped forbidden, largely
-un-backable UI, or `docs/design/current-state/schedule.png` is a capture of the MOCKUP misfiled as
+un-backable UI, or `docs/design/mockups/schedule.png` (was `current-state/`) is a capture of the MOCKUP misfiled as
 current-state. **Not a restyle gap and not mine to resolve — it needs a ruling. Recorded, not acted
 on** (a decision not in this prompt/handoffs is a STOP per §6).
 
@@ -201,7 +201,7 @@ ADD flow (the two-step add sheet 17a/b/c) and convert/PO (18a/b). So:
   and its in-tab footer are superseded by the shell. Do not reproduce them.
 
 ## No screenshot — specified from code
-There is **no `estimates-line-items.png`** in `docs/design/current-state/` (only the three
+There is **no `estimates-line-items.png`** in `docs/design/mockups/` (only the three
 `estimates-add-item-*`). Josh confirmed Line Items is wrong; this spec is from reading
 `apps/web/app/dashboard/estimates/[id]/items-tab.tsx` (1004 lines) against handoff 9b (read, not
 rendered). Flagged per §5: the shipped appearance is **read, not verified against a capture.**
