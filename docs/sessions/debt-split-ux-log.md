@@ -272,3 +272,39 @@ desktop-only and Floor-gated — NOT gaps.
 
 ### #101 status: (b) done. (a) is a REPORT, not owed work on this branch. The TECH_DEBT #101 entry
 should be updated to reflect the toggle shipped + the narrowed remaining gap at reconciliation.
+
+## Phase 3 — Item 2.5 (burst capture) — DEFERRED to its own pass [Josh, this session]
+
+**Not built here. Ruled to defer** because it rewrites a tightly-ruled core subsystem, changes ruled
+behaviour (not additive), and CANNOT be camera/offline-verified in this environment — so a
+build-passes signal alone is insufficient for the risk. "A partial change is worse than none" applies
+with full force. Re-grounded `capture-store.tsx` this session; findings below supersede any staleness
+in Phase 1 batch B §2.5.
+
+### Why it is not a reflex build (the ruled invariants it touches)
+- **Single-slot is deliberate, not a limitation.** `PendingShot` is ONE shot held in memory (§6),
+  because §7a/A-21c: a field user's `files` INSERT with no `project_id` is refused by RLS, so the shot
+  is held client-side until a project is chosen. Burst = single slot → LIST, and the §7a
+  "project-before-insert" invariant must hold for **every** shot, not just the first.
+- **The clock→job wiring is a BEHAVIOUR change, not additive.** `projectInContext()`
+  (`capture-store.tsx:78-84`) is pure (pathname + `?project=`); returning null is A-21's defined case
+  that TRIGGERS THE PROMPT. Attributing to the clocked-in project (`getOpenSession()` →
+  `openSegment.project_id`) on that null path CHANGES what A-21 rules — needs Josh's eyes, not a
+  silent default.
+- **Per-photo retry is intricate.** Photo 4/7 failing must keep that shot held, retry idempotently via
+  the existing `offline-sync` queue (idempotent through `uploadFile`'s `id` UPSERT), and NOT abort the
+  rest nor silently drop. Online path has no retry queue today.
+
+### Scoped plan for the dedicated pass (unit boundaries, smallest-first)
+1. **Clock→job attribution** — on the null path, fall back to the open segment's `project_id`. Ruled
+   behaviour change; confirm with Josh first. Additive to the store, testable as a pure resolution
+   step if the open-session id is passed in rather than fetched inside the pure fn.
+2. **List store** — `PendingShot | null` → `PendingShot[]`; `hold()` appends instead of overwriting;
+   `/m/capture` becomes an accumulating flow, not the terminal "saved / take another" card
+   (`capture-screen.tsx:135-176`). One job-picker ONCE at batch end if not clocked in / no context.
+3. **Batch save + per-photo retry** — route burst shots through `offline-sync` (idempotent), per-photo
+   status UI, keep failed shots held with a retry affordance. Never abort the batch, never drop.
+- **Parity:** all batch/retry LOGIC in `lib/`, mobile-only presentation. `uploadFile` (`files-client.ts:69`)
+  is single-file; the caller loops N times — its `id?` option gives the idempotent replay for (3).
+- **Verification:** needs device camera + real offline queue. Do it where that is possible; do NOT
+  ship (2)/(3) on build-passes alone.
