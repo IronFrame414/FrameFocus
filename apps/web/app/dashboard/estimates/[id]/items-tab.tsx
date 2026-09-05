@@ -909,41 +909,50 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
     const subSubtotal = lines.reduce((s, l) => s + Number(l.total_price ?? 0), 0);
     return (
       <div key={sub.id} style={{ marginLeft: '1.25rem', marginBottom: '0.75rem' }}>
+        {/* #2 — lighter TINTED subcategory bar; name + subtotal left, actions right. */}
         <div
           style={{
             display: 'flex',
+            justifyContent: 'space-between',
             alignItems: 'center',
             gap: '0.75rem',
             marginBottom: '0.5rem',
             flexWrap: 'wrap',
+            padding: '8px 12px',
+            background: '#fbfcfe',
+            border: '1px solid #eef1f6',
+            borderRadius: '10px',
           }}
         >
-          <span style={{ fontWeight: 600, fontSize: '0.875rem' }}>
-            <InlineText
-              value={sub.name}
-              disabled={!canEdit}
-              onSave={(v) =>
-                v.trim()
-                  ? mutate(() => updateEstimateSubcategory(sub.id, { name: v.trim() }), false)
-                  : Promise.resolve({ success: false, error: 'Name required' })
-              }
-            />
-          </span>
-          <span
-            style={{
-              fontFamily: font.mono,
-              fontSize: '0.72rem',
-              fontWeight: 600,
-              color: '#5c6784',
-              background: '#eef1f6',
-              padding: '2px 8px',
-              borderRadius: '20px',
-            }}
-          >
-            {fmtMoney(subSubtotal)}
-          </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap', minWidth: 0 }}>
+            <span style={{ fontWeight: 600, fontSize: '0.875rem' }}>
+              <InlineText
+                value={sub.name}
+                disabled={!canEdit}
+                onSave={(v) =>
+                  v.trim()
+                    ? mutate(() => updateEstimateSubcategory(sub.id, { name: v.trim() }), false)
+                    : Promise.resolve({ success: false, error: 'Name required' })
+                }
+              />
+            </span>
+            <span
+              style={{
+                fontFamily: font.mono,
+                fontSize: '0.72rem',
+                fontWeight: 600,
+                color: '#5c6784',
+                background: '#fff',
+                border: '1px solid #dde3ee',
+                padding: '2px 8px',
+                borderRadius: '20px',
+              }}
+            >
+              {fmtMoney(subSubtotal)}
+            </span>
+          </div>
           {canEdit && (
-            <>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexShrink: 0, flexWrap: 'wrap' }}>
               {/* 9b (§2) — add catalog items straight into this subcategory (its
                   first section). Shown only when it has a section to receive them. */}
               {lines.length > 0 && (
@@ -959,6 +968,8 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
               {addLineButton(sub.category_id, sub.id)}
               <button
                 type="button"
+                aria-label="Delete subcategory"
+                title="Delete subcategory"
                 onClick={async () => {
                   if (
                     !(await confirm(
@@ -974,7 +985,7 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
               >
                 🗑
               </button>
-            </>
+            </div>
           )}
         </div>
         {lines.map(lineItemBlock)}
