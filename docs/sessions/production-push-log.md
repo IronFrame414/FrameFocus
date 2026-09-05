@@ -341,3 +341,25 @@ record of a WAF block and is corrected by this note.
   `scope_library`, `purchase_order_edits`, `estimate_award_bases`, `estimate_sub_bid_requests`,
   `contacts_dedupe_log`. Dedupe (`…265`) applied strictly before the index (`…270`) ✓.
 - **§4 DB migration COMPLETE and verified. Next: push `main` (deploys the code), then relink CLI.**
+
+## §4.4 — push `main` (code deploy) — DONE
+- `git push origin main` → **`38b9c5a..cb1a2a2  main -> main`, exit 0.** 148 commits pushed (the
+  144 the resume started with + this session's 4 doc/log commits). Vercel auto-deploys `apps/web`
+  from `origin/main` — the estimates redesign + all merged work is now deploying to
+  https://frame-focus-eight.vercel.app. ⚠️ Josh: confirm the Vercel deployment for `cb1a2a2` goes
+  green (S98 pattern), same as the DB verification above.
+
+## §4.5 — relink CLI to rebuild-test — VERIFIED (was never moved)
+Production was reached via the ephemeral Management API (`curl` + `SUPABASE_ACCESS_TOKEN`), NOT via
+`supabase link`, so the CLI link never left rebuild-test. Verified post-push:
+- CLI `● LINKED nmyphyhmfttxkdoposvf framefocus-rebuild-test`; `supabase/.temp/project-ref` = same.
+- MCP `get_project_url` → `nmyphyhmfttxkdoposvf` (rebuild-test).
+- Production `jwkcknyuyvcwcdeskrmz` is `linked:false` — no persistent CLI/MCP path to prod remains.
+
+## ✅ PRODUCTION PUSH COMPLETE [RESUME RUN]
+- Battery: type-check 5/5, lint clean, cold build 1/1, unit 1021/1021, live 1564/1565 (0 skipped;
+  sole red = env timeout on s162, 20/20 isolated — Josh ruled proceed).
+- DB: 24 migrations applied to prod `jwkcknyuyvcwcdeskrmz`, ledger 171→195 / `20261330000000`,
+  all objects verified, dedupe a clean 0-dup no-op.
+- Code: `main` pushed `38b9c5a..cb1a2a2`; Vercel deploying.
+- Safe state restored/confirmed: CLI + MCP on rebuild-test; prod unlinked.
