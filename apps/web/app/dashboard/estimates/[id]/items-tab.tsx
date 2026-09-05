@@ -637,17 +637,21 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
       .filter((r) => r.line_item_id === line.id)
       .sort((a, b) => a.sort_order - b.sort_order);
     const hasOverride = line.total_price_override != null;
+    // #5 — a section printing at $0 is tinted amber whole-card.
+    const isUnpriced = Number(line.total_price) === 0;
 
     return (
       <div
         key={line.id}
         style={{
           // 9b — Section card geometry (mockup: radius 14, padding 16).
-          border: '1px solid #e4e8ef',
           borderRadius: '14px',
           padding: '16px',
           marginBottom: '10px',
-          backgroundColor: '#fff',
+          // #5 — amber tint for an unpriced section, else the plain white card.
+          border: isUnpriced ? '1.5px solid #f5cf8f' : '1px solid #e4e8ef',
+          boxShadow: isUnpriced ? '0 0 0 4px rgba(245,165,36,.09)' : undefined,
+          backgroundColor: isUnpriced ? '#fffdf7' : '#fff',
         }}
       >
         {/* Line header */}
@@ -722,18 +726,23 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
                 </span>
               </span>
             )}
-            <span style={rowLabel}>Total </span>
-            <span style={monoNum}>
-              <InlineNumber
-                value={line.total_price_override}
-                disabled={!canEdit}
-                allowNull
-                format={() => fmtMoney(line.total_price)}
-                validate={(v) => (v != null && v < 0 ? '≥ 0' : null)}
-                onSave={(v) =>
-                  mutate(() => updateEstimateLineItem(line.id, { total_price_override: v }), true)
-                }
-              />
+            {/* #7 — TOTAL label stacked above the figure; #5 — greyed when $0. */}
+            <span style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'flex-end', lineHeight: 1.15, verticalAlign: 'middle' }}>
+              <span style={{ fontFamily: font.mono, fontSize: '9px', fontWeight: 700, letterSpacing: '.08em', color: '#8792a8' }}>
+                TOTAL
+              </span>
+              <span style={{ ...monoNum, color: isUnpriced ? '#9aa4b8' : undefined }}>
+                <InlineNumber
+                  value={line.total_price_override}
+                  disabled={!canEdit}
+                  allowNull
+                  format={() => fmtMoney(line.total_price)}
+                  validate={(v) => (v != null && v < 0 ? '≥ 0' : null)}
+                  onSave={(v) =>
+                    mutate(() => updateEstimateLineItem(line.id, { total_price_override: v }), true)
+                  }
+                />
+              </span>
             </span>
             {hasOverride && (
               <button
@@ -804,22 +813,24 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
           <tbody>{lineRows.map(lineRowTr)}</tbody>
         </table>
         {/* 9b (§2) — section EMPTY STATE, with a jump into the add-items sheet. */}
+        {/* #5 — CENTRED empty state with its own + Add items. */}
         {lineRows.length === 0 && (
           <div
             style={{
               fontSize: '0.8125rem',
               color: '#8792a8',
               marginBottom: '0.5rem',
-              padding: '0.75rem',
+              padding: '1rem',
               border: '1px dashed #d5dae4',
               borderRadius: '10px',
               display: 'flex',
+              flexDirection: 'column',
               alignItems: 'center',
-              gap: '0.75rem',
-              flexWrap: 'wrap',
+              textAlign: 'center',
+              gap: '0.6rem',
             }}
           >
-            <span style={{ flex: 1, minWidth: '12rem' }}>
+            <span>
               Nothing priced here yet — labor, material, a subcontractor bid, or another cost.
             </span>
             {canEdit && (
@@ -834,45 +845,46 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
           </div>
         )}
 
+        {/* #6 — ONE footer row: + Add items / Discount on the left, Internal notes right. */}
         <div
           style={{
             display: 'flex',
+            justifyContent: 'space-between',
             gap: '1rem',
             flexWrap: 'wrap',
             alignItems: 'center',
             fontSize: '0.8125rem',
           }}
         >
-          {/* 9b (§2) — per-section "+ Add items" (the catalog sheet, pre-targeted
-              to this section); "+ Add Row" stays for a single blank row. */}
-          {canEdit && (
-            <button
-              type="button"
-              data-testid={`open-add-items-section-${line.id}`}
-              onClick={() => openAddItems({ lineItemId: line.id })}
-              style={{ ...smallButton, color: '#3b4ae0', borderColor: '#dbe0fb', background: '#f2f4ff' }}
-            >
-              + Add items
-            </button>
-          )}
-          {canEdit && addRowDropdown(line.id)}
-          <span>
-            <span style={rowLabel}>Discount </span>
-            {discountControls(line)}
-          </span>
-        </div>
-
-        {/* Internal line notes */}
-        <div style={{ marginTop: '0.5rem', fontSize: '0.8125rem' }}>
-          <span style={rowLabel}>Internal notes: </span>
-          <InlineText
-            value={line.notes ?? ''}
-            disabled={!canEdit}
-            placeholder="Add notes (never on proposal)"
-            onSave={(v) =>
-              mutate(() => updateEstimateLineItem(line.id, { notes: v.trim() || null }), false)
-            }
-          />
+          <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'center' }}>
+            {/* 9b (§2) — per-section "+ Add items" (pre-targeted); "+ Add Row" stays for a blank row. */}
+            {canEdit && (
+              <button
+                type="button"
+                data-testid={`open-add-items-section-${line.id}`}
+                onClick={() => openAddItems({ lineItemId: line.id })}
+                style={{ ...smallButton, color: '#3b4ae0', borderColor: '#dbe0fb', background: '#f2f4ff' }}
+              >
+                + Add items
+              </button>
+            )}
+            {canEdit && addRowDropdown(line.id)}
+            <span>
+              <span style={rowLabel}>Discount </span>
+              {discountControls(line)}
+            </span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', minWidth: 0 }}>
+            <span style={rowLabel}>Internal notes</span>
+            <InlineText
+              value={line.notes ?? ''}
+              disabled={!canEdit}
+              placeholder="Add a note — never on the proposal"
+              onSave={(v) =>
+                mutate(() => updateEstimateLineItem(line.id, { notes: v.trim() || null }), false)
+              }
+            />
+          </div>
         </div>
       </div>
     );
