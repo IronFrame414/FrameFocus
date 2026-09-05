@@ -722,3 +722,393 @@ pre-existing and untouched by this work.
 what they could not.
 
 `npx next build` → real exit **`0`**. `npx vitest run` → **1037/1038**, sole failure pre-existing.
+
+---
+
+## Unit 9 — the disclosure regression guard
+
+`apps/web/test/s180-intuit-disclosure.test.tsx` — **8 tests, 8 passed, real exit `0`.**
+
+The disclosure is a **declared value**, not copy, so it gets a test rather than a comment. Asserted:
+the button and the disclosure appear **together** when a pay-link exists; **neither** appears when it
+does not (with no affordance there is nothing to disclose, and printing it anyway would claim a
+payment service the client cannot reach); **no "you cannot pay here" copy** is added in that case —
+a ruled absence (7g1 #3), now asserted rather than left to the next editor; the invoice still renders
+normally without a link; the **shared** public footer carries the string and all four public pages
+render that footer; and **`GATED.md` still carries the Gate 6 obligation**, so tidying it away before
+the portal pay surface ships fails loudly.
+
+**Verified load-bearing rather than assumed** (the A-58 discipline): rewording the footer string to
+"Payments by Intuit" turned the run **red (exit `1`)**; restoring it returned **exit `0`, 8 passed**,
+with `git diff --stat` empty — the file is byte-identical to what is committed.
+
+**Sweep for tests encoding overturned behaviour (CLAUDE.md, S157):** grepped `test/`, `e2e/` and
+`lib/` for every surface changed — `enforce_invoices_column_scope`, `qb_sync_queue`,
+`qb_webhook_events`, `qb_invoice_link`, `InvoiceEmail`, `qb_connection_state`. Two live harnesses
+(`s148-qb-connection.live.ts`, `s149-qb-queue-webhooks.live.ts`) assert the shipped scaffolding and
+**nothing this run contradicts** — every change was additive. `brand-email-footer.test.tsx` renders
+`InvoiceEmail` without a `payLink`; the prop is optional and defaults to null, so it is unaffected and
+still green. **`lib/trial/deletion.ts:400` already lists all three QB tables**, so tenant deletion
+covers them and nothing is owed there.
+
+---
+
+# THE REPORT
+
+## Migrations — every one, with its rebuild-test AND ledger result
+
+⚠️ **PRODUCTION WAS NEVER OPENED THIS RUN.** Every migration was applied to **rebuild-test only**
+(`nmyphyhmfttxkdoposvf`, confirmed as `framefocus-rebuild-test` by the type-gen script's own guard).
+
+⚠️ **MCP `apply_migration` wrote NO ledger row for ANY of the five.** This was **checked after each
+one, not assumed**, and repaired by hand with `insert … on conflict (version) do nothing`.
+
+| # | File | rebuild-test | Ledger | Independently verified |
+| --- | --- | --- | --- | --- |
+| M-A | `20261350000000_qb_invoice_link.sql` | ✅ | ⚠️ absent → **repaired** | `invoices.qb_invoice_link` present; `pg_get_functiondef(enforce_invoices_column_scope)` contains it |
+| M-B | `20261360000000_qb_webhook_verifier.sql` | ✅ | ⚠️ absent → **repaired** | 2 functions; `qb_webhook_verifier_get('sandbox')` → NULL (correct, none stored) |
+| M-D | `20261370000000_qb_inbound_payment.sql` | ✅ | ⚠️ absent → **repaired** | `has_function_privilege`: service_role **true**, authenticated **false**, anon **false** |
+| M-E | `20261380000000_qb_enqueue_triggers.sql` | ✅ | ⚠️ absent → **repaired** | **Live probe, results in Unit 6** |
+| M-C | ~~expense `source` marker~~ | **DROPPED** [S103 Q5] | — | No expense import exists, so no origin marker is needed |
+
+**M-D and M-E are not in the spec.** M-D exists because 7E's payment RPC reads the JWT and a webhook
+has none; M-E exists because **nothing was going to put a row in the queue**. Both are argued in full
+in their own headers and in Units 5 and 6.
+
+## Commits — eight, all path-scoped, none pushed
+
+| Commit | Scope |
+| --- | --- |
+| `14584b4` | `docs/sessions/7g-build-log.md` |
+| `a5e4209` | M-A + M-B migrations, `database.ts`, log |
+| `a71698e` | `lib/quickbooks/{config,tokens,client,queue}.ts`, log |
+| `d795e73` | `app/api/quickbooks/{connect,callback,disconnect}`, `lib/quickbooks/{config,connection}`, log |
+| `8f6a4bd` | `lib/quickbooks/{entities,worker}.ts`, `app/api/cron/qb-sync`, `vercel.json`, log |
+| `70455ad` | webhook route + `webhook-verify.ts` (+test), M-D, `database.ts`, log |
+| `903c943` | M-E, `database.ts`, log |
+| `f16ca75` | Accounting UI, `lib/services/quickbooks.ts`, settings page, income-item + conflict routes, log |
+| `26e9ba7` | Pay-link surfaces, disclosure, `GATED.md`, `TECH_DEBT.md`, rebrand fix, log |
+
+**Never `git add -A`. Never pushed.** `apps/web/public/screenshots/review_and_send.png` was left
+untracked throughout, as instructed.
+
+## Routes built — nine
+
+| Route | Method | Registered with Intuit |
+| --- | --- | --- |
+| `/api/quickbooks/connect` | GET | no (ours) |
+| `/api/quickbooks/callback` | GET | ✅ **exact path, both hosts** |
+| `/api/quickbooks/disconnect` | GET + POST | ✅ **exact path** |
+| `/api/quickbooks/webhook` | POST | ✅ (endpoint URL in the portal) |
+| `/api/quickbooks/income-item` | GET + POST | no |
+| `/api/quickbooks/customer-conflict` | POST | no |
+| `/api/cron/qb-sync` | GET | no (Vercel cron, `*/5`) |
+| `/dashboard/settings/accounting` | page | ✅ **launch URL — it 404'd before this run** |
+| Settings → Accounting tab | page | mounts the same component |
+
+## ⚠️ Verified by construction vs. actually exercised — the honest split
+
+### Actually exercised
+- **The enqueue triggers (M-E)** — a live probe on rebuild-test with self-created fixtures, rolled
+  back, zero residue. The chain order, `depends_on` links, realm stamping, expense edit/delete parity,
+  the duplicate guard and the never-connected case are all **proven on real rows**.
+- **Webhook signature verification** — 13 tests with **real HMACs**: correct signature accepted; wrong
+  token, tampered body, missing header, truncated signature and re-serialised JSON all rejected.
+- **The disclosure** — 8 tests, and **proven load-bearing** by mutating the string and watching it go
+  red.
+- **Migrations M-A/M-B/M-D** — schema, function existence and **grant posture** queried directly.
+- **The whole app compiles** — `npx next build` exit `0`, all nine routes in the output.
+- **The suite** — `npx vitest run` → **1045 passed / 1046**. The single failure,
+  `s131-dashboard-access.test.ts`, **fails identically on `main`** and is untouched by this work.
+
+### Verified by construction ONLY — nothing below has ever spoken to Intuit
+- **The entire OAuth handshake.** `/connect` → Intuit consent → `/callback`, the code exchange, the
+  token blob, the Vault write, `qb_connection_state → connected`, the CSRF nonce round trip, the
+  realm-already-taken refusal.
+- **Token refresh and rotation**, including the `invalid_grant` → `needs_reauth` path and the
+  refresh-race re-read.
+- **Every Intuit API call**: customer, sub-customer, invoice create/update/void, vendor, bill
+  create/update/delete, payment, credit memo, refund receipt, and the `Item`/`Account`/`CompanyInfo`
+  queries.
+- **The pay-link itself.** Whether `InvoiceLink` comes back, and therefore whether
+  `qb_payments_enabled` flips true, is **unobservable without a real QuickBooks-Payments company** —
+  7g2 §3.1's own residual, unchanged.
+- **`resolveAccountId()` against real chart-of-accounts names**, and the `FullyQualifiedName`-then-
+  `Name` fallback.
+- **The customer-conflict detection** (it needs a real duplicate `DisplayName` in QuickBooks).
+- **The worker end to end.** Every unit is exercised or reasoned; the drain has never talked to Intuit.
+- **The webhook route as a whole.** The *verifier* is tested; the *route* has never received a request.
+
+## ⚠️ The webhook specifically — what verifying it will actually take
+
+**Intuit posts to a PUBLIC URL. This cannot be tested from the Codespace, and it cannot be tested on
+`localhost`** — there is no inbound path to either. Concretely:
+
+1. **The route must be deployed** to `https://ezcontractorbinder.com/api/quickbooks/webhook`. It does
+   not exist until this branch is merged and Vercel deploys it. Until then Intuit's portal will fail
+   its own endpoint validation.
+2. **The verifier token must be in Vault first**, on the **production** database, or the route
+   **rejects every request** — deliberately, it fails closed:
+   ```sql
+   select public.qb_webhook_verifier_put('production', '<verifier token from the Intuit portal>');
+   ```
+   ⚠️ **This run set NO token, on rebuild-test or anywhere.** `qb_webhook_verifier_get('sandbox')`
+   returns NULL today, which is why it is in the checklist below.
+3. **Sandbox webhooks still need a public URL.** A sandbox realm can post to a preview deployment, but
+   not to a Codespace. Intuit's portal also sends a test notification on save — that is the cheapest
+   first signal, and it exercises the signature path without any money moving.
+4. **A genuine end-to-end payment test needs QuickBooks Payments on the connected company**, which
+   sandbox limits — the same constraint as the pay-link.
+
+**What can be checked without any of that:** the signature algorithm (done — 13 tests), and that a
+request with no token or a bad signature gets a **401** rather than being processed.
+
+## ⚠️ Every place the spec proved wrong once I was in the code
+
+Nine. Each is argued where the code is, not only here.
+
+| # | The spec/prompt said | Reality |
+| --- | --- | --- |
+| 1 | `/dashboard/settings/accounting` **exists** | It was an in-page **tab key**. The URL registered with Intuit **404'd**. |
+| 2 | §3.2's paid-void fix is owed ("Part B") | Already shipped at `20261340000000` before this run |
+| 3 | Verifier token → `companies.qb_webhook_verifier_secret_id` | Intuit issues **one token per app per environment**; a per-tenant column is the wrong scope |
+| 4 | Disconnect: Intuit calls it, so revoke and clear | That redirect is **unsigned**; acting on it anonymously would let anyone sever any tenant's integration. It self-heals via `invalid_grant` instead. |
+| 5 | `qb_payments_enabled` is **read via the accounting API** | **No such field exists.** It is observable only from the first invoice push response. |
+| 6 | `gl_account_*` can be used as account references | They are free-text **paths**, not ids. They must be resolved. |
+| 7 | Flow 3: enqueue `vendor:create` → `bill:create` | **Nowhere to persist a vendor id** — `expenses.supplier` is free text, `subcontractors` has no `qb_vendor_id` |
+| 8 | `qb_webhook_events.intuit_event_id` is "Intuit's own event id" | The **legacy payload has no event id.** A composite of Intuit's own five values is used. |
+| 9 | §7: "no migration is needed for the worker, routes, UI" | True of those, but **nothing was going to enqueue anything.** M-E was missing entirely. |
+
+**Plus one that is not a spec error but a genuine model divergence** (Unit 5): retainage. The S103 Q7
+ruling describes the **QuickBooks** representation; 7E's shipped model differs on this side, because
+`amount_receivable` excludes retainage and P-4 caps applications at it, and `retainage_releases` is a
+per-**project** table. Both sides foot; only the second QB payment is missing (`#3-7gqb`).
+
+## Built on inference rather than something I read
+
+Named plainly, because none of it could be confirmed without a live connection:
+
+- **Intuit request/response SHAPES** — `SalesItemLineDetail`, `DescriptionOnly` +
+  `DescriptionLineDetail`, `AccountBasedExpenseLineDetail`, `LinkedTxn`, `operation=void` vs
+  `operation=delete`, and the `Bill` having no void. Endpoint URLs and the signature scheme **were**
+  verified against Intuit's docs this run; these object shapes were not.
+- **`minorversion=75`** is a deliberate pin, not a verified-current value.
+- **`DescriptionOnly` accepting an empty `DescriptionLineDetail: {}`.**
+- **That a `RefundReceipt` will post without an explicit `DepositToAccountRef`.** If it faults, it
+  surfaces as a terminal queue row naming Intuit's message — visible, not silent.
+- **That the 1099 sparse update on a Vendor is accepted as written.** Deliberately best-effort: a
+  failed stamp logs and **does not block the bill**.
+- **Retry ceiling (8), backoff shape, stale-`in_flight` window (10 min), 25 rows/tenant/drain** —
+  engineering choices, not derived from Intuit's published limits.
+
+---
+
+# ⚠️ HANDSHAKE CHECKLIST — for Josh
+
+**This is the first real test of everything above.** Nothing in this build has ever spoken to Intuit.
+Work through it in order; each step says what should happen, and what it means if it does not.
+
+⚠️ **Do all of this against SANDBOX first.** `QBO_ENVIRONMENT=sandbox` and
+`QBO_REALM_ID=9341457813274121` are already in `apps/web/.env.local`.
+
+⚠️ **This branch is NOT merged and NOT pushed.** Steps 1–9 run locally. Step 10 onward needs a deploy,
+and merging is your call.
+
+---
+
+### Step 0 — before you start
+
+1. Confirm you are on the branch:
+   ```
+   git branch --show-current
+   ```
+   **Expect:** `feature/7g-quickbooks`.
+2. Start the dev server:
+   ```
+   npm run dev --workspace=@framefocus/web
+   ```
+   ⚠️ **The first hit on any page takes ~10s in dev. That is the compiler, not the app** (CLAUDE.md's
+   dev-mode trap). Ignore it.
+
+---
+
+### Step 1 — the launch URL exists now
+
+Open **`http://localhost:3000/dashboard/settings/accounting`** signed in as **Owner**.
+
+**Expect:** an Accounting page with a **"Connect to QuickBooks"** button.
+**Before this run this URL was a 404** — that is the single most important thing to confirm, because
+it is the URL registered with Intuit.
+
+Also open **`/dashboard/settings?tab=accounting`**. **Expect:** the *same* connection panel, above the
+existing GL account mapping. If the two ever disagree, that is a PARITY bug — they are one component.
+
+---
+
+### Step 2 — the OAuth handshake (the part I could not do)
+
+1. Click **Connect to QuickBooks**.
+2. **Expect:** a redirect to Intuit's consent screen (`appcenter.intuit.com`).
+   - ⚠️ **Check the scope Intuit shows you: ACCOUNTING ONLY.** If it mentions Payments, **stop** — the
+     scope constant is wrong and scopes cannot be removed once saved.
+3. Approve, choosing the sandbox company.
+4. **Expect:** back at `/dashboard/settings/accounting` with a green **"QuickBooks is connected."**
+   and a connection card showing the realm id, connected-since, and a reconnect-by date **five years
+   out**.
+
+**If it fails**, the banner names the cause. The two most likely:
+- **"could not be verified"** (`state_mismatch`) — the state cookie did not survive. Check you did not
+  switch browsers mid-flow.
+- **`invalid_grant` at exchange** (shows as *"QuickBooks refused the connection request"*) — the
+  redirect URI must match **byte for byte**. It is
+  `http://localhost:3000/api/quickbooks/callback` locally. A trailing slash or `https` breaks it.
+
+Then verify the token really landed in Vault, not in a column:
+```sql
+select qb_connection_state, qb_realm_id, qb_token_secret_id is not null as has_secret
+from companies where id = '<your company id>';
+```
+**Expect:** `connected`, your realm, `has_secret = true`. ⚠️ **No token value should be visible
+anywhere** — that is the whole design.
+
+---
+
+### Step 3 — the income item (the first ruled prompt)
+
+**Expect:** if your sandbox company happens to have an item named exactly **"Construction Income"**, it
+is already mapped. Otherwise the card says QuickBooks needs a product or service and asks you to
+**create one in QuickBooks**.
+
+⚠️ **It will never create one for you. That is the ruling, not a gap** — writing to your chart of
+accounts on a guess is the thing we refuse to do.
+
+1. If unmapped, create a Service item in the sandbox, then click **Choose an item** → pick it.
+2. **Expect:** the card now names it.
+
+---
+
+### Step 4 — invoice OUT, and the pay-link
+
+1. Send an invoice on any project (Owner/Admin).
+2. **Immediately check the queue:**
+   ```sql
+   select entity_type, operation, status, depends_on_id is not null as waits, last_error
+   from qb_sync_queue order by created_at;
+   ```
+   **Expect:** three rows — `customer:create`, `sub_customer:create`, `invoice:create` — the last two
+   with `waits = true`. (Fewer if the client/project already reached QuickBooks. That is correct.)
+3. **Drain it** rather than waiting five minutes:
+   ```
+   curl -s -H "Authorization: Bearer $CRON_SECRET" http://localhost:3000/api/cron/qb-sync
+   ```
+   **Expect JSON** like `{"companiesDrained":1,"pushed":3,...}`.
+   ⚠️ **`pushed: 0` with `skippedNotConnected: 1`** means the token could not be used — check step 2.
+4. **In QuickBooks:** a Customer, a sub-customer named `PRJ-### — <project>`, and an Invoice whose
+   **total equals the invoice's `billed_total`**.
+   ⚠️ **If the invoice had retainage**, the QB total is the **FULL** amount with a **retainage line
+   that carries no money**, and the invoice stays **open** for the held portion. That is ruled S103 Q7
+   and the arithmetic depends on that line having no amount.
+5. Reload the invoice screen. **Expect:** a **"Pay online"** button **only if** the sandbox company has
+   QuickBooks Payments. **Its absence is not a failure** — invoices sync either way, ruled non-blocking.
+   ⚠️ **This is the one thing that may be unverifiable in sandbox at all** (§3.1's residual).
+6. Beside the button (or on the Accounting panel), confirm **"Payment service provided by Intuit
+   Payments Inc."** ⚠️ That string is a commitment to Intuit — if it is missing, something is wrong.
+
+---
+
+### Step 5 — the customer-conflict prompt (worth forcing)
+
+1. In QuickBooks, create a Customer named exactly like one of your clients.
+2. Send an invoice for that client, drain.
+3. **Expect** on the Accounting page: a prompt offering **"Link to the existing customer"** or
+   **"Create a new one"**.
+   ⚠️ **"Create a new one" asks for a DIFFERENT name, and must.** QuickBooks enforces unique display
+   names — the field is not politeness.
+4. Choose **Link**. **Expect:** the prompt clears and the invoice syncs on the next drain **without a
+   five-minute wait** (answering un-parks the dependants).
+
+---
+
+### Step 6 — expenses OUT as Bills, and edit/delete parity
+
+1. Set the **material** GL account on Settings → Accounting to a **real QuickBooks account name**.
+   ⚠️ These are free-text names and are resolved to ids at push time. A name QuickBooks does not have
+   **parks** the expense with a message naming the account — it does not fail it.
+2. Approve an expense → drain → **expect a Bill in QuickBooks**, attached to the job.
+3. **Edit the amount** → drain → **expect the Bill's amount to change.**
+4. **Delete the expense** → drain → **expect the Bill to be gone from QuickBooks.**
+   (Steps 3 and 4 are S103 Q9, and the enqueue half is already proven on rebuild-test.)
+
+---
+
+### Step 7 — void
+
+1. Void a **sent, unpaid** invoice that has already synced → drain.
+2. **Expect:** voided in QuickBooks, income backed out.
+3. Now try to void a **paid** invoice. **Expect a refusal**: *"This invoice has a payment applied and
+   cannot be voided. Issue a credit memo or a refund in 7E instead."* ⚠️ **This is enforced at the
+   database and cannot be clicked past.** No queue row is created.
+
+---
+
+### Step 8 — disconnect, and the choice
+
+1. Click **Disconnect QuickBooks**. **Expect** both options offered: **keep** the links or **clear**
+   them, with the consequence of each spelled out. **Choose "keep".**
+2. **Expect:** state back to `disconnected`, and:
+   ```sql
+   select qb_connection_state, qb_token_secret_id from companies where id = '<your company id>';
+   ```
+   **`disconnected` and a NULL secret id.** ⚠️ The Vault row is deleted, not orphaned.
+3. Reconnect to the **same** company. **Expect:** anything still queued flows on the next drain.
+
+---
+
+### Step 9 — needs_reauth (optional but valuable)
+
+Disconnect **from inside QuickBooks** (App Cards → Disconnect). Then drain.
+**Expect:** the connection flips to **needs_reauth**, an **amber banner** appears, and — the important
+part — **queued rows stay `queued`, not failed.** Confirm:
+```sql
+select status, count(*) from qb_sync_queue group by status;
+```
+⚠️ **If anything is `failed_transient` or `failed_terminal` after a disconnect, that is a bug** — the
+S148 ruling is that nothing is marked failed and it all flows on reconnect.
+
+---
+
+### Step 10 — the webhook. ⚠️ REQUIRES A DEPLOY. IT CANNOT BE DONE LOCALLY.
+
+**Intuit posts to a public URL. `localhost` cannot receive it, and the production route does not exist
+until this branch is deployed.**
+
+1. **Merge and deploy** (your call), so
+   `https://ezcontractorbinder.com/api/quickbooks/webhook` exists.
+2. **Store the verifier token FIRST** — the route **rejects every request** until you do, by design:
+   ```sql
+   select public.qb_webhook_verifier_put('production', '<verifier token from the Intuit portal>');
+   ```
+   ⚠️ **No token is stored anywhere today** — not on rebuild-test, not on production.
+   ⚠️ Use `'sandbox'` as the first argument when testing against a sandbox realm.
+3. In the Intuit portal, set the endpoint URL and **save**. Intuit sends a **test notification** — the
+   cheapest first signal, and it exercises the signature path with no money moving.
+   **Expect:** a `200`. A **401** means the token is missing or mismatched.
+4. Pay a sandbox invoice through the pay-link (needs QuickBooks Payments).
+   **Expect:** a `client_payments` row with `method = 'quickbooks'` and `qb_payment_id` set, applied to
+   the invoice, and the invoice showing **Paid**.
+   ⚠️ **It must NOT be re-pushed back to QuickBooks.** Check there is no `payment:create` queue row for
+   it — the `qb_payment_id`-set-in-the-same-insert guard is what prevents a double Payment, and this is
+   the first time it is exercised for real.
+
+---
+
+### What is owed after the handshake, whatever it shows
+
+- **`#3-7gqb` — retainage release → QuickBooks.** Blocked on **one ruling from you**: a release is per
+  **project**, but several invoices may each have withheld retainage. **Which QB invoice(s) does the
+  release pay, and in what split?** Everything else is a small migration.
+- **`#1-7gqb`** — a real vendor-id column, so suppliers stop being re-resolved by name every drain.
+- **`#2-7gqb`** — the CDC backstop poll, which is the designed recovery for a webhook whose follow-up
+  processing fails (today it is a log line).
+- **`GATED.md` Gate 6** — the **client-portal** disclosure, owed immediately after M7. **Do not let it
+  be tidied away**; a test now fails if the record is removed.
