@@ -102,6 +102,13 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
   const [error, setError] = useState<string | null>(null);
   // PO module 17 — the batch add sheet (R8). Draft-only, like every write here.
   const [sheetOpen, setSheetOpen] = useState(false);
+  // #4 — which category the add-items sheet was opened from (null = top-level
+  // button; the sheet pre-targets this category's first section when set).
+  const [sheetCategoryId, setSheetCategoryId] = useState<string | null>(null);
+  function openAddItems(categoryId: string | null) {
+    setSheetCategoryId(categoryId);
+    setSheetOpen(true);
+  }
   const [pickerForRow, setPickerForRow] = useState<EstimateLineRow | null>(null);
   const [defaultLaborRate, setDefaultLaborRate] = useState<number | null>(null);
   // 9b — category collapse. PRESENTATIONAL only, persists nothing (the subtotal
@@ -960,6 +967,19 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
           </span>
           {canEdit && (
             <>
+              {/* #4 — add catalog items straight into this category. Shown only
+                  when the category has a section to receive them; the sheet
+                  pre-targets that section (adjustable in step 2). */}
+              {lineItems.some((l) => l.category_id === category.id) && (
+                <button
+                  type="button"
+                  data-testid={`open-add-items-${category.id}`}
+                  onClick={() => openAddItems(category.id)}
+                  style={smallButton}
+                >
+                  + Add items
+                </button>
+              )}
               <button type="button" onClick={() => addSubcategory(category.id)} style={smallButton}>
                 + Add Subcategory
               </button>
@@ -1043,7 +1063,7 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
           <button
             type="button"
             data-testid="open-add-items"
-            onClick={() => setSheetOpen(true)}
+            onClick={() => openAddItems(null)}
             style={{
               padding: '9px 16px',
               borderRadius: '9px',
@@ -1059,7 +1079,14 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
           </button>
         </div>
       )}
-      {sheetOpen && <AddItemsSheet data={data} reload={reload} onClose={() => setSheetOpen(false)} />}
+      {sheetOpen && (
+        <AddItemsSheet
+          data={data}
+          reload={reload}
+          initialCategoryId={sheetCategoryId ?? undefined}
+          onClose={() => setSheetOpen(false)}
+        />
+      )}
       {error && (
         <div
           style={{

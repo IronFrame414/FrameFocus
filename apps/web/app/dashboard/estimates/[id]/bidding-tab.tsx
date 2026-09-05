@@ -702,6 +702,9 @@ function RequestByLinkForm({
 
   return (
     <div style={{ border: '1px solid #dbe0fb', backgroundColor: '#f2f4ff', borderRadius: '0.375rem', padding: '0.75rem' }}>
+      {/* #7 — trade + sub on a stable row. The trade select carries a FIXED
+          width so switching "All trades" ↔ a specific trade no longer resizes it
+          and reflows everything after it. */}
       <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
         {trades.length > 0 && (
           <select
@@ -714,7 +717,7 @@ function RequestByLinkForm({
                 if (!s || s.trade_type !== e.target.value) setSubId('');
               }
             }}
-            style={inputStyle}
+            style={{ ...inputStyle, width: '150px' }}
           >
             <option value="">All trades</option>
             {trades.map((t) => (
@@ -722,7 +725,7 @@ function RequestByLinkForm({
             ))}
           </select>
         )}
-        <select value={subId} onChange={(e) => setSubId(e.target.value)} style={inputStyle}>
+        <select value={subId} onChange={(e) => setSubId(e.target.value)} style={{ ...inputStyle, flex: 1, minWidth: '160px' }}>
           <option value="">Subcontractor…</option>
           {filteredSubs.map((s) => (
             <option key={s.id} value={s.id}>{s.company_name}</option>
@@ -733,24 +736,16 @@ function RequestByLinkForm({
             won {rec.won} of {rec.total} bids here
           </span>
         )}
-        <input value={scope} onChange={(e) => setScope(e.target.value)} placeholder="Scope (free text)" style={{ ...inputStyle, flex: 1, minWidth: '160px' }} />
-        <label style={{ fontSize: '0.72rem', color: '#5b6472' }}>
-          Allowance{' '}
-          <input inputMode="decimal" value={allowance} onChange={(e) => setAllowance(e.target.value)} placeholder="$" style={{ ...inputStyle, width: '90px' }} />
-        </label>
-        <label style={{ fontSize: '0.72rem', color: '#5b6472' }}>
-          Bids due{' '}
-          <input type="date" value={bidsDue} onChange={(e) => setBidsDue(e.target.value)} style={inputStyle} />
-        </label>
-        <label style={{ fontSize: '0.72rem', color: '#5b6472' }}>
-          Work starts{' '}
-          <input type="date" value={workStarts} onChange={(e) => setWorkStarts(e.target.value)} style={inputStyle} />
-        </label>
-        <label style={{ fontSize: '0.72rem', color: '#5b6472' }}>
-          Site visit{' '}
-          <input type="date" value={siteVisit} onChange={(e) => setSiteVisit(e.target.value)} style={inputStyle} />
-        </label>
       </div>
+      {/* #8 — Scope is generally a long block; give it the same textarea as the
+          message rather than a one-line input. */}
+      <textarea
+        value={scope}
+        onChange={(e) => setScope(e.target.value)}
+        placeholder="Scope — what you're asking them to price"
+        rows={2}
+        style={{ ...inputStyle, width: '100%', marginTop: '0.5rem', resize: 'vertical', fontFamily: 'inherit' }}
+      />
       <textarea
         value={message}
         onChange={(e) => setMessage(e.target.value)}
@@ -758,6 +753,27 @@ function RequestByLinkForm({
         rows={2}
         style={{ ...inputStyle, width: '100%', marginTop: '0.5rem', resize: 'vertical', fontFamily: 'inherit' }}
       />
+      {/* #7 & #9 — allowance + the three dates on ONE fixed grid line
+          (minmax(0,1fr), never bare 1fr, so a long value never sets the width).
+          "Allowance you carry" disambiguates from allowance ROW TYPES. */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0,1fr))', gap: '0.5rem', marginTop: '0.5rem' }}>
+        <label style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem', fontSize: '0.72rem', color: '#5b6472' }}>
+          Allowance you carry
+          <input inputMode="decimal" value={allowance} onChange={(e) => setAllowance(e.target.value)} placeholder="$" style={{ ...inputStyle, width: '100%' }} />
+        </label>
+        <label style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem', fontSize: '0.72rem', color: '#5b6472' }}>
+          Bids due
+          <input type="date" value={bidsDue} onChange={(e) => setBidsDue(e.target.value)} style={{ ...inputStyle, width: '100%' }} />
+        </label>
+        <label style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem', fontSize: '0.72rem', color: '#5b6472' }}>
+          Work starts
+          <input type="date" value={workStarts} onChange={(e) => setWorkStarts(e.target.value)} style={{ ...inputStyle, width: '100%' }} />
+        </label>
+        <label style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem', fontSize: '0.72rem', color: '#5b6472' }}>
+          Site visit
+          <input type="date" value={siteVisit} onChange={(e) => setSiteVisit(e.target.value)} style={{ ...inputStyle, width: '100%' }} />
+        </label>
+      </div>
       <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', marginTop: '0.5rem', flexWrap: 'wrap' }}>
         <span style={{ fontSize: '0.72rem', color: '#5b6472' }}>How they reply:</span>
         {(['link', 'email'] as const).map((m) => (

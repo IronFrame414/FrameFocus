@@ -83,3 +83,21 @@
      few people told is a safety problem; too many and everyone ignores them.** That judgement needs
      Josh's knowledge of how a real crew operates, and it is **wrong in a way tests cannot catch.**
 
+---
+
+### Branch-scoped provisional (awaiting a real number at merge — S136 rule)
+
+- **#1-listscr — COST CODES IN THE ADD-ITEMS SHEET: REMOVED for now, pending a decision on HOW they
+  should be assigned.** [Josh, S103; `fix/list-screens-and-ui`] The add-items sheet had a free-text
+  "Cost code" input on manual rows and displayed each item's cost code on catalog rows and in the
+  tray. **All three UI appearances were removed** (`add-items-sheet.tsx` — manual input, catalog-row
+  display, tray sub-label now shows the item's row type).
+
+  **It is a deferred DECISION, not lost work:** the underlying data flow is intact — a catalog item
+  still carries its own `cost_code` onto the saved line (`:184` read, `:357` write); only the sheet's
+  UI stopped showing/editing it. What is undecided is the *mechanism*: a free-text box invites typos
+  and drift from the real cost-code set, and the sheet already groups by **category**, so how cost
+  code relates to category (same axis? finer grain? a select from a defined list?) is the open
+  question. Re-introduce with a chosen mechanism, not the free-text box. Convert to a real number when
+  this branch lands.
+

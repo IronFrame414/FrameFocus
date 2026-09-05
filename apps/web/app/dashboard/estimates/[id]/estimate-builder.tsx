@@ -206,17 +206,11 @@ export function EstimateBuilder({
     };
 
     if (estimate.status === 'draft' && isManager) {
+      // [S103] The header "Send to Client" was removed — the send path is
+      // Review & Send → Send to client (est-review-send above). "Mark as Sent"
+      // stays: it is the distinct freeze-without-emailing action (placement open).
       return (
         <>
-          <button
-            type="button"
-            data-testid="est-send"
-            disabled={actionBusy}
-            style={buttonStyle}
-            onClick={() => openSendModal()}
-          >
-            Send to Client
-          </button>
           <button
             type="button"
             data-testid="est-mark-sent"

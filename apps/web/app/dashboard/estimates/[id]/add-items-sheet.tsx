@@ -82,7 +82,8 @@ export function AddItemsSheet({
   data,
   reload,
   onClose,
-}: Pick<TabProps, 'data' | 'reload'> & { onClose: () => void }) {
+  initialCategoryId,
+}: Pick<TabProps, 'data' | 'reload'> & { onClose: () => void; initialCategoryId?: string }) {
   const { estimate, categories, lineItems, rows } = data;
 
   const [step, setStep] = useState<1 | 2>(1);
@@ -104,7 +105,13 @@ export function AddItemsSheet({
     [rows]
   );
 
-  const defaultLineItemId = lineItems[0]?.id ?? '';
+  // #4 — opened from a category's "+ Add items", pre-target that category's first
+  // section so picks land there without a manual Section pick. Falls back to the
+  // first section overall (top-level "+ Add items", or a category with no sections).
+  const defaultLineItemId =
+    (initialCategoryId && lineItems.find((li) => li.category_id === initialCategoryId)?.id) ||
+    lineItems[0]?.id ||
+    '';
 
   const lineItemLabel = useMemo(() => {
     const byId = new Map<string, string>();
@@ -261,7 +268,8 @@ export function AddItemsSheet({
   // Apply-to-all (17b): writes ONLY what was typed — an empty markup applies
   // nothing (inheritance stays NULL for untouched rows).
   const [applyMarkup, setApplyMarkup] = useState('');
-  const [applySection, setApplySection] = useState('');
+  // Pre-select the target section (#4) so step 2 shows where picks will land.
+  const [applySection, setApplySection] = useState(defaultLineItemId);
 
   const totals = useMemo(() => {
     const cost = tray.reduce((s, e) => s + basisOf(e), 0);
@@ -406,7 +414,9 @@ export function AddItemsSheet({
       style={{
         position: 'fixed',
         inset: 0,
-        zIndex: 60,
+        // #6 — above the chat launcher (z 60) so its scrim covers the launcher
+        // while the sheet is open; otherwise the FAB floated over "Add N items".
+        zIndex: 70,
         backgroundColor: 'rgba(15,23,41,.42)',
       }}
       onClick={() => !busy && onClose()}
@@ -436,8 +446,16 @@ export function AddItemsSheet({
             alignItems: 'center',
           }}
         >
-          <div style={{ fontSize: '18px', fontWeight: 800, color: color.navy }}>
-            Add items {step === 1 ? '— pick' : '— set details'}
+          <div>
+            <div style={{ fontSize: '18px', fontWeight: 800, color: color.navy }}>
+              Add items {step === 1 ? '— pick' : '— set details'}
+            </div>
+            {/* #4 — show the target section so it is clear where picks land. */}
+            {defaultLineItemId && (
+              <div style={{ fontSize: '12px', color: color.muted, marginTop: '2px' }}>
+                Adding to {lineItemLabel.get(defaultLineItemId)}
+              </div>
+            )}
           </div>
           <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
             <span style={{ fontSize: '12px', color: step === 1 ? color.primary : color.success }}>
@@ -510,10 +528,9 @@ export function AddItemsSheet({
                         ))}
                       </select>
                     </div>
-                    <div>
-                      <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: color.body, marginBottom: '2px' }}>Cost code</label>
-                      <input value={manual.costCode} onChange={(e) => setManual((m) => ({ ...m, costCode: e.target.value }))} style={{ ...inputStyle, width: '100%' }} placeholder="06 — CARPENTRY" />
-                    </div>
+                    {/* [S103] Cost code REMOVED from the add-items sheet — deferred
+                        decision, see TECH_DEBT_IDEAS.md. Data passthrough kept: a
+                        catalog item still carries its own cost_code on save. */}
                     <div>
                       <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: color.body, marginBottom: '2px' }}>Qty</label>
                       <input inputMode="decimal" value={manual.qty} onChange={(e) => setManual((m) => ({ ...m, qty: e.target.value }))} style={{ ...inputStyle, width: '100%', fontFamily: font.mono, textAlign: 'right' }} />
@@ -592,10 +609,8 @@ export function AddItemsSheet({
                               data-testid={`sheet-pick-${item.id}`}
                             />
                             <div style={{ flex: 1, minWidth: 0 }}>
+                              {/* [S103] cost code removed from the sheet UI */}
                               <div style={{ fontSize: '13px', fontWeight: 600, color: color.navy }}>{item.name}</div>
-                              <div style={{ fontFamily: font.mono, fontSize: '10.5px', color: color.faint }}>
-                                {item.cost_code ?? '—'}
-                              </div>
                             </div>
                             <span style={{ fontSize: '11.5px', color: color.muted }}>{item.unit_of_measure}</span>
                             <span style={{ fontFamily: font.mono, fontSize: '12.5px', fontWeight: 600, color: color.navy, width: '76px', textAlign: 'right' }}>
@@ -711,7 +726,7 @@ export function AddItemsSheet({
                     <div key={e.key} style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 74px 90px 90px 80px 100px 190px 30px', gap: '8px', alignItems: 'center', padding: '6px 18px', borderBottom: `1px solid ${color.rowDivider}` }}>
                       <div style={{ minWidth: 0 }}>
                         <div style={{ fontSize: '13px', fontWeight: 600, color: color.navy, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.name}</div>
-                        <div style={{ fontFamily: font.mono, fontSize: '10px', color: color.faint }}>{e.costCode ?? e.rowType}</div>
+                        <div style={{ fontFamily: font.mono, fontSize: '10px', color: color.faint }}>{e.rowType}</div>
                       </div>
                       {e.rowType === 'labor' || e.rowType === 'material' ? (
                         <input aria-label="Qty" inputMode="decimal" value={e.qty} onChange={(ev) => patchEntry(e.key, { qty: ev.target.value })} style={{ ...inputStyle, fontFamily: font.mono, textAlign: 'right' }} />
