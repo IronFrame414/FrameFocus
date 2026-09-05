@@ -23,6 +23,28 @@ If not → STOP, it's a ruling.
 
 ---
 
+## §2 — CONTINUED [S103: build-verified accepted]. Card restyle + per-tier add-items.
+
+⚠️ **Correction to my earlier finding:** the section **"Shown on proposal" description field ALREADY
+EXISTS** (`lineItemBlock` ~:765, `InlineText` → `updateEstimateLineItem({ description })`). I had
+skipped lines 710-780 and wrongly reported it unrendered. So item 3 is already done — **no new
+`updateEstimateLineItem` call was needed or added.** The shipped Section was already feature-complete
+(name, description, rows w/ {mode}% column, discount, internal notes, unpriced badge, total override);
+the gap was VISUAL + the per-section add-items entry.
+
+### Unit — sheet initialLineItemId (commit) — DONE
+`AddItemsSheet` gained `initialLineItemId` (precedence section > category > first). `openAddItems` now
+takes `{categoryId?, lineItemId?}`. Enabler for per-tier add-items. No autosave touched.
+
+### Unit — Section card (commit) — DONE
+- Card geometry → mockup (radius 14, padding 16). Badge "Unpriced · $0" → "Unpriced".
+- Section EMPTY STATE reworded ("Nothing priced here yet — labor, material, a subcontractor bid, or
+  another cost") with a "+ Add items" jump.
+- Per-section **"+ Add items"** (opens the sheet pre-targeted to this section) beside "+ Add Row".
+- ⚠️ Every existing editor RELOCATED/kept verbatim — name/description/override/total/notes/discount
+  `InlineText`/`InlineNumber` `onSave`/`value`/`disabled` UNCHANGED. No `updateEstimateLine*` call
+  touched (the description call was already there). type-check PASS.
+
 ## ⚠️ CHECKPOINT — gating resolved + safe additive features done; card restyle NOT attempted
 
 **What the shipped tab nested BEFORE (§5):** THREE tiers already —

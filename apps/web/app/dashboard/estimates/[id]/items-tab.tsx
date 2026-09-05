@@ -637,10 +637,11 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
       <div
         key={line.id}
         style={{
+          // 9b — Section card geometry (mockup: radius 14, padding 16).
           border: '1px solid #e4e8ef',
-          borderRadius: '0.375rem',
-          padding: '0.75rem',
-          marginBottom: '0.625rem',
+          borderRadius: '14px',
+          padding: '16px',
+          marginBottom: '10px',
           backgroundColor: '#fff',
         }}
       >
@@ -692,7 +693,7 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
                   fontFamily: font.mono,
                 }}
               >
-                Unpriced · $0
+                Unpriced
               </span>
             )}
           </div>
@@ -794,9 +795,34 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
           </thead>
           <tbody>{lineRows.map(lineRowTr)}</tbody>
         </table>
+        {/* 9b (§2) — section EMPTY STATE, with a jump into the add-items sheet. */}
         {lineRows.length === 0 && (
-          <div style={{ fontSize: '0.75rem', color: '#9aa4b8', marginBottom: '0.5rem' }}>
-            No rows yet — add labor, materials, a subcontractor bid, or another cost.
+          <div
+            style={{
+              fontSize: '0.8125rem',
+              color: '#8792a8',
+              marginBottom: '0.5rem',
+              padding: '0.75rem',
+              border: '1px dashed #d5dae4',
+              borderRadius: '10px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.75rem',
+              flexWrap: 'wrap',
+            }}
+          >
+            <span style={{ flex: 1, minWidth: '12rem' }}>
+              Nothing priced here yet — labor, material, a subcontractor bid, or another cost.
+            </span>
+            {canEdit && (
+              <button
+                type="button"
+                onClick={() => openAddItems({ lineItemId: line.id })}
+                style={{ ...smallButton, color: '#3b4ae0', borderColor: '#dbe0fb', background: '#f2f4ff' }}
+              >
+                + Add items
+              </button>
+            )}
           </div>
         )}
 
@@ -809,6 +835,18 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
             fontSize: '0.8125rem',
           }}
         >
+          {/* 9b (§2) — per-section "+ Add items" (the catalog sheet, pre-targeted
+              to this section); "+ Add Row" stays for a single blank row. */}
+          {canEdit && (
+            <button
+              type="button"
+              data-testid={`open-add-items-section-${line.id}`}
+              onClick={() => openAddItems({ lineItemId: line.id })}
+              style={{ ...smallButton, color: '#3b4ae0', borderColor: '#dbe0fb', background: '#f2f4ff' }}
+            >
+              + Add items
+            </button>
+          )}
           {canEdit && addRowDropdown(line.id)}
           <span>
             <span style={rowLabel}>Discount </span>
