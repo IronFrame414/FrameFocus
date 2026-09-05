@@ -192,3 +192,31 @@ If Josh confirms "proceed despite the pre-existing/environmental reds," §4 can 
 (ledger-first, migrations in filename order one at a time, dedupe abort = hard stop, push main, relink).
 Otherwise the two fixture failures (s126/s131) and the harness setup collisions (s133/s178) should be
 fixed first. **The go/no-go on the pre-existing reds is Josh's, per the rule.**
+
+---
+
+# UNBLOCK RUN 2 — RULED [Josh, S103]: fix all four reds (pre-existing is not a pass)
+
+**Fix 1 — s131-punch-names (test was stale, seed/app right).** The displayed name is
+`company_members.display_name` (punch.ts reads that), which the seed reconciles to **"QA Crew A"**
+[S176 rename]; `profiles.first/last` = "Casey Crew" is vestigial and not what the app shows. Established
+by reading the seed's reconcile logic + live data (member_display="QA Crew A", profiles first/last=
+"Casey"/"Crew"). Changed the TEST to expect "QA Crew A". Green in isolation (5/5).
+
+**Fix 2 — s126-chat-core (test token stale, behaviour right).** Owner is **"Dave Whitfield"** [S176];
+`candidateTokens` addresses by first/last, so `@Josh` resolved to nobody. The owner IS a mentionable
+candidate (line 122 passes) and IS mentionable as "Dave" — only the token was stale. Changed the
+mention token `@Josh`→`@Dave` (did NOT touch the assertion). Green in isolation (17/17).
+
+**Fix 3 — s133 / s178 harness (hidden coverage restored).** Both failed DETERMINISTICALLY in isolation:
+- s178 purge hit `contacts_company_id_fkey` — `COMPANY_CHILDREN` was missing the file/project/contact
+  chain. Added `files`, `file_categories`(existing), `project_contacts`, `projects`, `contacts` in FK
+  order (mirrors deletion.ts; contact_addresses cascades). The leftover s178 company was pinned by
+  exactly contacts(1)+projects(1) — confirmed by probing the row counts.
+- s133 threw on a leftover, but the leftover was an ORPHAN auth user (no profile — a profiles check
+  misses it, then createUser fails "already registered"; 12 auth users total, 1 the orphan). beforeAll
+  now deletes the profile+user OR the orphan auth user before creating fresh (self-heal).
+- Both self-healing (next run cleans the leftover). Isolation: **s133 25/25** (was 25 skipped),
+  **s178 7/7** (was 7 skipped) → **+32 tests back from skipped to running.**
+  ⚠️ Expect the full-suite SKIPPED count to drop 32→~0, because those two files were the only skip
+  sources (25+7=32).
