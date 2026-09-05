@@ -177,3 +177,38 @@ exercised this run — confirmed during build.
   returns sub_type; 1 vendor (member-linked) → now "(Vendor)"; 3 subs → "(Sub)"; crew → none.
 - Guarded the silent-empty risk (getMembers `if(error) return []`): embed confirmed non-erroring.
 - Desktop-only (no /m twin). Shared getMembers change is additive (optional field) — other callers unaffected.
+
+## Phase 3 — Item 2.3 (#100) photo markup display — IN PROGRESS
+
+> ⚠️ **This whole section was reconstructed after a restart lost the session mid-#100.** The (a)+(c)
+> code below was found UNCOMMITTED at tip `fc1f9bb`, audited read-only, judged a complete unit by
+> Josh, and only then committed. The log had been silent on all of #100.
+
+### Phase 1 supersession finding (was lost from the log; restated here)
+The #100 TECH_DEBT entry ("markup invisible everywhere but the editor") is **STALE**. Established in
+Phase 1: mobile gallery (M-8), mobile viewer (M-9), the editor save, and the client portal ALREADY
+render the flattened `.markup.jpg` derivative via the shared `saveMarkup()`/`drawShapes()` path.
+**#129 and #139 are genuinely closed** — desktop and mobile share one derivative path and cannot
+silently diverge. Only THREE surface-groups were still serving the raw original:
+- (a) desktop file grid — `file-row.tsx`
+- (b) the 3 photo PDF services — `delivery-pdf-service.ts:86,108`, `daily-log-pdf-service.ts:74`, `incident-pdf-service.ts:51`
+- (c) general file download — `file-row-actions.tsx`
+
+### (a)+(c) DONE (commit: `[Files] #100: desktop files page shows photo markup`)
+- `route.ts`: on `markup=1`, sign the `.markup.jpg` derivative; **degrade to the original** if absent
+  (save's derivative step can fail independently of `markup_data` — A-23t).
+- `file-row.tsx` (a): `annotated = hasMarkup(file.markup_data)`; append `&markup=1` on row-click open; pass `annotated` down.
+- `file-row-actions.tsx` (c): append `&markup=1` on download.
+- Reuses shared `hasMarkup`/`derivativePathFor` (no re-implemented format, per PARITY).
+- **#142 error contract PRESERVED**: `markup=1` returns only on success; any failure falls through to
+  the original-path fetch, which still runs the full 403/500 + real-cause-log logic. Access decision
+  is always made on the ORIGINAL path.
+- VERIFIED: type-check PASS (exit 0); `next build` PASS (exit 0, 121/121 pages, both `/…/files` and
+  `/api/files/signed-url` routes compiled). The client-imports-server build defect did NOT ship —
+  `@framefocus/shared/utils/markup` is a pure util (type-only import), already used by client components.
+
+### (b) the 3 PDF services — TODO
+⚠️ Different mechanism from (a)/(c). The client-side `markup=1` protocol does NOT transfer: these are
+server-side, embedding `photo.file_path` via `downloadImageBase64(rls, BUCKET, path)`. The swap is
+server-side — resolve to `derivativePathFor(path)` when `hasMarkup`, degrade to original if the
+derivative download fails.
