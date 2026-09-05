@@ -9722,6 +9722,19 @@ export type Database = {
         Returns: boolean
       }
       prune_proposal_views: { Args: never; Returns: number }
+      qb_record_inbound_payment: {
+        Args: {
+          p_amount: number
+          p_applications?: Json
+          p_company_id: string
+          p_contact_id: string
+          p_method?: string
+          p_note?: string
+          p_payment_date?: string
+          p_qb_payment_id: string
+        }
+        Returns: string
+      }
       qb_vault_forget: { Args: { p_secret_id: string }; Returns: undefined }
       qb_vault_get: { Args: { p_secret_id: string }; Returns: string }
       qb_vault_put: {

@@ -402,3 +402,116 @@ offer for all entity types. What limits it today is that the write-back is a sin
 immediately after the call. **Recorded in the worker's header, in the code, where the next reader is.**
 
 `npx tsc --noEmit` — real exit line: **`0`**.
+
+---
+
+## Unit 5 — the webhook, signature verification, and migration M-D
+
+**Route:** `POST /api/quickbooks/webhook`. Verified → deduped → metered read → booked.
+
+| Migration | rebuild-test | Ledger | Verified |
+| --- | --- | --- | --- |
+| `20261370000000_qb_inbound_payment.sql` (**M-D, not in the spec**) | `{"success":true}` | ⚠️ **no row written by MCP — repaired**; confirmed `1` | `pg_proc` = 1; `has_function_privilege`: **service_role `true`, authenticated `false`, anon `false`** |
+
+### ⚠️ CORRECTION 8 — Intuit's legacy webhook payload has NO event id
+
+`qb_webhook_events.intuit_event_id` is documented in its own migration as *"INTUIT'S OWN EVENT ID …
+a locally generated id would dedupe nothing."* **The legacy payload contains no such field**
+(confirmed against Intuit's docs this run). Each notification carries only `realmId` plus
+`{name, id, operation, lastUpdated}`. A single notification `id` exists **only** in the newer
+CloudEvents format Intuit is migrating to.
+
+**Built:** a composite key made entirely of **Intuit's own values** —
+`<realmId>:<entityName>:<entityId>:<operation>:<lastUpdated>`. Nothing in it is locally generated, and
+it is stable across redeliveries of the same change, which is precisely the property the migration's
+guarantee needs. `lastUpdated` **must** stay in the key: without it a second genuine update to invoice
+145 would be silently discarded as a duplicate. `eventIdFor()` takes an optional provided id and
+prefers it, so the CloudEvents migration is a one-line change.
+
+### ⚠️ WHY M-D EXISTS — 7E's payment RPC cannot be called by a webhook
+
+`record_client_payment()` opens with `get_my_company_id()` / `get_my_role()`, **both of which read the
+JWT. A webhook has no JWT** — it is an unauthenticated request from Intuit handled with the service
+role — so the very first check raises `no company for caller`. The RPC is correct; it was written for
+a signed-in Owner and this caller is not one.
+
+Inserting `client_payments` + `client_payment_applications` from TypeScript instead was rejected: that
+puts **P-2 (settle the invoice)** and **P-4 (never over-apply)** in a second place, in a second
+language, free to drift from 7E's copy. CLAUDE.md: *"Authority belongs in the database."* M-D is the
+**service-role twin** of the RPC — same invariants, different caller — and differs in exactly four
+documented ways: `company_id` is a parameter (S143), there is no role check (Intuit is not a user;
+EXECUTE is `service_role` only), it is **idempotent on `qb_payment_id`**, and it writes
+`qb_payment_id` **in the same INSERT as the row**.
+
+> **That last one is not tidiness.** If an inbound payment existed for even a moment without its
+> QuickBooks id, 7G's own outbound `payment:create` handler would pick it up and push it straight back
+> — **a second Payment in QuickBooks for money received once.** The single INSERT closes that window.
+
+### ⚠️ RETAINAGE — where the S103 Q7 ruling and 7E's shipped model genuinely diverge
+
+Ruling Q7: releasing retainage is *"a PAYMENT against the existing open invoice — never a second
+invoice."* **In QuickBooks that is exactly what M-D and the invoice mapper produce.** But on the
+FrameFocus side it is not a payment application at all, and this had to be checked rather than assumed:
+
+- `invoices.amount_receivable` **excludes** retainage (12,500 billed − 1,250 held = 11,250), and 7E's
+  **P-4 caps any application at the remaining `amount_receivable`.** A 1,250 release applied to that
+  invoice would raise `OVER_APPLIED`.
+- Retainage release is its own table — **`retainage_releases`, UNIQUE per *project*** — not an
+  application against an invoice.
+
+So the two sides legitimately differ, and **the arithmetic still foots on each**: QuickBooks holds one
+invoice at full face (12,500) closed by two payments; FrameFocus holds a receivable of 11,250 plus a
+separate project-level release. M-D's P-4 arm is what keeps them from colliding — a QB payment larger
+than our remaining receivable lands the surplus as an **unapplied credit** (7E §3), never forced onto
+the invoice. **Because of retainage this is the normal case, not an edge case**, which is why it is
+capped rather than raised on.
+
+### ⚠️ NOT BUILT, AND THIS IS A DECISION THE SPEC DOES NOT NAME — retainage release → QuickBooks
+
+The QB-side representation of a **release** is not wired. Two blockers, both structural:
+
+1. `retainage_releases` has **no `qb_*` columns**, so nothing can record whether a release reached QB.
+2. `qb_sync_queue.entity_type`'s CHECK has **no value** for it, and `payment:create` reads
+   `client_payments` — a release is not one.
+
+Both are small additive migrations. **The actual blocker is an allocation question the spec never
+asks:** a release is per **project**, but a project may have **many** invoices that each withheld
+retainage. Which QuickBooks invoice(s) does the release payment apply to, and in what split? 7g2's
+trace assumes exactly one invoice. Defaulting that on a money path is not a reversible choice, so per
+the run's own rule this is **logged and built around, not guessed**. Filed **`#3-7gqb`**.
+
+### The webhook's posture
+
+- **Raw body read once, before anything else.** The HMAC is over the exact bytes Intuit signed;
+  `request.json()` would re-serialise them. A test asserts this explicitly.
+- **Fail closed.** No verifier token in Vault → **reject every request** with 401. `getVerifierToken()`
+  returning null must never be read as "verification isn't configured, let it through" — that
+  inversion is how a money endpoint ships open on a fresh deployment.
+- **Dedupe by INSERTING**, letting the UNIQUE index be the check. A select-then-insert has a race two
+  concurrent deliveries will find, and losing it costs a duplicate **paid** read plus a possible
+  double-booked payment.
+- **Only `Payment` entities are acted on.** An Invoice or Customer webhook is recorded for diagnosis
+  and deliberately not applied — pulling QuickBooks' version of an invoice back over ours would be the
+  import that RULED S103 #5 says does not exist. A Payment **deleted or voided in QuickBooks** is
+  logged and **not** auto-reversed: reversing money from an unauthenticated trigger is not this
+  connector's decision to take.
+- **An unknown realm is recorded, not dropped.** `qb_webhook_events.company_id` is nullable precisely
+  so a stale grant is diagnosable.
+
+**⚠️ The honest gap, named in the code:** the event row is written *before* processing, so a processing
+failure is **not** re-driven by Intuit's retry — that retry is deduped by design, because the row means
+"received" and the metered read it protects has been paid for. Recovery must be ours. Today that is a
+greppable `[qb-webhook] UNPROCESSED` log line plus a manual re-sync; the **CDC backstop poll (7g2 §9
+item 9) is the designed automatic recovery and is not built.** Filed **`#2-7gqb`**.
+
+### Tests — real HMACs, not fixtures
+
+`lib/quickbooks/webhook-verify.test.ts` — **13 tests, 13 passed, real exit line `0`** (`npx vitest run`).
+Every case signs a payload with `crypto` exactly as Intuit does and asserts the verifier's answer:
+correct signature accepted; **wrong token rejected; tampered body rejected; missing header rejected;
+truncated signature rejected without throwing** (the `timingSafeEqual` length guard); and
+**re-serialised JSON rejected**, which is the test that proves why the route reads `text()` and never
+`json()`. Plus parsing and idempotency-key cases, including the one that matters most — two different
+updates to the same entity must produce **different** keys.
+
+`npx tsc --noEmit` — real exit line: **`0`**. Types regenerated (10037 → 10050), additive only.
