@@ -653,3 +653,72 @@ The specific trap that build clears: `accounting-panel.tsx` is `'use client'` an
 types from `lib/services/quickbooks.ts`, which is `server-only`. `import type` is erased, so it is
 correct — but it is exactly the shape that type-checks clean and fails to build, so it was **built**,
 not assumed.
+
+---
+
+## Unit 8 — the pay-link surface, the disclosure, and the records
+
+**Pay-link, three surfaces:**
+
+| Surface | File |
+| --- | --- |
+| Invoice screen | `invoice-delivery-panel.tsx` — "Pay online" + disclosure, wired from `invoice-builder.tsx` |
+| **Invoice email** | `lib/email/templates/invoice-email.tsx` — a conditional CTA button + disclosure |
+| Accounting settings | `accounting-panel.tsx` payments card |
+
+The email template's own header said *"Add the button here when 7G lands."* It landed, so the button
+is built, and the superseded note is **quoted rather than deleted** in both the template and the send
+route.
+
+> ⚠️ **The link is usually absent on a FIRST send, and that is not a bug.** QuickBooks mints it when
+> the invoice is **pushed**, and the push is **queued** — the drain runs every five minutes. Sending is
+> deliberately **not** coupled to Intuit being reachable (7g2 §1.10: everything queues while QuickBooks
+> is unreachable), which is the right trade: an invoice must send when QuickBooks is down. So the
+> button appears on a **re-send**. It is also absent **forever** when the connected company has no
+> QuickBooks Payments — RULED NON-BLOCKING. **And there is no "you cannot pay here" copy in that case**
+> (7g1 #3: a viewable bill, not an explanation). All of this is written at each site.
+
+**Not Floor-gated, deliberately.** 7g2 §8: *"The pay-link on the invoice is visible to whoever can
+already see the invoice."* It is a URL, not a figure; `invoices_select_visible` already decides who
+reaches the row and this inherits exactly that. **No second gate, no #136-class render-only filter.**
+
+### The disclosure — placements 1 and 2 shipped, placement 3 recorded
+
+**"Payment service provided by Intuit Payments Inc."**
+
+1. **Marketing/pricing → `components/public/site-footer.tsx`.** Put in the **shared footer** rather
+   than on `/pricing` alone, so `/`, `/pricing`, `/terms` and `/privacy` all carry it — one placement
+   instead of four that drift, and a future marketing page inherits it.
+2. **The invoice pay-link surface** — beside the button on both the screen and the email, plus the
+   Accounting settings panel.
+3. **The client-portal pay surface** — **NOT built, and must not be.** Recorded as **`GATED.md` →
+   Gate 6**, a FORWARD OBLIGATION for immediately after M7, with the wording marked as *a declared
+   string, not copy to reword*, and an explicit instruction not to remove the entry until it ships.
+
+### Tech debt filed — `#1-7gqb`, `#2-7gqb`, `#3-7gqb`
+
+Branch-scoped provisional ids per the S136 numbering ruling (tag `7gqb`), in `TECH_DEBT.md`: the
+missing vendor-id column, the webhook's log-only recovery, and the retainage-release push blocked on
+the allocation ruling.
+
+### ⚠️ A REGRESSION I INTRODUCED AND CAUGHT — the pre-rebrand product name
+
+Running the **full** unit suite (not just my own file) surfaced `test/brand-literals.test.ts` failing
+on **five files I had written**. I had used **"FrameFocus"** — the **pre-rebrand** name — in comments
+and, worse, in **on-screen copy** and a user-facing error string. The product is **EZ Contractor
+Binder** (`lib/brand.ts`); the test counts comments too, on purpose.
+
+Fixed at all eight sites: comments reworded to "the platform"/"this side", and the two **user-facing**
+strings now read `brand.name` from `lib/brand.ts` rather than any literal — which is what that module
+exists for.
+
+**Baseline established properly rather than assumed**, per CLAUDE.md's exit-status rule. On `main`:
+**1 failed, 13 passed**. On this branch before the fix: **2 failed**. So exactly one regression was
+mine. After the fix: **1037 passed, 1 failed**, and that one (`s131-dashboard-access.test.ts` →
+*"defaultSignedInPath still branches on user agent alone"*) **fails identically on `main`** — it is
+pre-existing and untouched by this work.
+
+**This is the S157 sweep rule working as intended**: my own probes were green; a suite-wide run caught
+what they could not.
+
+`npx next build` → real exit **`0`**. `npx vitest run` → **1037/1038**, sole failure pre-existing.

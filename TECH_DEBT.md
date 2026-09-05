@@ -74,6 +74,72 @@ Complete as of Session 40. All polish items closed. Module 4 build is unblocked.
 > **#155 and #156 moved to [`TECH_DEBT_IDEAS.md`](TECH_DEBT_IDEAS.md)** — they are deferred
 > decisions, not owed work. Everything below is owed work with a known fix.
 
+### Branch-scoped, awaiting real numbers — `feature/7g-quickbooks` [S180]
+
+> Provisional ids per the S136 rule. Tag `7gqb`. Convert to real numbers from main's file at merge.
+> All three were found while building 7G and are **owed work with a known fix**, not deferred
+> decisions — except `#3-7gqb`, which is owed work **blocked on one ruling**, stated below.
+
+#### `#1-7gqb` — there is nowhere to persist a QuickBooks **Vendor** id
+
+**What.** `expenses.supplier` is FREE TEXT and `subcontractors` carries **no `qb_vendor_id`** column
+(checked against the live schema at S180). Contacts, projects, invoices, payments, refunds and
+expenses all have a `qb_*_id`; vendors have none.
+
+**Consequence today.** 7g2 Flow 3's design — *"enqueue `vendor:create` … → `bill:create` (depends_on
+vendor)"* — **cannot be built as written**, because there is no row to write the id back to. The
+connector instead resolves-or-creates the vendor **inline** in `bill:create`, memoised per drain
+(`resolveOrCreateVendor`, `lib/quickbooks/entities.ts`). `vendor:create` is explicitly **terminal** in
+the dispatcher so a stray row cannot sit `queued` forever.
+
+**Cost of leaving it.** One metered CorePlus read per distinct supplier per drain, and a supplier
+renamed in QuickBooks silently becomes a *second* vendor on the next push.
+
+**Fix.** Add `subcontractors.qb_vendor_id` (and/or a `qb_vendor_map` table keyed on the supplier
+string for non-sub vendors), write it back on create, and check it first — the same shape
+`contacts.qb_customer_id` already uses.
+
+#### `#2-7gqb` — a webhook whose follow-up processing fails is visible only in logs
+
+**What.** `/api/quickbooks/webhook` writes the `qb_webhook_events` row **before** processing, because
+that row's documented meaning is *received* and it protects a **metered** CorePlus read. So a failure
+after that point is **not** re-driven by Intuit's retry — the retry is correctly deduped.
+
+**Consequence today.** Recovery must be ours, and today it is a greppable `[qb-webhook] UNPROCESSED`
+log line plus a manual re-sync. **The payment is never lost in QuickBooks** — it is the mirror in
+FrameFocus that is missing — but nothing surfaces it on a screen.
+
+**Fix.** The **CDC backstop poll** already specified as 7g2 §9 item 9 (hourly cadence ruled at S143),
+which reconciles QuickBooks against our records and catches exactly this. `qb_read_budget` exists to
+keep that affordable.
+
+#### `#3-7gqb` — retainage RELEASE does not reach QuickBooks — ⚠️ **blocked on one ruling**
+
+**What.** RULED [S103 Q7]: *"releasing retainage is a PAYMENT against the existing open invoice —
+never a second invoice."* The QuickBooks-side invoice is built correctly for this (full face value,
+retainage as a `DescriptionOnly` line, so it stays OPEN for the held amount). **The release itself is
+not pushed.**
+
+**Why it is not merely unwired.** Two structural gaps, both small additive migrations —
+`retainage_releases` has no `qb_*` columns, and `qb_sync_queue.entity_type`'s CHECK has no value for a
+release (`payment:create` reads `client_payments`, and a release is not one).
+
+⚠️ **But the real blocker is an allocation question the spec never asks.** `retainage_releases` is
+**UNIQUE per project**, while a project may have **many** invoices that each withheld retainage. 7g2's
+trace assumes exactly one. **Which QuickBooks invoice(s) does the release payment apply to, and in
+what split?** That is not a reversible default on a money path, so S180 logged it rather than guessing.
+
+**Note the two sides do NOT disagree today.** 7E's P-4 caps an application at the remaining
+`amount_receivable`, which **excludes** retainage — so a release was never an invoice application on
+this side either. QuickBooks holds one invoice at full face closed by two payments; FrameFocus holds a
+receivable plus a separate project-level release. Both foot. What is missing is only the second QB
+payment.
+
+**Fix.** Rule the allocation, then: add `retainage_releases.qb_payment_id`, extend the `entity_type`
+CHECK, add a handler, and enqueue on release.
+
+---
+
 ### Branch-scoped, awaiting real numbers — `fix/contacts-and-insurance` [S103]
 
 > Provisional id per the S136 rule. Tag `cai`. Convert to a real number from main's file at merge.

@@ -532,6 +532,36 @@ ships, `/terms` and `/privacy` render placeholders that assert no policy
 
 ---
 
+## Gate 6 — The CLIENT-PORTAL Intuit Payments disclosure — **FORWARD OBLIGATION [Josh, S103 Q8; recorded S180]**
+
+⚠️ **This is not blocked work waiting on a decision. It is a COMMITMENT ALREADY MADE to Intuit, with
+nowhere to put it yet.** It is recorded here because 7g2-spec.md §5.5 says explicitly that it **must
+not be lost**, and the only reason it is not built is that the surface does not exist.
+
+**The obligation.** The exact text **"Payment service provided by Intuit Payments Inc."** must appear
+in **three** places. Josh answered **YES** to Intuit on both marketing and product disclosure, and
+**Intuit reviews an app against what was declared.**
+
+| # | Placement | Status |
+| --- | --- | --- |
+| 1 | Marketing / pricing pages | ✅ **SHIPPED [S180]** — `components/public/site-footer.tsx`, so every public page carries it |
+| 2 | The invoice pay-link surface | ✅ **SHIPPED [S180]** — `invoice-delivery-panel.tsx`, beside "Pay online"; also on the Accounting settings panel |
+| 3 | **The CLIENT-PORTAL pay surface** | ⚠️ **OWED** |
+
+**Behind what:** the client portal is **Module 9 and its pay surface is unbuilt.** There is no page to
+put the line on. (Note the portal *route tree* partly exists — `/portal/[projectId]/financials` builds
+today — but no **pay** surface does, and the line belongs with the pay affordance, not with a
+statement of account.)
+
+**What unblocks it:** M9's pay surface. **RULED [S103 Q8]: add it IMMEDIATELY AFTER M7 completes**, at
+the moment that surface arrives.
+
+**How not to lose it:** whoever builds the portal pay surface adds the line in the same commit. The
+two shipped placements are the reference for the wording — **copy it verbatim; it is a declared string,
+not copy to reword.** Do not remove this entry until placement 3 is shipped.
+
+---
+
 ## Deferred by decision (not blocked — chosen)
 
 - **Conversion-stamp (contract-start date) — CONFLICT, resolve before build.**

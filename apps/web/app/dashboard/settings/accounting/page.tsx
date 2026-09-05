@@ -6,6 +6,7 @@ import {
 } from '@/lib/services/quickbooks';
 import { AccountingPanel } from '@/components/quickbooks/accounting-panel';
 import { color, h2Style } from '@/lib/theme';
+import { brand } from '@/lib/brand';
 
 /**
  * ⚠️ THIS ROUTE EXISTS BECAUSE INTUIT IS REGISTERED AGAINST THIS EXACT PATH.
@@ -41,7 +42,7 @@ const NOTICES: Record<string, { kind: 'ok' | 'error'; message: string }> = {
   realm_taken: {
     kind: 'error',
     message:
-      'That QuickBooks company is already connected to another FrameFocus account. Disconnect it there first.',
+      `That QuickBooks company is already connected to another ${brand.name} account. Disconnect it there first.`,
   },
   vault_failed: { kind: 'error', message: 'The connection could not be stored securely. Nothing was saved — please try again.' },
   save_failed: { kind: 'error', message: 'The connection could not be saved. Please try again.' },

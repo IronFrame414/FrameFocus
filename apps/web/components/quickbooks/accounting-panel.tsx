@@ -21,6 +21,7 @@
  */
 
 import { useState } from 'react';
+import { brand } from '@/lib/brand';
 import type { QueueItem, QueueSummary, QuickBooksConnection } from '@/lib/services/quickbooks';
 import {
   badgeStyle,
@@ -68,8 +69,9 @@ export function AccountingPanel({ connection, queue, isOwner, notice }: Accounti
       <section style={{ ...cardStyle, padding: '1.25rem' }}>
         <h2 style={h2Style}>QuickBooks Online</h2>
         <p style={{ color: color.body, fontSize: '0.875rem', margin: '0.5rem 0 1rem' }}>
-          FrameFocus runs your operations; QuickBooks runs your books. Invoices and approved expenses
-          are sent to QuickBooks automatically, and payments taken through QuickBooks come back here.
+          {brand.name} runs your operations; QuickBooks runs your books. Invoices and approved
+          expenses are sent to QuickBooks automatically, and payments taken through QuickBooks come
+          back here.
         </p>
 
         {isConnected || needsReauth ? (

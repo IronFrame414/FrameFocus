@@ -265,7 +265,7 @@ async function recordPaymentFromQuickBooks(
 
   if (!contactId) {
     throw new Error(
-      `Payment ${qbPaymentId} could not be matched to a client in FrameFocus; not booked.`
+      `Payment ${qbPaymentId} could not be matched to a client on this platform; not booked.`
     );
   }
 

@@ -5,7 +5,7 @@ import type { QboConnection } from './tokens';
 import type { QbQueueRow } from './queue';
 
 /**
- * 7G — the entity mappers. FrameFocus rows in, QuickBooks objects out.
+ * 7G — the entity mappers. Platform rows in, QuickBooks objects out.
  *
  * ⚠️ THE DIRECTION OF EVERY FLOW IN THIS FILE IS OUTBOUND. RULED [S103 #5]:
  * "Sync is TWO-WAY, not three." Invoices OUT, expenses OUT as Bills, and
@@ -232,7 +232,7 @@ async function readSyncToken(
 }
 
 // ---------------------------------------------------------------------------
-// customer:create — a FrameFocus contact becomes a QuickBooks Customer
+// customer:create — a platform contact becomes a QuickBooks Customer
 // ---------------------------------------------------------------------------
 
 export function contactDisplayName(contact: {
@@ -1024,8 +1024,8 @@ async function handleBillVoid(ctx: DrainContext, row: QbQueueRow): Promise<Handl
  * pay-link, QuickBooks creates the Payment, and a webhook brings it here.
  *
  * But 7E also has a MANUAL path: a cheque or a bank transfer recorded by the
- * Owner in FrameFocus. Nothing in QuickBooks knows about it. Without this
- * handler the QuickBooks invoice **stays open forever** while FrameFocus shows
+ * Owner here. Nothing in QuickBooks knows about it. Without this handler the
+ * QuickBooks invoice **stays open forever** while this side shows
  * it paid — the two sets of books disagree about money, which is precisely the
  * defect 7G exists to prevent. So a manually recorded payment is pushed OUT.
  *

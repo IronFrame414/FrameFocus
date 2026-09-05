@@ -14,7 +14,7 @@ import {
  *
  * CLAUDE.md owner-only item 4: "Connecting or disconnecting QuickBooks — QB
  * connection is treated as billing-adjacent because it controls financial data
- * flow out of FrameFocus. Owner-only." The DATABASE already enforces this
+ * flow out of the platform. Owner-only." The DATABASE already enforces this
  * (`enforce_companies_qb_scope`, 20260928000000, which is NARROWER than
  * `companies_update_owner_admin`); this check exists so an Admin gets a 403
  * here rather than a raised exception three hops later.
