@@ -88,7 +88,8 @@ export default async function MobileLayout({ children }: { children: React.React
     // `id` [S126 slice 5] — the chat overlay needs the caller's PROFILE id to
     // decide which bubbles are theirs. chat_messages.author_profile_id is a
     // profile id, so user.id is the wrong key and would align every bubble left.
-    .select('id, company_id')
+    // `role` [#101] — gates the "Desktop site" toggle in the nav sheet.
+    .select('id, company_id, role')
     .eq('user_id', user.id)
     .single();
 
@@ -117,6 +118,7 @@ export default async function MobileLayout({ children }: { children: React.React
         teamCount={members?.length ?? null}
         unreadCount={unreadCount}
         myProfileId={profile.id}
+        role={profile.role}
       >
         {children}
       </MobileShell>

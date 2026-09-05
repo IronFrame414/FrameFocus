@@ -44,7 +44,7 @@ export interface DayPresence {
 /** files row subset for the 4c photo grid. */
 export type LogPhoto = Pick<
   Database['public']['Tables']['files']['Row'],
-  'id' | 'file_name' | 'file_path' | 'mime_type' | 'category' | 'created_at'
+  'id' | 'file_name' | 'file_path' | 'mime_type' | 'category' | 'created_at' | 'markup_data'
 > & {
   // Migrations 20260721070000/080000 — swap to the generated type after the
   // next `npm run db:push` regenerates database.ts.
@@ -128,7 +128,7 @@ export async function getLogPhotos(logId: string): Promise<LogPhoto[]> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from('files')
-    .select('id, file_name, file_path, mime_type, category, created_at, client_visible')
+    .select('id, file_name, file_path, mime_type, category, created_at, client_visible, markup_data')
     // .filter — daily_log_id is not in database.ts until the next type
     // regen; switch to .eq then.
     .filter('daily_log_id', 'eq', logId)

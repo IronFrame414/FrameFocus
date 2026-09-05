@@ -647,7 +647,7 @@ Add a SECOND SELECT policy on `files` to grant clients read access to specifical
 
 ## Open Tech Debt
 
-> Tech debt is tracked in `TECH_DEBT.md` at the repo root. Not loaded into project knowledge — view on demand.
+> Tech debt is tracked in three files at the repo root: `TECH_DEBT.md` (OPEN — owed work + numbering authority), `TECH_DEBT_CLOSED.md` (closed), `TECH_DEBT_IDEAS.md` (deferred decisions). Split from one file [debt-split-and-ux]. Not loaded into project knowledge — view on demand.
 
 ---
 

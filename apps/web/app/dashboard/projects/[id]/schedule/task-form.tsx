@@ -9,7 +9,12 @@ import { findOverlaps } from '@/lib/services/schedule-client';
 interface TaskFormProps {
   projectId: string;
   phases: Phase[];
-  members: { id: string; display_name: string; member_type: string }[];
+  members: {
+    id: string;
+    display_name: string;
+    member_type: string;
+    sub_type?: 'subcontractor' | 'vendor' | null; // #89: label subs vs vendors
+  }[];
   tasks: Task[]; // for the dependency picker
   editing: Task | null; // null = create mode
   canManage: boolean;
@@ -183,7 +188,14 @@ export function TaskForm({
             {members.map((m) => (
               <option key={m.id} value={m.id}>
                 {m.display_name}
-                {m.member_type === 'subcontractor' ? ' (Sub)' : ''}
+                {m.member_type === 'subcontractor'
+                  ? // #89: label by the resolved sub_type — a vendor is a
+                    // subcontractor-type member with sub_type 'vendor'. NULL
+                    // (unresolved directory sub) falls back to "(Sub)", today's behaviour.
+                    m.sub_type === 'vendor'
+                    ? ' (Vendor)'
+                    : ' (Sub)'
+                  : ''}
               </option>
             ))}
           </select>

@@ -11,7 +11,7 @@ import {
   poTitle,
 } from '@/lib/services/deliveries';
 import { getCompanyTimeSettings } from '@/lib/services/company';
-import { downloadImageBase64 } from '@/lib/change-orders/co-data';
+import { downloadPhotoBase64 } from '@/lib/change-orders/co-data';
 
 // 6D — delivery record PDF pipeline, server-only (S90 new scope; mechanics
 // identical to daily-log-pdf-service.ts). Regenerate-on-edit, ONE current PDF
@@ -83,9 +83,9 @@ export async function regenerateDeliveryPdf(
     for (const photo of itemPhotos) {
       if (embedBudget <= 0) break;
       if (!EMBEDDABLE_MIME_TYPES.has(photo.mime_type)) continue;
-      const base64 = await downloadImageBase64(rls, BUCKET, photo.file_path);
-      if (base64) {
-        embedded.push({ dataUri: `data:${photo.mime_type};base64,${base64}` });
+      const embed = await downloadPhotoBase64(rls, BUCKET, photo);
+      if (embed) {
+        embedded.push({ dataUri: `data:${embed.mimeType};base64,${embed.base64}` });
         embedBudget -= 1;
       }
     }
@@ -105,9 +105,9 @@ export async function regenerateDeliveryPdf(
   for (const photo of generalPhotos) {
     if (embedBudget <= 0) break;
     if (!EMBEDDABLE_MIME_TYPES.has(photo.mime_type)) continue;
-    const base64 = await downloadImageBase64(rls, BUCKET, photo.file_path);
-    if (base64) {
-      embeddedGeneral.push({ dataUri: `data:${photo.mime_type};base64,${base64}` });
+    const embed = await downloadPhotoBase64(rls, BUCKET, photo);
+    if (embed) {
+      embeddedGeneral.push({ dataUri: `data:${embed.mimeType};base64,${embed.base64}` });
       embedBudget -= 1;
     }
   }

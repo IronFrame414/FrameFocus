@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useAlert } from '@/components/confirm/confirm-provider';
 import type { FileRecord } from '@/lib/services/files';
+import { hasMarkup } from '@framefocus/shared/utils/markup';
 import FavoriteToggle from './favorite-toggle';
 import FileRowActions from './file-row-actions';
 import AiTagEditor from './ai-tag-editor';
@@ -24,10 +25,17 @@ export default function FileRow({
   const [hover, setHover] = useState(false);
   const [busy, setBusy] = useState(false);
 
+  // #100: an annotated photo opens/downloads as its flattened `.markup.jpg`
+  // derivative so the marks are visible outside the editor (the route degrades
+  // to the original if the derivative is missing).
+  const annotated = hasMarkup(file.markup_data);
+
   async function handleRowClick() {
     if (busy) return;
     setBusy(true);
-    const res = await fetch(`/api/files/signed-url?path=${encodeURIComponent(file.file_path)}`);
+    const res = await fetch(
+      `/api/files/signed-url?path=${encodeURIComponent(file.file_path)}${annotated ? '&markup=1' : ''}`
+    );
     setBusy(false);
     if (!res.ok) {
       void alert('Could not open file.');
@@ -113,6 +121,7 @@ export default function FileRow({
           filePath={file.file_path}
           fileName={file.file_name}
           mimeType={file.mime_type}
+          annotated={annotated}
           projectId={projectId}
         />
       </td>

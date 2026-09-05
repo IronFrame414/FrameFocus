@@ -218,6 +218,8 @@ export interface DeliveryPhoto {
   delivery_item_id: string | null;
   client_visible: boolean;
   created_at: string;
+  /** #100 — non-empty ⇒ embed the `.markup.jpg` derivative in the PDF. */
+  markup_data: unknown;
 }
 
 /**
@@ -230,7 +232,7 @@ export async function getDeliveryPhotos(itemIds: string[]): Promise<DeliveryPhot
   const supabase = await createClient();
   const { data, error } = await supabase
     .from('files')
-    .select('id, file_name, file_path, mime_type, delivery_item_id, client_visible, created_at')
+    .select('id, file_name, file_path, mime_type, delivery_item_id, client_visible, created_at, markup_data')
     // .filter — delivery_item_id is not in database.ts until the next type
     // regen (prod batch pending); switch to .in then.
     .filter('delivery_item_id', 'in', `(${itemIds.join(',')})`)
@@ -250,7 +252,7 @@ export async function getDeliveryLevelPhotos(deliveryId: string): Promise<Delive
   const supabase = await createClient();
   const { data, error } = await supabase
     .from('files')
-    .select('id, file_name, file_path, mime_type, delivery_item_id, client_visible, created_at')
+    .select('id, file_name, file_path, mime_type, delivery_item_id, client_visible, created_at, markup_data')
     // .filter — delivery_id is not in database.ts until the next type regen
     // (prod batch pending); switch to .eq then.
     .filter('delivery_id', 'eq', deliveryId)
