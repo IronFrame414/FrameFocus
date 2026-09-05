@@ -271,3 +271,25 @@ prod; `main` NOT pushed (origin/main still `38b9c5a`); CLI still linked to rebui
 **Recommendation:** proceed — the sole red is a network-slowness timeout that passes 20/20 in 4.5s
 isolated; nothing that would deploy is implicated. Alternative if Josh wants a clean aggregate
 green first: re-run the full live suite once (it may have been a transient slow window).
+
+---
+
+# §4 — PRODUCTION PUSH [Josh approved proceed, RESUME RUN; sole red proven env-only]
+
+## §4.1 — production ledger read FIRST (the "before" picture)
+- Production = `FrameFocus` / `jwkcknyuyvcwcdeskrmz`. rebuild-test = `nmyphyhmfttxkdoposvf` (CLI + MCP
+  both still point here). No `SUPABASE_DB_PASSWORD` in env, so `db push` is unavailable; production is
+  reached via the **Supabase Management API `/v1/projects/{ref}/database/query`** endpoint with
+  `SUPABASE_ACCESS_TOKEN` — the same channel the MCP uses, pointed at prod. Verified read-only first.
+- **Prod ledger: 171 rows, oldest `20260101000000`, newest `20261100000000`.**
+- **Diff vs local (195 files): 24 PENDING, ZERO in-prod-not-local.** The pending set is a contiguous
+  range `20261110000000 … 20261330000000` — prod's ledger is a clean PREFIX of local, no holes, no
+  divergence. This is the EXPECTED scoped set (estimates redesign + fix branch + dedupe/index + a few
+  main-line), NOT §0's "unexpectedly large set" STOP condition. Proceeding.
+- Dedupe `20261265000000` precedes index `20261270000000` in filename order ✓. All 24 files scanned:
+  no CONCURRENTLY / enum ADD VALUE / VACUUM / explicit BEGIN — every migration is transaction-safe.
+- Endpoint TX semantics probed on prod (CREATE + forced error in one request → table did NOT survive):
+  each request is a SINGLE implicit transaction. So each migration is applied as `<DDL>; INSERT ledger`
+  in ONE atomic request — a failure rolls back the migration AND records no ledger row.
+
+## §4.2 — applying 24 pending migrations in filename order, one at a time, STOP on first error
