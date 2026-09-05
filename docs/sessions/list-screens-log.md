@@ -19,6 +19,17 @@ Plan:
 
 ---
 
+## §2 item 3 — DONE (commit: remove cost codes from add-items sheet)
+- `add-items-sheet.tsx`: removed all 3 cost-code UI spots — manual "Cost code" input, catalog-row
+  cost_code display, tray sub-label (now shows `rowType`). **Data passthrough KEPT** (`:184` read /
+  `:357` write) so a catalog item still persists its own cost_code — not a lost feature.
+- Filed `#1-listscr` in `TECH_DEBT_IDEAS.md` (branch-scoped provisional, S136 rule): the DECISION is
+  how cost codes should be assigned (free-text vs select vs category relation), not the work.
+- ⚠️ Interpretation note: "remove cost codes from the sheet" read as remove from the sheet UI
+  everywhere (input + both displays), preserving data. If Josh meant only the editable input, the
+  two display removals are trivially reversible.
+- type-check PASS; **`next build` PASS** (✓ Compiled successfully — §2 checkpoint).
+
 ## §2 item 2 — DONE (commit: contract_type enum leak)
 - `review-send-sheet.tsx:208` now renders `CONTRACT_TYPE_LABELS[estimate.contract_type]` (the SAME
   map `contract-section.tsx`/Details uses, from `estimates-client.ts:35`) → "Time & Materials" etc.

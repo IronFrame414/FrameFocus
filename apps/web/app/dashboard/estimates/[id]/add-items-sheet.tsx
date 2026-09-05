@@ -510,10 +510,9 @@ export function AddItemsSheet({
                         ))}
                       </select>
                     </div>
-                    <div>
-                      <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: color.body, marginBottom: '2px' }}>Cost code</label>
-                      <input value={manual.costCode} onChange={(e) => setManual((m) => ({ ...m, costCode: e.target.value }))} style={{ ...inputStyle, width: '100%' }} placeholder="06 — CARPENTRY" />
-                    </div>
+                    {/* [S103] Cost code REMOVED from the add-items sheet — deferred
+                        decision, see TECH_DEBT_IDEAS.md. Data passthrough kept: a
+                        catalog item still carries its own cost_code on save. */}
                     <div>
                       <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: color.body, marginBottom: '2px' }}>Qty</label>
                       <input inputMode="decimal" value={manual.qty} onChange={(e) => setManual((m) => ({ ...m, qty: e.target.value }))} style={{ ...inputStyle, width: '100%', fontFamily: font.mono, textAlign: 'right' }} />
@@ -592,10 +591,8 @@ export function AddItemsSheet({
                               data-testid={`sheet-pick-${item.id}`}
                             />
                             <div style={{ flex: 1, minWidth: 0 }}>
+                              {/* [S103] cost code removed from the sheet UI */}
                               <div style={{ fontSize: '13px', fontWeight: 600, color: color.navy }}>{item.name}</div>
-                              <div style={{ fontFamily: font.mono, fontSize: '10.5px', color: color.faint }}>
-                                {item.cost_code ?? '—'}
-                              </div>
                             </div>
                             <span style={{ fontSize: '11.5px', color: color.muted }}>{item.unit_of_measure}</span>
                             <span style={{ fontFamily: font.mono, fontSize: '12.5px', fontWeight: 600, color: color.navy, width: '76px', textAlign: 'right' }}>
@@ -711,7 +708,7 @@ export function AddItemsSheet({
                     <div key={e.key} style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 74px 90px 90px 80px 100px 190px 30px', gap: '8px', alignItems: 'center', padding: '6px 18px', borderBottom: `1px solid ${color.rowDivider}` }}>
                       <div style={{ minWidth: 0 }}>
                         <div style={{ fontSize: '13px', fontWeight: 600, color: color.navy, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.name}</div>
-                        <div style={{ fontFamily: font.mono, fontSize: '10px', color: color.faint }}>{e.costCode ?? e.rowType}</div>
+                        <div style={{ fontFamily: font.mono, fontSize: '10px', color: color.faint }}>{e.rowType}</div>
                       </div>
                       {e.rowType === 'labor' || e.rowType === 'material' ? (
                         <input aria-label="Qty" inputMode="decimal" value={e.qty} onChange={(ev) => patchEntry(e.key, { qty: ev.target.value })} style={{ ...inputStyle, fontFamily: font.mono, textAlign: 'right' }} />
