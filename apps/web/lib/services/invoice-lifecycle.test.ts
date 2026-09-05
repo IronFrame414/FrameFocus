@@ -27,14 +27,15 @@ describe('§9 — who may void, and when', () => {
     expect(pm.allowed === false && pm.reason).toContain('Owner or Admin');
   });
 
-  it('PARTIALLY PAID, not yet in QuickBooks: Owner ONLY, and it warns', () => {
-    const owner = canVoidInvoice({ ...base, hasPayment: true, role: 'owner' });
-    expect(owner.allowed).toBe(true);
-    expect(owner.allowed === true && owner.warning).toContain('client credit');
-
-    const admin = canVoidInvoice({ ...base, hasPayment: true, role: 'admin' });
-    expect(admin.allowed).toBe(false);
-    expect(admin.allowed === false && admin.reason).toContain('only the Owner');
+  it('PAID (any payment applied), NOT yet in QuickBooks: NOBODY may void — credit or refund [S103]', () => {
+    // Superseded [S103], quoted not deleted: "PARTIALLY PAID, not yet in
+    // QuickBooks: Owner ONLY, and it warns." The money moved — a paid invoice
+    // cannot be voided at all, Owner included, whether or not it reached QB.
+    for (const role of ['owner', 'admin', 'project_manager'] as const) {
+      const decision = canVoidInvoice({ ...base, hasPayment: true, role });
+      expect(decision.allowed).toBe(false);
+      expect(decision.allowed === false && decision.reason).toContain('credit memo or a refund');
+    }
   });
 
   it('PAYMENT ALREADY IN QUICKBOOKS: nobody may void — 7E credit or refund', () => {
