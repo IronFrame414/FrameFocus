@@ -10,12 +10,15 @@ export default function FileRowActions({
   filePath,
   fileName,
   mimeType,
+  annotated = false,
   projectId,
 }: {
   fileId: string;
   filePath: string;
   fileName: string;
   mimeType: string | null;
+  /** #100: file has markup — download the flattened `.markup.jpg` derivative. */
+  annotated?: boolean;
   projectId: string;
 }) {
   const router = useRouter();
@@ -25,7 +28,9 @@ export default function FileRowActions({
   const isImage = mimeType?.startsWith('image/') ?? false;
 
   async function getSignedUrl(): Promise<string | null> {
-    const res = await fetch(`/api/files/signed-url?path=${encodeURIComponent(filePath)}`);
+    const res = await fetch(
+      `/api/files/signed-url?path=${encodeURIComponent(filePath)}${annotated ? '&markup=1' : ''}`
+    );
     if (!res.ok) return null;
     const { url } = await res.json();
     return url;

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { signedUrlFor } from '@/lib/services/files';
 import { SIGNED_URL_TTL_SECONDS } from '@/lib/services/signed-url-ttl';
+import { derivativePathFor } from '@framefocus/shared/utils/markup';
 
 // TECH_DEBT #142 [S122] — THE ERROR CONTRACT, not the auth model.
 //
@@ -40,6 +41,21 @@ export async function GET(request: Request) {
 
   if (!path) {
     return NextResponse.json({ error: 'Missing path' }, { status: 400 });
+  }
+
+  // TECH_DEBT #100 — when the caller knows the file is annotated (hasMarkup),
+  // it passes `markup=1` and the ORIGINAL path. We serve the flattened
+  // `.markup.jpg` derivative so the marks are visible on open/download, and
+  // DEGRADE to the original if the derivative is absent (save's derivative
+  // step can fail independently of markup_data — A-23t / photos.ts resolveUrls).
+  // The 403/anti-enumeration decision below is always made on the ORIGINAL
+  // path, which is the real access question — the derivative is best-effort.
+  if (searchParams.get('markup') === '1') {
+    const derivative = await signedUrlFor(derivativePathFor(path), SIGNED_URL_TTL_SECONDS);
+    if (derivative.url) {
+      return NextResponse.json({ url: derivative.url });
+    }
+    // derivative missing/unreadable → fall through and sign the original.
   }
 
   const { url, error } = await signedUrlFor(path, SIGNED_URL_TTL_SECONDS);
