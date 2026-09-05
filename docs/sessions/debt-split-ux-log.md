@@ -167,3 +167,13 @@ exercised this run — confirmed during build.
   context/spec refs left unrewritten (resolve via OPEN + cross-links; rewriting history is wrong).
 - NOTE: did NOT hunt for additional IDEAS candidates beyond the two named — reclassifying other open
   items would be a deferred-decision judgment not in the prompt (a stop). Only #155/#156 moved.
+
+## Phase 3 — Item 2.1 (#89) DONE (commit: Schedule label)
+- `members.ts`: CompanyMember gains optional `sub_type`; getMembers() embeds
+  `subcontractors!subcontractors_member_id_fkey(sub_type)`, flattens reverse-embed array → sub_type.
+- `schedule/page.tsx`: threads sub_type into the TaskForm members prop.
+- `task-form.tsx`: label by resolved sub_type (vendor→"(Vendor)", sub→"(Sub)", crew/null→fallback).
+- type-check PASS. Runtime VERIFIED on rebuild-test: FK `subcontractors_member_id_fkey` exists; join
+  returns sub_type; 1 vendor (member-linked) → now "(Vendor)"; 3 subs → "(Sub)"; crew → none.
+- Guarded the silent-empty risk (getMembers `if(error) return []`): embed confirmed non-erroring.
+- Desktop-only (no /m twin). Shared getMembers change is additive (optional field) — other callers unaffected.
