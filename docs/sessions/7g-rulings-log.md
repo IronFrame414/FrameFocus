@@ -41,4 +41,22 @@ report. Refusal message must NAME the credit/refund path. Existing rows untouche
 
 ---
 
-## §0 — status: starting. Part A first.
+## PART A — DONE (commit). All eleven rulings recorded in `7g2-spec.md` (342 → 380 lines).
+- §10 converted "Questions" → "Rulings [S103]", all 11 answered. RULED markers added in the body where a
+  ruling changes the design (superseded-and-quoted, never deleted):
+  - Q1 §3.1/§10 — scope sound, confirm-render-at-build.
+  - Q2 §3.2/§10 — paid invoice cannot be voided FULL STOP (Part B implements). Superseded the "one nuance".
+  - Q3 §3.3/§10 — derived credit syncs when APPLIED.
+  - Q4 §4 Flow 1/§7 M-A/§10 — STORE pay-link on `invoices.qb_invoice_link`.
+  - Q5 §2/§4 Flow 3/§7 M-C/§10 — NO import; two-way; M-C DROPPED; removed the §2 "reverse-import" line.
+  - Q6 §7 M-B/§10 — verifier token in Vault (`companies.qb_webhook_verifier_secret_id`).
+  - Q7 §4 retainage — REWRITTEN and now FOOTS: full $12,500 invoice + retainage line; $11,250 + $1,250
+    release-payment against the SAME open invoice = $12,500. ✓
+  - Q8 §5.5/§10 — portal disclosure = forward obligation, immediately after M7; → GATED.md.
+  - Q9 §4 Flow 3/§10 — expense edit/delete → bill:update/void.
+  - Q10 §5.1/§10 — no income Item: tell user, don't auto-create; no Payments: non-blocking.
+  - Q11 — deleted empty 0-byte `docs/specs/7g-quickbooks-spec.md` (git rm).
+- "Far more of 7G ships than the specs claim" already recorded in §1.3/§1.4 and §2 (whole DB layer shipped;
+  NOT built: OAuth callback route, disconnect route, worker, webhook route+sig-verify, any Intuit call, UI, disclosure).
+
+## §0 — status: Part A done. Starting Part B (the void-defect migration).
