@@ -75,6 +75,12 @@ Plan:
 
 ## ⚠️ CHECKPOINT — status after item 9/6 (clean commit boundary, full build PASS)
 
+> ⚠️ **Slip caught at checkpoint:** §0's `git add` returned exit 128 (bad `current-state` pathspec,
+> already moved) and did NOT stage the README REWRITE or path-ref edits — commit `0062d12` held only
+> the renames, so the committed README kept the wrong "SHIPPED state" text. Fixed in `cb420a4`.
+> Lesson (CLAUDE.md's own rule): a non-zero `git add` exit means nothing you intended may be staged —
+> re-check, don't trust a later commit's file list.
+
 **DONE + committed + verified (`next build` ✓ Compiled successfully):**
 §0 (rename mockups) · §2 items 1,2,3 · §3 items 4,6,7,8,9.
 
