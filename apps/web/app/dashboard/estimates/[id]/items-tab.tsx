@@ -1002,10 +1002,11 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
       <div
         key={category.id}
         style={{
+          // 9b — Category card geometry, aligned with the Section cards.
           border: '1px solid #e4e8ef',
-          borderRadius: '0.5rem',
-          padding: '1rem',
-          marginBottom: '1rem',
+          borderRadius: '14px',
+          padding: '16px',
+          marginBottom: '14px',
           backgroundColor: '#fbfcfe',
         }}
       >
