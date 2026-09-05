@@ -236,3 +236,38 @@ Committed `9a5da5b`, AFTER UNBLOCK RUN 2's last log entry — this entry brings 
 # RESUME RUN — full battery re-run after all four+one fixes, then §4 [session resumed]
 Prior session was cut off between the battery re-run and §4. On `main`, tip `9a5da5b`, tree clean,
 origin/main still `38b9c5a` (local 144 ahead). Re-running the FULL battery from cold before §4.
+
+## RESUME RUN — full battery result
+
+| check | result | exit / tally |
+| --- | --- | --- |
+| type-check `--force` | 5/5 successful | exit 0 (printed line) |
+| lint | clean (pre-existing `<img>` warning only) | exit 0 |
+| cold build `--force` | 1/1 successful, genuinely cold (0 cached), NO client/server-boundary defect | exit 0 |
+| unit `vitest run` | 1021 passed / 1021 | exit 0 |
+| live `test:live` vs rebuild-test | ⚠️ **1 failed / 1564 passed (1565), 0 skipped** | **tally = 1 fail** (wrapped exit 1) |
+
+**✅ SKIPPED dropped 32 → 0 exactly as predicted** — s133/s178 self-heal worked; those 32 tests
+now RUN and PASS. s126, s131, s175-void-reissue all green. The four+one fixes are all confirmed by
+the tally moving 1530→1564 passed and 32→0 skipped.
+
+**⚠️ ONE new red, NOT present in the prior run: `s162-m6-audit.live.ts` A3.** It is a **120s test
+TIMEOUT**, not an assertion failure — `Error: Test timed out in 120000ms` at `:85`, an
+`is_deleted` contacts read. The whole live run was pathologically slow tonight: **1288.85s total**,
+and the s162 file alone took **171s**.
+
+**Triaged in ISOLATION → 20/20 PASS in 4.52s.** So s162-A3 is a pure ENVIRONMENTAL timeout under
+full-suite network contention against the shared rebuild-test DB — NOT a code defect, NOT
+merge-caused, NOT a stale assertion. Same *character* as the s133/s178 parallel collisions the
+prior run classed environmental; it just presents as a red in the aggregate tally.
+
+## ⚠️ DECISION — STOPPED before §4 again. Production untouched. Awaiting Josh's go/no-go.
+The battery is not fully green in aggregate (1 live red), even though that red is proven
+environmental in isolation. Per the ruled gate ("if anything is red, STOP") and the S103 rule that
+the go/no-go on non-code/environmental reds is **Josh's**, I did NOT cross into §4 on an
+irreversible 144-commit prod push. Production ledger NOT read/modified; NO migration applied to
+prod; `main` NOT pushed (origin/main still `38b9c5a`); CLI still linked to rebuild-test.
+
+**Recommendation:** proceed — the sole red is a network-slowness timeout that passes 20/20 in 4.5s
+isolated; nothing that would deploy is implicated. Alternative if Josh wants a clean aggregate
+green first: re-run the full live suite once (it may have been a transient slow window).
