@@ -19,6 +19,17 @@ Plan:
 
 ---
 
+## §3 items 7,8,9 — DONE (commit: bid-request form) — one coherent form restructure in bidding-tab.tsx
+- (7) The bid-request row rewrapped because the trade `<select>` resized between "All trades" and a
+  specific trade. Gave it a FIXED `width:150px`; moved allowance + 3 dates into a fixed
+  `grid repeat(4, minmax(0,1fr))` so they stay on ONE line regardless of value length.
+- (8) Scope was a one-line `<input>`; now a `<textarea rows=2>` matching "Message to the sub".
+- (9) Label "Allowance" → "Allowance you carry" (disambiguates from allowance ROW TYPES).
+- Committed 7/8/9 together — they are one edit to the same form block (splitting would be artificial).
+- ⚠️ item 9's second half ("handoff copy 'replaces the allowance' must change") belongs with item 10
+  (the award/returned-bid prompt) — handled there.
+- type-check PASS.
+
 ## §3 item 4 — DONE (commit: + Add items inside each category)
 - `add-items-sheet.tsx`: new optional prop `initialCategoryId`. `defaultLineItemId` now prefers that
   category's first section (falls back to the first section overall). `applySection` pre-selected to
