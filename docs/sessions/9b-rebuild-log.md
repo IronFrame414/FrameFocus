@@ -23,6 +23,54 @@ If not → STOP, it's a ruling.
 
 ---
 
+## ⚠️ CHECKPOINT — gating resolved + safe additive features done; card restyle NOT attempted
+
+**What the shipped tab nested BEFORE (§5):** THREE tiers already —
+`Category → Subcategory → Section(=estimate_line_items) → rows`. So this run is a RESTYLE + new
+affordances, NOT a schema change. (Gating question was the one thing that could stop the run; it passed.)
+
+**Built this run (all additive, presentational, money-safe):**
+- Unit A — "Find a line…" search box + section filter.
+- Unit B — "Collapse all/Expand all" foot control + category "N subcategories · M sections" count line.
+- (Gating analysis committed as the key deliverable.)
+
+**Restyled:** nothing structural yet — the block renderers still use the pre-redesign card/table styling.
+**What I did NOT touch:** any `updateEstimateLine*` call, the markup/margin toggle, the shell footer, any role gate, the superseded catalog bar.
+
+### §4 verification (each check):
+1. **Page COMPILES** — ✅ `next build` exit 0, `/dashboard/estimates/[id]` compiled (39.4 kB). Tab LOADS
+   — ⚠️ can't confirm in this env (no running app/auth); route-compilation is the available evidence.
+2. **Per-field autosave** — ✅ by construction: `git diff main..HEAD` on items-tab touches **zero**
+   `updateEstimateLineRow|Item` calls (verified). Nothing in the autosave path changed. (A live
+   change-blur-reload-restore test needs a running app + DB — not runnable here.)
+3. **`markup_percent` still null** — ✅ by construction (no markup persistence touched). DB re-query
+   needs a running app.
+4. **Shell footer once** — ✅ added NO footer; `estimate-builder.tsx` footer untouched (footer trap avoided).
+5. **Collapse works + subtotal survives** — ✅ collapse logic unchanged; collapse-all reuses the same
+   `collapsed` Set; the subtotal still rides the category header.
+
+### §5 confirmations (explicit):
+- **No `updateEstimateLineRow|Item` call was touched** — ✅ verified by diff grep.
+- **Markup/margin toggle unchanged** — ✅ the rows table's pricing column is still `{modeNoun} %`.
+- **Shell footer renders once** — ✅ no in-tab footer added.
+- **Superseded catalog bar NOT built** — ✅.
+- **No role gate added** — ✅ (route-level gate untouched; no #136-class render gate introduced).
+
+### ⚠️ NOT DONE — the card restyle (THE BIG ONE) and remaining §2 items, and WHY:
+Remaining: the three-tier **card restyle** of `categoryBlock/subcategoryBlock/lineItemBlock`; per-**subcategory**
+and per-**section** "+ Add items" (needs a small sheet `initialLineItemId` extension); the section
+**"Shown on proposal" description** field (the `description` column exists but is unrendered — rendering
+it needs ONE **new** `updateEstimateLineItem({ description })` call, additive, mirroring the existing
+`notes` editor); a **section-level** unpriced warning banner + section empty-state/"Unpriced"-badge reword
+(a row-aggregate banner + near-versions already exist).
+
+**Why I stopped before the card restyle:** it RELOCATES money fields (`InlineNumber`/`InlineText` for
+cost/qty/markup/total) on a **money surface**, and §4 requires verifying it by **loading** + a
+change-blur-reload-restore autosave test with a DB re-query — none of which is runnable in this
+environment. Relocating money fields verified by `next build` alone (compile, not behaviour) is exactly
+the risk §4 warns against. A silent autosave break would not show in a build. That step wants a session
+where the page can actually be loaded and autosave re-tested. Not a guess-item; a verify-gated one.
+
 ## §2 Unit B — Collapse all + category count line — DONE (commit)
 - `toggleCollapseAll` (reuses the `collapsed` Set); "Collapse all/Expand all" button at the foot beside
   "+ Add Category". Category header now shows "N subcategories · M sections". Presentational only. PASS.
