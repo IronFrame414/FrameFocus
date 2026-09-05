@@ -183,6 +183,8 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
   };
   const unpricedCount = rows.filter(rowUnpriced).length;
   const uncappedAllowances = rows.filter((r) => r.row_type === 'allowance' && !r.unit_cost).length;
+  // 9b (§2) — SECTIONS that will print at $0. Read-only derivation; no write.
+  const unpricedSections = lineItems.filter((l) => Number(l.total_price) === 0);
 
   const mode = estimate.pricing_mode;
   const modeNoun = mode === 'markup' ? 'markup' : 'margin';
@@ -1172,6 +1174,61 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
             )}
             {' — unpriced rows print as $0.00 on the proposal.'}
           </div>
+        </div>
+      )}
+      {/* 9b (§2) — SECTION-level unpriced warning, with a jump per section. An
+          empty section still prints, so it names each one and offers Add items. */}
+      {unpricedSections.length > 0 && (
+        <div
+          style={{
+            background: '#fff5e6',
+            border: '1.5px solid #f5cf8f',
+            borderRadius: '12px',
+            padding: '12px 16px',
+            marginBottom: '0.75rem',
+            boxShadow: '0 0 0 4px rgba(245,165,36,.09)',
+            fontSize: '0.8125rem',
+            color: '#8a5a12',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.35rem' }}>
+            <span aria-hidden style={{ fontSize: '1rem', lineHeight: 1 }}>⚠</span>
+            <strong style={{ fontWeight: 700 }}>
+              {unpricedSections.length} section{unpricedSections.length === 1 ? ' is' : 's are'} unpriced
+            </strong>
+            <span
+              style={{
+                fontFamily: font.mono,
+                fontSize: '9px',
+                fontWeight: 800,
+                letterSpacing: '.08em',
+                color: '#b45309',
+                background: '#fffdf7',
+                border: '1px solid #f3e2c4',
+                borderRadius: '20px',
+                padding: '1px 6px',
+              }}
+            >
+              NEW
+            </span>
+          </div>
+          <div style={{ marginBottom: canEdit ? '0.4rem' : 0 }}>
+            An empty section still prints on the proposal — price it or remove it before you send.
+          </div>
+          {canEdit && (
+            <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+              {unpricedSections.map((s) => (
+                <button
+                  key={s.id}
+                  type="button"
+                  onClick={() => openAddItems({ lineItemId: s.id })}
+                  style={{ ...smallButton, color: '#3b4ae0', borderColor: '#dbe0fb', background: '#f2f4ff' }}
+                >
+                  Add items to {s.name}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       )}
       {canEdit && (
