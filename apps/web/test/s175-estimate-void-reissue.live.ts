@@ -156,24 +156,37 @@ describe('S175-B — ⚠️ a CONVERTED estimate may NOT be voided. This is wher
     // A change order ADDS to a project; an estimate IS its origin. A converted
     // estimate is load-bearing through projects.source_estimate_id,
     // project_financials.contract_value and every budget line derived from it.
-    const { data: proj } = await admin
-      .from('projects')
-      .select('id, name, source_estimate_id')
-      .not('source_estimate_id', 'is', null)
+    // ⚠️ SCOPE to a genuinely CONVERTED estimate — the property this test depends
+    // on (CLAUDE.md .limit(1) rule). The old query filtered only
+    // `source_estimate_id IS NOT NULL` and took an UNORDERED limit(1); but the
+    // fixture holds S97 projects whose source estimate is ACCEPTED or even VOIDED,
+    // so the heap-first row intermittently landed on a voided one and the
+    // void-record arm fired instead of the converted-origin refusal. Query the
+    // estimate BY STATUS: convert sets estimates.project_id and
+    // projects.source_estimate_id together, and the trigger names OLD.project_id's
+    // project — so project_id is the correct handle for the name.
+    const { data: convEst } = await admin
+      .from('estimates')
+      .select('id, project_id')
       .eq('company_id', companyId)
+      .eq('status', 'converted')
+      .not('project_id', 'is', null)
       .limit(1)
       .maybeSingle();
-    // Scoped, not merely ordered: the dependency is "this estimate converted
-    // into a project", which no ordering can supply (CLAUDE.md .limit(1) rule).
-    if (!proj) throw new Error('no converted estimate in the fixture company — B1 cannot run');
+    if (!convEst) throw new Error('no converted estimate in the fixture company — B1 cannot run');
+    const { data: proj } = await admin
+      .from('projects')
+      .select('name')
+      .eq('id', convEst.project_id!)
+      .single();
 
     state.client = ownerC;
-    const r = await voidEstimate(proj.source_estimate_id!, 'Trying to withdraw a live project.');
+    const r = await voidEstimate(convEst.id, 'Trying to withdraw a live project.');
     expect(r.success, 'a CONVERTED estimate was voided').toBe(false);
     expect(r.error).toMatch(/converted into the project/i);
-    expect(r.error, 'the refusal did not name the project').toContain(proj.name);
+    expect(r.error, 'the refusal did not name the project').toContain(proj!.name);
     // Mutation-proved on a row this harness does not own — it must be untouched.
-    expect((await row(proj.source_estimate_id!)).status).toBe('converted');
+    expect((await row(convEst.id)).status).toBe('converted');
   });
 });
 
