@@ -6,6 +6,11 @@ import { EstimatingSettingsForm } from './estimating-settings-form';
 import { ProposalSettingsForm } from './proposal-settings-form';
 import { TimeTrackingSettingsForm } from './time-tracking-settings-form';
 import { GLMappingSettingsForm } from './gl-mapping-settings-form';
+import { AccountingPanel } from '@/components/quickbooks/accounting-panel';
+import {
+  getQuickBooksConnection,
+  getQuickBooksQueueSummary,
+} from '@/lib/services/quickbooks';
 import { getTemplateBoxesByTemplate, getTemplates } from '@/lib/services/lien-releases';
 import { LienReleaseSettingsForm } from './lien-release-settings-form';
 import { getContractTemplateBoxesByTemplate, getContractTemplates } from '@/lib/services/contracts';
@@ -189,6 +194,14 @@ export default async function SettingsPage({
     })),
   }));
 
+  // 7G §5.1 — the connection state and sync queue for the Accounting tab.
+  // Both reads are caller-scoped (the signed-in user, not the service role), so
+  // RLS does the gating; see lib/services/quickbooks.ts.
+  const [qbConnection, qbQueue] = await Promise.all([
+    getQuickBooksConnection(),
+    getQuickBooksQueueSummary(),
+  ]);
+
   // §8.11.1 — the seven tabs. The Documents tab hosts the categories manager
   // (Entry 20's deferral) plus BOTH template forms; Notifications hosts the
   // quiet-hours/push form (the routing grid is a schema change, unbuilt).
@@ -212,7 +225,27 @@ export default async function SettingsPage({
     {
       key: 'accounting',
       label: 'Accounting',
-      content: <GLMappingSettingsForm settings={glMappingSettings} />,
+      // 7G §5.1 — the QuickBooks connection surface joins the GL mapping that
+      // already lived here. ⚠️ SAME COMPONENT as
+      // /dashboard/settings/accounting (Intuit's registered launch URL), per
+      // the PARITY ruling [Josh, S122]: one feature, two presentations. Do not
+      // fork it for either surface.
+      //
+      // ⚠️ Owner/Admin already gate this whole page, and every field the panel
+      // shows is Owner/Admin by RLS (companies_select_own,
+      // qb_sync_queue_select_owner_admin). So unlike the Billing tab below,
+      // this one does NOT need to be withheld from the tabs array — there is no
+      // payload here an Admin may not see. `isOwner` removes ACTIONS, not data.
+      content: (
+        <div style={{ display: 'grid', gap: '1.5rem' }}>
+          <AccountingPanel
+            connection={qbConnection}
+            queue={qbQueue}
+            isOwner={profile.role === 'owner'}
+          />
+          <GLMappingSettingsForm settings={glMappingSettings} />
+        </div>
+      ),
     },
     {
       key: 'documents',

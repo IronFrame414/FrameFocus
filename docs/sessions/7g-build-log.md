@@ -586,3 +586,70 @@ This is the first part of 7G exercised against a live database rather than reaso
 that requires Intuit itself remains verified by construction only.
 
 Types regenerated (10050 → 10060), additive only.
+
+---
+
+## Unit 7 — the UI
+
+| Path | What |
+| --- | --- |
+| `app/dashboard/settings/accounting/page.tsx` | **The route Intuit is registered against.** It did not exist. |
+| `components/quickbooks/accounting-panel.tsx` | The whole connection surface — **one component, two mount points** |
+| `app/dashboard/settings/page.tsx` | Accounting tab now mounts the **same** component above the GL form |
+| `lib/services/quickbooks.ts` | Caller-scoped reads (connection + queue) |
+| `app/api/quickbooks/income-item/route.ts` | GET lists items, POST stores the choice. **Owner-only.** |
+| `app/api/quickbooks/customer-conflict/route.ts` | The §5.2 answer. **Owner/Admin.** |
+
+**The launch-URL 404 is fixed.** `/dashboard/settings/accounting` is a real route now and appears in
+the build output as `ƒ /dashboard/settings/accounting`.
+
+**PARITY [Josh, S122] is honoured by construction.** `AccountingPanel` lives in `components/`, not
+under either route — *"a helper under `app/m/` or `app/dashboard/` implies that surface owns it. If
+both need it, it belongs in `lib/`. Location is a claim about ownership."* Both surfaces mount the same
+component; there is no second implementation to drift.
+
+**No new render-only gate (#136's class).** Everything the panel shows is Owner/Admin **by RLS** —
+`companies_select_own` for the connection columns, `qb_sync_queue_select_owner_admin` for the queue —
+and `lib/services/quickbooks.ts` reads as the **signed-in user**, never the service role. A PM gets an
+empty result from the database itself, not a hidden div. `isOwner` removes **actions**, not data, and
+connect/disconnect are separately enforced in the route *and* by `enforce_companies_qb_scope`.
+
+> ⚠️ This mattered concretely: `settings-tabs.tsx` keeps **every panel mounted** (`display:none`), so a
+> tab rendered for an Admin ships in the Admin's DOM. That is exactly why the Billing tab is *added*
+> only for an Owner rather than hidden. The Accounting tab does **not** need that treatment — there is
+> no payload here an Admin may not see — and the reason is written at the tab so nobody "fixes" it.
+
+**Screens built:** connection card (realm, connected-since, last-rotated, reconnect-by) · the amber
+**needs_reauth banner** whose copy says the work is still queued and nothing must be re-entered ·
+**income-item chooser** with the ruled S103 Q10 copy (*create one in QuickBooks* — never auto-created,
+never guessed) · **payments status** with the non-blocking copy · **sync status** with counts and the
+rows needing a person.
+
+**The customer-conflict prompt asks, and its second option is honest.** "Link to the existing customer"
+writes `contacts.qb_customer_id`. "Create a new one" **requires a different name**, and the field is
+not politeness: QuickBooks enforces `DisplayName` uniqueness, so "create another Acme Builders" is a
+request it cannot satisfy — a button without that field would be a button that always fails.
+
+**Answering a question un-parks the work that was waiting on it.** Both routes clear `next_attempt_at`
+on the affected `queued` rows (the conflict route also on rows whose `depends_on_id` is the answered
+row). Without that, an Owner answers the question and then watches nothing happen for up to five
+minutes, which reads as broken.
+
+**Disclosure placement 2 of 3 is in this unit** — "Payment service provided by Intuit Payments Inc."
+sits on the payments card beside the pay-link status.
+
+`npx tsc --noEmit` → real exit **`0`**. **`npx next build` → real exit `0`**, and this is the check
+that matters (§6: type-check is necessary and NOT sufficient). All seven new routes compiled:
+
+```
+ƒ /api/cron/qb-sync            ƒ /api/quickbooks/disconnect
+ƒ /api/quickbooks/callback     ƒ /api/quickbooks/income-item
+ƒ /api/quickbooks/connect      ƒ /api/quickbooks/webhook
+ƒ /api/quickbooks/customer-conflict
+ƒ /dashboard/settings/accounting        1.03 kB   92.3 kB
+```
+
+The specific trap that build clears: `accounting-panel.tsx` is `'use client'` and imports its prop
+types from `lib/services/quickbooks.ts`, which is `server-only`. `import type` is erased, so it is
+correct — but it is exactly the shape that type-checks clean and fails to build, so it was **built**,
+not assumed.
