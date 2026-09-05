@@ -1,5 +1,5 @@
-import { headers } from 'next/headers';
-import { defaultSignedInPath } from '@/lib/device';
+import { headers, cookies } from 'next/headers';
+import { landingPathFor, surfacePreferenceFrom, SURFACE_COOKIE } from '@/lib/device';
 import { SignInForm } from './sign-in-form';
 
 // D-12's SIGN-IN LANDING — a phone signs in to `/m`. [S121, Josh]
@@ -20,5 +20,8 @@ import { SignInForm } from './sign-in-form';
 
 export default function SignInPage() {
   const userAgent = headers().get('user-agent');
-  return <SignInForm defaultPath={defaultSignedInPath(userAgent)} />;
+  // #101 — a saved surface preference wins over the UA guess. Same helper and
+  // same cookie the middleware reads, so both entry points land identically.
+  const surface = surfacePreferenceFrom(cookies().get(SURFACE_COOKIE)?.value);
+  return <SignInForm defaultPath={landingPathFor(surface, userAgent)} />;
 }

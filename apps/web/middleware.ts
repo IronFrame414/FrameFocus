@@ -2,7 +2,7 @@ import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 import { billingEnforcementEnabled } from '@/lib/billing-flag';
 import { safeNextPath } from '@/lib/safe-next';
-import { defaultSignedInPath } from '@/lib/device';
+import { landingPathFor, surfacePreferenceFrom, SURFACE_COOKIE } from '@/lib/device';
 import { dashboardDeniedRedirect } from '@/lib/dashboard-access';
 import {
   isMyCompanyLocked,
@@ -89,9 +89,19 @@ export async function middleware(request: NextRequest) {
     // auth page while already signed in goes to /m, not the desktop app. Same
     // helper as the sign-in page, passed as safeNextPath's fallback so there is
     // one mechanism rather than two. `?next=` still wins over both.
+    //
+    // #101 — the surface toggle layers ON TOP of D-12 here: a saved `ff_surface`
+    // preference overrides the UA guess (`landingPathFor`). This does NOT teach
+    // the helper about role or session — the S131 objection to that stands — it
+    // reads a cookie both callers already have. With no cookie, `landingPathFor`
+    // IS `defaultSignedInPath`, so A-6 is untouched for everyone who never
+    // toggled. `?next=` still wins over the preference too.
     const dest = safeNextPath(
       request.nextUrl.searchParams.get('next'),
-      defaultSignedInPath(request.headers.get('user-agent'))
+      landingPathFor(
+        surfacePreferenceFrom(request.cookies.get(SURFACE_COOKIE)?.value),
+        request.headers.get('user-agent')
+      )
     );
     // Split rather than `new URL(dest, origin)`: cloning keeps the request's
     // real origin, which behind Vercel's proxy is not always nextUrl.origin.

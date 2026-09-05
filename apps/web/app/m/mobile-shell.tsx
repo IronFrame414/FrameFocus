@@ -20,7 +20,10 @@ import {
   CalendarDays,
   type LucideIcon,
 } from 'lucide-react';
+import { type CompanyRole } from '@framefocus/shared';
 import { createClient } from '@/lib/supabase-browser';
+import { SURFACE_TOGGLE_ROLES } from '@/lib/device';
+import { setSurfaceAndGo } from '@/lib/surface-client';
 import { MobileHeaderProvider, useMobileHeader } from './mobile-header';
 import { NotificationBell } from '@/components/notifications/notification-bell';
 import { OfflineSyncProvider, useOfflineSync } from './offline-sync';
@@ -265,6 +268,8 @@ export type MobileShellProps = {
   unreadCount: number;
   /** ND-37 — the chat overlay needs the caller's PROFILE id, not their user id. */
   myProfileId: string;
+  /** #101 — gates the nav sheet's "Desktop site" toggle (Owner/Admin/PM). */
+  role: CompanyRole;
 };
 // `userName` was a prop here and is GONE with the avatar (D-36) — it had no
 // other consumer. The signed-in name is not lost: M-30 (§4.13.7) binds it to
@@ -292,6 +297,7 @@ function MobileShellInner({
   teamCount,
   unreadCount,
   myProfileId,
+  role,
 }: MobileShellProps) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -483,6 +489,7 @@ function MobileShellInner({
           <NavSheet
             pathname={pathname}
             teamCount={teamCount}
+            role={role}
             onClose={() => setSheetOpen(false)}
           />
         ) : null}
@@ -670,10 +677,12 @@ function TabItem({
 function NavSheet({
   pathname,
   teamCount,
+  role,
   onClose,
 }: {
   pathname: string;
   teamCount: number | null;
+  role: CompanyRole;
   onClose: () => void;
 }) {
   const router = useRouter();
@@ -768,6 +777,21 @@ function NavSheet({
             );
           })}
         </div>
+
+        {/* #101 — the surface toggle. Owner/Admin/PM only: field roles have no
+            office screens to reach. Sets ff_surface=desktop and hard-navigates
+            so the desktop shell renders fresh; the preference then survives the
+            next sign-in (middleware reads the same cookie). */}
+        {SURFACE_TOGGLE_ROLES.includes(role) ? (
+          <button
+            type="button"
+            data-testid="m-surface-desktop"
+            onClick={() => setSurfaceAndGo('desktop', '/dashboard')}
+            className="mt-[10px] flex h-[58px] w-full items-center justify-center rounded-[14px] border border-m6m-border bg-m6m-card text-[15px] font-bold text-m6m-navy"
+          >
+            Desktop site
+          </button>
+        ) : null}
 
         {/* §3.3 — full-width Sign out row, 58px, #c0362c text, #f0d4d1 border. */}
         <button

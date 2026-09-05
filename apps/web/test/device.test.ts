@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { isPhoneUserAgent, defaultSignedInPath } from '@/lib/device';
+import {
+  isPhoneUserAgent,
+  defaultSignedInPath,
+  landingPathFor,
+  surfacePreferenceFrom,
+} from '@/lib/device';
 import { safeNextPath } from '@/lib/safe-next';
 
 // D-12's sign-in landing. The UA strings are real ones, not invented shapes —
@@ -75,5 +80,38 @@ describe('?next= overrides the device default — ONE mechanism, not two', () =>
     // undo D-12 by falling back to the hard-coded constant.
     expect(safeNextPath('//evil.example', defaultSignedInPath(IPHONE))).toBe('/m');
     expect(safeNextPath(null, defaultSignedInPath(IPHONE))).toBe('/m');
+  });
+});
+
+// #101 — the surface toggle. An explicit saved preference overrides the UA
+// guess; with none, the landing is defaultSignedInPath UNCHANGED (A-6 holds).
+describe('surfacePreferenceFrom', () => {
+  it('accepts only the two known values; everything else is "no preference"', () => {
+    expect(surfacePreferenceFrom('desktop')).toBe('desktop');
+    expect(surfacePreferenceFrom('mobile')).toBe('mobile');
+    expect(surfacePreferenceFrom(undefined)).toBe(null);
+    expect(surfacePreferenceFrom('')).toBe(null);
+    expect(surfacePreferenceFrom('DESKTOP')).toBe(null);
+    expect(surfacePreferenceFrom('/dashboard')).toBe(null);
+  });
+});
+
+describe('landingPathFor', () => {
+  it('a saved preference wins over the user-agent guess, both directions', () => {
+    // Owner on a phone who chose the desktop app; field user on a laptop who
+    // chose the mobile app. The preference is the explicit answer.
+    expect(landingPathFor('desktop', IPHONE)).toBe('/dashboard');
+    expect(landingPathFor('mobile', MAC_CHROME)).toBe('/m');
+  });
+
+  it('with NO preference it IS defaultSignedInPath — A-6 is preserved for everyone who never toggled', () => {
+    expect(landingPathFor(null, IPHONE)).toBe('/m');
+    expect(landingPathFor(null, MAC_CHROME)).toBe('/dashboard');
+    expect(landingPathFor(null, null)).toBe('/dashboard');
+  });
+
+  it('?next= still wins over a saved preference — the fallback never overrides an explicit destination', () => {
+    expect(safeNextPath('/m/timeclock', landingPathFor('desktop', IPHONE))).toBe('/m/timeclock');
+    expect(safeNextPath(null, landingPathFor('desktop', IPHONE))).toBe('/dashboard');
   });
 });

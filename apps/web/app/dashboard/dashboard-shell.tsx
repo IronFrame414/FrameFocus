@@ -19,6 +19,8 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { ROLE_LABELS, type CompanyRole } from '@framefocus/shared';
+import { SURFACE_TOGGLE_ROLES } from '@/lib/device';
+import { setSurfaceAndGo } from '@/lib/surface-client';
 import { brand } from '@/lib/brand';
 import type { GpsClockMode } from '@framefocus/shared/utils/time-tracking';
 import type { SessionWithSegments } from '@/lib/services/time-tracking-client';
@@ -387,6 +389,19 @@ export function DashboardShell({
           >
             Account
           </Link>
+          {/* #101 — the surface toggle's desktop arm. Owner/Admin/PM only, the
+              same three as the mobile "Desktop site" button. Sets ff_surface=
+              mobile and hard-navigates to /m; the preference survives the next
+              sign-in (middleware reads the same cookie). */}
+          {SURFACE_TOGGLE_ROLES.includes(userRole) ? (
+            <button
+              data-testid="desktop-surface-mobile"
+              onClick={() => setSurfaceAndGo('mobile', '/m')}
+              className="mt-1 w-full rounded-[9px] px-3 py-2 text-left text-[12px] text-brand-300 transition-colors duration-150 hover:bg-white/5 hover:text-white"
+            >
+              Mobile site
+            </button>
+          ) : null}
           <button
             onClick={handleSignOut}
             className="mt-1 w-full rounded-[9px] px-3 py-2 text-left text-[12px] text-brand-300 transition-colors duration-150 hover:bg-white/5 hover:text-white"
