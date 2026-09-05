@@ -1010,63 +1010,72 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
           backgroundColor: '#fbfcfe',
         }}
       >
+        {/* #1 — full-width TINTED category bar; identity on the left, actions
+            right-aligned. */}
         <div
           style={{
             display: 'flex',
+            justifyContent: 'space-between',
             alignItems: 'center',
             gap: '0.75rem',
-            marginBottom: isCollapsed ? 0 : '0.75rem',
             flexWrap: 'wrap',
+            margin: isCollapsed ? '-16px' : '-16px -16px 12px',
+            padding: '10px 16px',
+            background: '#eef1f6',
+            borderRadius: isCollapsed ? '14px' : '14px 14px 0 0',
           }}
         >
-          <button
-            type="button"
-            onClick={() => toggleCollapsed(category.id)}
-            aria-label={isCollapsed ? 'Expand category' : 'Collapse category'}
-            style={{
-              border: 'none',
-              background: 'none',
-              cursor: 'pointer',
-              padding: '0 0.25rem 0 0',
-              color: '#8792a8',
-              fontSize: '0.75rem',
-              lineHeight: 1,
-            }}
-          >
-            {isCollapsed ? '▸' : '▾'}
-          </button>
-          <span style={{ fontWeight: 700, fontSize: '1rem' }}>
-            <InlineText
-              value={category.name}
-              disabled={!canEdit}
-              onSave={(v) =>
-                v.trim()
-                  ? mutate(() => updateEstimateCategory(category.id, { name: v.trim() }), false)
-                  : Promise.resolve({ success: false, error: 'Name required' })
-              }
-            />
-          </span>
-          <span
-            style={{
-              fontFamily: font.mono,
-              fontSize: '0.75rem',
-              fontWeight: 600,
-              color: '#5c6784',
-              background: '#eef1f6',
-              padding: '3px 9px',
-              borderRadius: '20px',
-            }}
-          >
-            {fmtMoney(catTotal)}
-          </span>
-          {/* 9b (§2) — category count line. */}
-          <span style={{ fontSize: '0.72rem', color: '#8792a8' }}>
-            {subs.length} subcategor{subs.length === 1 ? 'y' : 'ies'} ·{' '}
-            {lineItems.filter((l) => l.category_id === category.id).length} section
-            {lineItems.filter((l) => l.category_id === category.id).length === 1 ? '' : 's'}
-          </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap', minWidth: 0 }}>
+            <button
+              type="button"
+              onClick={() => toggleCollapsed(category.id)}
+              aria-label={isCollapsed ? 'Expand category' : 'Collapse category'}
+              style={{
+                border: 'none',
+                background: 'none',
+                cursor: 'pointer',
+                padding: '0 0.25rem 0 0',
+                color: '#8792a8',
+                fontSize: '0.75rem',
+                lineHeight: 1,
+              }}
+            >
+              {isCollapsed ? '▸' : '▾'}
+            </button>
+            <span style={{ fontWeight: 700, fontSize: '1rem' }}>
+              <InlineText
+                value={category.name}
+                disabled={!canEdit}
+                onSave={(v) =>
+                  v.trim()
+                    ? mutate(() => updateEstimateCategory(category.id, { name: v.trim() }), false)
+                    : Promise.resolve({ success: false, error: 'Name required' })
+                }
+              />
+            </span>
+            <span
+              style={{
+                fontFamily: font.mono,
+                fontSize: '0.75rem',
+                fontWeight: 600,
+                color: '#5c6784',
+                background: '#fff',
+                border: '1px solid #dde3ee',
+                padding: '3px 9px',
+                borderRadius: '20px',
+              }}
+            >
+              {fmtMoney(catTotal)}
+            </span>
+            {/* 9b (§2) — category count line. */}
+            <span style={{ fontSize: '0.72rem', color: '#8792a8' }}>
+              {subs.length} subcategor{subs.length === 1 ? 'y' : 'ies'} ·{' '}
+              {lineItems.filter((l) => l.category_id === category.id).length} section
+              {lineItems.filter((l) => l.category_id === category.id).length === 1 ? '' : 's'}
+            </span>
+          </div>
           {canEdit && (
-            <>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexShrink: 0, flexWrap: 'wrap' }}>
               {/* #4 — add catalog items straight into this category. Shown only
                   when the category has a section to receive them; the sheet
                   pre-targets that section (adjustable in step 2). */}
@@ -1075,7 +1084,7 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
                   type="button"
                   data-testid={`open-add-items-${category.id}`}
                   onClick={() => openAddItems({ categoryId: category.id })}
-                  style={smallButton}
+                  style={{ ...smallButton, color: '#3b4ae0', borderColor: '#dbe0fb', background: '#f2f4ff' }}
                 >
                   + Add items
                 </button>
@@ -1086,6 +1095,8 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
               {addLineButton(category.id, null)}
               <button
                 type="button"
+                aria-label="Delete category"
+                title="Delete category"
                 onClick={async () => {
                   if (
                     !(await confirm(
@@ -1101,7 +1112,7 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
               >
                 🗑
               </button>
-            </>
+            </div>
           )}
         </div>
         {!isCollapsed && (
@@ -1232,27 +1243,9 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
           )}
         </div>
       )}
-      {canEdit && (
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '0.75rem' }}>
-          <button
-            type="button"
-            data-testid="open-add-items"
-            onClick={() => openAddItems()}
-            style={{
-              padding: '9px 16px',
-              borderRadius: '9px',
-              backgroundColor: '#3b4ae0',
-              color: '#fff',
-              fontSize: '13px',
-              fontWeight: 700,
-              border: 'none',
-              cursor: 'pointer',
-            }}
-          >
-            + Add items
-          </button>
-        </div>
-      )}
+      {/* #8 [S103] — the page-level "+ Add items" was REMOVED. Adding items
+          belongs inside a category / subcategory / section (those buttons are the
+          paths). `openAddItems()` with no target is still used by the sheet plumbing. */}
       {sheetOpen && (
         <AddItemsSheet
           data={data}
