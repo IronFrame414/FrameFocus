@@ -74,3 +74,55 @@ rebuild-test and (per `e14f59b`) production. **Nothing to build here.** Re-verif
 later unit rather than re-implemented.
 
 **Nothing built in this unit.** Grounding only.
+
+---
+
+## Unit 1 — migrations M-A and M-B
+
+Two additive migrations. **rebuild-test only; production untouched, and this run never opens it.**
+
+| Migration | rebuild-test | Ledger | Verified by |
+| --- | --- | --- | --- |
+| `20261350000000_qb_invoice_link.sql` (M-A) | `{"success":true}` | ⚠️ **MCP wrote NO row — repaired by hand**, `insert … on conflict do nothing`; confirmed present as `20261350000000 / qb_invoice_link` | `information_schema.columns` → `invoices.qb_invoice_link` present (1); `pg_get_functiondef(enforce_invoices_column_scope)` contains `qb_invoice_link` → **true** |
+| `20261360000000_qb_webhook_verifier.sql` (M-B) | `{"success":true}` | ⚠️ **same — no row written, repaired**; confirmed as `20261360000000 / qb_webhook_verifier` | `pg_proc` → **2** `qb_webhook_verifier*` functions; `qb_webhook_verifier_get('sandbox')` returns NULL (correct — no token stored yet) |
+
+**The MCP-no-ledger-row warning in the prompt is accurate and was checked, not assumed.** A
+`select … where version in (…)` returned `[]` immediately after both `apply_migration` calls succeeded.
+
+**Types regenerated** — `npm run db:types`, real exit line read: `0`. Linked project reported by the
+script's own guard: **`framefocus-rebuild-test`**. `database.ts` 10026 → 10037 lines, and the diff is
+**additive only**: `invoices.qb_invoice_link` in Row/Insert/Update plus the two verifier RPC signatures.
+Nothing removed.
+
+### ⚠️ CORRECTION 3 — M-B does NOT create the column the spec suggested, and the ruling still holds
+
+`7g2-spec.md` §7 item 2 suggests "**e.g.** a `companies.qb_webhook_verifier_secret_id uuid`". That
+column is **not created.** The RULING (Q6) is about the **store** — Vault, alongside the OAuth tokens —
+and that is honoured exactly. The "e.g." is about **scope**, and the scope is wrong:
+
+> **Intuit issues ONE webhook verifier token per APP per ENVIRONMENT**, configured in the developer
+> portal beside the endpoint URL. It is not per realmId and not per customer.
+
+At Josh's stated 200–400 company scale, a `companies` column means either 400 copies of one secret (so
+rotating the token is a 400-row update that will half-fail) or 400 rows pointing at one secret id — an
+app-level credential parked on a tenant row, where the next reader writes per-tenant code against it.
+So the token is stored **once, app-scoped**, reached by a service_role-only accessor pair in the same
+shape as `qb_vault_put/get/forget`. One mechanism, not two. If Intuit ever issues per-realm tokens, the
+`companies` column is the right addition then and these accessors become its fallback — nothing here
+forecloses it. Recorded in the migration header too, not only here.
+
+**Two things measured rather than assumed while writing M-B:**
+
+1. **`vault.secrets` has no UNIQUE on `name` in Vault 0.3.1** — the only constraint is
+   `secrets_pkey PRIMARY KEY (id)` (queried on rebuild-test). So "put by name" can accumulate
+   duplicates and a later "get by name" would be an **unordered `.limit(1)`** over them — CLAUDE.md's
+   S165 rule, category 1. `put` therefore updates in place and deletes older duplicates; `get` is
+   ordered `created_at DESC` regardless, so even a row inserted around the accessors resolves
+   deterministically.
+2. **The environment is in the secret name on purpose.** Sandbox and production have different verifier
+   tokens. Each has its own Supabase project, so a bare name would usually work — until someone points a
+   sandbox deployment at a production database, where the failure would be silent signature rejection
+   with no clue. Keyed by environment, it reads as "there is no sandbox token here" instead.
+
+**`qb_webhook_verifier_get()` returning NULL means REJECT EVERY WEBHOOK**, never "skip verification".
+Stated in the migration comment and enforced in the route (Unit 6).

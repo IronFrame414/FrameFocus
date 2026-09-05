@@ -5040,6 +5040,7 @@ export type Database = {
           presentation_level: string
           project_id: string
           qb_invoice_id: string | null
+          qb_invoice_link: string | null
           qb_push_status: string
           qb_synced_at: string | null
           qb_void_memo: string | null
@@ -5079,6 +5080,7 @@ export type Database = {
           presentation_level?: string
           project_id: string
           qb_invoice_id?: string | null
+          qb_invoice_link?: string | null
           qb_push_status?: string
           qb_synced_at?: string | null
           qb_void_memo?: string | null
@@ -5118,6 +5120,7 @@ export type Database = {
           presentation_level?: string
           project_id?: string
           qb_invoice_id?: string | null
+          qb_invoice_link?: string | null
           qb_push_status?: string
           qb_synced_at?: string | null
           qb_void_memo?: string | null
@@ -9723,6 +9726,14 @@ export type Database = {
       qb_vault_get: { Args: { p_secret_id: string }; Returns: string }
       qb_vault_put: {
         Args: { p_company_id: string; p_payload: string; p_secret_id?: string }
+        Returns: string
+      }
+      qb_webhook_verifier_get: {
+        Args: { p_environment: string }
+        Returns: string
+      }
+      qb_webhook_verifier_put: {
+        Args: { p_environment: string; p_payload: string }
         Returns: string
       }
       recompute_budget_item: {
