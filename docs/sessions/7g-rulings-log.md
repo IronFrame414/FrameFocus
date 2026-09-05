@@ -59,4 +59,26 @@ report. Refusal message must NAME the credit/refund path. Existing rows untouche
 - "Far more of 7G ships than the specs claim" already recorded in §1.3/§1.4 and §2 (whole DB layer shipped;
   NOT built: OAuth callback route, disconnect route, worker, webhook route+sig-verify, any Intuit call, UI, disclosure).
 
-## §0 — status: Part A done. Starting Part B (the void-defect migration).
+## PART B — code done (commit); rebuild-test proof next.
+- ⚠️ **Premise correction found by reading the code:** the DB trigger `enforce_invoice_void_authority`
+  NEVER checked QB-sync. It refused a paid-invoice void for non-owners and **ALLOWED the OWNER** (`v_applied
+  > 0 → RETURN NEW`). The "paid AND synced → nobody" qualifier lived only in service-layer `canVoidInvoice()`.
+  So the live defect: an Owner could void ANY paid invoice (synced or not), via UI or direct PostgREST.
+- **What "paid" means — CHOSEN: ANY payment applied (partial or full).** Both the trigger (`SUM(live
+  client_payment_applications.amount) > 0`) and `canVoidInvoice`'s `hasPayment` already key on it; a
+  partial payment has also moved money (prompt's own reasoning). So no new definition, just tighten who.
+- **Migration `20261340000000_paid_invoice_void_refusal.sql`:** CREATE OR REPLACE the trigger — `v_applied
+  > 0` now RAISES for EVERYONE (owner included), message NAMES the credit-memo/refund path. Unpaid arm
+  unchanged. Service-role escape kept. AFTER trigger `retire_applications_on_invoice_void` untouched.
+  Existing rows untouched (CREATE OR REPLACE only).
+- **Service `canVoidInvoice()`:** collapsed the two paid arms into one — `hasPayment` → refuse for all,
+  same named path. `paymentSyncedToQuickBooks` no longer consulted (kept on the context for callers).
+- **Tests inverted (not deleted), per CLAUDE.md:**
+  - `invoice-lifecycle.test.ts` — "PARTIALLY PAID… Owner ONLY, warns" → "PAID (any), not in QB: NOBODY may
+    void." Unit run: **25/25 PASS.**
+  - `s143-void-authority.live.ts` — V2 "OWNER ONLY" → "NOBODY may void" (PM/Admin/**Owner** all refused,
+    message names credit path); V3 credit-effect now voids via the service-role escape (`admin`) since no
+    user can. (Live run pending rebuild-test.)
+- type-check PASS.
+
+## §0 — status: Part A done. Part B code done. Applying to rebuild-test + proving.

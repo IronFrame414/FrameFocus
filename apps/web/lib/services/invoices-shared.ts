@@ -348,24 +348,18 @@ export function canVoidInvoice(ctx: VoidContext): VoidDecision {
       reason: 'A draft invoice is deleted, not voided — voiding is for invoices already sent (§9).',
     };
   }
-  if (ctx.hasPayment && ctx.paymentSyncedToQuickBooks) {
+  // [S103] A PAID invoice cannot be voided, full stop — ANY payment applied
+  // (partial or full) means money moved. NOBODY may void it, Owner included,
+  // whether or not it reached QuickBooks (the QB-synced qualifier was never the
+  // reason). The remedy is a credit memo or a refund; the message names it.
+  // Superseded: "paid+synced -> nobody; paid, not synced -> Owner ONLY with a
+  // warning that voiding turns the payment into a credit." `paymentSyncedTo
+  // QuickBooks` is no longer consulted here (kept on the context for callers).
+  if (ctx.hasPayment) {
     return {
       allowed: false,
       reason:
-        'This invoice has a payment already in QuickBooks and cannot be voided. Correct it with a credit or refund in 7E (§9).',
-    };
-  }
-  if (ctx.hasPayment) {
-    if (ctx.role !== 'owner') {
-      return {
-        allowed: false,
-        reason: 'Once a payment has been applied, only the Owner can void this invoice (§9).',
-      };
-    }
-    return {
-      allowed: true,
-      warning:
-        'A payment has been applied to this invoice. Voiding it turns that payment into a client credit.',
+        'This invoice has a payment applied and cannot be voided. Issue a credit memo or a refund in 7E instead (§9).',
     };
   }
   if (!['owner', 'admin'].includes(ctx.role)) {

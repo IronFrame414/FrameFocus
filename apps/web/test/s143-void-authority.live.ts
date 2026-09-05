@@ -209,36 +209,45 @@ describe('S143-V1 — UNPAID invoice (A4, the arm the ruling did not name)', () 
   });
 });
 
-describe('S143-V2 — PAID invoice: OWNER ONLY (the ruling)', () => {
+describe('S143-V2 — PAID invoice: NOBODY may void [tightened S103]', () => {
+  // Superseded [S103], quoted not deleted: "PAID invoice: OWNER ONLY (the
+  // ruling)". A paid invoice cannot be voided at ALL — the money moved, and the
+  // remedy is a credit memo or a refund, never a void. Any payment applied
+  // (partial or full) triggers it.
   it('PM is refused', async () => {
     const id = await makeInvoice({ applied: 300 });
     const { error } = await tryVoid(pmC, id);
     expect(error).toBeTruthy();
-    expect(error?.message).toMatch(/only the Owner can void/i);
+    expect(error?.message).toMatch(/payment applied and cannot be voided/i);
     expect(await statusOf(id)).toBe('sent');
   });
 
-  it('ADMIN is refused too — A1', async () => {
-    // The half the ruling did not name and the shipped matrix already implied.
-    // Admin can void an UNPAID invoice (V1) and cannot void this one, so the
-    // refusal is about the payment, not about Admin generally.
+  it('Admin is refused', async () => {
     const id = await makeInvoice({ applied: 300 });
     const { error } = await tryVoid(adminC, id);
     expect(error).toBeTruthy();
-    expect(error?.message).toMatch(/only the Owner can void/i);
+    expect(error?.message).toMatch(/payment applied and cannot be voided/i);
     expect(await statusOf(id)).toBe('sent');
   });
 
-  it('Owner may void', async () => {
+  it('OWNER is ALSO refused — THIS IS THE S103 FIX', async () => {
+    // Superseded: "Owner may void." A paid invoice cannot be voided by anyone;
+    // the refusal names the credit/refund path.
     const id = await makeInvoice({ applied: 300 });
     const { error } = await tryVoid(ownerC, id);
-    expect(error).toBeNull();
-    expect(await statusOf(id)).toBe('voided');
+    expect(error).toBeTruthy();
+    expect(error?.message).toMatch(/credit memo or a refund/i);
+    expect(await statusOf(id)).toBe('sent');
   });
 });
 
-describe('S143-V3 — the credit effect (A3)', () => {
-  it('voiding retires the applications, so the payment becomes client credit', async () => {
+describe('S143-V3 — the credit effect (A3), now reachable ONLY via the service-role escape [S103]', () => {
+  it('a service-role void retires the applications, so the payment becomes client credit', async () => {
+    // Superseded [S103], quoted not deleted: this used to void via `ownerC` (a
+    // user Owner). After S103 NO user may void a paid invoice (V2). The
+    // retire-applications AFTER trigger is UNCHANGED and still fires on the one
+    // remaining path — the service-role escape (auth.uid() IS NULL) — so it is
+    // exercised there, via `admin`.
     const id = await makeInvoice({ applied: 400 });
 
     const before = await admin
@@ -248,7 +257,7 @@ describe('S143-V3 — the credit effect (A3)', () => {
       .eq('is_deleted', false);
     expect(before.data, 'fixture has no live application').toHaveLength(1);
 
-    const { error } = await tryVoid(ownerC, id);
+    const { error } = await tryVoid(admin, id); // service role — bypasses the authority gate
     expect(error).toBeNull();
 
     const after = await admin
