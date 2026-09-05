@@ -499,7 +499,8 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
 
   function lineRowTr(row: EstimateLineRow) {
     return (
-      <tr key={row.id}>
+      // #3 — rule between rows.
+      <tr key={row.id} style={{ borderBottom: '1px solid #f4f6fa' }}>
         <td style={{ padding: '0.25rem 0.5rem' }}>
           <span
             style={{
@@ -569,6 +570,8 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
           {canEdit && (
             <button
               type="button"
+              aria-label="Delete row"
+              title="Delete row"
               onClick={async () => {
                 if (!(await confirm(`Remove ${ROW_TYPE_LABELS[row.row_type]} row "${row.name}"?`))) return;
                 const r = await mutate(() => deleteEstimateLineRow(row.id), true);
@@ -576,7 +579,7 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
               }}
               style={dangerButton}
             >
-              ✕
+              🗑
             </button>
           )}
         </td>
@@ -752,6 +755,8 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
             {canEdit && (
               <button
                 type="button"
+                aria-label="Delete section"
+                title="Delete section"
                 onClick={async () => {
                   if (!(await confirm(`Delete line "${line.name}"?`))) return;
                   const result = await mutate(() => deleteEstimateLineItem(line.id), true);
@@ -759,7 +764,7 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
                 }}
                 style={{ ...dangerButton, marginLeft: '0.375rem' }}
               >
-                ✕
+                🗑
               </button>
             )}
           </div>
@@ -784,7 +789,8 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
         {/* Rows table */}
         <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '0.5rem' }}>
           <thead>
-            <tr style={{ fontSize: '0.6875rem', color: '#7b8699', textAlign: 'left' }}>
+            {/* #3 — rule under the column header. */}
+            <tr style={{ fontSize: '0.6875rem', color: '#7b8699', textAlign: 'left', borderBottom: '1px solid #e4e8ef' }}>
               <th style={{ padding: '0.25rem 0.5rem' }}>Type</th>
               <th style={{ padding: '0.25rem 0.5rem' }}>Name</th>
               <th style={{ padding: '0.25rem 0.5rem' }}>Price</th>
