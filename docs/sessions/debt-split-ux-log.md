@@ -228,3 +228,47 @@ The TECH_DEBT #100 entry's blanket "markup invisible everywhere but the editor" 
 (mobile/portal closed via #129/#139). With a/b/c now done, #100 is fully addressed and can be moved
 to CLOSED at branch reconciliation with refs to these three commits. (Not moving it now — one item
 at a time; the debt-file move is its own bookkeeping step.)
+
+## Phase 3 — Item 2.4 (#101) — (b) toggle DONE, (a) gap REPORTED (not built)
+
+> ⚠️ Phase 1 batch B on this subsystem was PARTLY STALE by build time — the middleware had been
+> rewritten across S131/S138/S164/S176/S177. Re-grounded before building. What survived: routing is
+> NOT device-gated (every route URL-reachable), and the landing default lives at middleware `:92-95`
+> + `sign-in/page.tsx`, exactly where Phase 2 aimed the cookie.
+
+### (b) the surface toggle DONE (commit: `[Nav] #101: desktop/mobile surface toggle`)
+- Cookie `ff_surface` (desktop|mobile). `landingPathFor(surfacePreferenceFrom(cookie), ua)` overrides
+  the UA guess; with no cookie it IS `defaultSignedInPath`, so **A-6/D-12 are preserved** for anyone
+  who never toggled. Composes the UA helper — does NOT teach it role/session, so the **S131 objection
+  still stands** (the reason that ruling gives — the sign-in PAGE has no session — is untouched; a
+  cookie is available to both callers).
+- Read at BOTH entry points (middleware `:92-95`, `sign-in/page.tsx`) via the same helper+cookie, so
+  they land identically. `?next=` still wins over the preference.
+- `setSurfaceAndGo()` (lib/surface-client.ts) sets the cookie + hard-navigates (full nav, not
+  router.push — /m and /dashboard are different layout trees).
+- UI: "Desktop site" in the mobile nav sheet; "Mobile site" in the desktop shell. Both gated to
+  `SURFACE_TOGGLE_ROLES` = owner/admin/project_manager (ONE list in device.ts — both shells share it,
+  PARITY). `/m/layout` widened to select `role`.
+- **NOT a security boundary** [device.ts comment]: routes stay URL-reachable, dashboard guard +
+  Financial Floor are server-side. So the UI that SETS the cookie is role-gated; the READ is
+  role-agnostic (a stray cookie only lands you where the guards already allow).
+- VERIFIED: type-check PASS; `next build` PASS (middleware 93 kB — `import type CompanyRole` erased,
+  no bundle bloat). `test/device.test.ts` EXTENDED (not inverted — the old assertions still hold) with
+  `landingPathFor`/`surfacePreferenceFrom` coverage incl. "no pref ⇒ A-6 preserved" and "?next= wins";
+  12/12 pass. e2e sheet specs checked structurally: the new `<button>` sits OUTSIDE `m-sheet-grid`
+  (which asserts grid LINK count only) and field roles don't render it — no assertion breaks.
+
+### (a) /m screen-port gap — REPORTED, deliberately NOT built this pass (Phase 2 latitude)
+The toggle largely SUBSUMES (a): a power role on a phone now reaches EVERY desktop screen. The
+genuine field-relevant /m gaps that remain (each needs its own Floor review before porting — do NOT
+port by reflex):
+- **Timesheet approval** — no /m twin; foreman/PM approve on desktop only.
+- **Costs (actual — visible to all roles per the Floor)** — no /m read surface.
+- **Contracts / schedule detail** — read-access thin on /m.
+- ⚠️ **Floor guard for any future port:** `budgetColumnsFor()` is NOT imported anywhere under /m. Any
+  money screen ported to /m must ADOPT it (share the mechanism, per PARITY), never re-derive columns.
+Office/money screens (estimating, billing, invoices, payments, profitability) are correctly
+desktop-only and Floor-gated — NOT gaps.
+
+### #101 status: (b) done. (a) is a REPORT, not owed work on this branch. The TECH_DEBT #101 entry
+should be updated to reflect the toggle shipped + the narrowed remaining gap at reconciliation.
