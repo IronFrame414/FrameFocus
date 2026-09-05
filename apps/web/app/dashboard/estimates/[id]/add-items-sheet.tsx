@@ -82,7 +82,8 @@ export function AddItemsSheet({
   data,
   reload,
   onClose,
-}: Pick<TabProps, 'data' | 'reload'> & { onClose: () => void }) {
+  initialCategoryId,
+}: Pick<TabProps, 'data' | 'reload'> & { onClose: () => void; initialCategoryId?: string }) {
   const { estimate, categories, lineItems, rows } = data;
 
   const [step, setStep] = useState<1 | 2>(1);
@@ -104,7 +105,13 @@ export function AddItemsSheet({
     [rows]
   );
 
-  const defaultLineItemId = lineItems[0]?.id ?? '';
+  // #4 — opened from a category's "+ Add items", pre-target that category's first
+  // section so picks land there without a manual Section pick. Falls back to the
+  // first section overall (top-level "+ Add items", or a category with no sections).
+  const defaultLineItemId =
+    (initialCategoryId && lineItems.find((li) => li.category_id === initialCategoryId)?.id) ||
+    lineItems[0]?.id ||
+    '';
 
   const lineItemLabel = useMemo(() => {
     const byId = new Map<string, string>();
@@ -261,7 +268,8 @@ export function AddItemsSheet({
   // Apply-to-all (17b): writes ONLY what was typed — an empty markup applies
   // nothing (inheritance stays NULL for untouched rows).
   const [applyMarkup, setApplyMarkup] = useState('');
-  const [applySection, setApplySection] = useState('');
+  // Pre-select the target section (#4) so step 2 shows where picks will land.
+  const [applySection, setApplySection] = useState(defaultLineItemId);
 
   const totals = useMemo(() => {
     const cost = tray.reduce((s, e) => s + basisOf(e), 0);
@@ -436,8 +444,16 @@ export function AddItemsSheet({
             alignItems: 'center',
           }}
         >
-          <div style={{ fontSize: '18px', fontWeight: 800, color: color.navy }}>
-            Add items {step === 1 ? '— pick' : '— set details'}
+          <div>
+            <div style={{ fontSize: '18px', fontWeight: 800, color: color.navy }}>
+              Add items {step === 1 ? '— pick' : '— set details'}
+            </div>
+            {/* #4 — show the target section so it is clear where picks land. */}
+            {defaultLineItemId && (
+              <div style={{ fontSize: '12px', color: color.muted, marginTop: '2px' }}>
+                Adding to {lineItemLabel.get(defaultLineItemId)}
+              </div>
+            )}
           </div>
           <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
             <span style={{ fontSize: '12px', color: step === 1 ? color.primary : color.success }}>

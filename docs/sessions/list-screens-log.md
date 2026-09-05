@@ -19,6 +19,18 @@ Plan:
 
 ---
 
+## §3 item 4 — DONE (commit: + Add items inside each category)
+- `add-items-sheet.tsx`: new optional prop `initialCategoryId`. `defaultLineItemId` now prefers that
+  category's first section (falls back to the first section overall). `applySection` pre-selected to
+  it; header shows "Adding to {section}". Model: sheet adds cost rows to a target "section" = a
+  `lineItem` (each has category_id); a category's first line item is the target.
+- `items-tab.tsx`: `openAddItems(categoryId|null)` + `sheetCategoryId` state. Top "+ Add items" →
+  `openAddItems(null)` (unchanged behaviour). New per-category "+ Add items" button in the category
+  header, shown only when the category HAS a section to receive rows (avoids targeting another
+  category's section). Sheet gets `initialCategoryId`.
+- Caught a self-inflicted build-class error: added the prop to the TYPE but not the destructuring →
+  `TS2304`. Fixed. Re-type-check PASS. (Full build at §3 checkpoint.)
+
 ## §2 item 3 — DONE (commit: remove cost codes from add-items sheet)
 - `add-items-sheet.tsx`: removed all 3 cost-code UI spots — manual "Cost code" input, catalog-row
   cost_code display, tray sub-label (now shows `rowType`). **Data passthrough KEPT** (`:184` read /
