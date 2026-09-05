@@ -106,3 +106,53 @@ Migrations: rebuild-test only; check it's idle first; MCP apply_migration writes
 `### UX Polish`(2209) `### Track for Module 4`(2249) `### Track for Module 5/6`(2434) `### Module 3
 Follow-Ups`(2463) `### Lower Priority / Existing`(2470) `#### #81`(2557). `## Closed Tech Debt`(L2836).
 `## Process notes`(L2903). ~70 files cite the literal path `TECH_DEBT.md` (mostly historical).
+
+## Phase 2 — decisions, each answered with the reversible default (no stops)
+
+**No hard stop needed.** Every decision below has a reversible/additive default that fulfils the
+prompt's clear intent; I took it and proceed. One premise-correction flagged (burst clock-routing).
+
+**Item 1 — split:**
+- D1 (naming): OPEN keeps the name **`TECH_DEBT.md`** (so all ~70 path refs resolve unbroken) + new
+  **`TECH_DEBT_CLOSED.md`** + **`TECH_DEBT_IDEAS.md`**. Exactly three files. Reversible.
+- D2 (what→IDEAS): ONLY #155, #156 (deferred *decisions*), per the prompt. Everything else open → OPEN
+  (incl. the branch-scoped pointer sections, which are already register-pointers). Reversible.
+- D3 (authority): stated at top of OPEN — TECH_DEBT.md (=OPEN) is the assignment authority; next-free =
+  max number across all THREE files + 1 (currently #156 → **#157 next**); branch provisional ids convert
+  here at merge. Matches CLAUDE.md's "main's file is the authority".
+- D4 (refs): nothing breaks (TECH_DEBT.md still resolves). Update CLAUDE.md's active pointer prose to
+  name the three files; leave historical context/spec files unrewritten (rewriting history is wrong).
+
+**Item 2.1 (#89):** widen `getMembers()` to embed `subcontractors(sub_type)` via the member_id FK;
+label by resolved sub_type (vendor→"(Vendor)", sub→"(Sub)", crew→none, NULL→"(Sub)" fallback = today's
+behaviour). Also correct the same shared mislabel at `team-panel.tsx:112,189` in the same pass (the
+type-widening makes it free). Desktop-only; no /m twin. Reversible.
+
+**Item 2.2 (#13):** no build — mark CLOSED with S140/S158/S159 refs; note #108(a)(b) stay open.
+
+**Item 2.3 (#100):** build the derivative swap on the 3 genuinely-broken surfaces via a shared resolver
+(`hasMarkup(markup_data) ? derivativePathFor(path) : path`): desktop file grid, 3 photo PDF services,
+general download. DEFAULT for downloads: serve the marked-up derivative when the photo is annotated
+(matches the entry's intent that markup is visible "everywhere", and the portal/gallery precedent);
+flagged as a minor UX call. No schema.
+
+**Item 2.4 (#101):** (b) BUILD the desktop-mode toggle — a `ff_surface` cookie the middleware reads at
+`:92-95`, Owner/Admin/PM only, a "Desktop site" button on /m and a "Mobile site" button on desktop,
+persisted across sessions. This is the high-leverage piece: it gives power roles access to EVERY
+desktop screen from a phone, largely subsuming (a). (a) /m screen ports: REPORT the gap (timesheet
+approval, costs, contracts/schedule read) with reasons; DO NOT port individual screens this pass —
+each needs its own Floor review and the toggle already unblocks power roles. Judgment within the
+prompt's "do not port everything" latitude.
+
+**Item 2.5 (burst):** (1) ⚠️ PREMISE CORRECTION — the clock→job routing does NOT feed capture today;
+I WIRE the open-segment `project_id` as an additive fallback in the capture project resolution
+(fulfils Josh's "save to the job I'm clocked into"). (2) burst = accumulate shots in a list (no
+save-and-return between), one job-picker ONCE at batch end if not clocked in. (3) batch failure:
+per-photo status, keep failed shots, offer retry via the existing `offline-sync` idempotent queue —
+never silently drop, never abort the rest. Logic in `lib/`, mobile-only presentation (parity).
+
+**Migrations:** NONE of the five fixes needs a schema change (FK for #89 exists; #100 derivative is a
+storage object; toggle is a cookie; burst is client). So the rebuild-test migration path is not
+exercised this run — confirmed during build.
+
+## Phase 3 — build. Order: Item 1 split → #13 close → #89 → #100 → #101 toggle → burst.
