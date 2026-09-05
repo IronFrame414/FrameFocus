@@ -126,3 +126,73 @@ forecloses it. Recorded in the migration header too, not only here.
 
 **`qb_webhook_verifier_get()` returning NULL means REJECT EVERY WEBHOOK**, never "skip verification".
 Stated in the migration comment and enforced in the route (Unit 6).
+
+---
+
+## Unit 2 — the Intuit transport layer (`apps/web/lib/quickbooks/`)
+
+Four modules, no routes yet. Every one opens with `import 'server-only'` — the §6 constraint the
+prompt names ("a client component importing a server module type-checks clean and fails to build, and
+that shipped here") is turned into a **build** failure rather than a runtime credential leak.
+
+| File | What it is |
+| --- | --- |
+| `config.ts` | Endpoints, environment, scope, redirect URI, lazy credential read |
+| `tokens.ts` | Vault put/get/forget, code exchange, refresh, revoke, `getAccessToken()` |
+| `client.ts` | The REST transport, the metered/free read-write split, error classification |
+| `queue.ts` | `enqueue` / `claimDue` / `markPushed` / `markFailed` / `parkAwaitingHuman` |
+
+**Intuit endpoints were verified against Intuit's docs this run, not recalled:** authorize
+`https://appcenter.intuit.com/connect/oauth2`, token
+`https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer`, revoke
+`https://developer.api.intuit.com/v2/oauth2/tokens/revoke`; API host
+`sandbox-quickbooks.api.intuit.com` vs `quickbooks.api.intuit.com`. Signature scheme confirmed as
+**HMAC-SHA256 of the raw body, verifier token as key, compared against the base64 `intuit-signature`
+header**. `minorversion` is **pinned at 75** — an unpinned minor version silently changes response
+shapes under a working integration.
+
+**Scope is `com.intuit.quickbooks.accounting` and nothing else**, with the irreversibility warning
+written at the constant itself rather than only in the spec.
+
+### Decisions taken at build that the spec left open — all logged, all reversible
+
+1. **Retry ceiling = `MAX_ATTEMPTS = 8`** (§6 says "CC sets the retry ceiling at build"). Exponential
+   `30s · 2^n` capped at 6h, plus up to 30s of jitter — roughly 8 hours before escalation to
+   `failed_terminal`. Deliberately generous, and the reason is Intuit's own billing rule: **only 2xx
+   calls are metered, so a failed call costs no quota.** The cost of waiting is latency; the cost of
+   giving up early is a money record that silently stopped trying. Jitter is not decoration — without
+   it, every row queued during one outage retries in the same instant on recovery and re-triggers the
+   429 that caused the backoff.
+2. **Stale `in_flight` reclaim at 10 minutes.** The queue migration states `next_attempt_at` is "the
+   reclaim clock and not a lock"; this is the number that makes that true. Without it a worker that
+   crashes mid-row parks that row forever.
+3. **`qb_read_budget` increments are best-effort and never throw.** A counter write that fails must not
+   discard a QuickBooks read the caller already paid for and is about to act on. An undercount is a
+   telemetry gap; throwing would be a money-path defect. Likewise the read-modify-write can lose one
+   increment under a race — accepted and commented **in the code**, so nobody "fixes" a telemetry
+   counter into a lock on a money path.
+4. **`parkAwaitingHuman()` — a fourth outcome that is not in the five-state model, and does not need to
+   be.** The two ruled cases where work cannot proceed for a reason that is *not* a failure — no income
+   Item chosen (S103 Q10), and a customer-name conflict awaiting the Owner's answer (§5.2) — leave the
+   row **`queued`** with the prompt in `last_error` and a 5-minute re-check. Exactly the reasoning the
+   queue migration already applies to `invalid_grant`: nothing is wrong with the record, a person just
+   has to answer something first.
+
+### Two hazards handled in code rather than left to the next reader
+
+- **The refresh race.** Two workers can refresh at once; the loser's brand-new refresh token was
+  invalidated by the winner's rotation, so it sees `invalid_grant` on a connection that is perfectly
+  healthy. `getAccessToken()` therefore **re-reads the blob once** before condemning a grant: if the
+  stored refresh token changed underneath us, another process rotated it and we use the new one.
+  Without this, ordinary concurrency flips working connections to `needs_reauth`.
+- **A transient refresh failure is not a dead grant.** A 5xx or a socket error leaves the connection
+  `connected` and lets the queue retry. Only a real `invalid_grant` sets `needs_reauth` — otherwise an
+  Intuit blip would demand a pointless reconnect from every customer at once.
+
+**Also handled:** `qbQuoteLiteral()` escapes single quotes and backslashes for QuickBooks' query
+grammar. Not cosmetic — a client named `O'Brien Builders` breaks the query, and a crafted DisplayName
+could otherwise alter the WHERE clause of a query running against the customer's own books.
+
+**`last_error` is treated as user-facing** (it renders on the Accounting screen): Intuit's message
+only, truncated to 1000 chars, never a raw response body — an Intuit error page can echo request
+headers.
