@@ -218,6 +218,34 @@ export async function resolveOrCreateVendor(
 /** Read one object's SyncToken. QuickBooks rejects any update or void without
  *  the CURRENT token — it is the optimistic-concurrency stamp, and a stale one
  *  is a 5010 fault. Metered. */
+/**
+ * Read the WHOLE object, not just its SyncToken. [F10, S187]
+ *
+ * ⚠️ THIS IS THE READ HALF OF READ-MODIFY-WRITE, AND IT COSTS NOTHING EXTRA —
+ * `readSyncToken()` was already making this exact call and throwing the body
+ * away.
+ *
+ * ⚠️ WHY IT MATTERS. QuickBooks REPLACES an object on a full update. Building
+ * the body from only the fields we manage therefore ERASES everything we do not
+ * know about — a customer message, payment terms, a billing email, a shipping
+ * address, custom fields — all of which the customer may have set in QuickBooks
+ * on an invoice we pushed. Merging our changes over the object as it actually
+ * exists is the only shape that cannot silently delete someone else's data.
+ */
+async function readEntity(
+  ctx: DrainContext,
+  resource: string,
+  id: string,
+  responseKey?: string
+): Promise<Record<string, unknown> | null> {
+  const result = (await qboRead(ctx.admin, ctx.conn, `/${resource}/${id}`)) as Record<
+    string,
+    Record<string, unknown> | undefined
+  >;
+  const key = responseKey ?? resource.charAt(0).toUpperCase() + resource.slice(1);
+  return result[key] ?? null;
+}
+
 async function readSyncToken(
   ctx: DrainContext,
   resource: string,
@@ -353,10 +381,42 @@ interface QbInvoiceLine {
   DetailType: string;
   Amount?: number;
   Description?: string;
-  SalesItemLineDetail?: { ItemRef: { value: string }; Qty?: number; UnitPrice?: number };
+  SalesItemLineDetail?: {
+    ItemRef: { value: string };
+    Qty?: number;
+    UnitPrice?: number;
+    TaxCodeRef?: { value: string };
+  };
   DescriptionLineDetail?: Record<string, never>;
   DiscountLineDetail?: { PercentBased: boolean };
 }
+
+/**
+ * ⚠️ THE INVOICE STATES ITS OWN TAX POSITION [F12, S187]. IT DOES NOT INHERIT ONE.
+ *
+ * ⚠️ WHICH SIDE IS AUTHORITATIVE, settled: **ours**. The invoice we sent is the
+ * document the client received and agreed to pay. And the platform carries no
+ * tax on invoices at all — `companies.default_tax_rate` exists but flows into
+ * ESTIMATES only (`estimates-client.ts`), and `invoices` / `invoice_lines` have
+ * no tax column. So `billed_total` is a tax-free figure, and the QuickBooks
+ * invoice must equal it exactly.
+ *
+ * ⚠️ WHY SAY SO WHEN IT ALREADY WORKS. Measured on the sandbox: QuickBooks was
+ * already choosing `NON` by itself and the totals agreed (INV-3675, $3000 both
+ * sides, `TxnTaxDetail: {TotalTax: 0}`). But that was QUICKBOOKS' DEFAULT, on a
+ * company with `TaxPrefs.UsingSalesTax: true` — a default that varies with the
+ * company's tax setup, the customer's exempt status and the item's own setting.
+ * **Relying on someone else's default for the total on a money document is the
+ * bug, whether or not it has fired yet**: the books would silently disagree with
+ * the document the client holds.
+ *
+ * ⚠️ `NON` IS US-SPECIFIC, and that is a deliberate, logged limit. Non-US
+ * QuickBooks uses different codes and `GlobalTaxCalculation` instead. If a
+ * non-US company ever connects, this ref is rejected by Intuit and the push
+ * FAILS LOUDLY with the queue's error — which is the right failure: visible,
+ * not a silently wrong total. Revisit here when that day comes.
+ */
+const NON_TAXABLE = { value: 'NON' } as const;
 
 /**
  * Build the QuickBooks invoice lines.
@@ -413,7 +473,7 @@ function buildInvoiceLines(
     DetailType: 'SalesItemLineDetail',
     Amount: money(line.billed_amount),
     Description: line.description,
-    SalesItemLineDetail: { ItemRef: { value: incomeItemId } },
+    SalesItemLineDetail: { ItemRef: { value: incomeItemId }, TaxCodeRef: NON_TAXABLE },
   }));
 
   // A bill with no derived lines (a lump-sum draw) is legitimate: one line for
@@ -423,7 +483,7 @@ function buildInvoiceLines(
       DetailType: 'SalesItemLineDetail',
       Amount: money(invoice.billed_total),
       Description: invoice.title || 'Progress billing',
-      SalesItemLineDetail: { ItemRef: { value: incomeItemId } },
+      SalesItemLineDetail: { ItemRef: { value: incomeItemId }, TaxCodeRef: NON_TAXABLE },
     });
   }
 
@@ -683,7 +743,16 @@ async function handleInvoiceUpdate(ctx: DrainContext, row: QbQueueRow): Promise<
   }
   const { note: updateNote } = await projectRefs(ctx, invoice.project_id as string);
 
+  // ⚠️ MERGE OVER WHAT QUICKBOOKS ACTUALLY HOLDS [F10]. A full update replaces
+  // the object, so anything we omit is DELETED — including fields the customer
+  // set themselves in QuickBooks (BillEmail, SalesTermRef, CustomerMemo,
+  // CustomField, addresses). `existing` is the object as it stands; our managed
+  // fields are spread AFTER it so they win, and everything else survives.
+  const existingInvoice =
+    (await readEntity(ctx, 'invoice', invoice.qb_invoice_id as string)) ?? {};
+
   await qboWrite(ctx.conn, '/invoice', {
+    ...existingInvoice,
     Id: invoice.qb_invoice_id,
     SyncToken: syncToken,
     CustomerRef: { value: updateCustomerRef },
@@ -1388,7 +1457,14 @@ async function handlePurchaseUpdate(ctx: DrainContext, row: QbQueueRow): Promise
 
   // Full object, not sparse — QuickBooks REPLACES the Line array, and omitting
   // it leaves the old amount in place while this side reads as synced.
+  // ⚠️ MERGE, DO NOT REPLACE [F10] — see the invoice update. A Purchase carries
+  // customer-set fields too (PaymentMethodRef, DocNumber, attachments' refs),
+  // and a body built only from what we manage would erase them.
+  const existingPurchase =
+    (await readEntity(ctx, 'purchase', expense.qb_purchase_id as string)) ?? {};
+
   await qboWrite(ctx.conn, '/purchase', {
+    ...existingPurchase,
     Id: expense.qb_purchase_id,
     SyncToken: syncToken,
     ...(await buildPurchaseBody(ctx, expense, settings.value, account.id, vendorId)),
