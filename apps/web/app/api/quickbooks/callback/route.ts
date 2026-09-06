@@ -8,6 +8,7 @@ import {
   listIncomeItems,
 } from '@/lib/quickbooks/connection';
 import { QB_STATE_COOKIE } from '@/lib/quickbooks/config';
+import { appUrl } from '@/lib/app-origin';
 
 /**
  * 7G step 2 — Intuit redirects the Owner back here after consent.
@@ -30,7 +31,11 @@ export const dynamic = 'force-dynamic';
 const REAUTH_CEILING_MS = 5 * 365 * 24 * 60 * 60 * 1000;
 
 function settingsUrl(request: NextRequest, params: Record<string, string>): URL {
-  const url = new URL('/dashboard/settings/accounting', request.url);
+  // ⚠️ BUILT FROM THE EXTERNAL ORIGIN, NOT FROM THE REQUEST [S190]. Behind a
+  // proxy the request carries the INTERNAL host, and the proxy rewriting it on
+  // the way out leaves a doubled port — so this very redirect, the one that
+  // exists to tell the user what went wrong, arrived as an unreachable page.
+  const url = appUrl('/dashboard/settings/accounting', request);
   for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
   return url;
 }
@@ -87,7 +92,7 @@ export async function GET(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) {
-    return clearState(NextResponse.redirect(new URL('/sign-in', request.url)));
+    return clearState(NextResponse.redirect(appUrl('/sign-in', request)));
   }
 
   const { data: profile } = await supabase

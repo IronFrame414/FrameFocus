@@ -1,5 +1,6 @@
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
+import { appUrl } from '@/lib/app-origin';
 import { billingEnforcementEnabled } from '@/lib/billing-flag';
 import { safeNextPath } from '@/lib/safe-next';
 import { landingPathFor, surfacePreferenceFrom, SURFACE_COOKIE } from '@/lib/device';
@@ -47,8 +48,7 @@ export async function middleware(request: NextRequest) {
 
   // Redirect unauthenticated users away from dashboard
   if (!user && pathname.startsWith('/dashboard')) {
-    const url = request.nextUrl.clone();
-    url.pathname = '/sign-in';
+    const url = appUrl('/sign-in', request);
     return NextResponse.redirect(url);
   }
 
@@ -106,9 +106,7 @@ export async function middleware(request: NextRequest) {
     // Split rather than `new URL(dest, origin)`: cloning keeps the request's
     // real origin, which behind Vercel's proxy is not always nextUrl.origin.
     const cut = dest.indexOf('?');
-    const url = request.nextUrl.clone();
-    url.pathname = cut === -1 ? dest : dest.slice(0, cut);
-    url.search = cut === -1 ? '' : dest.slice(cut);
+    const url = appUrl(dest, request);
     return NextResponse.redirect(url);
   }
 
@@ -173,9 +171,7 @@ export async function middleware(request: NextRequest) {
             { status: 403 }
           );
         }
-        const url = request.nextUrl.clone();
-        url.pathname = '/locked';
-        url.search = '';
+        const url = appUrl('/locked', request);
         return NextResponse.redirect(url);
       }
       // Carve-out taken: the portal's own access model governs from here.
@@ -203,9 +199,7 @@ export async function middleware(request: NextRequest) {
     // DATA — that is Ruling B, on the tables.
     const denied = dashboardDeniedRedirect(profile?.role);
     if (denied) {
-      const url = request.nextUrl.clone();
-      url.pathname = denied;
-      url.search = '';
+      const url = appUrl(denied, request);
       return NextResponse.redirect(url);
     }
 
@@ -231,9 +225,7 @@ export async function middleware(request: NextRequest) {
         .eq('id', profile.company_id)
         .single();
       if (company && company.payment_method_on_file === false) {
-        const url = request.nextUrl.clone();
-        url.pathname = '/onboarding';
-        url.search = '';
+        const url = appUrl('/onboarding', request);
         return NextResponse.redirect(url);
       }
     }
@@ -264,9 +256,7 @@ export async function middleware(request: NextRequest) {
           subscription.stripe_subscription_id === null;
 
         if (isTrialLimited) {
-          const url = request.nextUrl.clone();
-          url.pathname = '/trial-limit';
-          url.search = '';
+          const url = appUrl('/trial-limit', request);
           return NextResponse.redirect(url);
         }
 
@@ -277,8 +267,7 @@ export async function middleware(request: NextRequest) {
           subscription.status === 'incomplete';
 
         if (needsPayment) {
-          const url = request.nextUrl.clone();
-          url.pathname = '/dashboard/billing/plans';
+          const url = appUrl('/dashboard/billing/plans', request);
           return NextResponse.redirect(url);
         }
       }
