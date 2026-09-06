@@ -687,3 +687,256 @@ The dependency edge already exists in the table; nothing new is needed to find t
 
 **Note for the queue's `waiting` counter:** it should probably distinguish *waiting on a live
 dependency* from *waiting on a dead one*. The second is not waiting.
+
+---
+
+# S187 — REMEDIATION RECORD
+
+*What this run actually did to the findings above. Written at the end of the run, from the commits
+and the command output, not from the plan.*
+
+> ⚠️ **Two findings came back different from how they were filed.** F13's premise was wrong — the
+> counter it says is missing has existed since the worker shipped — and the F10 exposure was
+> narrower than the finding described. Both are corrected in place below rather than quietly built
+> to. **A remediation record that only reports successes is not a record.**
+
+---
+
+## 1. What shipped, in order
+
+| # | Finding | Commit | Scope |
+| --- | --- | --- | --- |
+| 1 | **C** — disconnect leaves link columns behind | `b70de82` | `disconnect-resets.ts` (new), `disconnect/route.ts` |
+| 2 | **C-guard** — the link census test | `b70de82` | `test/s187-qb-link-census.test.ts` (new, 6 cases) |
+| 3 | **F1** — the webhook did all its work before answering | `c4e6997` + **M-N** | `webhook/route.ts`, `webhook-process.ts` (new), `worker.ts` |
+| 4 | **F12** — sales lines carried the company's default tax code | `37777aa` | `entities.ts` |
+| 5 | **F10** — a full-object update blanked fields we do not model | `37777aa` | `entities.ts` |
+| 6 | **F2** — two processes could refresh the same token | `2fcba89` + **M-O** | `tokens.ts`, migration, `database.ts` |
+| 7 | **F3** — signature compared base64 strings, not digest bytes | `8d9f663` | `webhook-verify.ts` |
+| 8 | **F7** — a dormant connection never refreshed | `1ce9dc6` | `worker.ts` |
+| 9 | **F4** — the read counter had no consumer | `fe67e80` | `services/quickbooks.ts`, `accounting-panel.tsx` |
+| 10 | **F13** — proof the drain reports `parked` | `1abcbf2` | `test/s187-qb-drain-parked.live.ts` (new, 4 cases) |
+
+Earlier in the same branch: `05ff25a` (**M-M**, sub-customers removed), `897d06d` and `43dd329`
+(audit addenda 2 and 3).
+
+**Deferred, not built, exactly as instructed: F5, F6, F8.** F5 has no code fix available — Intuit
+accepts any `minorversion` silently, so the pin cannot be validated from here; it is a
+re-read-the-page-each-release-cycle item. F6 (the discovery document) and F8 (surface the reconnect
+deadline) are unstarted and unblocked.
+
+---
+
+## 2. Migrations — rebuild-test AND the ledger
+
+**Three migrations this branch. All applied to rebuild-test only. Production untouched.**
+
+| Migration | What it adds | Applied | Ledger row |
+| --- | --- | --- | --- |
+| `20261460000000_qb_remove_sub_customers` (M-M) | drops the sub-customer path; project moves to the memo | ✅ | ✅ repaired by hand |
+| `20261470000000_qb_webhook_deferred_processing` (M-N) | `processed_at`, `process_attempts`, `process_error` | ✅ | ✅ repaired by hand |
+| `20261480000000_qb_refresh_lease` (M-O) | `companies.qb_refresh_lock_at` | ✅ | ✅ repaired by hand |
+
+⚠️ **The ledger repair is not optional and is not automatic.** MCP `apply_migration` writes no
+`supabase_migrations.schema_migrations` row, so each was inserted by hand and then verified by
+reading the table back. Verified at end of run — all three present, versions `…460000`, `…470000`,
+`…480000`. Without that row the next `supabase db push` re-runs an applied migration.
+
+`database.ts` was regenerated after M-O (10,219 → 10,231 lines) and committed with it.
+
+---
+
+## 3. Verification — the printed exit lines
+
+Every line below was read from the command's own printed status, not a wrapper's echo and not a
+summary.
+
+| Check | Result | Exit line |
+| --- | --- | --- |
+| `npx tsc --noEmit` | clean | **0** |
+| `npx next build` | **compiled**, 185 routes, `/dashboard/settings/accounting` among them | **0** |
+| `npx vitest run` (full unit suite) | **1053 passed, 1 failed** (1054) | **1** |
+| `webhook-verify.test.ts` | 13 passed | **0** |
+| `s187-qb-link-census.test.ts` | 6 passed | **0** |
+| `s187-qb-drain-parked.live.ts` | 4 passed | **0** |
+| live QB battery (7 files) | **76 passed, 5 failed** (81) | **1** |
+
+⚠️ **The build was run, not inferred from the type-check.** `tsc --noEmit` says nothing about a
+route module exporting a symbol Next rejects — the trap `disconnect-resets.ts` exists to avoid — so
+"pages must compile" was answered by `next build` printing exit 0.
+
+### 3a. ⚠️ The red results, and whether this run caused them
+
+**Neither is caused by this run's changes, and both were proven so rather than asserted.**
+
+**Unit suite — `s131-dashboard-access.test.ts`, 1 case.** It asserts `lib/device.ts` must not
+mention `CompanyRole` or `DASHBOARD_ROLES`; `device.ts` imports `CompanyRole` at line 1, put there
+by `1ed3d10` (*"[Nav] #101: desktop/mobile surface toggle"*), an ancestor of this branch. Checked
+out the branch point `0953822` and ran the file there: **fails identically, 1 failed / 10 passed.**
+Nothing in this run touched either file. **Inherited. Not fixed here — it belongs to the Nav work,
+and inventing a fix for it in a QuickBooks run is the drift the prompt forbids.**
+
+**Live battery — 5 cases, and they are all one thing.** `s143-Q5`, `s148-Q4` and `s149-G` (×2) all
+assert a world in which **the connector has never run**: that every `qb_*_id` is still null, that
+the company's Vault secret does not exist yet, that no `qb_read_budget` row exists for this month.
+7G is now connected to the sandbox and has pushed real objects, so invoice `146`, customer `62`, a
+real token secret and a real September counter row all exist. Ran the same three files at the
+branch point: **4 failed there too.**
+
+> ### ⚠️ AND THE FIFTH ONE IS WORSE THAN STALE — `s149-A` DESTROYS LIVE CONNECTOR STATE TO GO GREEN
+>
+> `s149-A` expects `contacts.qb_customer_id` to be **null**, and its `afterAll` **nulls it** as
+> cleanup (`s149-qb-queue-webhooks.live.ts:128`). So the file **fails on the first run and passes on
+> the second** — because the first run deleted the data that made it fail. That is precisely why it
+> appeared to pass at the branch point and fail at HEAD: the HEAD battery ran first and nulled the
+> link; the branch-point run then found it already gone. **Run order, not code.** Confirmed by
+> restoring the link and re-running at HEAD: it fails again.
+>
+> **This is not a cosmetic test smell.** Karen Foster's contact was linked to QuickBooks Customer
+> **62**; the harness nulled it. A contact with no `qb_customer_id` is re-pushed as a **new
+> customer**, so the next sync would have created a **duplicate Customer 62** in the connected
+> company's books. **The link was restored by hand at the end of this run and verified back at
+> `'62'`.**
+>
+> It is the S157 rule's own failure mode wearing its worst face: a test that makes itself green by
+> corrupting the state it was written to protect. **Recorded, not fixed — it is not one of the
+> listed findings.** Whoever picks it up: invert it, do not delete it, and take the `afterAll` out.
+
+---
+
+## 4. The five proofs asked for in §3 of the prompt
+
+1. **The webhook answers before it works.** `webhook/route.ts` now verifies the signature, inserts
+   the event rows and returns `{ok, recorded, duplicates}`. Every read, token refresh and DB write
+   moved to `webhook-process.ts`, drained by the worker. Intuit's 3-second budget is now spent on a
+   signature check and one insert.
+2. **A failed notification is retried by us.** `processed_at` separates *received* from *acted on*.
+   The UNIQUE index still dedupes deliveries; a duplicate now answers 200 and **leaves an
+   unprocessed row alone** for the worker. Before M-N, a delivery that timed out mid-processing was
+   deduped away on Intuit's retry and lost for good.
+3. **One refresh at a time.** M-O's 60-second lease on `companies.qb_refresh_lock_at`; exactly one
+   caller wins the conditional UPDATE. Exercised live — the F13 drain called `getAccessToken()`
+   twice through the lease path and completed both times.
+4. **The disconnect forgets everything.** `QB_LINK_RESETS` covers all eight tables;
+   `s187-qb-link-census.test.ts` parses the **generated** `database.ts` and fails if any `qb_%_id`
+   column is in neither the reset list nor the exempt map. Three columns were missing when it was
+   written.
+5. **The drain reports a non-zero `parked`.** `s187-qb-drain-parked.live.ts`, 4 cases, exit line 0.
+
+---
+
+## 5. ⚠️ F13 — THE FINDING WAS WRONG, AND HERE IS THE CORRECTION
+
+**Filed as:** *"the drain never reports `parked`."*
+
+**It always has.** `DrainOutcome.parked` is declared at `worker.ts:53`, incremented at
+`worker.ts:217` on every park, and `/api/cron/qb-sync` returns the outcome object verbatim. **No
+code was written to close F13**, and any claim that it was would be false.
+
+What was genuinely missing is a **proof**. The counter had never been watched increment; "it is
+wired" rested entirely on reading the code — the same standard the S181 investigation failed
+against, where a claim query that *appeared* to match was believed for an hour and was never the
+problem. So F13 shipped as a live harness rather than a fix.
+
+**The harness parks without touching Intuit**, deliberately: an approved refund with no
+`qb_object_type` parks at `entities.ts:1126`, before the handler looks anything up. No CorePlus
+quota spent, nothing written to the sandbox's books. **The queue row is produced by the real
+`qb_enqueue_refund` trigger on approval**, not seeded — seeding `qb_sync_queue` directly would have
+proved the counter and skipped everything that has to work for the counter to matter.
+
+Its four cases: the trigger fires · the drain returns `parked ≥ 1` with `pushed: 0` · the park
+leaves the row **`queued`** with the five-minute clock rather than failing it · a second drain
+reports it as **`waiting`**, not parked twice.
+
+---
+
+## 6. ⚠️ F7 — WHAT WAS ASSUMED ABOUT THE 100-DAY RULE
+
+**The change:** `runQbSync` now calls `getAccessToken()` for **every connected company**, above the
+queue-empty `continue` that previously skipped it. A company that does not invoice or spend for
+months now refreshes on schedule instead of discovering the connection dead.
+
+**The assumption, stated because it could not be confirmed:** that Intuit's **100-day inactivity
+expiry still applies alongside** the newer five-year maximum. Intuit's November 2025 note describes
+the five-year cap as *added*, not as *replacing* the inactivity rule, and their documentation pages
+would not load during the audit (§7) or during this run.
+
+⚠️ **The change is correct under either reading**, which is why it was written rather than held for
+an answer. If the 100-day rule is gone, a keep-alive costs one cheap DB read per company per cron
+tick and refreshes only when the stored token has actually expired. If it still stands, it is the
+difference between a working connection and a customer re-authorising by hand. **The asymmetry is
+what made this safe to decide without the answer.** It should still be confirmed.
+
+`skippedNotConnected` deliberately stays below the keep-alive: that metric means *"work was waiting
+and we could not send it"*, and a disconnected company with an empty queue is idle, not skipped.
+Moving it would have quietly changed what the number means.
+
+---
+
+## 7. ⚠️ F4 — WHY THERE IS NO PROGRESS BAR
+
+The counter is surfaced on the Sync status card as two numbers — reads this month, reads last month
+— plus the date of the last one, and a plain sentence saying that **sending** records is free and
+that this is the company's share of an allowance held across all customers.
+
+**No percentage, no bar, no ceiling number, and that is a decision rather than an omission.** The
+500,000/month Builder quota this project works from is `7g1-spec.md`'s own S97 research, which that
+document explicitly flags as **re-confirmation-owed against Intuit** ("the numbers are
+re-confirmation-owed; the ruling is not"). Rendering an unverified denominator turns a caveated
+figure into a fact on an Owner's screen. **A "3% used" that is quietly wrong is worse than no bar
+at all** — it invites exactly the complacency the counter exists to prevent. Show the count that is
+measured; add the ceiling when the ceiling is confirmed.
+
+It is carried on `QueueSummary` rather than as a new prop because `AccountingPanel` has **two mount
+points** — the Settings tab and the `/dashboard/settings/accounting` route Intuit launches at — and
+a second prop is exactly how those two drift apart (PARITY [Josh, S122]). One reader feeds the card,
+so both surfaces get it or neither does.
+
+---
+
+## 8. ⚠️ Does anything here make a questionnaire answer wrong?
+
+**No answer given to Intuit is falsified by this run. Two are now MORE true than when they were
+written, and one deserves a volunteered correction if the form is resubmitted.**
+
+- **Webhook signature verification — answered YES, still YES.** F3 changed *how* the comparison is
+  made (digest bytes rather than base64 strings), not *whether* it happens. Constant-time
+  throughout, before and after.
+- **Token storage and refresh — answered YES, now stronger.** F2 added serialisation that was not
+  there when the answer was given. The answer did not claim it, so nothing was overstated.
+- **The discovery document — answered NO, still accurately NO.** F6 was deferred by instruction.
+  ⚠️ Do not "improve" this answer on a resubmission; the endpoints are hardcoded and correct, and
+  saying otherwise would be the false statement.
+- **⚠️ Worth volunteering if the form is resubmitted:** the webhook endpoint's behaviour changed
+  materially. It previously did its work before acknowledging — which, against Intuit's 3-second
+  budget and endpoint-disabling retry policy, was a conformance defect, not just a latency one. It
+  now acknowledges first. **Nothing said to Intuit was untrue; the endpoint is simply now doing
+  what the answer implied.**
+
+---
+
+## 9. Still open
+
+**Nothing found in this run is left breaking in production.** What remains:
+
+- **F5, F6, F8** — deferred by instruction, unstarted, unblocked.
+- **The 100-day question (§6)** — needs a real answer from Intuit's docs when they load.
+- **The Builder quota figure (§7)** — blocks the read-budget ceiling and the alert threshold.
+- **`s143-Q5`, `s148-Q4`, `s149-A`, `s149-G` ×2** — five live cases asserting a pre-connection
+  world. **`s149-A` nulls a live QuickBooks link as cleanup and must be dealt with first (§3a).**
+- **`s131-dashboard-access`** — one inherited unit failure, belonging to the Nav work.
+- **Addendum 3's finding** — a dependant of a terminally-failed row waits forever. Unfixed, and
+  correctly not in this run's scope.
+
+⚠️ **The sparse-update question, asked in §4 of the prompt and answered here:** F10's read-modify-write
+was applied to **invoice and purchase updates**, which are the two paths that PUT a full object back.
+**No other handler has the pattern** — customer, payment and refund creates are POSTs of new
+objects, and the void path sends only the id and SyncToken. So the exposure is closed where it
+existed and does not exist elsewhere.
+
+---
+
+*Production database never touched. Every migration applied to rebuild-test only. Nothing was
+written to the connected QuickBooks company by this run — the one drain it performed parked before
+reaching the network. Test data seeded by this run was removed; one live link destroyed by an
+existing harness was restored and verified.*
