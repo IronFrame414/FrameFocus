@@ -337,6 +337,11 @@ honoured there and only there.
 
 ### The retainage line — and the arithmetic that forced its shape
 
+> ⚠️ **SUPERSEDED [Josh, S103 §1c — see Unit 16].** Everything in this section describes Q7, which
+> has been **reversed**. QuickBooks now receives the **NET RECEIVABLE** and the invoice **closes
+> fully** when paid. The section is kept because its arithmetic argument is still the reason the
+> DescriptionOnly line carries no money — that half survived the reversal.
+
 RULED [S103 Q7]: full invoice amount, retainage as a **line item**, held portion **OPEN** until
 released, release is a **payment against the same invoice**.
 
@@ -448,6 +453,12 @@ EXECUTE is `service_role` only), it is **idempotent on `qb_payment_id`**, and it
 > — **a second Payment in QuickBooks for money received once.** The single INSERT closes that window.
 
 ### ⚠️ RETAINAGE — where the S103 Q7 ruling and 7E's shipped model genuinely diverge
+
+> ⚠️ **THIS DIVERGENCE IS GONE, AND THE ANALYSIS BELOW IS WHY [Unit 16].** It is kept verbatim
+> because it is the argument that killed Q7. It correctly found that a release is **per project**
+> while retainage is withheld **per invoice**, and concluded the two sides "legitimately differ".
+> **They did not — the ruling was wrong.** Josh reversed it at S103 §1c for exactly the reason this
+> section identifies. Read it as the diagnosis, not as current behaviour.
 
 Ruling Q7: releasing retainage is *"a PAYMENT against the existing open invoice — never a second
 invoice."* **In QuickBooks that is exactly what M-D and the invoice mapper produce.** But on the
@@ -1017,9 +1028,14 @@ accounts on a guess is the thing we refuse to do.
    these two produced the identical all-zero response, which is what made a parked row look stuck.
 4. **In QuickBooks:** a Customer, a sub-customer named `PRJ-### — <project>`, and an Invoice whose
    **total equals the invoice's `billed_total`**.
-   ⚠️ **If the invoice had retainage**, the QB total is the **FULL** amount with a **retainage line
-   that carries no money**, and the invoice stays **open** for the held portion. That is ruled S103 Q7
-   and the arithmetic depends on that line having no amount.
+   ⚠️ **REWRITTEN [S103 §1c].** _Superseded, quoted not deleted: "If the invoice had retainage, the QB
+   total is the **FULL** amount with a **retainage line that carries no money**, and the invoice stays
+   **open** for the held portion."_ **If the invoice had retainage, the QB total is the NET
+   RECEIVABLE** — for `billed_total 12,500` / `withheld 1,250`, **`TotalAmt 11,250`** — carrying the
+   work lines, a **DescriptionOnly** note naming the held amount, and a **`DiscountLineDetail`** of
+   `1,250`. QuickBooks inserts its own `SubTotal 12,500` between them. **The invoice closes FULLY when
+   paid; nothing stays open.** Releasing retainage produces a **separate invoice** with a line per
+   withholding, which syncs the ordinary way.
 5. Reload the invoice screen. **Expect:** a **"Pay online"** button **only if** the sandbox company has
    QuickBooks Payments. **Its absence is not a failure** — invoices sync either way, ruled non-blocking.
    ⚠️ **This is the one thing that may be unverifiable in sandbox at all** (§3.1's residual).
@@ -1595,3 +1611,92 @@ rather than taking an arbitrary first row (S165 category 2).
 
 **Both QB harnesses green together: `s181` + `s182`, 9 tests, real exit `0`.** Queue idle, no
 harness rows left behind.
+
+---
+
+## Unit 16 — §1c: retainage reversed. QuickBooks gets the NET, and `#3-7gqb` is CLOSED.
+
+**Ruling [Josh, S103 §1c], superseding Q7.** Q7 said: full face value, retainage as a line item, the
+invoice stays **open** for the held portion, and the release is a payment against that same invoice.
+
+⚠️ **Unit 5 of this very log had already found the flaw and drew the wrong conclusion from it.** It
+noted that `retainage_releases` is **UNIQUE per project** while retainage is withheld **per invoice**,
+and concluded the two sides "legitimately differ". They did not. **One release would have had to clear
+several open QuickBooks invoices — one payment split across many — and the platform has no concept of
+a split payment.** Q7 wrote a reconciliation problem into the customer's books that nothing on this
+side could close. That is exactly Josh's stated reason for the reversal.
+
+### The new model, and the shape was MEASURED before it was chosen
+
+| | Q7 (superseded) | S103 §1c (now) |
+| --- | --- | --- |
+| QB `TotalAmt` on a $12,500 invoice withholding $1,250 | **12,500** | **11,250** |
+| After the client pays | balance **1,250 OPEN** | balance **0, paid** |
+| Release | a 2nd payment on the SAME invoice | **a NEW invoice**, line per withholding |
+| QB shows | full contract billing | **only what is collectible** ← accepted trade, Josh's words |
+
+**How the total becomes the net without an amount-bearing line item.** The ruling says retainage is
+*descriptive, not a line item*. A negative sales line would be a line item; scaling the work lines
+would falsify them. QuickBooks' own non-item mechanism is `DiscountLineDetail`, and it was **probed
+against the sandbox before being chosen**:
+
+```
+sales 8,000 + 4,500 + DiscountLineDetail 1,250
+  -> TotalAmt 11250, Balance 11250
+  -> Sales:8000, Sales:4500, DescriptionOnly, SubTotalLineDetail:12500, DiscountLineDetail:1250
+```
+
+⚠️ **The discount line MUST follow the sales lines** — QuickBooks builds its own SubTotal from
+everything above it, so a discount placed first discounts nothing.
+
+⚠️ **Ledger consequence, named rather than discovered in a report later:** a discount reduces
+recognised income now, and the release invoice recognises it on release. Over the project the total is
+identical; the timing moves. That is the same accepted trade seen from the ledger.
+
+### ⚠️ `#3-7gqb` IS CLOSED — BY REMOVING THE QUESTION, NOT ANSWERING IT
+
+The entry was blocked on *"which QuickBooks invoice(s) does the release payment apply to, and in what
+split?"* **Under the new model no invoice is ever left open for retainage, so there is nothing to
+split.** And the three "structural gaps" it listed all turned out to be unnecessary:
+
+| The entry expected | Actually needed |
+| --- | --- |
+| `retainage_releases.qb_*` columns | **none** |
+| a new `qb_sync_queue.entity_type` value | **none** |
+| a new release handler | **none** |
+
+**Because a release is ALREADY its own invoice.** `recordSignOffAndGenerateRelease()`
+(`payments-client.ts`) has always called `createInvoice()` and stored `release_invoice_id`. It
+therefore syncs through the ordinary `invoice:create` path that already works. **Checked in the code
+rather than assumed** — the entry's premise that the release "is not pushed" was true only because
+nobody had followed the release invoice through the existing path.
+
+### One real change on the 7E side — a line per withholding
+
+_Superseded shape, quoted not deleted: a single `'Retainage released at completion'` line for the
+whole amount._ The ruling says **a line per withholding**, so the release invoice now carries one line
+per source invoice (*"Retainage withheld on INV-1043"*), ordered by issue date then invoice number
+(S165 category 1 — these are visible document lines and the order must be stable).
+
+⚠️ **WITH A FALLBACK THAT PROTECTS THE MONEY.** If the per-invoice rows do not foot to `input.amount`
+(a void mid-flight, a rounding difference), it emits the **single aggregate line** instead.
+`input.amount` is what the Owner approved and what the release is *for*: one line for the agreed
+figure is wrong in detail; several lines summing to a different total is wrong in **money**.
+
+### Documents brought into agreement
+
+- `docs/specs/7g2-spec.md` — §4's retainage trace **rewritten and re-footed** (`11,250 + 1,250 =
+  12,500`, two invoices each closed by one payment), and ruling #7 amended, superseded text quoted.
+- This log — Unit 4's retainage section and Unit 5's "genuine divergence" both banner-marked; **the
+  handshake checklist Step 4.4 rewritten**, since it told Josh to expect the full amount.
+- `TECH_DEBT.md` → `TECH_DEBT_CLOSED.md` — `#3-7gqb` moved and closed.
+
+### Verification
+
+`npx tsc --noEmit` real exit **`0`**. **Committed unit suite: 1045 passed, 1 failed, real exit `1`** —
+⚠️ **the single failure is `s131-dashboard-access.test.ts > defaultSignedInPath still branches on user
+agent alone`, and it is PRE-EXISTING**: proved by stashing this run's changes and re-running it on the
+clean tree, where it fails identically. Not touched by this work and not fixed here.
+
+⚠️ **One of this run's own edits was caught by `brand-literals.test.ts`** — a code comment named the
+product in prose, which that guard forbids outside `lib/brand.ts`. Reworded; the guard did its job.

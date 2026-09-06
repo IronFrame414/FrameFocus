@@ -398,26 +398,54 @@ interface QbInvoiceLine {
   Description?: string;
   SalesItemLineDetail?: { ItemRef: { value: string }; Qty?: number; UnitPrice?: number };
   DescriptionLineDetail?: Record<string, never>;
+  DiscountLineDetail?: { PercentBased: boolean };
 }
 
 /**
  * Build the QuickBooks invoice lines.
  *
- * ⚠️ RETAINAGE — RULED [S103, Q7] AND IT FOOTS. "Send QB the FULL invoice
+ * ⚠️ RETAINAGE — REVERSED [RULED Josh, S103, superseding Q7]. QuickBooks now
+ * receives the **NET RECEIVABLE**, and the invoice **CLOSES FULLY when paid**.
+ *
+ * _Superseded ruling, quoted rather than deleted:_ _"Send QB the FULL invoice
  * amount with retainage as a LINE ITEM; the held portion sits OPEN until
- * released; releasing retainage is a PAYMENT against the existing open invoice,
- * never a second invoice."
+ * released; releasing retainage is a PAYMENT against the existing open
+ * invoice, never a second invoice."_
  *
- * So for `billed_total 12,500` with `retainage_withheld 1,250`:
- *   - the WORK lines carry the full 12,500, and
- *   - the retainage line is **DescriptionOnly** — visible on the document,
- *     designating the held amount, and adding NOTHING to the total.
+ * ⚠️ WHY IT BROKE, in Josh's own terms: **a release is per-PROJECT, but several
+ * invoices may each have withheld retainage.** One release would then have to
+ * clear several open QuickBooks invoices — one payment split across many — and
+ * the platform has no concept of that. Leaving each invoice open was writing a
+ * reconciliation problem into the customer's books that nothing here could ever
+ * close.
  *
- * ⚠️ THE RETAINAGE LINE MUST NOT CARRY AN AMOUNT. A `1,250` line on top of
- * `12,500` of work lines makes `TotalAmt 13,750`, and the ruling's own arithmetic
- * (`11,250 + 1,250 = 12,500 = billed_total`) stops footing. The held portion is
- * expressed by the invoice staying OPEN for `1,250` after the first payment —
- * not by an extra line of money.
+ * **NOW:** for `billed_total 12,500` with `retainage_withheld 1,250`, QuickBooks
+ * gets a **11,250** invoice. Releasing retainage generates a NEW invoice on
+ * this side with **a line per withholding**, which syncs as one ordinary
+ * invoice and is paid by one ordinary payment. No split, no partial closes.
+ *
+ * ⚠️ ACCEPTED TRADE, STATED BY JOSH: **QuickBooks no longer shows full contract
+ * billing, only what is collectible.** That is the deliberate cost of the
+ * reversal, not a side effect to be engineered away.
+ *
+ * ⚠️ HOW THE TOTAL IS REDUCED, AND WHY IT IS NOT AN AMOUNT-BEARING LINE.
+ * The ruling says retainage is **descriptive, not a line item**. A negative
+ * sales line would be a line item, and scaling the work lines would falsify
+ * them. QuickBooks' own non-item mechanism is `DiscountLineDetail`. Measured
+ * against the sandbox before it was chosen:
+ *
+ *   sales 8,000 + 4,500, DiscountLineDetail 1,250
+ *     -> TotalAmt 11,250, Balance 11,250
+ *     -> lines: Sales:8000, Sales:4500, DescriptionOnly, SubTotal:12500, Discount:1250
+ *
+ * The work lines keep their real amounts, QuickBooks inserts its own subtotal,
+ * and the collectible figure is what remains. The DescriptionOnly line stays —
+ * it is the "descriptive text, customer-facing" half of the ruling.
+ *
+ * ⚠️ THE ACCOUNTING CONSEQUENCE, NAMED SO NOBODY DISCOVERS IT IN A REPORT:
+ * a discount reduces recognised income now, and the release invoice recognises
+ * it later. Over the project the total is the same; the timing moves. That is
+ * the same trade as the sentence above, seen from the ledger.
  */
 function buildInvoiceLines(
   lines: Array<{ description: string; billed_amount: number }>,
@@ -443,12 +471,23 @@ function buildInvoiceLines(
   }
 
   if (invoice.retainage_withheld > 0) {
+    const held = money(invoice.retainage_withheld);
+
+    // The descriptive half of the ruling — customer-facing, carries no money.
     built.push({
       DetailType: 'DescriptionOnly',
       Description:
-        `Retainage withheld: $${money(invoice.retainage_withheld).toFixed(2)} — ` +
-        `remains open on this invoice until released.`,
+        `Retainage withheld: $${held.toFixed(2)} — billed separately when released.`,
       DescriptionLineDetail: {},
+    });
+
+    // ⚠️ AND THE HALF THAT MAKES THE TOTAL THE NET RECEIVABLE. Must come after
+    // the sales lines: QuickBooks builds its own SubTotal from everything above
+    // the discount, and a discount placed first would discount nothing.
+    built.push({
+      DetailType: 'DiscountLineDetail',
+      Amount: held,
+      DiscountLineDetail: { PercentBased: false },
     });
   }
 
@@ -1531,7 +1570,7 @@ async function handlePurchaseVoid(ctx: DrainContext, row: QbQueueRow): Promise<H
 // ---------------------------------------------------------------------------
 //
 // ⚠️ THE HANDSHAKE PROVED THIS WAS MISSING. Josh approved an $800 bill (QB 149)
-// and paid it in EZ Binder. Nothing was enqueued, and QB 149 sat OPEN.
+// and paid it HERE. Nothing was enqueued, and QB 149 sat OPEN.
 //
 // ⚠️ THIS ONLY EVER SETTLES A LEGACY BILL. Nothing creates a Bill any more, so
 // the set this can act on is closed and shrinking. A receipt pushed as a

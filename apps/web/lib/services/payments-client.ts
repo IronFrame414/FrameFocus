@@ -337,12 +337,53 @@ export async function recordSignOffAndGenerateRelease(
     return { success: false, error: invoice.error ?? 'Could not create the release invoice' };
   }
 
-  const line = await addFixedLine({
-    invoiceId: invoice.id,
-    description: 'Retainage released at completion',
-    amount: input.amount,
-  });
-  if (!line.success) return { success: false, error: line.error };
+  // ⚠️ A LINE PER WITHHOLDING, NOT ONE AGGREGATE LINE [RULED Josh, S103 §1c].
+  // The release bills back what each earlier invoice held, so the client can
+  // see which bill each held amount came from. A single "Retainage released at
+  // completion" line for the total was the old shape; it is quoted in the
+  // superseded comment below rather than deleted.
+  //
+  // ⚠️ ORDERED, NOT MERELY LISTED. These become visible document lines in a
+  // fixed order (S165 category 1) — issue date, then invoice number, so a
+  // reissued release reads identically to the first.
+  const { data: withholdings } = await supabase
+    .from('invoices')
+    .select('invoice_number, issue_date, retainage_withheld')
+    .eq('project_id', input.projectId)
+    .gt('retainage_withheld', 0)
+    .neq('status', 'voided')
+    .eq('is_deleted', false)
+    .order('issue_date', { ascending: true })
+    .order('invoice_number', { ascending: true });
+
+  const sources = withholdings ?? [];
+  const sourceSum = sources.reduce((sum, w) => sum + Number(w.retainage_withheld ?? 0), 0);
+
+  // ⚠️ FALL BACK TO ONE LINE WHEN THE PARTS DO NOT FOOT TO `amount`.
+  // `input.amount` is the caller's Σ and is what the release is FOR. If the
+  // per-invoice rows disagree with it — a void mid-flight, a rounding
+  // difference — billing the parts would bill a different number than the one
+  // the Owner approved. One line for the agreed figure is wrong in detail;
+  // several lines summing to the wrong total is wrong in money.
+  const perLine = sources.length > 0 && Math.abs(sourceSum - input.amount) < 0.005;
+
+  const lines = perLine
+    ? sources.map((w) => ({
+        description: `Retainage withheld on ${w.invoice_number}`,
+        amount: Number(w.retainage_withheld),
+      }))
+    : // _Superseded shape, quoted rather than deleted:_ the single line
+      // _'Retainage released at completion'_ for the whole `input.amount`.
+      [{ description: 'Retainage released at completion', amount: input.amount }];
+
+  for (const l of lines) {
+    const line = await addFixedLine({
+      invoiceId: invoice.id,
+      description: l.description,
+      amount: l.amount,
+    });
+    if (!line.success) return { success: false, error: line.error };
+  }
 
   const recalc = await recalculateInvoiceTotals(invoice.id, { contractType: 'fixed_price' });
   if (!recalc.success) return { success: false, error: recalc.error };

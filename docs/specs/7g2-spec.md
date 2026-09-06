@@ -142,22 +142,48 @@ and there is **no verifier-token storage** yet (only event-id dedupe exists) →
 **Output:** the platform invoice shows a **"Pay online"** button → the QB pay-link (only when
 `qb_payments_enabled`). **Foots:** billed lines `$8,400.00` = QB `TotalAmt $8,400.00`. ✓
 
-**Retainage case — RULED [S103, Q7], and it now FOOTS.** _Superseded prep text, quoted not deleted:
-"where it does NOT foot cleanly, flagged not adjusted… How retainage is represented in QB is UNDECIDED."_
-**Send QB the FULL invoice amount, with retainage as a LINE ITEM; the held portion sits OPEN until
-released; releasing retainage is a PAYMENT against the existing open invoice — never a second invoice.**
+**Retainage case — ⚠️ REVERSED [RULED Josh, S103 §1c, superseding Q7]. The trace is rewritten below and
+it FOOTS.**
+
+_Superseded ruling, quoted rather than deleted:_ _"**Send QB the FULL invoice amount, with retainage as a
+LINE ITEM; the held portion sits OPEN until released; releasing retainage is a PAYMENT against the
+existing open invoice — never a second invoice.**"_ _(itself superseding the earlier prep text "where it
+does NOT foot cleanly, flagged not adjusted… How retainage is represented in QB is UNDECIDED.")_
+
+⚠️ **WHY Q7 BROKE, and it is a modelling error rather than a build detail.** A release is per **PROJECT**,
+but **several invoices may each have withheld retainage**. Under Q7 one release would have to clear
+several open QuickBooks invoices — **one payment split across many** — and the platform has no concept of
+a split payment. Q7 wrote a reconciliation problem into the customer's books that nothing on this side
+could ever close.
+
+**NOW RULED:**
+- **Retainage is DESCRIPTIVE text on the invoice — customer-facing, but NOT a line item.**
+- **QuickBooks receives the NET RECEIVABLE, and that invoice CLOSES FULLY when paid.**
+- **Releasing retainage generates a NEW EZ Binder invoice with A LINE PER WITHHOLDING**, which syncs as
+  one ordinary invoice and is paid by one ordinary payment.
+- ⚠️ **Accepted trade, stated by Josh: QuickBooks no longer shows full contract billing, only what is
+  collectible.**
 
 `INV-1043`, `billed_total $12,500.00`, `retainage_withheld $1,250.00`, `amount_receivable $11,250.00`:
-- **QB Invoice `TotalAmt = $12,500.00`** — the work line(s) at the full amount, plus a visible **retainage
-  line item** designating the `$1,250.00` held. One invoice, the whole job.
-- **Initial payment** (Flow 2, on client pay) = `$11,250.00` against `INV-1043` → **balance `$1,250.00`
-  OPEN** (the retainage). Invoice not yet `paid`.
-- **Retainage release** (7E §4.2 timing — earlier of client payment or 30 days after completion,
-  Owner-only) = a **second Payment of `$1,250.00` against the SAME open invoice** → **balance `$0.00`,
-  invoice `paid`.** NOT a new invoice.
-- **Foots:** `$11,250.00 + $1,250.00 = $12,500.00` = QB `TotalAmt` = `billed_total`. ✓ (The exact QB line
-  mechanic — a held-retainage line vs a receivable-holdback account — is a build detail; the money model
-  above is one invoice at full face, closed by two payments that sum to it.)
+- **QB Invoice `TotalAmt = $11,250.00`** — the work lines at their real amounts (`$8,000.00` +
+  `$4,500.00`), a **DescriptionOnly** line reading *"Retainage withheld: $1,250.00 — billed separately
+  when released"*, and a **`DiscountLineDetail` of `$1,250.00`** that brings the total to the net.
+- **Initial payment** (Flow 2, on client pay) = `$11,250.00` → **balance `$0.00`, invoice `paid`.**
+  Nothing is left open.
+- **Retainage release** (7E §4.1 — the recorded walkthrough sign-off) = **a NEW draft invoice**, already
+  built by `recordSignOffAndGenerateRelease()`, carrying **one line per withholding**
+  (*"Retainage withheld on INV-1043" $1,250.00*). It syncs through the ordinary `invoice:create` path and
+  is closed by **one ordinary payment of `$1,250.00`**.
+- **Foots:** `$11,250.00` (QB `TotalAmt` on INV-1043, = `amount_receivable`) `+ $1,250.00` (the release
+  invoice's own `TotalAmt`) `= $12,500.00 = billed_total`. ✓ **Two invoices, each closed by one payment,
+  no split and no partial closes.**
+- ⚠️ **The QB line mechanic is NO LONGER "a build detail" and is measured, not assumed:**
+  sales `8,000` + `4,500` with `DiscountLineDetail 1,250` returns **`TotalAmt 11250, Balance 11250`** —
+  QuickBooks inserts its own `SubTotalLineDetail 12500` between them. The discount line MUST follow the
+  sales lines or it discounts nothing.
+- ⚠️ **Ledger consequence, named rather than discovered later:** a discount reduces recognised income now
+  and the release invoice recognises it on release. Over the project the total is unchanged; the timing
+  moves. Same trade as the bullet above, seen from the ledger.
 
 ### Flow 2 — Payment received BACK (Model A, electronic)
 **Input:** client pays `$8,400.00` via the pay-link. QB creates **Payment** `201`, `LinkedTxn` → Invoice
@@ -366,9 +392,14 @@ webhook-triggered reads can be batched (7g1 §7G.9). Fill M-A/M-B/M-C column sha
    flow*.
 6. **Webhook verifier token — RULED: VAULT**, alongside the OAuth tokens (same credential class, one store,
    one access pattern). **Migration M-B = the Vault option.**
-7. **Retainage — RULED: send QB the FULL invoice amount with retainage as a LINE ITEM;** the held portion
-   sits OPEN until released. **Releasing retainage is a PAYMENT against the existing open invoice — never a
-   second invoice.** §4's retainage trace is rewritten under this and **now foots.**
+7. ⚠️ **Retainage — REVERSED [Josh, S103 §1c].** _Superseded, quoted not deleted: "**RULED: send QB the
+   FULL invoice amount with retainage as a LINE ITEM;** the held portion sits OPEN until released.
+   **Releasing retainage is a PAYMENT against the existing open invoice — never a second invoice.**"_
+   **NOW: QuickBooks receives the NET RECEIVABLE and the invoice CLOSES FULLY when paid; retainage is
+   descriptive text, not a line item; releasing it generates a NEW invoice with a line per withholding.**
+   Q7 broke because a release is per-PROJECT while several invoices may each hold retainage — one payment
+   split across many, which the platform cannot express. §4's trace is rewritten again and **foots.**
+   **This closes `#3-7gqb`.**
 8. **Portal disclosure — RULED: a FORWARD OBLIGATION**, done **immediately after M7 completes** (the portal
    pay surface is Module 9, unbuilt). Josh committed to it on the Intuit questionnaire — recorded in §5.5
    and to be carried into `GATED.md` so it cannot be lost.
