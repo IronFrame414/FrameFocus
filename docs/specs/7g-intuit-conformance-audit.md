@@ -559,3 +559,85 @@ F1 and should go first on effort alone.**
    project.
 5. **D — run one receipt against the real Simple Start company** as soon as production keys allow.
 6. F7, F3, F4/F8, F6 as before.
+
+---
+
+# ADDENDUM 2 — three items recorded, not fixed [S186]
+
+> **Read-only.** Handed to this run as "record without fixing". ⚠️ **Two of the three are not quite
+> what the note said, and recording them verbatim would have put a false claim in the register.**
+> Checked against the code before writing. **None is fixed here** — Part B is this run's work.
+
+### N1 — ⚠️ THE `parked` COUNTER IS PRESENT AND WORKING. The note is wrong.
+
+**Claim as handed over:** *"The `parked` counter is missing from the worker's outcome shape — the
+drain reports `parked: 0` while rows park."*
+
+**Measured:** `parked` is declared (`worker.ts:52`), initialised (`:75`) and incremented on every park
+(`:174`). It has been observed firing in two separate runs:
+
+```
+S182 park proof   -> {"companiesDrained":1,"pushed":0,"parked":1,...}
+S184 §4 proof     -> {"companiesDrained":1,"pushed":1,"parked":0,...}
+```
+
+**Rank: NOTED — nothing to fix.**
+
+⚠️ **The likely real observation behind the note:** a drain that reports `parked: 0` while a row *is*
+parked is the **normal** reading once the row has already parked on an earlier pass — a parked row is
+not re-claimed until its 5-minute clock expires, so subsequent drains legitimately report
+`parked: 0` **and `waiting: 1`**. That `waiting` field exists precisely to make that case legible
+(S181, F-N in §5). **If `waiting` was 0 too, that is a different and real bug — but it was not
+reproduced here.**
+
+### N2 — `intuit_tid` is captured NOWHERE, not "only on failures"
+
+**Claim as handed over:** *"`intuit_tid` is captured only on FAILURES."*
+
+**Measured:** `grep -rn "intuit_tid\|intuit-tid" apps/web` returns **nothing**. The header is read on
+neither the success nor the failure path — `call()` (`client.ts:70-123`) reads `response.text()` and
+parses the fault body, and **never touches `response.headers`**.
+
+**So the gap is wider than reported: no QuickBooks call, successful or failed, has an Intuit
+transaction id recorded.** ⚠️ **`intuit-tid` is the first thing Intuit support asks for**, and without
+it a "QuickBooks shows the wrong figure" report cannot be escalated — for a *successful* call least
+of all, since there is no error text to fall back on either.
+
+**Rank: HARDENING.** ⚠️ **But note it is worth more than most HARDENING items**, because its value is
+realised exactly when something has already gone wrong on a money path.
+
+**Shape of the fix (not done):** read `response.headers.get('intuit-tid')` in `call()`; store it on
+`qb_sync_queue` (a `last_intuit_tid` column) and on the pushed record's `qb_synced_at` sibling. One
+column and three lines in the client.
+
+### N3 — Sales tax: ⚠️ NEITHER WINS. The two are computed independently and never reconciled.
+
+**The question asked:** *"EZ Binder carries a rate and QuickBooks computes its own. Which wins? Could
+an invoice show one total here and another there?"*
+
+**What is actually true, measured:**
+
+| | Finding |
+| --- | --- |
+| Platform-side rate | `companies.default_tax_rate` exists — but it flows into **ESTIMATES only** (`estimates-client.ts:379`, `tax_rate: company.default_tax_rate`). |
+| Invoice-side rate | ⚠️ **`invoices` and `invoice_lines` have NO tax column at all** — confirmed against the live schema. |
+| What the connector sends | ⚠️ **No tax fields whatsoever.** The invoice body (`entities.ts:576-600`) carries `CustomerRef`, `Line`, `DocNumber`, `TxnDate`, `DueDate` and the three `AllowOnline*` flags — **no `TxnTaxDetail`, no `GlobalTaxCalculation`.** |
+
+**So the answer to "which wins" is neither — the question has no contest in it today.** The platform
+does not put tax on an invoice, so there is nothing to send; QuickBooks then applies **whatever the
+Customer's own default tax code says**, entirely outside our control or knowledge.
+
+> ⚠️ **CAN THE TOTALS DIVERGE? YES — and this is the part worth Josh's attention.**
+>
+> If the QuickBooks customer carries a default tax code, **QuickBooks will add tax that EZ Binder
+> never showed**, and the QuickBooks invoice total will exceed ours. Nothing in the build detects
+> that: the push writes `qb_push_status = 'pushed'` on a 2xx and never compares totals back.
+>
+> ⚠️ **It is invisible in our sandbox** — the fixture customers have no tax code — **so the handshake
+> could not have caught it and did not.**
+
+**Rank: BREAKS IN PRODUCTION (conditional on the customer having a tax code) — recorded, not
+investigated further, per this run's scope.**
+
+**What would settle it** (one read, no write): fetch a real customer from a production realm and check
+`DefaultTaxCodeRef`. **Not done — production is out of scope for this run.**
