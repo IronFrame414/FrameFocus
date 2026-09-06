@@ -1523,3 +1523,75 @@ purchase, one dependency level each. Confirmed, not yet fixed.
 `npx tsc --noEmit` real exit **`0`**. **`npx next build` real exit `0`** — `/api/quickbooks/payment-account`
 compiled. ⚠️ **`next build` replaced `.next` under the running `next dev` and killed it**; the proof
 was re-run in-process (proven equivalent at S181) and the dev server is restarted at the end of this run.
+
+---
+
+## Unit 15 — §1b proven, and a money defect this run caused, found and repaired
+
+### The loop closes. QB bill 149: balance **800 → 0**.
+
+The two payments Josh recorded predate M-G's trigger, so nothing had enqueued them — exactly the
+state §1b describes. Backfilled and drained:
+
+```
+BEFORE  bill 147: {"total":600,"balance":0}      <- Josh had marked this paid IN QuickBooks by hand
+BEFORE  bill 149: {"total":800,"balance":800}    <- the open one
+drain   -> pushed: 2
+AFTER   bill 147: {"total":600,"balance":0}
+AFTER   bill 149: {"total":800,"balance":0}      ✅
+```
+
+### ⚠️ AND THEN THE SAME DRAIN PUT $600 OF UNAPPLIED CASH IN THE SANDBOX
+
+Bill 147 had **no balance left** — Josh settled it inside QuickBooks by hand during the handshake,
+which is the very step this ruling removes. Pushing a $600 BillPayment at it:
+
+- **did not fail**, and
+- **did not apply.** QuickBooks silently **dropped the `LinkedTxn`** and returned `Line: []`,
+- booking **$600 of unapplied cash** against the vendor, whose balance then read **600** — as though
+  the supplier owed the company money.
+
+> **A refusal would have been fine. A silent unapplied payment is the worst outcome available**,
+> because nothing on either side says anything is wrong. It was found only by reading the created
+> object back rather than trusting `pushed: 2`.
+
+**Repaired:** BillPayment 152 deleted, **vendor `btb` balance back to 0**, both bills at 0.
+
+**Guarded, and the guard is proven:** `handleBillPaymentCreate` now reads the bill's remaining
+`Balance` first.
+
+- `balance <= 0` → **no BillPayment is written at all.** Returns `pushed`, because already-settled is
+  the outcome we wanted, and logs which payment it skipped.
+- `net > balance` → applies **`min(net, balance)`** and logs the difference. Paying more than a bill
+  owes produces the same unapplied cash. A payment that exceeds what QuickBooks thinks is owed is a
+  reconciliation difference for a person — not something to resolve by pushing money into the
+  customer's books.
+
+Re-run after the fix, with both payments re-queued:
+
+```
+[qb-entities] bill 147 already has no balance; recording no BillPayment for payment ff25a65e…
+[qb-entities] bill 149 already has no balance; recording no BillPayment for payment 84998e10…
+FINAL vendor btb balance: [0]
+FINAL bills: [{"Id":"149","Bal":0},{"Id":"147","Bal":0}]
+```
+
+**Cost:** one metered read per bill payment. Worth it on a money path.
+
+### Regression harness — `apps/web/test/s182-qb-purchase-routing.live.ts`, 5 tests, real exit `0`
+
+Makes **no Intuit call**: the routing decision lives entirely in the enqueue triggers.
+
+⚠️ **What it actually guards is that the RECEIPT test stays the NEGATION of the payable predicate.**
+Case 3 asserts all four payable terms independently, including the one that matters most — an
+expense that is `state = 'actual'` **and still a payable** because it is sub-contract-linked. That is
+the exact shape of QB bills 147 and 149, and it is the case a `state`-only filter would wrongly push.
+If anyone "simplifies" the trigger to `state = 'actual'`, that case goes red.
+
+Two harness bugs of its own, fixed rather than worked around: `author_member_id` is NOT-NULL and
+defaults from `get_my_member_id()`, which is NULL under the service role; and the job-chain case
+needs a project that HAS a client, so the fixture query is scoped with `.not('contact_id','is',null)`
+rather than taking an arbitrary first row (S165 category 2).
+
+**Both QB harnesses green together: `s181` + `s182`, 9 tests, real exit `0`.** Queue idle, no
+harness rows left behind.

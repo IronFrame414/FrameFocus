@@ -1583,6 +1583,51 @@ async function handleBillPaymentCreate(
     };
   }
 
+  // ⚠️ READ THE BILL'S REMAINING BALANCE FIRST. THIS GUARD IS NOT OPTIONAL, AND
+  // IT COST REAL MONEY IN THE SANDBOX TO LEARN [S182].
+  //
+  // Bill 147 was already settled — Josh had marked it paid inside QuickBooks by
+  // hand during the handshake, which is exactly the manual step this ruling
+  // removes. Pushing a $600 BillPayment at a bill with no balance did NOT fail
+  // and did NOT apply: **QuickBooks silently dropped the LinkedTxn**, returning
+  // `Line: []`, and booked $600 of UNAPPLIED cash against the vendor — whose
+  // balance then read 600 as if the supplier owed us money.
+  //
+  // A refusal would have been fine. A silent unapplied payment is the worst
+  // outcome available, because nothing on either side says anything is wrong.
+  const bill = (await qboRead(ctx.admin, ctx.conn, `/bill/${expense.qb_bill_id}`)) as {
+    Bill?: { Balance?: number };
+  };
+  const balance = Number(bill.Bill?.Balance ?? 0);
+
+  if (balance <= 0) {
+    // Already settled — in QuickBooks by hand, or by an earlier drain. The
+    // outcome we wanted, so this is `pushed`, not a failure.
+    console.warn(
+      `[qb-entities] bill ${expense.qb_bill_id} already has no balance; ` +
+        `recording no BillPayment for payment ${row.entity_id}.`
+    );
+    await ctx.admin
+      .from('expense_payments')
+      .update({ qb_push_status: 'pushed', qb_synced_at: new Date().toISOString() })
+      .eq('id', row.entity_id)
+      .eq('company_id', ctx.companyId);
+    return { kind: 'pushed' };
+  }
+
+  // ⚠️ CAPPED AT THE BALANCE, and the excess is deliberately NOT sent. Paying
+  // more than a bill owes produces the same unapplied cash as the case above.
+  // A payment here that exceeds what QuickBooks thinks is owed is a
+  // reconciliation difference for a person to look at — it is not something to
+  // resolve by pushing money into the customer's books.
+  const applied = Math.min(net, balance);
+  if (applied < net) {
+    console.warn(
+      `[qb-entities] payment ${row.entity_id} is ${net} but bill ` +
+        `${expense.qb_bill_id} owes ${balance}; applying ${applied}.`
+    );
+  }
+
   // ⚠️ BillPayment's PayType admits only Check and CreditCard — there is no
   // Cash. A company set to Cash therefore files as Check rather than parking:
   // the bill closing correctly matters more than the tender label, and the
@@ -1593,7 +1638,7 @@ async function handleBillPaymentCreate(
   const created = (await qboWrite(ctx.conn, '/billpayment', {
     VendorRef: { value: vendorId },
     PayType: payType,
-    TotalAmt: net,
+    TotalAmt: applied,
     TxnDate: qbDate(payment.paid_date as string),
     ...(payType === 'CreditCard'
       ? { CreditCardPayment: { CCAccountRef: { value: settings.value.accountId } } }
@@ -1601,7 +1646,7 @@ async function handleBillPaymentCreate(
     ...(note ? { PrivateNote: note } : {}),
     Line: [
       {
-        Amount: net,
+        Amount: applied,
         LinkedTxn: [{ TxnId: expense.qb_bill_id, TxnType: 'Bill' }],
       },
     ],
