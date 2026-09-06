@@ -641,3 +641,49 @@ investigated further, per this run's scope.**
 
 **What would settle it** (one read, no write): fetch a real customer from a production realm and check
 `DefaultTaxCodeRef`. **Not done — production is out of scope for this run.**
+
+---
+
+# ADDENDUM 3 — one finding surfaced by the sub-customer removal [S186]
+
+> **Recorded, not fixed** — outside this run's two jobs. Found while draining a real queue, not by
+> reading.
+
+### N4 — ⚠️ A DEPENDANT WHOSE DEPENDENCY GOES `failed_terminal` WAITS FOREVER
+
+**Rank: BREAKS IN PRODUCTION (silent, and it strands money documents)**
+
+**Observed on rebuild-test**, on Josh's own queued rows rather than a contrived case:
+
+```
+customer:create      = failed_terminal   "The client record no longer exists."
+sub_customer:create  = queued (waits on customer)      <- never claimable
+invoice:create       = queued (waits on sub_customer)  <- never claimable
+```
+
+`claimDue()` releases a dependant **only when its dependency reaches `pushed`**
+(`queue.ts:199-201` — `satisfied` is built solely from `d.status === 'pushed'`). **There is no
+propagation of terminal failure down the chain.** So when a dependency dies permanently, everything
+behind it sits `queued` forever — **claimable by nothing, retried by nothing, and counted by the
+`waiting` field as though it were merely patient.**
+
+⚠️ **It reads as healthy.** The rows are `queued`, not failed. `attempts` stays 0. The drain reports
+`waiting: N` — which S181 added precisely so a stalled queue would be visible, and which here says
+"work is waiting" when the truth is "work can never run".
+
+**How it happens in production**, no test-data weirdness required: any terminal failure on a customer
+push — a contact deleted between enqueue and drain, a `6240` duplicate-name conflict resolved the
+wrong way, a QuickBooks-side validation refusal — strands every invoice for that client.
+
+⚠️ **This is not caused by the sub-customer removal and predates it.** The removal shortens the chain
+(one dependency instead of two), which narrows the exposure but does not close it: an
+`invoice:create` still depends on a `customer:create` that can go terminal.
+
+**Fix, when it is scheduled:** when `markFailed()` writes `failed_terminal`, cascade to the rows whose
+`depends_on_id` is that row — either failing them with an inherited reason ("the client this invoice
+belongs to could not be created") or, better, **surfacing them through the existing
+`qb_sync_blocked` notification (M-H) so a person is told rather than a counter being incremented.**
+The dependency edge already exists in the table; nothing new is needed to find them.
+
+**Note for the queue's `waiting` counter:** it should probably distinguish *waiting on a live
+dependency* from *waiting on a dead one*. The second is not waiting.
