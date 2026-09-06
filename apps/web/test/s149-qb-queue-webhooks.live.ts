@@ -53,6 +53,30 @@ const madeQueue: string[] = [];
 const madeEvents: string[] = [];
 const madeBudget: string[] = [];
 
+/**
+ * ⚠️ THE VALUES THESE PROBES OVERWRITE, CAPTURED BEFORE THEY ARE OVERWRITTEN
+ * [S188].
+ *
+ * When this file was written every `qb_*` column on every fixture row was NULL,
+ * because nothing had ever written one — the connector did not exist yet. So
+ * "restore" and "set to NULL" were the same operation, and the afterAll wrote
+ * NULL.
+ *
+ * ⚠️ THEY ARE NOT THE SAME OPERATION ANY MORE, AND THE DIFFERENCE CORRUPTS
+ * SOMEONE'S BOOKS. 7G is connected, and the fixture contact this file picks
+ * carries a real link to a real QuickBooks Customer. Nulling it does not clean
+ * up — it makes the app FORGET a customer it has already created, and the next
+ * push then creates a SECOND one. A duplicate customer in a real chart of
+ * accounts is the exact failure `disconnect-resets.ts` exists to prevent, and
+ * this file was causing it on every run.
+ *
+ * Measured, not theorised: it nulled Karen Foster's link to Customer 62 on the
+ * S187 battery and the link had to be restored by hand.
+ */
+let originalCustomerId: string | null = null;
+let originalSubCustomerId: string | null = null;
+let originalVoidMemo: string | null = null;
+
 /** A queue row, service-role — the only writer the design admits. */
 async function enqueue(fields: Record<string, unknown>): Promise<{ id?: string; error: unknown }> {
   const { data, error } = await admin
@@ -112,22 +136,72 @@ beforeAll(async () => {
     .order('created_at', { ascending: true }).limit(1).single();
   invoiceId = (invoice as { id: string }).id;
 
+  // ⚠️ CAPTURE BEFORE ANY PROBE WRITES [S188]. Two probes below deliberately
+  // put marker values in these columns; each puts the ORIGINAL back, and these
+  // are what "original" means. See the declarations above for why NULL is no
+  // longer a safe stand-in for it.
+  const { data: before } = await admin
+    .from('contacts').select('qb_customer_id').eq('id', contactId).single();
+  originalCustomerId = (before as { qb_customer_id: string | null }).qb_customer_id;
+
+  const { data: beforeProject } = await admin
+    .from('projects').select('qb_sub_customer_id').eq('id', assignedProjectId).single();
+  originalSubCustomerId =
+    (beforeProject as { qb_sub_customer_id: string | null }).qb_sub_customer_id;
+
+  const { data: beforeInvoice } = await admin
+    .from('invoices').select('qb_void_memo').eq('id', invoiceId).single();
+  originalVoidMemo = (beforeInvoice as { qb_void_memo: string | null }).qb_void_memo;
+
   // Self-heal. A run that died — or a MUTATION run in which the deliberately
   // added INSERT policy let a row through that `enqueue()` never tracked —
   // leaves queue rows this file's afterAll cannot reach by id. Keyed on the
   // company and the fixture subjects rather than on ids captured this run,
   // which is the #2-s147 rule applied to a table that is not `companies`.
-  await admin.from('qb_sync_queue').delete().eq('company_id', companyA);
-  await admin.from('qb_webhook_events').delete().eq('company_id', companyA);
+  //
+  // ⚠️ SCOPED TO THIS FILE'S OWN SUBJECTS [S188]. It used to delete EVERY queue
+  // row and EVERY webhook event for the company, which was harmless when
+  // nothing else wrote them and is not harmless now:
+  //
+  //   * a `qb_sync_queue` row is a record's PENDING PUSH. Deleting it does not
+  //     re-queue anything — the enqueue triggers fire on a CHANGE — so that
+  //     invoice simply never reaches QuickBooks, and nothing reports it.
+  //   * since M-N a `qb_webhook_events` row with `processed_at IS NULL` is
+  //     INBOUND WORK WE STILL OWE. Deleting it discards a real client payment,
+  //     and Intuit's own retry is deduped away by the row we just removed.
+  //
+  // Every row this file creates hangs off `contactId` or `invoiceId`, and every
+  // event it creates carries the `S149-` marker, so the narrower filter catches
+  // exactly what the broad one was for.
+  await admin
+    .from('qb_sync_queue').delete().eq('company_id', companyA)
+    .in('entity_id', [contactId, invoiceId]);
+  await admin
+    .from('qb_webhook_events').delete().eq('company_id', companyA)
+    .like('intuit_event_id', `${MARKER}-%`);
 });
 
 afterAll(async () => {
   if (madeQueue.length) await admin.from('qb_sync_queue').delete().in('id', madeQueue);
   if (madeEvents.length) await admin.from('qb_webhook_events').delete().in('id', madeEvents);
   if (madeBudget.length) await admin.from('qb_read_budget').delete().in('id', madeBudget);
-  await admin.from('contacts').update({ qb_customer_id: null }).eq('id', contactId);
-  await admin.from('projects').update({ qb_sub_customer_id: null }).eq('id', assignedProjectId);
-  await admin.from('invoices').update({ qb_void_memo: null }).eq('id', invoiceId);
+
+  // ⚠️ THE THREE `update({ qb_*: null })` LINES THAT STOOD HERE ARE GONE
+  // [S188]. Superseded text, quoted rather than deleted:
+  //
+  //     await admin.from('contacts').update({ qb_customer_id: null })…
+  //     await admin.from('projects').update({ qb_sub_customer_id: null })…
+  //     await admin.from('invoices').update({ qb_void_memo: null })…
+  //
+  // They were written as "restore" and they were correct as restore for exactly
+  // as long as those columns were always NULL. Once the connector shipped they
+  // became a DESTRUCTIVE WRITE dressed as cleanup, and the file had no way to
+  // notice: nulling the link is also what makes the stale assertion in S149-A
+  // pass, so the damage bought the green tick. It failed on a fresh link and
+  // passed on the second run, having deleted the thing that made it fail.
+  //
+  // The probe that writes a marker now puts the original back itself, in the
+  // test, where the value that was overwritten is actually known.
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -141,9 +215,22 @@ describe('S149-A — the new entity-id columns are connector-written, not hand-w
     expect(error).toBeTruthy();
     expect(error?.message).toMatch(/written by the connector/i);
 
+    // ⚠️ INVERTED [S188]. This asserted `.toBeNull()`, which tested the wrong
+    // fact and tested it against live data.
+    //
+    // What the probe proves is that the PM's write was REFUSED — so the column
+    // must be UNCHANGED. It is not "the column is empty": that was only ever
+    // true because the connector had never run, and once it had, the assertion
+    // could be satisfied in two ways — the write being refused (what we want to
+    // know) or the link having been destroyed (what the afterAll was doing).
+    // An assertion with two roads to green is not a test of either.
     const { data: row } = await admin
       .from('contacts').select('qb_customer_id, notes').eq('id', contactId).single();
-    expect((row as { qb_customer_id: string | null }).qb_customer_id).toBeNull();
+    const after = (row as { qb_customer_id: string | null }).qb_customer_id;
+    expect(after, 'the PM write was refused, so the column must not carry the marker')
+      .not.toBe(`${MARKER}-cust`);
+    expect(after, 'the refusal must leave the existing QuickBooks link untouched')
+      .toBe(originalCustomerId);
 
     const prior = (row as { notes: string | null }).notes;
     const { error: ok } = await pmC
@@ -162,9 +249,13 @@ describe('S149-A — the new entity-id columns are connector-written, not hand-w
     expect(error?.message).toMatch(/written by the connector/i);
     expect(error?.message).not.toMatch(/financial terms/i);
 
+    // Inverted for the same reason as the contact probe above [S188]: the fact
+    // under test is that the write was refused, not that the column is empty.
     const { data } = await admin
       .from('projects').select('qb_sub_customer_id').eq('id', assignedProjectId).single();
-    expect((data as { qb_sub_customer_id: string | null }).qb_sub_customer_id).toBeNull();
+    const afterSub = (data as { qb_sub_customer_id: string | null }).qb_sub_customer_id;
+    expect(afterSub).not.toBe(`${MARKER}-sub`);
+    expect(afterSub).toBe(originalSubCustomerId);
   });
 
   it('…and the SAME project still raises the FINANCIAL message for a financial column', async () => {
@@ -183,13 +274,44 @@ describe('S149-A — the new entity-id columns are connector-written, not hand-w
   });
 
   it('the service role writes all three — the guards are column-scoped, not blanket', async () => {
+    // ⚠️ THIS IS THE PROBE THAT ACTUALLY OVERWRITES THE LIVE LINKS, and it has
+    // to: proving the guard is column-scoped rather than blanket means really
+    // writing the column as the service role. What it must not do is LEAVE the
+    // marker there.
     const { error: e1 } = await admin
       .from('contacts').update({ qb_customer_id: `${MARKER}-cust` }).eq('id', contactId);
     const { error: e2 } = await admin
       .from('projects').update({ qb_sub_customer_id: `${MARKER}-sub` }).eq('id', assignedProjectId);
     const { error: e3 } = await admin
       .from('invoices').update({ qb_void_memo: `${MARKER}-memo` }).eq('id', invoiceId);
+
+    // ⚠️ RESTORED HERE, IN THE TEST, NOT IN afterAll [S188]. Two reasons, and
+    // the second is the one that bit.
+    //
+    // 1. The window matters. Between the write above and this restore the
+    //    contact points at a QuickBooks customer called "S149-cust", and a
+    //    drain landing in that window would push an update at an id that does
+    //    not exist. Narrowing the window to a few statements is free.
+    // 2. afterAll is the wrong place to know the value. It ran far from the
+    //    write, could not see what had been overwritten, and "restored" a
+    //    constant — which is how a cleanup step came to be the most destructive
+    //    thing in the file.
+    await admin.from('contacts').update({ qb_customer_id: originalCustomerId }).eq('id', contactId);
+    await admin
+      .from('projects').update({ qb_sub_customer_id: originalSubCustomerId })
+      .eq('id', assignedProjectId);
+    await admin.from('invoices').update({ qb_void_memo: originalVoidMemo }).eq('id', invoiceId);
+
     expect([e1, e2, e3]).toEqual([null, null, null]);
+
+    // And the restore itself is asserted, because a silent failure here is the
+    // original defect wearing a different hat.
+    const { data: back } = await admin
+      .from('contacts').select('qb_customer_id').eq('id', contactId).single();
+    expect(
+      (back as { qb_customer_id: string | null }).qb_customer_id,
+      'the QuickBooks link was not put back — do not leave the suite in this state'
+    ).toBe(originalCustomerId);
   });
 });
 
