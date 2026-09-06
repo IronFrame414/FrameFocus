@@ -1302,3 +1302,98 @@ path.** No queue rows, no webhook events, no seeded business records.
 
 *Migration applied to rebuild-test only; ledger row inserted by hand and verified. Production never
 touched.*
+
+---
+
+# S190 — THE OAUTH CALLBACK "FAILURE" WAS THE CODESPACE, NOT THE CODE
+
+> ## ⚠️ TO FINISH THE CONNECT, FLIP PORT 3000 TO PUBLIC IN THE RUNNING CODESPACE
+>
+> **VS Code → PORTS panel → right-click 3000 → Port Visibility → Public.** (`gh` is not installed
+> here, so I could not do it for you; `gh codespace ports visibility 3000:public` is the CLI form.)
+> The committed `devcontainer.json` change only takes effect on a **rebuild**.
+>
+> Then retry Connect. Everything downstream of Intuit's redirect is verified working below.
+
+## 1. What it actually was
+
+**Not the route. Not the middleware. Not the vault change.** Requesting the exact URL Intuit is told
+to return to:
+
+```
+$ curl -D - "https://fantastic-palm-tree-…-3000.app.github.dev/api/quickbooks/callback?code=…"
+HTTP/2 302
+location: https://github.dev/pf-signin?…&tunnel=1
+```
+
+**Codespaces forwards ports PRIVATE by default**, and a private port answers any request without a
+GitHub tunnel cookie with a 302 to the port-forwarding sign-in interstitial. **The request never
+reaches the dev server**, which is precisely why nothing was ever logged for the callback.
+
+⚠️ **And it explains the asymmetry that made this confusing.** `/api/quickbooks/connect` logged
+fine because it is a **same-site** request from the already-authenticated tab, carrying the tunnel
+cookie. The return leg is a **cross-site navigation from `appcenter.intuit.com`**, which presents no
+such cookie. Same server, same port, opposite outcome — and the difference is invisible from inside
+the code.
+
+Every reported symptom follows without remainder: the `code` is swallowed by the interstitial, so the
+token is never stored, `qb_connection_state` stays `disconnected`, and `qb_income_item_id` keeps its
+stale `19` from an earlier connection because the post-connect probe never runs.
+
+## 2. What was ruled out, and how — by observation
+
+| Hypothesis | Verdict | The observation |
+| --- | --- | --- |
+| Middleware `'/api/:path*'` blocks the callback | **Disproved** | `curl` on localhost returns the route's **own** `qb_error=state_mismatch` redirect and its `clearState` cookie. |
+| …but only for an authenticated session | **Disproved properly** | ⚠️ My first curl sent **no cookie**, so it skipped every `user &&` branch — the wrong case. Re-run with a minted Owner session: identical result, route still reached. |
+| The middleware blocks the **webhook** (no session, ever) | **Disproved** | `POST` with no cookies returns `401 {"error":"Invalid signature"}` — the route's own check. The handler runs. |
+| My S189 vault change refuses where it used to swallow | **Disproved** | Ran the callback's exact store step: `qb_vault_put` → no error, secret created, company row → `connected` with the pointer set, vault round-trip verified. Then reverted. |
+| The route 404s / is not compiled | **Disproved** | It responds, with its own redirects, at every stage. |
+
+**The route is healthy end to end.** Driven past the CSRF nonce with a matching cookie, it walks
+nonce → session → owner check → token exchange and lands on `qb_error=exchange_failed` — the correct
+answer to my deliberately bogus `code`. Only Intuit's consent click is unexercised.
+
+## 3. ⚠️ The webhook shares the cause — but it is NOT a production defect
+
+The prompt anticipated that if the middleware were the cause, the webhook would be equally affected
+**and that this would be a production defect**. The first half is right and the second is not, because
+the cause turned out to be the tunnel rather than the middleware:
+
+- **In a Codespace** the webhook is equally broken. Intuit POSTs with **no session, ever**, so it
+  would see 302s instead of 200s and, after retries at 20/30/50 minutes, **disable the endpoint**.
+- **In production** there is no tunnel — Vercel serves the domain directly — and the middleware
+  demonstrably passes the webhook through (§2). **Nothing to fix in production.**
+
+So it is fixed by the same one-line visibility change, and it is a development-environment defect.
+
+## 4. The fix, and what it costs
+
+`.devcontainer/devcontainer.json` now sets `"visibility": "public"` on port 3000, with the reasoning
+in the file so the next person does not spend twenty minutes in the route.
+
+⚠️ **Stated plainly rather than left implicit: a public forwarded port is reachable by anyone holding
+the URL, and this dev server talks to rebuild-test.** That is a deliberate trade for developing an
+integration whose entire premise is that Intuit calls us. To opt out, set it back to `private` and
+accept that OAuth and webhooks cannot be exercised in a Codespace at all. **Josh's call — flag it if
+you would rather flip the port only while testing and back afterwards.**
+
+## 5. Instrumentation
+
+Temporary logging was added at the top of `middleware.ts` and of the callback's `GET`, then removed.
+`git status` shows both files byte-identical to `HEAD`; the only committed change is
+`devcontainer.json`. In the end the decisive evidence came from the **wire** — status lines and
+`Location` headers — not from the logs, because the request that mattered never arrived to be logged.
+
+## 6. Test data
+
+| Created | Removed |
+| --- | --- |
+| One Owner session (password sign-in, in-memory) | Never persisted; no cookie written anywhere but the curl invocation |
+| One synthetic token blob + Vault secret for the fixture company, to test the store step | Secret deleted and verified gone; company restored to `disconnected` with a null pointer |
+
+**Rebuild-test is exactly as it was**: `disconnected`, realm kept, no `qb_tokens_*` secret, awaiting
+the real re-authorisation still owed from S189.
+
+⚠️ **The user's dev server was never touched.** My own `next dev` failed to start with `EADDRINUSE`
+and was left dead rather than killing theirs.
