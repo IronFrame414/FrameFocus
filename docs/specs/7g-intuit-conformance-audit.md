@@ -367,3 +367,195 @@ where the honest extra detail belongs.
 
 *Audit performed read-only. No code changed, no migration run, nothing written to QuickBooks, and no
 production database touched. The only artefact of this run is this file.*
+
+---
+
+# ADDENDUM — two rulings landed after this audit was written [Josh, S103]
+
+> **Added S185, same run, read-only.** Neither ruling changes a finding above. Ruling 2 was already
+> discharged; ruling 1 adds a section and **one new finding the first pass missed**.
+
+---
+
+## A. Ruling 2 — the discovery document. ✅ Already discharged, no drift.
+
+§1 above did exactly what the ruling asks: **the three hardcoded URLs were compared against the live
+discovery document on 2026-09-06 and all three match.** Josh's truthful "no" to Intuit's Q5 stands and
+needs no correction. **There is no live defect here.** F6 (adopt the document at runtime) remains
+HARDENING, not repair.
+
+---
+
+## B. Ruling 1 — sub-customers are being removed. What bears on it.
+
+⚠️ **Nothing below is reported as a defect.** Current sub-customer behaviour is correct for a
+Plus/Advanced company; it is being removed because Josh runs **Simple Start** and intends to stay
+there. This section is an inventory for whoever does the removal.
+
+### B1 — ⚠️ THE INVOICE CARRIES THE PROJECT *ONLY* IN THE SUB-CUSTOMER. REMOVING IT LOSES THE PROJECT ENTIRELY.
+
+**This is the single most important thing on this page.** Measured by reading the invoice body
+construction (`entities.ts:578-600`):
+
+| Object | How the project reaches QuickBooks today | After sub-customer removal |
+| --- | --- | --- |
+| **Purchase** | **TWO carriers** — line `CustomerRef` → the job (`entities.ts:1289`) **and** `PrivateNote` = `"PRJ-107 — Harbor Bath Renovation"` (`entities.ts:1288`) | ✅ **Degrades gracefully** — the memo survives |
+| **Invoice** | **ONE carrier** — `CustomerRef` → the sub-customer (`entities.ts:579`). ⚠️ **`grep` for `PrivateNote`/`CustomerMemo` in the invoice body returns ZERO.** | ❌ **The project vanishes from the invoice** |
+
+⚠️ **So the removal must ADD a memo to the invoice, or QuickBooks will hold invoices with no
+indication of which job they belong to.** The Purchase path already has the pattern to copy
+(`projectRefs()` at `entities.ts:1274-1290` returns exactly the `"PRJ-### — Name"` string).
+
+**Partial mitigation that already exists:** `body.DocNumber = invoice.invoice_number`
+(`entities.ts:596`). So a human can trace QuickBooks → our invoice → the project. **But nothing in
+QuickBooks alone names the job**, which is the reporting Josh is presumably keeping.
+
+### B2 — Memo field limits [secondary], now that the memo becomes load-bearing
+
+| Field | Limit | Visible to the client? |
+| --- | --- | --- |
+| `PrivateNote` (Invoice, Purchase) | **4000 chars** — maps to the *Memo* field on the form | **No** — internal |
+| `CustomerMemo` (Invoice) | **1000 chars** | **Yes** — prints on the invoice |
+| Line `Description` | 4000 chars | Yes |
+
+⚠️ **Two decisions this forces, which the ruling does not settle:**
+1. **`PrivateNote` or `CustomerMemo`?** They differ in *who sees it*. A project name on a client-facing
+   invoice is usually fine — it is their job — but that is Josh's call, not a technical one.
+2. `"PRJ-107 — Harbor Bath Renovation"` is ~31 chars against a 4000 limit, so **truncation is not a
+   practical risk.** ⚠️ **I did not measure the limit** — writing a 4001-character memo is a write to
+   QuickBooks, which this run forbids. Treat 4000 as [secondary].
+
+### B3 — Every touchpoint, so none is missed
+
+| Site | What it does | After removal |
+| --- | --- | --- |
+| `entities.ts:328-395` `handleSubCustomerCreate` | Creates `Job: true, ParentRef: {...}` — **the Plus-gated call** | **Delete**, with its dispatch case at `:1541` |
+| `entities.ts:579` invoice create | `CustomerRef` = sub-customer | → `contacts.qb_customer_id`; **add the memo (B1)** |
+| `entities.ts:719` invoice update | `CustomerRef: await subCustomerRef(...)` | → same; see B5 |
+| `entities.ts:746-753` `subCustomerRef()` | Helper, returns `''` when unset | **Delete** |
+| `entities.ts:985-987` payment | Sub-customer, then **falls back to the contact** at `:996-1006` | ✅ **The fallback IS the post-removal shape.** Delete the first branch. |
+| `entities.ts:1090-1092` refund | Same shape, same fallback | ✅ Same |
+| `entities.ts:1274-1290` `projectRefs()` | Returns `jobRef` **and** `note` | Keep the `note`; drop `jobRef` |
+| `qb_enqueue_job_chain()` (SQL, M-G) | customer → sub_customer → dependant | **Collapses to one level** — customer only |
+| `queue.ts:20`, `park-notify.ts:91` | Entity type + its plain-English label | Leave the CHECK value (historical rows); stop producing it |
+| `disconnect/route.ts:226` | Nulls `qb_sub_customer_id` | Drop the line — see **B6** |
+| `webhook/route.ts:254-263` | Inbound payment → project → contact | ✅ **Becomes dead code.** See B4. |
+| `projects.qb_sub_customer_id` | The column | Keep until the code is gone, then drop |
+
+### B4 — ✅ Three things the removal makes *better*, not worse
+
+1. **The inbound-payment reverse lookup gets simpler and more reliable.**
+   `webhook/route.ts:244-263` tries `contacts.qb_customer_id` first and only then falls back to
+   `projects.qb_sub_customer_id`. With one Customer per client **the first lookup always hits**, and
+   the fallback branch becomes unreachable. One less way for a payment to fail to match.
+2. **The dependency chain shortens from three levels to two** (customer → invoice). §2.6's in-drain
+   cascade still earns its place, but the worst case drops from 3 passes to 2.
+3. **`subCustomerRef()`'s empty-string return disappears** — see B5.
+
+### B5 — A latent edge the removal closes, worth knowing about until then
+
+`subCustomerRef()` returns `{ value: '' }` when `qb_sub_customer_id` is NULL (`entities.ts:753`).
+Three of the four consumers coerce that with `|| null` and then park or fall back. **`handleInvoiceUpdate`
+(`entities.ts:719`) does not** — it would send `CustomerRef: { value: '' }` straight to Intuit.
+
+⚠️ **It is not currently reachable, and I checked rather than assumed:** the update arm is guarded on
+`invoices.qb_invoice_id IS NOT NULL`, and `clearEntityLinks` nulls `qb_invoice_id` and
+`qb_sub_customer_id` **in the same operation** (`disconnect/route.ts:225-229`). So the invoice cannot
+be updatable while its project has lost its job id. **Rank: NOTED.** The removal deletes the function
+and the question with it.
+
+---
+
+## C. ⚠️ NEW FINDING — the disconnect "clear the links" list is stale by two columns
+
+**Rank: BREAKS IN PRODUCTION (narrow trigger, data-corruption consequence in a third party's books)**
+
+⚠️ **This one is not about sub-customers. I found it while tracing B5 and it is the "silently
+overwrite a customer's QuickBooks data" case the first audit looked for and missed.**
+
+`clearEntityLinks` (`disconnect/route.ts:224-234`) resets:
+
+```
+contacts.qb_customer_id · projects.qb_sub_customer_id · invoices.qb_invoice_id
+client_payments.qb_payment_id · client_refunds.qb_refund_id
+expenses.qb_bill_id                      <-- vestigial since M-L
+```
+
+⚠️ **It does NOT reset `expenses.qb_purchase_id` (added by M-G) or `expense_payments.qb_purchase_id`
+(added by M-L).** Verified against the deployed schema — both columns exist; neither is in the list.
+
+**The sequence that corrupts:**
+
+1. Owner disconnects, choosing **"clear the links"**. `qb_push_status` → `not_pushed`, but
+   `qb_purchase_id` **survives**.
+2. Owner reconnects to a **different** QuickBooks company.
+3. Someone edits that old expense. The enqueue trigger's update arm fires — **confirmed on the
+   deployed function**: `qb_enqueue_expense` keys it on `NEW.qb_purchase_id IS NOT NULL`.
+4. `purchase:update` is queued **with the NEW realm**, so `worker.ts:103`'s realm guard does **not**
+   catch it.
+5. `handlePurchaseUpdate` sends a full-object update to Purchase id *N* — **in a stranger's books.**
+
+⚠️ **QuickBooks ids are small per-realm sequentials.** Our sandbox Purchases are 151/155/156. An id
+collision across two realms is **likely, not exotic** — and because the build correctly sends a *full*
+object rather than a sparse one (§5), a collision **overwrites every field of an unrelated
+transaction** rather than merging into it. The one place the sparse-update discipline works against us.
+
+**Fix — two lines, and it should not wait for the sub-customer work:**
+
+```ts
+['expenses',         { qb_bill_id: null, qb_purchase_id: null, qb_push_status: 'not_pushed', qb_synced_at: null }],
+['expense_payments', { qb_purchase_id: null, qb_push_status: 'not_pushed', qb_synced_at: null }],
+```
+
+⚠️ **And the standing lesson, because this list will go stale again:** `clearEntityLinks` is a
+hand-maintained list of `qb_*` id columns, and **three migrations added such columns without touching
+it** (M-G, M-L). A test that enumerates every `qb_%_id` column in the schema and asserts each appears
+in the reset list would have caught this the day M-G landed — the same shape as `deletion-census.test.ts`,
+which already does exactly that for the trial-deletion walk and which *did* catch M-J's two missing
+tables.
+
+---
+
+## D. Simple Start — ⚠️ the question behind the ruling, and what I could not answer
+
+Sub-customers need Plus. **That raises a larger question the ruling does not ask but Josh will hit:
+what else does 7G use that Simple Start does not have?**
+
+| Feature the build uses | Status |
+| --- | --- |
+| **Bill / accounts payable** | ⚠️ **Not on Simple Start** [secondary]. ✅ **Already removed by M-L** — the "one record on payment approval" ruling accidentally aligned the build with Simple Start before anyone framed it that way. |
+| **Sub-customer / Job** | Plus+. Being removed by this ruling. |
+| **Purchase, Vendor, Invoice, Payment, RefundReceipt, Account, Item** | ❓ **Unverified.** |
+| **`DiscountLineDetail`** (the S103 §1c retainage mechanism) | ❓ **Unverified**, and load-bearing — retainage arithmetic depends on it. |
+
+⚠️ **I could not verify the entity-to-SKU mapping.** Intuit's own article
+(`help.developer.intuit.com/s/article/QuickBooks-Online-SKU-API-Mapping`) is the authoritative source
+and **returns only a "Sorry to interrupt — CSS Error" shell**, like every other Intuit doc page in §7.
+
+> ### ⚠️ AND A CAVEAT THAT APPLIES TO EVERY PROOF IN THE BUILD LOG
+>
+> **Every 7G test — the handshake, Purchase 151/155/156, the retainage discount probe — ran against
+> `Sandbox Company US cc64`, which supports sub-customers and is therefore NOT Simple Start.**
+>
+> **A green proof on that sandbox does not establish that the same call succeeds on Josh's production
+> Simple Start company.** That is not a defect in the build or in the testing; it is a limit on what
+> the evidence covers, and it is worth knowing *before* production keys arrive rather than after.
+>
+> **Cheapest way to settle it:** once production keys exist, connect the real Simple Start company and
+> run one receipt end-to-end. That single push exercises Customer, Vendor, Purchase, Account and the
+> memo in one call.
+
+---
+
+## E. Revised priority order
+
+F1 (webhook) and C (the disconnect reset list) are the two that damage data. **C is a smaller fix than
+F1 and should go first on effort alone.**
+
+1. **C — add the two columns to `clearEntityLinks`.** Two lines. Add the schema-enumerating test.
+2. **F1 — the webhook.** Acknowledge before processing; add `processed_at`.
+3. **F2 — serialise the token refresh.**
+4. **B1 — when removing sub-customers, ADD THE INVOICE MEMO** in the same change, or invoices lose the
+   project.
+5. **D — run one receipt against the real Simple Start company** as soon as production keys allow.
+6. F7, F3, F4/F8, F6 as before.
