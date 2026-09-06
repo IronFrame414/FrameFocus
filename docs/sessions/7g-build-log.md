@@ -635,6 +635,14 @@ on the affected `queued` rows (the conflict route also on rows whose `depends_on
 row). Without that, an Owner answers the question and then watches nothing happen for up to five
 minutes, which reads as broken.
 
+> ⚠️ **AMENDED [S181] — "both routes" WAS THE BUG, and this paragraph is where it is visible.**
+> There are **three** park reasons, not two. The third — an unresolvable GL account name, parked by
+> `billAccountRef()` — has **no route**: its remedy is the Settings → Accounting form, which saves
+> `gl_account_*` **client-side** and therefore *cannot* un-park anything (`qb_sync_queue` has no
+> client UPDATE policy). The paragraph above states the hazard correctly and then enumerates only
+> the cases that had a route to fix it in. **The text stands as written; the omission is recorded
+> rather than edited away.** Closed by M-F — see Unit 12.
+
 **Disclosure placement 2 of 3 is in this unit** — "Payment service provided by Intuit Payments Inc."
 sits on the payments card beside the pay-link status.
 
@@ -1003,6 +1011,10 @@ accounts on a guess is the thing we refuse to do.
    ```
    **Expect JSON** like `{"companiesDrained":1,"pushed":3,...}`.
    ⚠️ **`pushed: 0` with `skippedNotConnected: 1`** means the token could not be used — check step 2.
+   ⚠️ **`companiesDrained: 0` with `waiting: 0` means the queue is EMPTY. With `waiting > 0` it means
+   work exists and is not claimable** — parked awaiting a person, backing off, or held behind a
+   dependency. Read `last_error` on the queue, or the Accounting panel's Sync status. Before S181
+   these two produced the identical all-zero response, which is what made a parked row look stuck.
 4. **In QuickBooks:** a Customer, a sub-customer named `PRJ-### — <project>`, and an Invoice whose
    **total equals the invoice's `billed_total`**.
    ⚠️ **If the invoice had retainage**, the QB total is the **FULL** amount with a **retainage line
@@ -1034,6 +1046,10 @@ accounts on a guess is the thing we refuse to do.
 1. Set the **material** GL account on Settings → Accounting to a **real QuickBooks account name**.
    ⚠️ These are free-text names and are resolved to ids at push time. A name QuickBooks does not have
    **parks** the expense with a message naming the account — it does not fail it.
+   ⚠️ **A park is not a stall, and the drain used to be unable to say so [S181].** Correcting the name
+   now **un-parks the row immediately** (M-F), so the very next drain pushes it — no five-minute wait.
+   The message itself is on the **Accounting panel → Sync status → needs a person**, which is where to
+   look first when a drain reports `"companiesDrained":0` **with `"waiting"` above zero**.
 2. Approve an expense → drain → **expect a Bill in QuickBooks**, attached to the job.
 3. **Edit the amount** → drain → **expect the Bill's amount to change.**
 4. **Delete the expense** → drain → **expect the Bill to be gone from QuickBooks.**
@@ -1060,7 +1076,8 @@ accounts on a guess is the thing we refuse to do.
    select qb_connection_state, qb_token_secret_id from companies where id = '<your company id>';
    ```
    **`disconnected` and a NULL secret id.** ⚠️ The Vault row is deleted, not orphaned.
-3. Reconnect to the **same** company. **Expect:** anything still queued flows on the next drain.
+3. Reconnect to the **same** company. **Expect:** anything still queued flows on the next drain —
+   **including anything parked**, since M-F un-parks on the transition back to `connected`.
 
 ---
 
@@ -1112,3 +1129,130 @@ until this branch is deployed.**
   processing fails (today it is a log line).
 - **`GATED.md` Gate 6** — the **client-portal** disclosure, owed immediately after M7. **Do not let it
   be tidied away**; a test now fails if the record is removed.
+
+---
+
+## Unit 12 — the "unclaimable" queue row. It was never unclaimable.
+
+**Run:** S181 (2026-09-06), same branch. Reported as: one `bill/create` row `queued`, `attempts 0`,
+`depends_on_id null`, `is_deleted false`, realm matching, `next_attempt_at` in the past, company
+`connected` — and the drain returning `companiesConsidered: 1, companiesDrained: 0`. Read as
+`claimRows()` returning `[]`, i.e. a filter in `claimDue` excluding a row that matches all of them.
+
+### The premise was wrong, and instrumenting it was the only way to find that out
+
+Rather than re-reason about the filters, the claim query was **executed** three ways against
+rebuild-test:
+
+| Probe | Result |
+| --- | --- |
+| the real `claimDue(admin, company, 25)`, in process | **1 row** — `bill:create:queued` |
+| the same filters peeled one at a time (`company` → `is_deleted` → `status IN` → `or(due)` → `order/limit`) | 7 → 7 → 1 → 1 → **1** |
+| the shipped route over HTTP, `GET /api/cron/qb-sync` | **`pushed: 1`** |
+
+**`claimDue` was correct at every step.** The row drained on the first real attempt, with no code
+change: `{"companiesDrained":1,"pushed":1}`, `status → pushed`, QuickBooks Bill created.
+
+### What actually happened, established rather than guessed
+
+`parkAwaitingHuman()` had parked the row at **11:39:05.573** with `next_attempt_at = 11:44:05.562`
+— the deliberate five-minute re-check. Two facts pin the rest down:
+
+- **`attempts = 0`.** Every failure path increments it. Zero proves nothing had *failed*; only
+  `park` had ever touched this row.
+- **The first drain after the window ended pushed it immediately.** So every drain that reported
+  `0` was **inside the park window**. Not a filter, not a race, not the enqueue path — the row was
+  simply not due yet, and the only thing that changed between the failing drains and the succeeding
+  one was the clock.
+
+**The empty-queue baseline settles it.** A drain over a completely empty queue returns
+`{"companiesConsidered":1,"companiesDrained":0,"pushed":0,"parked":0,"failedTransient":0,`
+`"failedTerminal":0,"skippedNotConnected":0}` — **byte-identical to the reported symptom.**
+
+### So the defect is real, and it is TWO defects. Neither is in the claim query.
+
+**D1 — the third park reason had no way to un-park.** Unit 8 wrote *"answering a question un-parks
+the work that was waiting on it"* and named **both routes**. There are **three** park reasons:
+
+| Park reason | Remedy the message names | Un-parks? |
+| --- | --- | --- |
+| no income Item (S103 Q10) | `/api/quickbooks/income-item` | ✅ clears `next_attempt_at` |
+| customer name conflict (§5.2) | `/api/quickbooks/customer-conflict` | ✅ clears it, and the dependants |
+| **unresolvable GL account name** (`billAccountRef()`) | **Settings → Accounting** | ❌ **nothing** |
+
+And it **could not have**. Settings → Accounting is `gl-mapping-settings-form.tsx`, which writes
+`gl_account_*` **client-side on the anon key** via `updateGLMappingSettings()`. `qb_sync_queue` has
+**no client UPDATE policy** by design (20260929000000: *"a client-side INSERT would let a PM enqueue
+arbitrary pushes to the company's books"*). So the park message's promise — *"Set it on Settings →
+Accounting, **and this expense will sync automatically**"* — was **unkeepable from where it was
+made**. Josh did exactly what it said and nothing happened.
+
+This is the failure shape M-E's own header names: *"a call site is a list someone forgets to add
+to."* The GL mapping form predates 7G and has never heard of a sync queue. **So the fix is a
+trigger, for the same reason the enqueues are triggers.**
+
+**D2 — the drain could not say why it did nothing.** `companiesDrained: 0` with every counter zero
+meant *either* "nothing to do" *or* "money work is parked and waiting on you". Those are opposite
+situations and the response did not distinguish them. That ambiguity is what pointed this
+investigation at a claim query that was never at fault. **Note the Accounting panel was NOT blind** —
+`getQueueSummary()` already lists `status === 'queued' && last_error` under "needs a person", and it
+was showing the GL account message the whole time. The blind surface was the drain's own output.
+
+### The fix
+
+**M-F — `20261390000000_qb_wake_parked_on_settings.sql`.** An `AFTER UPDATE` trigger on `companies`,
+`SECURITY DEFINER`, clearing `next_attempt_at` on that company's **`status = 'queued'`** rows when
+the Owner supplies what a park was waiting for.
+
+- **`SECURITY DEFINER` is load-bearing, not decoration.** The settings write is an ordinary
+  authenticated user; an invoker-rights trigger would update **zero rows and report success** — a
+  silent no-op wearing a green tick, which is the failure this closes, not one to reproduce.
+- **`status = 'queued'` and nothing wider.** `failed_transient` carries a **real** exponential
+  backoff with jitter; clearing that clock would discard the jitter and re-trigger the 429 it exists
+  to escape. Explicitly asserted (test 2).
+- **A `WHEN` clause is the cost control.** `companies` is written on many unrelated paths (branding,
+  notification hours, Stripe flags) and none of them should scan the queue. Asserted (test 3).
+- **It swallows its own errors as a `WARNING`.** M-E doctrine: an Owner correcting a GL account name
+  must never fail because a queue table was unhappy. The cost of swallowing is a row that waits out
+  its five minutes — i.e. exactly today's behaviour.
+- **The income-item route's explicit clear is left in place.** It is that endpoint's documented
+  behaviour, and a redundant write costs less than a second mechanism to forget.
+
+**`waiting` added to `DrainOutcome`** (`countWaiting()` in `queue.ts`). Counted **only on the
+empty-claim path**, `head: true` + `count: 'exact'`, so the common case pays nothing and a failed
+count reads as zero rather than breaking a drain.
+
+### Proven end to end, over HTTP, on the shipped route
+
+```
+STEP 1  Owner sets a GL account name QuickBooks does not have
+STEP 2  approved expense enqueues a bill push
+STEP 3  drain -> {"companiesDrained":1,"parked":1,...,"waiting":0}      the park (correct)
+        row -> queued, next_attempt_at 12:04:37, last_error names the account
+STEP 4  drain -> {"companiesDrained":0,...,"waiting":1}                 THE REPORTED SYMPTOM, now labelled
+STEP 5  Owner corrects the name (anon key, as the form does)
+        row -> next_attempt_at NULL                                      the trigger, through RLS
+STEP 6  drain -> {"companiesDrained":1,"pushed":1,...}                   no five-minute wait
+        row -> pushed, last_error null
+```
+
+**Regression harness:** `apps/web/test/s181-qb-park-wake.live.ts`, **4 tests, real exit `0`**. It
+makes **no Intuit call** — the claim query, the park clock and the trigger are all testable without
+one, and a live call would meter against the CorePlus quota (§7G.3a). The settings write runs as a
+**real Owner on the anon key**, and the file says why: swapping it to `admin` would bypass RLS and
+stop testing the defect. Two harness bugs of its own were caught and fixed rather than worked
+around — a `time` column written as an integer (which would have passed for the wrong reason, no
+UPDATE having landed), and a shared `entity_id` colliding with
+`idx_qb_sync_queue_one_live_per_entity_op`.
+
+`npx tsc --noEmit` → real exit **`0`**. Ledger row for `20261390000000` written by hand, as with
+M-A/M-B — **MCP `apply_migration` still writes no row**; confirmed present after the repair.
+Fixture restored: `gl_account_subcontractor` and `notify_hours_start` back to their original values,
+all harness queue rows deleted.
+
+### The lesson worth keeping
+
+**A row that is parked and a queue that is empty must never look the same from the outside.** The
+park mechanism was right, the claim query was right, and the Accounting panel was right — the drain's
+response was the one surface that could not tell an operator which world they were in, and that is
+where five minutes of waiting turned into a hunt through a query that had nothing wrong with it.

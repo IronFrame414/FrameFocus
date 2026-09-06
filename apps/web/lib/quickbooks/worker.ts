@@ -4,6 +4,7 @@ import { QboApiError } from './client';
 import { handleQueueRow, newDrainContext } from './entities';
 import {
   claimDue,
+  countWaiting,
   markFailed,
   markInFlight,
   markPushed,
@@ -51,6 +52,18 @@ export interface DrainOutcome {
   failedTransient: number;
   failedTerminal: number;
   skippedNotConnected: number;
+  /**
+   * Live rows that existed but were NOT claimable this pass — parked awaiting a
+   * person, backing off after a transient failure, or held behind an
+   * unsatisfied `depends_on_id`.
+   *
+   * ⚠️ WITHOUT THIS FIELD A DRAIN CANNOT SAY WHY IT DID NOTHING [S181]. An
+   * empty queue and a queue full of parked money work produced the identical
+   * all-zero response. `waiting > 0` alongside `companiesDrained: 0` is the
+   * signal that says "look at `last_error` on the queue", and its absence is
+   * what sent an investigation at the claim query, which was never at fault.
+   */
+  waiting: number;
 }
 
 export async function runQbSync(admin: SupabaseClient): Promise<DrainOutcome> {
@@ -62,6 +75,7 @@ export async function runQbSync(admin: SupabaseClient): Promise<DrainOutcome> {
     failedTransient: 0,
     failedTerminal: 0,
     skippedNotConnected: 0,
+    waiting: 0,
   };
 
   // Only tenants that are actually connected. A `needs_reauth` company is
@@ -82,7 +96,12 @@ export async function runQbSync(admin: SupabaseClient): Promise<DrainOutcome> {
     const companyId = company.id as string;
 
     const rows = await claimDue(admin, companyId, ROWS_PER_COMPANY);
-    if (rows.length === 0) continue;
+    if (rows.length === 0) {
+      // Nothing claimable. Say whether that is because there is nothing to do,
+      // or because there IS work and it is waiting on something. See `waiting`.
+      outcome.waiting += await countWaiting(admin, companyId);
+      continue;
+    }
 
     const conn = await getAccessToken(admin, companyId);
     if (!conn) {

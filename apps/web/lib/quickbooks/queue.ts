@@ -201,6 +201,39 @@ export async function claimDue(
     .slice(0, limit) as unknown as QbQueueRow[];
 }
 
+/**
+ * How much LIVE work this tenant has that `claimDue` did not hand back.
+ *
+ * ⚠️ THIS EXISTS BECAUSE THE DRAIN'S OUTPUT LIED BY OMISSION [S181]. A drain
+ * over a parked row returned
+ * `{"companiesConsidered":1,"companiesDrained":0, …all zero}` — byte-identical
+ * to a drain over an EMPTY queue. Those two are opposite situations: one is
+ * "nothing to do", the other is "money work exists and is waiting on a person",
+ * and telling them apart cost a debugging session that started from the false
+ * premise that the claim query was broken. It was not.
+ *
+ * Called ONLY on the empty-claim path, so the common case pays nothing. `head`
+ * + `count: 'exact'` returns no rows — this is a counter, not a second read.
+ */
+export async function countWaiting(
+  admin: SupabaseClient,
+  companyId: string
+): Promise<number> {
+  const { count, error } = await admin
+    .from('qb_sync_queue')
+    .select('id', { count: 'exact', head: true })
+    .eq('company_id', companyId)
+    .eq('is_deleted', false)
+    .in('status', ['queued', 'failed_transient', 'in_flight']);
+
+  // Telemetry must never break a drain. An unknown count reads as zero.
+  if (error) {
+    console.error(`[qb-queue] waiting count failed for company=${companyId}:`, error.message);
+    return 0;
+  }
+  return count ?? 0;
+}
+
 export async function markInFlight(admin: SupabaseClient, rowId: string): Promise<void> {
   await admin
     .from('qb_sync_queue')
