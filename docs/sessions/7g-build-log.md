@@ -1888,3 +1888,93 @@ asserts the edge rather than the presence of two rows.
 
 `npx tsc --noEmit` real exit **`0`**. **`npx next build` real exit `0`.** Both QB harnesses green:
 **s181 (4) + s182 (7) = 11 tests, real exit `0`.**
+
+---
+
+## Unit 19 — the DELTA handshake checklist. Only what changed at S182.
+
+⚠️ **This does not replace the Step 1–10 checklist above.** Connect, income item, invoice OUT, the
+conflict prompt, void and disconnect/reconnect all passed at your handshake and are unchanged. Run
+only what is here, plus **Step 10 (the webhook)**, which still needs a deploy and a verifier token.
+
+### ⚠️ FIRST, AND NOTHING ELSE WORKS WITHOUT IT — choose the expense payment account
+
+**Settings → Accounting → "Expense payment account" → Choose an account.**
+
+A QuickBooks Purchase will not post without it — Intuit refuses with *"Required parameter PaymentType
+is missing"* and, separately, *"Invalid account type"*. Until you choose, **approved expenses PARK**
+(nothing is lost, and you now get a notification saying so).
+
+⚠️ **This is the account money came FROM** — a bank or credit card. The `gl_account_*` fields further
+down that page are the accounts an expense was spent **ON**. QuickBooks calls both `AccountRef`, one
+level apart in the same request; the card's copy says which is which.
+
+### A — expenses are PURCHASES now, not Bills  [§1a]
+
+1. Approve a **receipt** (an expense with no sub-contract, no PO, not retainage, no payments).
+2. Drain. **Expect in QuickBooks: an Expense/Purchase — NOT a bill.** Nothing to mark paid.
+   **⚠️ This is the ruling working. You should never again have to open QuickBooks to convert one.**
+3. **Expect the project on it, two ways:** `PRJ-### — <project>` in the memo, **and** the line
+   attached to the sub-customer (the job), which is what QuickBooks' job-costing reports read.
+4. Approve a **bill or commitment** (sub-contract, PO, or "Bills & commitments"). **Expect NOTHING in
+   QuickBooks. That is correct** — only actual costs sync.
+
+⚠️ **READ THIS ONE BEFORE YOU TEST IT — it is a consequence, not a bug.** Under the ruling a
+**subcontractor payable never reaches QuickBooks at all**, and **no vendor will be marked 1099** by
+the connector. Both are listed under "What is owed" below and need a decision from you.
+
+### B — paying a bill closes it  [§1b]
+
+Only applies to the two bills that already exist from your handshake. **Pay one in the platform →
+drain → expect its QuickBooks balance to go to 0.** Proven on **QB 149 (800 → 0)**.
+
+⚠️ **If you already marked a bill paid inside QuickBooks by hand, nothing is pushed and that is
+deliberate** — a second payment against a settled bill does not fail, it books **unapplied cash**
+against the vendor. That happened once during this run, was repaired, and is now guarded.
+
+### C — retainage looks different, and the number changed  [§1c]
+
+1. Send an invoice **with retainage**. `billed_total 12,500`, `withheld 1,250`.
+2. **Expect QuickBooks `TotalAmt` = 11,250 — the NET, not 12,500.**
+   ⚠️ **This is the reversal.** The old behaviour sent 12,500 and left the invoice open for 1,250.
+3. Client pays 11,250 → **expect the invoice to close FULLY.** Nothing stays open.
+4. Record the walkthrough sign-off → **expect a NEW draft invoice with one line per withholding**
+   (*"Retainage withheld on INV-####"*), which syncs and is paid like any other.
+5. **Foots:** `11,250 + 1,250 = 12,500`. ⚠️ **Accepted trade you stated: QuickBooks now shows what is
+   collectible, not full contract billing.**
+
+### D — a paid expense can be fixed  [§2.4]
+
+1. As Owner/Admin, open Expenses. **Expect Edit and Delete on any row now, paid included.**
+2. Edit an amount on a synced expense → drain → **expect QuickBooks to change too.**
+3. Delete a paid one → drain → **expect it gone from QuickBooks, its bill payment reversed first.**
+   The confirm tells you when a row has been sent to QuickBooks.
+
+### E — you get told when sync is waiting on you  [§2.3]
+
+Force any park (easiest: clear the payment account, approve a receipt, drain).
+**Expect a notification — "QuickBooks sync needs you — an expense" — linking to Settings → Accounting.**
+⚠️ **Drain again: you should NOT get a second one.** A different blocker does raise a new one.
+
+### F — one drain, not three  [§2.6]
+
+Send an invoice for a client who has never reached QuickBooks. **Expect ONE drain to create the
+customer, the job AND the invoice.** It used to take three, i.e. fifteen minutes at the cron.
+
+### G — reading the drain output  [§2.5 / S181]
+
+```
+{"companiesDrained":0, … ,"waiting":0}   the queue is EMPTY
+{"companiesDrained":0, … ,"waiting":3}   3 rows exist and are NOT claimable
+```
+⚠️ **`waiting > 0` with nothing drained means look at the queue's `last_error` or the Accounting
+panel's Sync status.** Before S181 those two cases produced an identical all-zero response, which is
+what made a parked row look permanently stuck.
+
+### ⚠️ What is NOT covered and still needs you
+
+- **Step 10, the webhook** — unchanged, still needs a deploy and `qb_webhook_verifier_put()`.
+- **Step 9, needs_reauth** — sandbox has no Apps disconnect UI. Still unverified.
+- **The pay-link** — `InvoiceLink` is absent from a plain read **and** from `?include=invoiceLink` on
+  a live unpaid invoice. Not retrievable without QuickBooks Payments on the realm. `qb_payments_enabled`
+  now keys on the link alone, so it stays **false** in sandbox, honestly.
