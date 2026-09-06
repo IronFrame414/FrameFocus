@@ -215,6 +215,44 @@ export interface QboConnection {
  * the blob once: if the stored refresh token has changed underneath us, another
  * process rotated it and we simply use the new one.
  */
+/**
+ * Try to take the refresh lease for a company. [F2, M-O]
+ *
+ * ⚠️ ONE ATOMIC CONDITIONAL UPDATE IS THE WHOLE MECHANISM. Postgres serialises
+ * the two writers, so exactly one gets a row back and holds the lease. There is
+ * no read-then-write window for a second process to slip through.
+ *
+ * A `SELECT … FOR UPDATE` cannot be used here: the refresh is an HTTPS round
+ * trip to Intuit, and a transaction cannot span it.
+ */
+const REFRESH_LEASE_SECONDS = 60;
+
+async function acquireRefreshLease(
+  admin: SupabaseClient,
+  companyId: string
+): Promise<boolean> {
+  const staleBefore = new Date(Date.now() - REFRESH_LEASE_SECONDS * 1000).toISOString();
+  const { data, error } = await admin
+    .from('companies')
+    .update({ qb_refresh_lock_at: new Date().toISOString() })
+    .eq('id', companyId)
+    .or(`qb_refresh_lock_at.is.null,qb_refresh_lock_at.lt.${staleBefore}`)
+    .select('id');
+
+  if (error) {
+    // ⚠️ FAIL OPEN, and say why. If the lease cannot be read we are back to the
+    // pre-M-O behaviour — a possible race — which is strictly better than
+    // refusing to refresh at all and letting every connection expire.
+    console.error(`[qb-tokens] refresh lease failed for company=${companyId}:`, error.message);
+    return true;
+  }
+  return (data ?? []).length > 0;
+}
+
+async function releaseRefreshLease(admin: SupabaseClient, companyId: string): Promise<void> {
+  await admin.from('companies').update({ qb_refresh_lock_at: null }).eq('id', companyId);
+}
+
 export async function getAccessToken(
   admin: SupabaseClient,
   companyId: string
@@ -254,10 +292,34 @@ export async function getAccessToken(
     };
   }
 
+  // ⚠️ ONLY ONE PROCESS MAY PRESENT THIS TOKEN [F2, M-O]. Intuit rotates the
+  // refresh token on roughly every use, and presenting an ALREADY-ROTATED one
+  // revokes the entire authorization chain — the customer is disconnected and
+  // must re-authorise by hand. The recovery below runs after that damage is
+  // done; this prevents it.
+  if (!(await acquireRefreshLease(admin, companyId))) {
+    // Someone else is refreshing right now. Re-read once — if they finished, we
+    // get their new token for free and never make the dangerous call at all.
+    const shared = await getTokenBlob(admin, secretId);
+    if (shared && new Date(shared.access_expires_at).getTime() > Date.now()) {
+      return {
+        companyId,
+        realmId: company.qb_realm_id as string,
+        accessToken: shared.access_token,
+      };
+    }
+    // Still expired: the holder has not finished. Returning null leaves the work
+    // queued for the next drain, which is the connector's normal resting state —
+    // and is far cheaper than racing them.
+    console.log(`[qb-tokens] refresh already in flight for company=${companyId}; deferring.`);
+    return null;
+  }
+
   let fresh: QboTokenBlob;
   try {
     fresh = await refreshTokens(blob.refresh_token);
   } catch (err) {
+    await releaseRefreshLease(admin, companyId);
     if (err instanceof QboTokenError && err.isInvalidGrant) {
       // The race described above — re-read once before condemning the grant.
       const reread = await getTokenBlob(admin, secretId);
@@ -290,6 +352,7 @@ export async function getAccessToken(
   }
 
   await storeRefreshed(admin, companyId, fresh, secretId);
+  await releaseRefreshLease(admin, companyId);
   return { companyId, realmId: company.qb_realm_id as string, accessToken: fresh.access_token };
 }
 

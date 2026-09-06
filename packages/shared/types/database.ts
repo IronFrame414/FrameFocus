@@ -1308,6 +1308,7 @@ export type Database = {
           qb_payments_enabled: boolean
           qb_realm_id: string | null
           qb_reauth_required_after: string | null
+          qb_refresh_lock_at: string | null
           qb_refresh_rotated_at: string | null
           qb_token_secret_id: string | null
           signatory_name: string | null
@@ -1390,6 +1391,7 @@ export type Database = {
           qb_payments_enabled?: boolean
           qb_realm_id?: string | null
           qb_reauth_required_after?: string | null
+          qb_refresh_lock_at?: string | null
           qb_refresh_rotated_at?: string | null
           qb_token_secret_id?: string | null
           signatory_name?: string | null
@@ -1472,6 +1474,7 @@ export type Database = {
           qb_payments_enabled?: boolean
           qb_realm_id?: string | null
           qb_reauth_required_after?: string | null
+          qb_refresh_lock_at?: string | null
           qb_refresh_rotated_at?: string | null
           qb_token_secret_id?: string | null
           signatory_name?: string | null
@@ -7216,6 +7219,9 @@ export type Database = {
           id: string
           intuit_event_id: string
           operation: string
+          process_attempts: number
+          process_error: string | null
+          processed_at: string | null
           realm_id: string
           received_at: string | null
         }
@@ -7228,6 +7234,9 @@ export type Database = {
           id?: string
           intuit_event_id: string
           operation: string
+          process_attempts?: number
+          process_error?: string | null
+          processed_at?: string | null
           realm_id: string
           received_at?: string | null
         }
@@ -7240,6 +7249,9 @@ export type Database = {
           id?: string
           intuit_event_id?: string
           operation?: string
+          process_attempts?: number
+          process_error?: string | null
+          processed_at?: string | null
           realm_id?: string
           received_at?: string | null
         }
