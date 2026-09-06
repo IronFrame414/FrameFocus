@@ -178,9 +178,45 @@ export async function getTokenBlob(
   }
 }
 
+/**
+ * Destroy a company's stored tokens. SCRUB FIRST, THEN DELETE. [M-P, S189]
+ *
+ * ⚠️ THE TWO STEPS ARE SEPARATE ROUND TRIPS ON PURPOSE, AND THAT IS THE WHOLE
+ * FIX. If they shared a transaction, a failed DELETE would roll the scrub back
+ * with it and the surviving row would still hold a live refresh token. Sending
+ * them separately means the scrub is already COMMITTED when the delete is
+ * attempted, so the worst end state is an empty husk rather than a working
+ * credential nobody is tracking.
+ *
+ * ⚠️ A FAILED SCRUB MUST NOT SKIP THE DELETE. The delete is the better outcome
+ * of the two; if it succeeds, the scrub was moot anyway. So the scrub failure
+ * is recorded and execution continues, rather than throwing here.
+ *
+ * The caller (`/api/quickbooks/disconnect`) treats a throw from this function
+ * as non-fatal and clears the connection regardless — deliberately, because a
+ * tenant whose Vault row is wedged must still be able to disconnect. What has
+ * changed is what that leaves behind: an orphan that `qb_vault_put` can now
+ * adopt on the next connect, instead of one that locked the tenant out for
+ * good.
+ */
 export async function forgetTokenBlob(admin: SupabaseClient, secretId: string): Promise<void> {
+  let scrubbed = true;
+  const { error: scrubError } = await admin.rpc('qb_vault_scrub', { p_secret_id: secretId });
+  if (scrubError) {
+    scrubbed = false;
+    // ⚠️ NEVER LOG THE PAYLOAD OR THE SECRET'S CONTENT — only that it failed.
+    console.error(`[qb-tokens] Vault scrub failed for secret ${secretId}: ${scrubError.message}`);
+  }
+
   const { error } = await admin.rpc('qb_vault_forget', { p_secret_id: secretId });
-  if (error) throw new Error(`Vault delete failed: ${error.message}`);
+  if (error) {
+    throw new Error(
+      `Vault delete failed: ${error.message}` +
+        (scrubbed
+          ? ' (the blob was scrubbed first, so the orphaned row holds no credential)'
+          : ' ⚠️ AND THE SCRUB ALSO FAILED — a live token blob may remain in Vault')
+    );
+  }
 }
 
 // ---------------------------------------------------------------------------
