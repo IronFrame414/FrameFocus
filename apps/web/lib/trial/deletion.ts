@@ -398,6 +398,18 @@ export const COMPANY_TABLES: string[] = [
   // record anyone must retain [Q4]. Queue rows self-reference with SET NULL;
   // all three otherwise hang off companies only.
   'qb_sync_queue', 'qb_read_budget', 'qb_webhook_events',
+  // M-J (20261430000000) adds two more. ⚠️ THE ORDER IS A REAL CONSTRAINT, not
+  // tidiness: `expenses.payment_account_id` references company_payment_accounts
+  // with NO ACTION, so that table cannot go until `expenses` has (line 342,
+  // well above this). `company_members.default_payment_account_id` is
+  // ON DELETE SET NULL and members go at 407, after this — either order works
+  // there, and this one keeps the QuickBooks tables together.
+  //
+  // Both are operational state rather than a record anyone must retain [Q4]:
+  // qb_account_cache is a copy of the customer's own chart of accounts, and
+  // the payment list is configuration that means nothing without the
+  // connection it names.
+  'company_payment_accounts', 'qb_account_cache',
   // client_access_events cascades with profiles (profile_id NOT NULL,
   // ON DELETE CASCADE) — listed anyway, before profiles, because the walk is
   // explicit about every company-scoped table it owns (the proposal_views

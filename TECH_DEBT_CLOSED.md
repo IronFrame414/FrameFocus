@@ -13,6 +13,19 @@
 
 ## Closed Tech Debt
 
+- **#3-7gqb ✅ CLOSED [feature/7g-quickbooks; S182]** — retainage RELEASE does not reach QuickBooks.
+  ⚠️ **Closed by REMOVING the question, not by answering it.** The blocker was an allocation problem:
+  `retainage_releases` is UNIQUE per project while many invoices may each withhold, so "which QB
+  invoice does the release pay, and in what split?" had no reversible default. **Josh's S103 §1c
+  reversal deleted the premise** — QuickBooks now receives the NET RECEIVABLE and each invoice
+  CLOSES FULLY when paid, so no invoice is ever left open for retainage and there is nothing to
+  split. A release is already its own invoice
+  (`recordSignOffAndGenerateRelease()` has always called `createInvoice()`), so it syncs through the
+  ordinary `invoice:create` path with **no new columns, no new `entity_type`, and no new handler** —
+  all three of the "structural gaps" this entry listed turned out to be unnecessary. The release
+  invoice now carries **a line per withholding** rather than one aggregate line, per the ruling.
+  Commit: the §1c unit on `feature/7g-quickbooks`; trace rewritten in `docs/specs/7g2-spec.md` §4.
+
 - **#13 ✅ CLOSED [debt-split-and-ux; built S140/S158/S159]** — read-only detail/profile view for
   Contacts and Subs & Vendors. Entry was STALE: the row-click read-only view shipped for subs at
   S140, contacts at S158, unified into a matching sheet pattern at S159. Both list files carry

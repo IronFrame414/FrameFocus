@@ -41,6 +41,8 @@ export interface ExpenseCaptureInput {
    * case; "Miscellaneous" resolves via getOrCreateMiscBudgetLine.
    */
   allocations: AllocationInput[];
+  /** M-J: the account this was paid from. */
+  payment_account_id?: string | null;
 }
 
 /** The caller's company_members.id (Q2 — local helper; the createProject
@@ -112,6 +114,10 @@ export async function createExpense(input: ExpenseCaptureInput): Promise<CreateR
     cost_category: input.cost_category ?? 'material',
     source_segment_id: input.source_segment_id ?? null,
     source_po_id: input.source_po_id ?? null,
+    // M-J — which account paid. Required to APPROVE a syncing expense
+    // (enforce_expense_payment_account); optional to CAPTURE one, so a crew
+    // member without a default is never stopped from recording a receipt.
+    payment_account_id: input.payment_account_id ?? null,
   };
 
   const { data, error } = await supabase.from('expenses').insert(row).select('id').single();

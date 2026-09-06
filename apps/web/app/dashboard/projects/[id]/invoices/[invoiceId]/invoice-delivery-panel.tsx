@@ -13,7 +13,22 @@ import { color, secondaryButtonStyle } from '@/lib/theme';
 // 7D1 §13 — send the invoice to the client, and show what happened to it.
 //
 // OWNER/ADMIN ONLY (the route enforces it; this only decides what renders).
-// NO PAY LINK — payment is QuickBooks-hosted and 7G is not built.
+//
+// PAY LINK [7G §5.4, S103 Q4] — SUPERSEDES the note that stood here, quoted
+// rather than deleted: "NO PAY LINK — payment is QuickBooks-hosted and 7G is
+// not built." 7G ships, and the link is rendered below when there is one.
+//
+// ⚠️ THE LINK IS OFTEN ABSENT ON A FIRST SEND, AND THAT IS NOT A BUG. It is
+// minted by QuickBooks when the invoice is PUSHED, and the push is queued —
+// the drain runs every five minutes. Sending is deliberately NOT coupled to
+// Intuit being reachable (7g2 §1.10: everything queues while QuickBooks is
+// unreachable), so the first email can go out before the link exists. It
+// appears here, and on a re-send, once the sync completes.
+//
+// ⚠️ IT IS ALSO ABSENT FOREVER when the connected QuickBooks company has no
+// QuickBooks Payments — RULED NON-BLOCKING [S103 Q10]. The invoice still syncs;
+// there is simply no pay affordance, and NO explanatory copy to the client
+// (7g1 #3: a viewable bill, not a "you cannot pay here" message).
 //
 // [S97] THIS PANEL NOW RENDERS ON A DRAFT TOO. Sending is ONE action: the route
 // issues the invoice (allocating its number) and emails it. Previously this
@@ -46,11 +61,23 @@ export function InvoiceDeliveryPanel({
   status,
   hasLines,
   lienReleasePrompt,
+  payLink,
 }: {
   invoiceId: string;
   canSend: boolean;
   recipientEmail: string | null;
   deliveries: InvoiceDelivery[];
+  /**
+   * 7G §5.4 — the QuickBooks pay-link, STORED on the invoice (S103 Q4) rather
+   * than fetched, because it prints on a document the client holds.
+   *
+   * ⚠️ NOT GATED BY THE FINANCIAL VISIBILITY FLOOR, and this is deliberate
+   * (7g2 §8): "The pay-link on the invoice is visible to whoever can already
+   * see the invoice." It is a URL, not a figure. `invoices_select_visible`
+   * already decides who reaches the row at all — a PM sees only invoices they
+   * authored — and this inherits exactly that, adding no second gate.
+   */
+  payLink: string | null;
   /** Drives the label and the confirm — an unissued invoice is about to be
    *  numbered and frozen, an issued one is only being re-delivered. */
   status: string;
@@ -136,6 +163,39 @@ export function InvoiceDeliveryPanel({
 
   return (
     <div style={{ marginTop: '1rem', paddingTop: '0.75rem', borderTop: '1px solid #e5e7eb' }}>
+      {/* 7G §5.4 — the pay-link surface, and §5.5 placement 2: the Intuit
+          disclosure sits WITH it. See the file header for why the link is
+          often absent and why that is never an error. */}
+      {payLink ? (
+        <div
+          style={{
+            marginBottom: '0.875rem',
+            padding: '0.75rem',
+            border: `1px solid ${color.cardBorder}`,
+            borderRadius: '10px',
+            backgroundColor: color.blueTint,
+          }}
+        >
+          <a
+            href={payLink}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ color: color.primary, fontWeight: 600, fontSize: '0.875rem' }}
+          >
+            Pay online
+          </a>
+          <span style={{ color: color.muted, fontSize: '0.8125rem', marginLeft: '0.5rem' }}>
+            — the client can pay this invoice through QuickBooks.
+          </span>
+          {/* ⚠️ AN INTUIT COMMITMENT, NOT A NICETY. Josh answered YES to Intuit
+              on product disclosure and they review against what was declared.
+              Do not remove this line. 7g2 §5.5. */}
+          <p style={{ color: color.muted, fontSize: '0.75rem', margin: '0.5rem 0 0' }}>
+            Payment service provided by Intuit Payments Inc.
+          </p>
+        </div>
+      ) : null}
+
       <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.625rem', flexWrap: 'wrap' }}>
         <span
           style={{ fontSize: '0.75rem', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase' }}

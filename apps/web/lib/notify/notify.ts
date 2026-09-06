@@ -101,7 +101,12 @@ export type NotificationType =
   // PO module R7/R-Q4 — a material-run line flagged missing. CHECK value in
   // 20261045000000 (one commit adrift of this line — recorded in the build
   // report rather than hidden). In-app + push only; not emailed.
-  | 'po_item_missing';
+  | 'po_item_missing'
+  // 7G §2.3 [S182] — a sync row is parked awaiting a person: an income item, a
+  // payment account, a GL account name, or an answer to a customer-name
+  // conflict. Owner/Admin only; the body carries `last_error` verbatim, which
+  // can contain money. CHECK value in 20261410000000.
+  | 'qb_sync_blocked';
 
 export interface NotifyParams {
   admin: SupabaseClient<Database>;

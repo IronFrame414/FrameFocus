@@ -162,8 +162,16 @@ export function ExpensesPageClient({
     };
   }, [expenses, billRows, payableIds, pendingReceipts, isReviewer, todayYmd]);
 
-  async function handleDelete(id: string) {
-    if (!(await confirm('Move this expense to trash?'))) return;
+  async function handleDelete(id: string, synced: boolean) {
+    // ⚠️ THE CONFIRM NAMES THE QUICKBOOKS CONSEQUENCE [§2.4, S182]. Deleting a
+    // synced expense removes it from QuickBooks too — and reverses its bill
+    // payment first, where one was pushed. That is the ruled behaviour
+    // ("otherwise QuickBooks keeps a record for something that no longer
+    // exists"), and it is not something to discover after clicking.
+    const message = synced
+      ? 'Move this expense to trash? It has been sent to QuickBooks, so it will be removed there too.'
+      : 'Move this expense to trash?';
+    if (!(await confirm(message))) return;
     setBusyId(id);
     setError(null);
     const res = await softDeleteExpense(id);
@@ -391,6 +399,49 @@ export function ExpensesPageClient({
                             Review
                           </button>
                         )}
+                        {/* ⚠️ OWNER/ADMIN MAY CORRECT A PAID EXPENSE [RULED Josh, S103 §2.4].
+                            Josh: "this isn't customer facing. Mistakes happen. I can see
+                            myself making an expense before it actually hits my account, or
+                            typing the wrong number."
+
+                            ⚠️ THIS DELIBERATELY DIFFERS FROM A PAID INVOICE, WHICH NOBODY
+                            MAY VOID (enforced in the database, 20261340000000). An invoice
+                            is a receivable a CLIENT paid against — rewriting it rewrites
+                            someone else's record. An expense is the company's own record of
+                            its own spending. Do not "consistency-fix" the two together. */}
+                        {isReviewer && (
+                          <>
+                            <button
+                              style={{
+                                border: 'none',
+                                background: 'none',
+                                color: color.primary,
+                                fontWeight: 600,
+                                fontSize: '13px',
+                                cursor: 'pointer',
+                                padding: '4px 6px',
+                              }}
+                              onClick={() => setEditing(e)}
+                            >
+                              Edit
+                            </button>
+                            <button
+                              style={{
+                                border: 'none',
+                                background: 'none',
+                                color: color.danger,
+                                fontWeight: 600,
+                                fontSize: '13px',
+                                cursor: busyId === e.id ? 'default' : 'pointer',
+                                padding: '4px 6px',
+                              }}
+                              disabled={busyId === e.id}
+                              onClick={() => void handleDelete(e.id, e.qb_push_status === 'pushed')}
+                            >
+                              Delete
+                            </button>
+                          </>
+                        )}
                         {!isReviewer && ownPending && (
                           <>
                             <button
@@ -418,7 +469,7 @@ export function ExpensesPageClient({
                                 padding: '4px 6px',
                               }}
                               disabled={busyId === e.id}
-                              onClick={() => void handleDelete(e.id)}
+                              onClick={() => void handleDelete(e.id, e.qb_push_status === 'pushed')}
                             >
                               Delete
                             </button>
@@ -463,7 +514,8 @@ export function ExpensesPageClient({
         />
       )}
 
-      {/* Q8 — edit own pending row (shared capture form). */}
+      {/* Q8 — edit own pending row, AND §2.4's Owner/Admin correction of an
+          approved or paid one (shared capture form, one mount for both). */}
       {editing && (
         <ExpenseCaptureModal
           title="Edit expense"

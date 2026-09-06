@@ -53,9 +53,16 @@ import { companyToday, paymentTermsLabel } from '@/lib/services/invoices-shared'
 // because this puts a bill in front of a client under the company's name, and
 // §12 keeps a PM's invoice behind an Owner/Admin approval.
 //
-// NO PAY LINK. Payment is QuickBooks-hosted and 7G is not built, so there is
-// nothing to link to. The mail carries the amount due and the PDF and offers
-// no button — omitted rather than faked.
+// PAY LINK [7G §5.4, S180] — SUPERSEDES the note that stood here, quoted
+// rather than deleted: "NO PAY LINK. Payment is QuickBooks-hosted and 7G is not
+// built, so there is nothing to link to. The mail carries the amount due and
+// the PDF and offers no button — omitted rather than faked."
+//
+// 7G ships. The mail now carries a "Pay online" button WHEN a link exists.
+// ⚠️ On a FIRST send it usually does not: the QuickBooks push is queued and the
+// drain runs every five minutes, so the button appears on a re-send. That is
+// the cost of not coupling invoice delivery to Intuit's availability, and it is
+// the right trade — an invoice must send when QuickBooks is down.
 
 function fmtDate(value: string): string {
   const [y, m, d] = value.split('-').map(Number);
@@ -232,7 +239,13 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
   // issue_date has just moved.
   const { data: issuedInvoice } = await supabase
     .from('invoices')
-    .select('invoice_number, issue_date, due_date, amount_receivable')
+    // 7G §5.4 — `qb_invoice_link` is read HERE, after the issue step, because a
+    // RE-SEND of an already-synced invoice can carry the pay button. On a FIRST
+    // send it is null: the QuickBooks push is queued (the drain runs every five
+    // minutes) and sending is deliberately not coupled to Intuit being
+    // reachable. Null is the normal case, not an error — the template renders
+    // no button and no explanatory copy (7g1 #3).
+    .select('invoice_number, issue_date, due_date, amount_receivable, qb_invoice_link')
     .eq('id', params.id)
     .single();
   if (!issuedInvoice) {
@@ -305,6 +318,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         bodyText,
         invoiceNumber,
         amountDue,
+        payLink: issuedInvoice.qb_invoice_link ?? null,
       }),
       attachments: [{ filename: `invoice-${invoiceNumber}.pdf`, content: stored.buffer }],
     });

@@ -105,6 +105,18 @@ const LINKS: Record<string, LinkDef> = {
     // email and the notification now land a recipient in the same place.
     desktop: (p) => (p.id ? `/dashboard/field-ops/safety/${p.id}` : null),
   },
+  // 7G §2.3 [S182]. The Accounting settings page is where every park is
+  // answered — the income item, the payment account, the GL names and the
+  // customer-conflict prompt all live on it.
+  //
+  // ⚠️ MOBILE RESOLVES TO NULL, DELIBERATELY. There is no `/m` accounting
+  // screen, and the parks are Owner-only actions anyway. Returning a path to a
+  // route that does not exist is the exact defect the comments above this block
+  // record for `incident` and `delivery`.
+  qb: {
+    mobile: () => null,
+    desktop: () => '/dashboard/settings/accounting',
+  },
   delivery: {
     // Mobile has a deliveries LIST and a check-in screen, no per-delivery
     // detail — same shape as `incident` above.

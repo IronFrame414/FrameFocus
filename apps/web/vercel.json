@@ -37,6 +37,10 @@
       "schedule": "*/5 * * * *"
     },
     {
+      "path": "/api/cron/qb-sync",
+      "schedule": "*/5 * * * *"
+    },
+    {
       "path": "/api/cron/retention-warnings",
       "schedule": "30 14 * * *"
     },

@@ -321,6 +321,10 @@ export interface BillInput {
   /** SPLIT AT CAPTURE (money representation §4.4/P7): ≥1 line, Σ exactly =
    *  amount. Same rule as receipts — bills are expenses too. */
   allocations: { budget_item_id: string; amount: number; source_selection_id?: string | null }[];
+  /** ⚠️ OPTIONAL HERE BY RULING [Josh, S103]. A commitment has not been paid
+   *  yet, so which account will pay it is frequently unknown — and nothing at
+   *  entry may obstruct. It blocks only at the payment. */
+  payment_account_id?: string | null;
 }
 
 async function insertPayableRow(input: BillInput): Promise<CreateResult> {
@@ -346,6 +350,7 @@ async function insertPayableRow(input: BillInput): Promise<CreateResult> {
     state: 'committed',
     due_date: input.due_date ?? null,
     awaiting_paper: input.awaiting_paper ?? false,
+    payment_account_id: input.payment_account_id ?? null,
   };
 
   const { data, error } = await supabase.from('expenses').insert(row).select('id').single();
@@ -457,6 +462,11 @@ export interface PaymentInput {
   method?: string | null; // free text v1 (7G may force an enum)
   note?: string | null;
   overrideOverStage?: boolean;
+  /** ⚠️ M-L — WHICH ACCOUNT THE MONEY LEFT. This is the ONE point where an
+   *  empty account blocks: the RPC refuses without it once the company has
+   *  QuickBooks and at least one payment account. Everywhere else the field is
+   *  optional, because until money moves you may not know. */
+  paymentAccountId?: string | null;
 }
 
 export type RecordPaymentResult = {
@@ -486,6 +496,7 @@ export async function recordPayment(
     p_method: input.method?.trim() || undefined,
     p_note: input.note?.trim() || undefined,
     p_override_over_stage: input.overrideOverStage ?? false,
+    p_payment_account_id: input.paymentAccountId ?? undefined,
   });
   if (error) {
     // The RPC's only structured signal (SECURITY INVOKER RAISE) — prefix-match.

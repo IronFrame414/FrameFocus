@@ -453,6 +453,11 @@ export function InvoiceBuilder(props: InvoiceBuilderProps) {
             lienReleasePrompt={
               role === 'owner' || role === 'admin' ? { projectId } : null
             }
+            /* 7G §5.4 — stored at push time (S103 Q4), null until the sync
+               completes or forever if the QuickBooks company has no Payments.
+               Not Floor-gated: it is a URL, not a figure, and it inherits
+               invoices_select_visible from the row it sits on. */
+            payLink={invoice.qb_invoice_link ?? null}
           />
         </div>
       )}

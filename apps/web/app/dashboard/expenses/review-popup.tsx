@@ -25,6 +25,11 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import {
+  listPaymentAccounts,
+  myDefaultPaymentAccountId,
+  type PaymentAccountOption,
+} from '@/lib/services/qb-accounts-client';
+import {
   approveExpense,
   createAdHocBudgetLine,
   listExpenseAllocations,
@@ -84,6 +89,33 @@ export function ReviewPopup({ expense, receipts, projects, onClose, onDone }: Re
     expense.cost_category === 'subcontractor' ? 'material' : expense.cost_category
   );
   const [projectId, setProjectId] = useState(expense.project_id);
+
+  // ⚠️ THE SECOND PLACE THE ACCOUNT CAN BE CHOSEN [M-J, RULED Josh, S103]:
+  // "The account is chosen ON THE EXPENSE, at entry or at review."
+  const [paymentAccounts, setPaymentAccounts] = useState<PaymentAccountOption[]>([]);
+  const [paymentAccountId, setPaymentAccountId] = useState<string>(
+    (expense as { payment_account_id?: string | null }).payment_account_id ?? ''
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const [list, mine] = await Promise.all([
+        listPaymentAccounts(),
+        myDefaultPaymentAccountId(),
+      ]);
+      if (cancelled) return;
+      setPaymentAccounts(list);
+      // The REVIEWER's default fills a blank — the capture may have come from
+      // a crew member who has none. It never overwrites what the row says.
+      setPaymentAccountId((current) =>
+        current ? current : mine && list.some((a) => a.id === mine) ? mine : ''
+      );
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Allocation state — line id -> input string.
   const [lines, setLines] = useState<BudgetLineOption[] | null>(null);
@@ -292,12 +324,28 @@ export function ReviewPopup({ expense, receipts, projects, onClose, onDone }: Re
 
     // Correct-before-approve: persist any edited capture fields first.
     // Committed rows never touch cost_category here (select hidden).
+    // ⚠️ FAIL HERE, WHERE THE PERSON HAS THE CONTEXT [RULED Josh, S103].
+    // This is the reversal of M-G's "park it and tell them later": the sync
+    // used to stall hours afterwards on a settings page nobody was looking at.
+    // `enforce_expense_payment_account` (M-J) is the same rule at the database;
+    // this is the message that names the missing thing where it can be fixed.
+    //
+    // ⚠️ ONLY WHEN AN ACCOUNT COULD BE CHOSEN. A commitment never syncs and a
+    // company with no accounts configured has nothing to pick, so neither is
+    // blocked — the trigger applies exactly the same two exemptions.
+    if (!isCommitted && paymentAccounts.length > 0 && !paymentAccountId) {
+      setBusy(false);
+      setError('Choose which account paid for this expense before approving it.');
+      return;
+    }
+
     const dirty =
       supplier.trim() !== expense.supplier ||
       date !== expense.expense_date ||
       parsedAmount !== expense.amount ||
       (description.trim() || null) !== (expense.description ?? null) ||
-      (!isCommitted && category !== expense.cost_category);
+      (!isCommitted && category !== expense.cost_category) ||
+      paymentAccountId !== ((expense as { payment_account_id?: string | null }).payment_account_id ?? '');
     if (dirty) {
       const upd = await updateExpense(expense.id, {
         supplier: supplier.trim(),
@@ -305,6 +353,7 @@ export function ReviewPopup({ expense, receipts, projects, onClose, onDone }: Re
         amount: parsedAmount,
         description: description.trim() || null,
         ...(isCommitted ? {} : { cost_category: category }),
+        payment_account_id: paymentAccountId || null,
       });
       if (!upd.success) {
         setBusy(false);
@@ -444,6 +493,37 @@ export function ReviewPopup({ expense, receipts, projects, onClose, onDone }: Re
             style={{ ...inputStyle, resize: 'vertical' }}
           />
         </div>
+
+        {/* ⚠️ WHICH ACCOUNT PAID — required to approve [M-J]. A commitment
+            never syncs, so it is not asked for one. Hidden when the company has
+            configured no accounts: an empty dropdown invites configuring
+            something that is not there. */}
+        {/* ⚠️ SHOWN FOR COMMITMENTS TOO [S184]. It used to be hidden behind
+            `!isCommitted`, and Josh found the hole by using it: EVERYTHING in
+            this product enters as a bill/commitment first, so at review the
+            field was invisible on the one path every expense takes. It is
+            OPTIONAL here for a commitment and REQUIRED for a receipt, because
+            for a receipt this approval IS the payment confirmation. */}
+        {paymentAccounts.length > 0 && (
+          <div style={{ marginBottom: '12px' }}>
+            <label style={fieldLabelStyle}>
+              {isCommitted ? 'Paid from (optional until paid)' : 'Paid from (required to approve)'}
+            </label>
+            <select
+              value={paymentAccountId}
+              onChange={(e) => setPaymentAccountId(e.target.value)}
+              style={inputStyle}
+              data-testid="review-payment-account"
+            >
+              <option value="">{isCommitted ? 'Decide at payment…' : 'Select an account…'}</option>
+              {paymentAccounts.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.name} — {a.accountType}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
 
         {/* Project reassign (Q7) — immediate write, reloads budget lines. */}
         <div style={{ marginBottom: '16px' }}>

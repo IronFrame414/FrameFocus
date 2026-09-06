@@ -219,7 +219,7 @@ export async function getJobCostRollup(projectId: string): Promise<JobCostRollup
   const { data: expenseRows } = await supabase
     .from('expenses')
     .select(
-      'id, amount, cost_category, status, state, sub_contract_id, purchase_order_id, is_retainage, closed_out_at, awaiting_paper, is_deleted'
+      'id, amount, cost_category, status, state, sub_contract_id, purchase_order_id, is_retainage, closed_out_at, awaiting_paper, is_deleted, qb_push_status'
     )
     .eq('project_id', projectId)
     .eq('is_deleted', false);
@@ -237,6 +237,9 @@ export async function getJobCostRollup(projectId: string): Promise<JobCostRollup
     | 'closed_out_at'
     | 'awaiting_paper'
     | 'is_deleted'
+    // §2.4 — the delete confirm says so when the row has reached QuickBooks,
+    // because deleting it removes it there too.
+    | 'qb_push_status'
   >[];
 
   const allIds = rows.map((e) => e.id);

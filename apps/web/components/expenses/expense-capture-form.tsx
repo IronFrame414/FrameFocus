@@ -12,6 +12,11 @@
 
 import { useEffect, useState } from 'react';
 import {
+  listPaymentAccounts,
+  myDefaultPaymentAccountId,
+  type PaymentAccountOption,
+} from '@/lib/services/qb-accounts-client';
+import {
   createExpense,
   updateExpense,
   uploadExpenseReceipt,
@@ -125,6 +130,38 @@ export function ExpenseCaptureForm({
   }, [selectedPoId, myPoLines]);
   const [date, setDate] = useState(existing?.expense_date ?? todayYmd);
   const [amount, setAmount] = useState(existing ? String(existing.amount) : '');
+
+  // ⚠️ WHICH ACCOUNT PAID [M-J, RULED Josh, S103]. The user's default pre-fills
+  // it; whatever is on the row wins. An empty list means the company has not
+  // configured any yet — the field then hides itself rather than showing an
+  // empty dropdown, and approval is what surfaces the problem.
+  const [paymentAccounts, setPaymentAccounts] = useState<PaymentAccountOption[]>([]);
+  const [paymentAccountId, setPaymentAccountId] = useState<string>(
+    (existing as { payment_account_id?: string | null } | undefined)?.payment_account_id ?? ''
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const [list, mine] = await Promise.all([
+        listPaymentAccounts(),
+        myDefaultPaymentAccountId(),
+      ]);
+      if (cancelled) return;
+      setPaymentAccounts(list);
+      // ⚠️ THE DEFAULT ONLY PRE-FILLS AN EMPTY FIELD. On an EDIT the row
+      // already says which account paid, and overwriting that with the current
+      // user's default would silently move where a recorded expense posted.
+      setPaymentAccountId((current) => {
+        if (current) return current;
+        return mine && list.some((a) => a.id === mine) ? mine : '';
+      });
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const [description, setDescription] = useState(existing?.description ?? '');
   const [category, setCategory] = useState<CaptureCategory>(
     existing && existing.cost_category !== 'subcontractor' ? existing.cost_category : 'material'
@@ -201,6 +238,7 @@ export function ExpenseCaptureForm({
         amount: parsedAmount,
         description: description.trim() || null,
         cost_category: category,
+        payment_account_id: paymentAccountId || null,
       });
       if (!res.success) {
         setBusy(false);
@@ -222,6 +260,7 @@ export function ExpenseCaptureForm({
         amount: parsedAmount,
         description: description.trim() || null,
         cost_category: category,
+        payment_account_id: paymentAccountId || null,
         source_segment_id: sourceSegmentId ?? null,
         source_po_id: selectedPoId,
         allocations: resolved.allocations,
@@ -357,6 +396,33 @@ export function ExpenseCaptureForm({
           </select>
         )}
       </div>
+
+      {/* ⚠️ WHICH ACCOUNT PAID — required to APPROVE, not to capture [M-J].
+          Josh reversed the earlier "park it later" behaviour: "an error at
+          entry or review, not a silent park later … it catches the problem
+          where the person has the context, instead of blocking a sync hours
+          later on a page they are not looking at."
+
+          Hidden entirely when the company has configured no accounts: an empty
+          dropdown invites someone to configure something that is not there. */}
+      {paymentAccounts.length > 0 && (
+        <div style={{ marginBottom: '12px' }}>
+          <label style={fieldLabelStyle}>Paid from</label>
+          <select
+            value={paymentAccountId}
+            onChange={(e) => setPaymentAccountId(e.target.value)}
+            style={inputStyle}
+            data-testid="capture-payment-account"
+          >
+            <option value="">Select an account…</option>
+            {paymentAccounts.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.name} — {a.accountType}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
 
       {/* PO module R6.3 — the run's PO context. Renders ONLY when the member
           has issued lines assigned on this job; one clumped amount stays the
