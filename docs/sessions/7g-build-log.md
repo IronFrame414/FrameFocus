@@ -2260,3 +2260,142 @@ Steps 2 and 3 are new at S183 and did not exist when you ran the handshake.
 | `qb_sync_blocked` notifications | **0** — the proofs cleaned up after themselves |
 
 Queue: **26 rows, all `pushed`.**
+
+---
+
+## Unit 23 — M-L: one record, on approval of an actual payment. The Bill pair is gone.
+
+**Migration `20261450000000_qb_one_record_on_payment.sql`.** rebuild-test `{"success":true}`; ledger
+repaired to the canonical version. **Exactly one `record_expense_payment` exists afterwards** —
+checked, because appending a defaulted parameter creates an OVERLOAD rather than replacing a
+function, and PostgREST would then refuse the call as ambiguous.
+
+### §3 — the four things established first
+
+**1 + 2. The payment-confirmation event is TWO RPCs, and they are disjoint by construction.**
+
+| RPC | what it means | pushes |
+| --- | --- | --- |
+| `approve_expense` | a RECEIPT becomes approved — money already left at the register | one Purchase |
+| `record_expense_payment` | a PAYABLE is paid | one Purchase **per payment** |
+
+⚠️ **They cannot overlap, and the database says so rather than our discipline.**
+`record_expense_payment` refuses a receipt outright — *"this row is a receipt, not a payable"* — and
+the receipt push is gated on `NOT payable`. **So no row can push twice**, which is what makes "one
+record per real event" safe without inventing a guard. So yes: **two distinct events**, as Josh
+suspected.
+
+⚠️ **AND A CORRECTION TO THE PROMPT.** It says the commitment distinction was made with
+`bill_status = 'unpaid'`. **There is no `bill_status` column**, and nothing here ever used one. The
+distinction is 7C's five-term payable predicate — the same one `record_expense_payment` mirrors in
+its own refusal above.
+
+**3. The mobile surface. ⚠️ THERE IS NO `/m` EXPENSE CAPTURE TO PUT A FIELD ON.**
+`app/m/expenses/page.tsx` is a **read-only list**, and its own comment records capture as a
+deliberate M-26 cut: *"CUT from M-26 … capture (not in D-6's offline-write set, not among GAP-8's
+five capture screens)"*. `/m/capture` is photos. No route under `/m` creates an expense.
+
+> ⚠️ **So surface 5 was not built, and that is a decision, not an omission.** The earlier grep
+> finding "no account field anywhere under `/m`" was right about the symptom and wrong about the
+> cause: the field is not missing from a form, **the form is missing**. Adding one would be a new
+> screen against an explicit prior ruling — and §5 says that capture flow is ruled separately and
+> must not be disturbed. **Josh's call; nothing was touched.**
+
+**4. What removing the Bill path orphans.** Two things, both kept on purpose:
+`expenses.qb_bill_id` (the record that a Bill was once created) and **nine historical queue rows**
+(4 `bill`, 5 `bill_payment`, all `pushed`). `expense_payments.qb_bill_payment_id` was **dropped** —
+zero rows carried a value, checked before dropping.
+
+### ⚠️ Was removing the Bill path "an arm and a condition"? MOSTLY — and here is the exception.
+
+Deleted: `handleBillCreate`, `handleBillUpdate`, `handleBillVoid`, `buildBillBody`,
+`handleBillPaymentCreate`, `handleBillPaymentVoid`, `resolveSubcontractorEin`, the trigger arms and
+the dispatch cases. **One thing was NOT just an arm:**
+
+⚠️ **`ExpenseRow`, `loadExpense()` and `billAccountRef()` lived inside the Bill block and are used by
+the PURCHASE path.** Excising the block took them with it and broke nine call sites. Restored
+verbatim under a header saying they are not part of the Bill path. **Worth stating because "delete
+the bill code" reads like a clean cut and was not** — the GL-account resolver is named after bills and
+belongs to expenses.
+
+The `bill` and `bill_payment` values **stay in the `entity_type` CHECK**: nine rows carry them, and
+removing the values would make the CHECK reject its own table. Nothing produces them; the dispatch
+answers all five operations terminally.
+
+### The five surfaces
+
+| # | surface | field | error |
+| --- | --- | --- | --- |
+| 1 | expense entry (desktop) | ✅ | — |
+| 2 | bill / commitment entry (`bill-form.tsx`) | ✅ *"Decide at payment…"* | — |
+| 3 | review (`review-popup.tsx`) | ✅ **now shown for commitments too** | receipts only |
+| 4 | record payment (`payment-modal.tsx`) | ✅ | ⚠️ **BLOCKS** |
+| 5 | mobile `/m` capture | ⚠️ **no such screen** — see §3.3 | — |
+
+⚠️ **§0's defect, fixed at (3).** The field was behind `!isCommitted`, and **everything in this
+product enters as a bill/commitment first** — so on the one path every expense takes, the field was
+invisible. It now shows for both, labelled *"optional until paid"* for a commitment and *"required to
+approve"* for a receipt, because **for a receipt that approval IS the payment confirmation**.
+
+⚠️ **Surface 4 is ONE component with TWO mount points** (`bills-tab.tsx` and `contracts-panel.tsx`),
+so the field and the block landed on both at once. That is the PARITY ruling paying off rather than
+being obeyed.
+
+### The six §4 proofs, by observation
+
+```
+1. commitment approved            -> enqueued []                             ✅
+3. payment, NO account            -> BLOCKED: "Choose which account this
+                                     payment was made from."                 ✅
+2. payment WITH an account        -> expense_payment:create -> drain pushed 1
+   QB Purchase 173  Total = 100  AccountRef = {"value":"35","name":"Checking"} ✅
+   expense-level queue rows       -> []            (the commitment pushed nothing)
+5. receipt approved               -> purchase:create -> Purchase 174,
+                                     qb_bill_id null          ONE record     ✅
+   a receipt cannot also be paid  -> REFUSED by the RPC                      ✅
+6. newest bill/bill_payment rows  -> 13:51 today, i.e. BEFORE this run       ✅
+```
+
+4 (the default pre-fills, and a change wins) is asserted in `s183` case 9 and exercised above: the
+account passed explicitly is the one the Purchase posted against.
+
+### ⚠️ LEFT IN THE SANDBOX QUICKBOOKS FOR JOSH TO TIDY BY HAND
+
+| object | state |
+| --- | --- |
+| **Bill 147** — btb, total **$600**, balance **$0** | ⚠️ **the only thing to delete.** Nothing reaches it any more. |
+| Bill 149 | already gone (deleted at S182) |
+| BillPayments 152 / 153 | already gone |
+| Purchases **151 / 155 / 156** | **keep** — each attached to a live expense row |
+
+No migration touches QuickBooks, per the ruling.
+
+### Test data this unit created and removed
+
+2 harness expenses (`S184 proof`) and their payments — deleted. **Purchases 173 and 174 deleted from
+the sandbox** (orphaned when their expenses went). ⚠️ **One `expense_payment` queue row survived the
+proof's own cleanup** — the script deleted `expense_payments` before collecting their ids, so the
+queue delete matched nothing. Found by re-querying rather than trusting the script, and removed.
+
+### The sweep
+
+`s182` cases 4 and 7 asserted the behaviour M-L overturned. **Inverted, not deleted**, per the S157
+rule — the superseded titles are quoted in place:
+
+- **4** *"a payment enqueues a BillPayment only when a QuickBooks Bill exists"* → now asserts
+  `expense_payment:create` **and** that a legacy `qb_bill_id` on the parent changes nothing, since
+  that condition is exactly what was removed.
+- **4b** is new: a payment on an expense that already pushed a Purchase enqueues **nothing** — the
+  double-count guard, unreachable through the RPC and worth pinning anyway.
+- **7** *"…queues the payment reversal BEFORE the bill"* → now asserts that deleting an expense with a
+  legacy bill id enqueues **no bill work at all**.
+
+`s143-qb-scaffolding` only checks that `expenses.qb_bill_id` exists — still true, left alone.
+
+### Verification
+
+`npx tsc --noEmit` real exit **`0`**. **`npx next build` real exit `0`**, zero "Failed to compile"
+lines. ⚠️ **One build in this unit printed `✓ Compiled successfully` AND `Failed to compile.`** — the
+compile step passed and type-checking then failed. **The summary line lies; the exit code did not.**
+Live harnesses **s181 + s182 + s183 = 21 tests, real exit `0`**. Unit suite **1047 passed / 1
+failed** — the pre-existing `s131-dashboard-access`.

@@ -218,6 +218,7 @@ const RECORD_TABLE_FOR_ENTITY: Record<string, string> = {
   bill: 'expenses',
   purchase: 'expenses',
   bill_payment: 'expense_payments',
+  expense_payment: 'expense_payments',
   payment: 'client_payments',
   refund: 'client_refunds',
 };

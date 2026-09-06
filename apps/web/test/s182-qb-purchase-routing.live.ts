@@ -198,27 +198,48 @@ describe('S182 — receipts become Purchases; payables never sync', () => {
     }
   });
 
-  it('4 — a payment enqueues a BillPayment only when a QuickBooks Bill exists', async () => {
-    // No qb_bill_id: nothing in QuickBooks to settle.
-    const plain = await approveExpense({ supplier: 'S182 no-bill' });
-    const { data: p1 } = await admin
-      .from('expense_payments')
-      .insert({ company_id: COMPANY, expense_id: plain, amount: 50, paid_date: '2026-09-06' })
-      .select('id')
-      .single();
-    if (p1?.id) madePayments.push(p1.id as string);
-    expect(await queueFor(p1!.id as string), 'no bill -> no BillPayment').toEqual([]);
+  it('4 — a payment enqueues expense_payment:create, and NEVER a bill_payment', async () => {
+    // ⚠️ INVERTED, NOT DELETED [M-L, S184]. _Superseded title: "a payment
+    // enqueues a BillPayment only when a QuickBooks Bill exists."_ Josh:
+    // *"I do not need bill entered to QB. I only need the actual payment."*
+    // A Bill closed by a BillPayment was TWO QuickBooks records for ONE real
+    // event. Now a payment is one Purchase, and the parent's `qb_bill_id` is
+    // irrelevant to whether it pushes.
+    const billed = await approveExpense({ supplier: 'S182 payment push' });
 
-    // With a qb_bill_id: the legacy Bill that must be closed.
-    const billed = await approveExpense({ supplier: 'S182 legacy bill' });
-    await admin.from('expenses').update({ qb_bill_id: 'S182-FAKE' }).eq('id', billed);
-    const { data: p2 } = await admin
+    // A legacy Bill id on the parent must NOT change the outcome any more —
+    // that condition is exactly what was removed.
+    await admin.from('expenses').update({ qb_bill_id: 'S182-LEGACY' }).eq('id', billed);
+
+    const { data: pay } = await admin
       .from('expense_payments')
       .insert({ company_id: COMPANY, expense_id: billed, amount: 50, paid_date: '2026-09-06' })
       .select('id')
       .single();
-    if (p2?.id) madePayments.push(p2.id as string);
-    expect(await queueFor(p2!.id as string)).toContain('bill_payment:create');
+    madePayments.push(pay!.id as string);
+
+    const rows = await queueFor(pay!.id as string);
+    expect(rows).toContain('expense_payment:create');
+    expect(rows).not.toContain('bill_payment:create');
+  });
+
+  it('4b — a payment on an expense that ALREADY pushed a Purchase enqueues nothing', async () => {
+    // ⚠️ THE DOUBLE-COUNT GUARD. `record_expense_payment` refuses receipts, so
+    // this should be unreachable through the RPC — but a direct INSERT (a
+    // seeder, a future service) would otherwise book the same spend twice.
+    const receipt = await approveExpense({ supplier: 'S182 already pushed' });
+    await admin.from('expenses').update({ qb_purchase_id: 'S182-PUR' }).eq('id', receipt);
+
+    const { data: pay } = await admin
+      .from('expense_payments')
+      .insert({ company_id: COMPANY, expense_id: receipt, amount: 5, paid_date: '2026-09-06' })
+      .select('id')
+      .single();
+    madePayments.push(pay!.id as string);
+
+    expect(await queueFor(pay!.id as string), 'the receipt already pushed its own Purchase').toEqual(
+      []
+    );
   });
 
   // -------------------------------------------------------------------------
@@ -277,45 +298,25 @@ describe('S182 — receipts become Purchases; payables never sync', () => {
   // -------------------------------------------------------------------------
   // §2.4 — a PAID expense may be deleted, and QuickBooks must follow IN ORDER.
   // -------------------------------------------------------------------------
-  it('7 — deleting a paid legacy bill queues the payment reversal BEFORE the bill', async () => {
-    const billed = await approveExpense({ supplier: 'S182 delete-order' });
+  it('7 — deleting an expense with a LEGACY bill id enqueues no bill work at all', async () => {
+    // ⚠️ INVERTED, NOT DELETED [M-L, S184]. _Superseded title: "deleting a paid
+    // legacy bill queues the payment reversal BEFORE the bill", which asserted
+    // `bill:void.depends_on_id === bill_payment:void.id`._ Both operations are
+    // gone. The two Bills that exist on the sandbox are test data Josh tidies
+    // by hand; nothing here reaches into QuickBooks for them any more.
+    const billed = await approveExpense({ supplier: 'S182 delete-legacy' });
     await admin.from('expenses').update({ qb_bill_id: 'S182-BILL' }).eq('id', billed);
 
-    const { data: pay } = await admin
-      .from('expense_payments')
-      .insert({ company_id: COMPANY, expense_id: billed, amount: 25, paid_date: '2026-09-06' })
-      .select('id')
-      .single();
-    madePayments.push(pay!.id as string);
-    // Pretend it reached QuickBooks — only a PUSHED payment can be reversed.
-    await admin
-      .from('expense_payments')
-      .update({ qb_bill_payment_id: 'S182-BP', qb_push_status: 'pushed' })
-      .eq('id', pay!.id as string);
+    // Clear the Purchase the approval queued, so the assertion below is about
+    // the DELETE arm alone rather than about what approval left behind.
+    await admin.from('qb_sync_queue').delete().eq('entity_id', billed);
 
     await admin.from('expenses').update({ is_deleted: true }).eq('id', billed);
 
-    const { data: billRow } = await admin
-      .from('qb_sync_queue')
-      .select('id, depends_on_id')
-      .eq('entity_id', billed)
-      .eq('entity_type', 'bill')
-      .eq('operation', 'void')
-      .single();
-    const { data: payRow } = await admin
-      .from('qb_sync_queue')
-      .select('id')
-      .eq('entity_id', pay!.id as string)
-      .eq('entity_type', 'bill_payment')
-      .eq('operation', 'void')
-      .single();
-
-    expect(payRow?.id, 'the payment reversal must be queued').toBeTruthy();
-    // ⚠️ THE ORDER IS THE ASSERTION. QuickBooks refuses to delete a Bill that
-    // has a payment applied, so the bill's deletion must WAIT on the payment's.
-    // Without the dependency this passes intermittently — whichever row the
-    // claim query happened to hand back first.
-    expect(billRow?.depends_on_id, 'bill:void must depend on bill_payment:void').toBe(payRow?.id);
+    const rows = await queueFor(billed);
+    expect(rows.filter((r) => r.startsWith('bill'))).toEqual([]);
+    // No Purchase either: this row never had a qb_purchase_id.
+    expect(rows).toEqual([]);
   });
 
   it('5 — the queue accepts the two new entity types', async () => {

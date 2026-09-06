@@ -4,8 +4,13 @@
 // Owner/Admin/PM; PM entries land pending (the 7A uniform gate — the INSERT
 // policy pins it). awaiting_paper = decision 6: a known number, bill expected.
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { createBill } from '@/lib/services/payables-client';
+import {
+  listPaymentAccounts,
+  myDefaultPaymentAccountId,
+  type PaymentAccountOption,
+} from '@/lib/services/qb-accounts-client';
 import type { ExpenseCategory } from '@/lib/services/expenses-client';
 import {
   BudgetSplitEditor,
@@ -40,6 +45,25 @@ export function BillFormModal({ projects, todayYmd, callerRole, onClose, onDone 
   const [description, setDescription] = useState('');
   const [dueDate, setDueDate] = useState('');
   const [awaitingPaper, setAwaitingPaper] = useState(false);
+
+  // ⚠️ OPTIONAL AT COMMITMENT ENTRY, BY RULING [Josh, S103]. A bill has not
+  // been paid yet, so which account will pay it is often genuinely unknown.
+  // The one place an empty account blocks is the payment.
+  const [paymentAccounts, setPaymentAccounts] = useState<PaymentAccountOption[]>([]);
+  const [paymentAccountId, setPaymentAccountId] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const [list, mine] = await Promise.all([listPaymentAccounts(), myDefaultPaymentAccountId()]);
+      if (cancelled) return;
+      setPaymentAccounts(list);
+      setPaymentAccountId((cur) => (cur ? cur : mine && list.some((a) => a.id === mine) ? mine : ''));
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   // Split at capture (money representation §4.4/P7) — bills are expenses too.
   const [split, setSplit] = useState<SplitRowDraft[]>(emptySplit());
   const [busy, setBusy] = useState(false);
@@ -73,6 +97,7 @@ export function BillFormModal({ projects, todayYmd, callerRole, onClose, onDone 
       due_date: dueDate || null,
       awaiting_paper: awaitingPaper,
       allocations: resolved.allocations,
+      payment_account_id: paymentAccountId || null,
     });
     setBusy(false);
     if (!res.success) {
@@ -128,6 +153,24 @@ export function BillFormModal({ projects, todayYmd, callerRole, onClose, onDone 
             <label style={fieldLabelStyle}>Due date (vendor terms vary)</label>
             <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} style={inputStyle} />
           </div>
+          {paymentAccounts.length > 0 && (
+            <div>
+              <label style={fieldLabelStyle}>Paid from (optional until paid)</label>
+              <select
+                value={paymentAccountId}
+                onChange={(e) => setPaymentAccountId(e.target.value)}
+                style={inputStyle}
+                data-testid="bill-payment-account"
+              >
+                <option value="">Decide at payment…</option>
+                {paymentAccounts.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.name} — {a.accountType}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
           <div>
             <label style={fieldLabelStyle}>Category</label>
             <select

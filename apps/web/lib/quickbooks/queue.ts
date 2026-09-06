@@ -27,7 +27,11 @@ export type QbEntityType =
   // M-G [S103]: an actual cost is a Purchase, not a Bill. `bill` survives only
   // for the two that already exist in QuickBooks.
   | 'purchase'
-  | 'bill_payment';
+  // ⚠️ M-L [S103]: a recorded PAYMENT becomes one Purchase. `bill_payment` and
+  // `bill` stay in the union ONLY because nine historical rows carry them —
+  // nothing produces either any more, and the dispatch answers both terminally.
+  | 'bill_payment'
+  | 'expense_payment';
 
 export type QbOperation = 'create' | 'update' | 'void';
 

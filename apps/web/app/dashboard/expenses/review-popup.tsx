@@ -498,16 +498,24 @@ export function ReviewPopup({ expense, receipts, projects, onClose, onDone }: Re
             never syncs, so it is not asked for one. Hidden when the company has
             configured no accounts: an empty dropdown invites configuring
             something that is not there. */}
-        {!isCommitted && paymentAccounts.length > 0 && (
+        {/* ⚠️ SHOWN FOR COMMITMENTS TOO [S184]. It used to be hidden behind
+            `!isCommitted`, and Josh found the hole by using it: EVERYTHING in
+            this product enters as a bill/commitment first, so at review the
+            field was invisible on the one path every expense takes. It is
+            OPTIONAL here for a commitment and REQUIRED for a receipt, because
+            for a receipt this approval IS the payment confirmation. */}
+        {paymentAccounts.length > 0 && (
           <div style={{ marginBottom: '12px' }}>
-            <label style={fieldLabelStyle}>Paid from (required to approve)</label>
+            <label style={fieldLabelStyle}>
+              {isCommitted ? 'Paid from (optional until paid)' : 'Paid from (required to approve)'}
+            </label>
             <select
               value={paymentAccountId}
               onChange={(e) => setPaymentAccountId(e.target.value)}
               style={inputStyle}
               data-testid="review-payment-account"
             >
-              <option value="">Select an account…</option>
+              <option value="">{isCommitted ? 'Decide at payment…' : 'Select an account…'}</option>
               {paymentAccounts.map((a) => (
                 <option key={a.id} value={a.id}>
                   {a.name} — {a.accountType}

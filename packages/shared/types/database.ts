@@ -4038,7 +4038,8 @@ export type Database = {
           note: string | null
           over_stage: boolean
           paid_date: string
-          qb_bill_payment_id: string | null
+          payment_account_id: string | null
+          qb_purchase_id: string | null
           qb_push_status: string
           qb_synced_at: string | null
           retainage_percent_applied: number | null
@@ -4059,7 +4060,8 @@ export type Database = {
           note?: string | null
           over_stage?: boolean
           paid_date: string
-          qb_bill_payment_id?: string | null
+          payment_account_id?: string | null
+          qb_purchase_id?: string | null
           qb_push_status?: string
           qb_synced_at?: string | null
           retainage_percent_applied?: number | null
@@ -4080,7 +4082,8 @@ export type Database = {
           note?: string | null
           over_stage?: boolean
           paid_date?: string
-          qb_bill_payment_id?: string | null
+          payment_account_id?: string | null
+          qb_purchase_id?: string | null
           qb_push_status?: string
           qb_synced_at?: string | null
           retainage_percent_applied?: number | null
@@ -4101,6 +4104,13 @@ export type Database = {
             columns: ["expense_id"]
             isOneToOne: false
             referencedRelation: "expenses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "expense_payments_payment_account_id_fkey"
+            columns: ["payment_account_id"]
+            isOneToOne: false
+            referencedRelation: "company_payment_accounts"
             referencedColumns: ["id"]
           },
         ]
@@ -7065,7 +7075,7 @@ export type Database = {
           {
             foreignKeyName: "qb_account_cache_company_id_fkey"
             columns: ["company_id"]
-            isOneToOne: false
+            isOneToOne: true
             referencedRelation: "companies"
             referencedColumns: ["id"]
           },
@@ -9943,6 +9953,7 @@ export type Database = {
           p_note?: string
           p_override_over_stage?: boolean
           p_paid_date: string
+          p_payment_account_id?: string
         }
         Returns: Json
       }

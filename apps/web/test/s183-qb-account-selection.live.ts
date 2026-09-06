@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { admin, assertRebuildTest } from './live-session';
+import { admin, assertRebuildTest, sessionFor } from './live-session';
 import { glCandidates, paymentCandidates } from '@/lib/services/qb-accounts';
 import { AccountSettings } from '@/components/quickbooks/account-settings';
 import {
@@ -199,6 +199,64 @@ describe('S183 — picked accounts, and the account an expense was paid from', (
   });
 
   // -------------------------------------------------------------------------
+  // -------------------------------------------------------------------------
+  // M-L [S184] — the ONE error point, and the ONE record.
+  // -------------------------------------------------------------------------
+  it('9 — the payment RPC REFUSES without an account, and takes one when given', async () => {
+    if (!accountId) return;
+    const ownerC = await sessionFor('josh+test50@worthprop.com');
+
+    // A commitment: approved without an account (optional there), then paid.
+    const id = await seedPending({ state: 'committed' });
+    const { error: approveErr } = await admin
+      .from('expenses')
+      .update({ status: 'approved' })
+      .eq('id', id);
+    expect(approveErr, 'a commitment needs no account to approve').toBeNull();
+
+    // ⚠️ THE ONE POINT WHERE AN EMPTY ACCOUNT BLOCKS. Everywhere else the field
+    // is optional, because until money moves you may not know which account
+    // paid — and nothing may obstruct a field user logging a receipt.
+    const blocked = await ownerC.rpc('record_expense_payment', {
+      p_expense_id: id,
+      p_paid_date: '2026-09-06',
+      p_amount: 1,
+    });
+    expect(blocked.error, 'a payment with no account must be refused').not.toBeNull();
+    expect(blocked.error!.message).toContain('which account');
+
+    const ok = await ownerC.rpc('record_expense_payment', {
+      p_expense_id: id,
+      p_paid_date: '2026-09-06',
+      p_amount: 1,
+      p_payment_account_id: accountId,
+    });
+    expect(ok.error, 'a payment WITH an account is allowed').toBeNull();
+
+    const { data: pay } = await admin
+      .from('expense_payments')
+      .select('id, payment_account_id')
+      .eq('expense_id', id);
+    expect(pay?.[0]?.payment_account_id).toBe(accountId);
+
+    // ⚠️ ONE record for one real event: the payment queues a Purchase, and the
+    // commitment itself queued nothing at all.
+    const { data: payQ } = await admin
+      .from('qb_sync_queue')
+      .select('entity_type, operation')
+      .eq('entity_id', pay![0].id as string);
+    expect((payQ ?? []).map((r) => `${r.entity_type}:${r.operation}`)).toContain(
+      'expense_payment:create'
+    );
+
+    const { data: expQ } = await admin.from('qb_sync_queue').select('id').eq('entity_id', id);
+    expect((expQ ?? []).length, 'a commitment never enqueues anything itself').toBe(0);
+
+    // afterAll deletes the expense; take its payment and queue rows with it.
+    await admin.from('qb_sync_queue').delete().eq('entity_id', pay![0].id as string);
+    await admin.from('expense_payments').delete().eq('id', pay![0].id as string);
+  });
+
   it('8 — only Owner/Admin may set a member default (RLS + trigger)', async () => {
     if (!accountId) return;
     const { error } = await admin

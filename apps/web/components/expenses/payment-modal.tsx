@@ -19,6 +19,11 @@ import {
   recordPayment,
   type ComplianceWarning,
 } from '@/lib/services/payables-client';
+import {
+  listPaymentAccounts,
+  myDefaultPaymentAccountId,
+  type PaymentAccountOption,
+} from '@/lib/services/qb-accounts-client';
 import { fmtMoney } from '@/components/expenses/expense-ui';
 import { overlayStyle, fieldLabelStyle, inputStyle } from '@/components/time/clock-modal';
 import { cardStyle, color, h2Style, primaryButtonStyle, secondaryButtonStyle } from '@/lib/theme';
@@ -68,6 +73,28 @@ export function PaymentModal({ expense, subContractId, onClose, onDone }: Paymen
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // ⚠️ THIS IS THE ONE SURFACE WHERE AN EMPTY ACCOUNT BLOCKS [RULED Josh, S103].
+  // Everywhere else the field is optional, because until money moves you may
+  // not know which account paid — and nothing may obstruct a field user logging
+  // a receipt. Here the money IS moving, so the question can be answered and an
+  // unanswered one has to stop it.
+  const [paymentAccounts, setPaymentAccounts] = useState<PaymentAccountOption[]>([]);
+  const [paymentAccountId, setPaymentAccountId] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const [list, mine] = await Promise.all([listPaymentAccounts(), myDefaultPaymentAccountId()]);
+      if (cancelled) return;
+      setPaymentAccounts(list);
+      // Pre-fills from the payer's default; whatever is chosen here wins.
+      setPaymentAccountId((cur) => (cur ? cur : mine && list.some((a) => a.id === mine) ? mine : ''));
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   useEffect(() => {
     if (!subContractId) return;
     let cancelled = false;
@@ -98,12 +125,23 @@ export function PaymentModal({ expense, subContractId, onClose, onDone }: Paymen
     setFormalConfirm(false);
     setBusy(true);
     setError(null);
+    // ⚠️ THE ERROR FIRES HERE, WHERE THE PERSON HAS THE CONTEXT — not as a
+    // silent park hours later on a page nobody is looking at. The RPC enforces
+    // the same rule (M-L); this is the message that names the missing thing
+    // where it can be supplied.
+    if (paymentAccounts.length > 0 && !paymentAccountId) {
+      setBusy(false);
+      setError('Choose which account this payment was made from.');
+      return;
+    }
+
     const res = await recordPayment(expense.id, {
       paid_date: date,
       amount: parsed,
       method: method || null,
       note: note || null,
       overrideOverStage: override,
+      paymentAccountId: paymentAccountId || null,
     });
     setBusy(false);
     if (res.success) {
@@ -194,6 +232,24 @@ export function PaymentModal({ expense, subContractId, onClose, onDone }: Paymen
             />
           </div>
           <div>
+            {paymentAccounts.length > 0 && (
+              <>
+                <label style={fieldLabelStyle}>Paid from (required)</label>
+                <select
+                  value={paymentAccountId}
+                  onChange={(e) => setPaymentAccountId(e.target.value)}
+                  style={inputStyle}
+                  data-testid="payment-modal-account"
+                >
+                  <option value="">Select an account…</option>
+                  {paymentAccounts.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.name} — {a.accountType}
+                    </option>
+                  ))}
+                </select>
+              </>
+            )}
             <label style={fieldLabelStyle}>Method</label>
             <input
               list="payment-method-suggestions"
