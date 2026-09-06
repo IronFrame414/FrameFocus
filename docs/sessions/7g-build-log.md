@@ -2203,3 +2203,60 @@ in writing that their migration does not emit that notification.
 **Committed unit suite: 1047 passed, 1 failed, real exit `1`** — ⚠️ the failure is
 `s131-dashboard-access`, **pre-existing and unrelated**, proven last run by stashing and re-running
 on the clean tree.
+
+---
+
+## Unit 22 — ⚠️ WHAT JOSH MUST CONFIGURE, IN ORDER, BEFORE EXPENSES SYNC
+
+**Nothing in the expense flow works until steps 1–3 are done, and they must be done in this order.**
+Steps 2 and 3 are new at S183 and did not exist when you ran the handshake.
+
+1. **Connect QuickBooks** — Settings → Accounting → Connect. *(unchanged)*
+   ⚠️ **Until this is done the cost-account section does not appear at all.** That is the ruling, not
+   a bug: an empty dropdown invites configuring something inert.
+
+2. **Press "Refresh from QuickBooks"** on the Cost accounts card.
+   ⚠️ **The pickers are EMPTY until you do.** One press pulls your whole chart of accounts (93 in the
+   sandbox) and costs **one** metered read. Nothing refetches on its own — a stale label is cosmetic,
+   because the stored id is what posts.
+
+3. **Choose the four cost accounts** — Material, Subcontractor, Other, Labor.
+   ⚠️ **A previously typed name shows as "(typed — re-pick to lock it)".** Re-picking replaces the
+   name with an **id**, which is what survives a rename in QuickBooks and what removes the typo class
+   that parked three of your expenses.
+
+4. **Add your payment accounts** — the accounts and cards you spend *from*.
+   ⚠️ **Only bank, credit-card and current-liability accounts are offered, because those are the only
+   three QuickBooks accepts as the payer of an expense.** Measured, not chosen.
+   ⚠️ **This is the opposite direction from step 3.** Step 3 is what a cost was spent *on*; step 4 is
+   where the money came *from*. QuickBooks calls both `AccountRef`, one level apart in the same
+   request, and swapping them posts your spending to the bank.
+
+5. **Set who spends from what** — each person's usual account, on the same page.
+   ⚠️ **Owner/Admin only, by ruling** — it determines where money posts. **Leaving someone blank is
+   fine**; they pick an account each time.
+
+6. **Choose the income item** — the Invoices half. *(unchanged from the handshake)*
+
+### After that
+
+- Every expense gets a **"Paid from"** field, pre-filled from the author's default.
+- ⚠️ **An expense that will sync CANNOT BE APPROVED without one**, with the message *"Choose which
+  account paid for this expense before approving it."* — at review, where you have the context.
+- ⚠️ **Bills and commitments are not asked for one and never sync.** That is correct.
+- A company that has configured **no** payment accounts is not blocked; the field hides and approval
+  proceeds. The first account you add turns the rule on.
+
+### Test data created and removed on rebuild-test
+
+| Created | Now |
+| --- | --- |
+| `qb_account_cache` — 93 accounts | **kept** (real configuration) |
+| `company_payment_accounts` — "Checking" | **kept** — migrated from M-G's value, then re-used |
+| member defaults — 550 rows | **kept** — M-J's intended backfill of the old company-wide default |
+| 3 + 3 harness expenses (`S182…`, `S183…`) | **deleted**, with their queue rows |
+| QuickBooks **Purchase 172** ($12.34, orphaned when its harness expense was deleted) | **deleted from the sandbox** |
+| Purchases **151 / 155 / 156** | **kept** — each attached to a live expense row |
+| `qb_sync_blocked` notifications | **0** — the proofs cleaned up after themselves |
+
+Queue: **26 rows, all `pushed`.**
