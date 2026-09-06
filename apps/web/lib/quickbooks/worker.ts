@@ -12,6 +12,7 @@ import {
   type QbQueueRow,
 } from './queue';
 import { notifyParked } from './park-notify';
+import { drainWebhookEvents } from './webhook-process';
 import { getAccessToken } from './tokens';
 
 /**
@@ -65,6 +66,15 @@ export interface DrainOutcome {
    * what sent an investigation at the claim query, which was never at fault.
    */
   waiting: number;
+  /**
+   * Inbound webhook notifications applied this pass [F1, M-N].
+   *
+   * ⚠️ THESE ARE SEPARATE FROM THE PUSH COUNTERS ON PURPOSE. The queue counters
+   * describe work going OUT; this describes work coming IN. Folding them
+   * together would make "pushed: 3" mean two different things.
+   */
+  webhooksProcessed: number;
+  webhooksFailed: number;
 }
 
 export async function runQbSync(admin: SupabaseClient): Promise<DrainOutcome> {
@@ -77,6 +87,8 @@ export async function runQbSync(admin: SupabaseClient): Promise<DrainOutcome> {
     failedTerminal: 0,
     skippedNotConnected: 0,
     waiting: 0,
+    webhooksProcessed: 0,
+    webhooksFailed: 0,
   };
 
   // Only tenants that are actually connected. A `needs_reauth` company is
@@ -95,6 +107,15 @@ export async function runQbSync(admin: SupabaseClient): Promise<DrainOutcome> {
   for (const company of companies ?? []) {
     outcome.companiesConsidered += 1;
     const companyId = company.id as string;
+
+    // ⚠️ INBOUND FIRST, AND BEFORE THE QUEUE-EMPTY EARLY-OUT [F1, M-N]. A
+    // company with no OUTBOUND backlog still has inbound payments to apply, and
+    // the `continue` below would have skipped them entirely — the same shape as
+    // the dormancy gap in F7. Webhook work must not depend on push work
+    // existing.
+    const inbound = await drainWebhookEvents(admin, companyId);
+    outcome.webhooksProcessed += inbound.processed;
+    outcome.webhooksFailed += inbound.failed;
 
     let rows = await claimDue(admin, companyId, ROWS_PER_COMPANY);
     if (rows.length === 0) {
