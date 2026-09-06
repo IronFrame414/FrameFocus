@@ -221,13 +221,23 @@ export async function resolveOrCreateVendor(
 async function readSyncToken(
   ctx: DrainContext,
   resource: string,
-  id: string
+  id: string,
+  /**
+   * ⚠️ THE RESPONSE KEY IS NOT ALWAYS `Capitalize(resource)`, AND GUESSING IT
+   * FAILS SILENTLY [S182]. The URL path is lowercase (`/billpayment/153`) while
+   * the JSON key is `BillPayment` — capitalising the first letter yields
+   * `Billpayment`, which misses, returns `undefined`, and hands the caller a
+   * NULL SyncToken. Every caller reads a null as "already gone from QuickBooks"
+   * and returns `pushed`, so the delete never happens and the row reports
+   * success. Pass the key explicitly wherever it is not simply capitalised.
+   */
+  responseKey?: string
 ): Promise<string | null> {
   const result = (await qboRead(ctx.admin, ctx.conn, `/${resource}/${id}`)) as Record<
     string,
     { SyncToken?: string } | undefined
   >;
-  const key = resource.charAt(0).toUpperCase() + resource.slice(1);
+  const key = responseKey ?? resource.charAt(0).toUpperCase() + resource.slice(1);
   return result[key]?.SyncToken ?? null;
 }
 
@@ -1709,6 +1719,56 @@ async function handleBillPaymentCreate(
   return { kind: 'pushed' };
 }
 
+/**
+ * Reverse a BillPayment in QuickBooks. [§2.4, S182]
+ *
+ * ⚠️ ORDER IS EVERYTHING, AND THE QUEUE ENFORCES IT RATHER THAN THIS FUNCTION.
+ * QuickBooks refuses to delete a Bill that has a payment applied. M-I therefore
+ * queues each `bill_payment:void` FIRST and makes the `bill:void` row depend on
+ * the last of them. If you ever call this outside that chain, delete the
+ * payment before the bill or the bill's deletion fails.
+ */
+async function handleBillPaymentVoid(ctx: DrainContext, row: QbQueueRow): Promise<HandlerResult> {
+  const { data: payment } = await ctx.admin
+    .from('expense_payments')
+    .select('id, qb_bill_payment_id')
+    .eq('id', row.entity_id)
+    .eq('company_id', ctx.companyId)
+    .maybeSingle();
+
+  // The row is gone locally, or never reached QuickBooks. Either way there is
+  // nothing there to reverse, which is the outcome we wanted.
+  if (!payment?.qb_bill_payment_id) return { kind: 'pushed' };
+
+  const syncToken = await readSyncToken(
+    ctx,
+    'billpayment',
+    payment.qb_bill_payment_id as string,
+    'BillPayment'
+  );
+  if (!syncToken) return { kind: 'pushed' };
+
+  await qboWrite(ctx.conn, '/billpayment?operation=delete', {
+    Id: payment.qb_bill_payment_id,
+    SyncToken: syncToken,
+  });
+
+  // ⚠️ CLEAR THE ID. Without this the row still claims a QuickBooks object that
+  // no longer exists, and `handleBillPaymentCreate`'s idempotency check would
+  // read it as "already pushed" and refuse to re-record a corrected payment.
+  await ctx.admin
+    .from('expense_payments')
+    .update({
+      qb_bill_payment_id: null,
+      qb_push_status: 'not_pushed',
+      qb_synced_at: new Date().toISOString(),
+    })
+    .eq('id', row.entity_id)
+    .eq('company_id', ctx.companyId);
+
+  return { kind: 'pushed' };
+}
+
 export async function handleQueueRow(
   ctx: DrainContext,
   row: QbQueueRow
@@ -1733,6 +1793,8 @@ export async function handleQueueRow(
       return handlePurchaseVoid(ctx, row);
     case 'bill_payment:create':
       return handleBillPaymentCreate(ctx, row);
+    case 'bill_payment:void':
+      return handleBillPaymentVoid(ctx, row);
     // ⚠️ `bill:create` IS GONE, NOT MOVED [RULED Josh, S103]. Nothing enqueues
     // one any more (M-G dropped the arm). A row of this shape can only come
     // from before that migration or by hand, and creating the payable it asks

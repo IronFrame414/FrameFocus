@@ -247,6 +247,50 @@ describe('S182 — receipts become Purchases; payables never sync', () => {
     }
   });
 
+  // -------------------------------------------------------------------------
+  // §2.4 — a PAID expense may be deleted, and QuickBooks must follow IN ORDER.
+  // -------------------------------------------------------------------------
+  it('7 — deleting a paid legacy bill queues the payment reversal BEFORE the bill', async () => {
+    const billed = await approveExpense({ supplier: 'S182 delete-order' });
+    await admin.from('expenses').update({ qb_bill_id: 'S182-BILL' }).eq('id', billed);
+
+    const { data: pay } = await admin
+      .from('expense_payments')
+      .insert({ company_id: COMPANY, expense_id: billed, amount: 25, paid_date: '2026-09-06' })
+      .select('id')
+      .single();
+    madePayments.push(pay!.id as string);
+    // Pretend it reached QuickBooks — only a PUSHED payment can be reversed.
+    await admin
+      .from('expense_payments')
+      .update({ qb_bill_payment_id: 'S182-BP', qb_push_status: 'pushed' })
+      .eq('id', pay!.id as string);
+
+    await admin.from('expenses').update({ is_deleted: true }).eq('id', billed);
+
+    const { data: billRow } = await admin
+      .from('qb_sync_queue')
+      .select('id, depends_on_id')
+      .eq('entity_id', billed)
+      .eq('entity_type', 'bill')
+      .eq('operation', 'void')
+      .single();
+    const { data: payRow } = await admin
+      .from('qb_sync_queue')
+      .select('id')
+      .eq('entity_id', pay!.id as string)
+      .eq('entity_type', 'bill_payment')
+      .eq('operation', 'void')
+      .single();
+
+    expect(payRow?.id, 'the payment reversal must be queued').toBeTruthy();
+    // ⚠️ THE ORDER IS THE ASSERTION. QuickBooks refuses to delete a Bill that
+    // has a payment applied, so the bill's deletion must WAIT on the payment's.
+    // Without the dependency this passes intermittently — whichever row the
+    // claim query happened to hand back first.
+    expect(billRow?.depends_on_id, 'bill:void must depend on bill_payment:void').toBe(payRow?.id);
+  });
+
   it('5 — the queue accepts the two new entity types', async () => {
     const probe = randomUUID();
     for (const entityType of ['purchase', 'bill_payment']) {

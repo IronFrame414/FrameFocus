@@ -1796,3 +1796,95 @@ Regression case 6 in `s182-qb-purchase-routing.live.ts` asserts all three proper
 network**: one notification per recipient, the same reason adds nothing, a different reason lands.
 
 `npx tsc --noEmit` real exit **`0`**. **`npx next build` real exit `0`.**
+
+---
+
+## Unit 18 — §2.4: a paid expense can be corrected, and QuickBooks follows
+
+**Migration `20261420000000_qb_paid_expense_edit_delete.sql` (M-I).** rebuild-test `{"success":true}`;
+ledger repaired to the canonical version.
+
+### ⚠️ THE DATABASE ALREADY ALLOWED IT. THE BLOCK WAS THE UI, AND THE OBVIOUS GUESS IS WRONG.
+
+Checked before anything was written:
+
+- `expenses_update_authorized` admits `get_my_role() = ANY (owner, admin)` with **no status and no
+  payment condition**.
+- `enforce_expenses_column_scope` **returns early** for those two roles.
+- Soft-delete is an UPDATE, so deletion was permitted too.
+
+**No policy needed changing.** `expenses-page-client.tsx` rendered Edit/Delete under
+`!isReviewer && ownPending` — the author's own **pending** row — which gives an Owner exactly nothing
+on an approved or paid expense. Recorded because a reader told "the UI offers no way" would reasonably
+go hunting for an RLS gap that is not there.
+
+### ⚠️ AND A HOLE M-G HAD OPENED, FOUND WHILE READING THAT GUARD
+
+`enforce_expenses_column_scope` denies the system columns **by name** and listed `qb_bill_id`,
+`qb_push_status`, `qb_synced_at` — **but not `qb_purchase_id`, which M-G added four units ago.** A crew
+member editing their own pending receipt could have written a QuickBooks object id onto it. Added.
+**A denylist protects only what it names**, and that is the standing hazard of the pattern; the note is
+now at the site rather than in a session log.
+
+### The asymmetry with invoices, written where the code is
+
+A paid **INVOICE** cannot be voided by anyone — enforced in the database (`20261340000000`) and live on
+production. A paid **EXPENSE** can be corrected by Owner/Admin. That is not an inconsistency:
+
+> an **invoice** is a receivable a **client** paid against — rewriting it rewrites *someone else's*
+> record of what they bought and what they owe.
+> an **expense** is the company's **own** record of its **own** spending — correcting it corrects only
+> itself.
+
+⚠️ Stated in M-I's header **and** at the buttons in the UI, because the failure mode is a future
+session tidying *"voids should behave the same everywhere"* and breaking one direction or the other.
+
+### QuickBooks follows — and the ORDER is enforced by the queue, not by hope
+
+*"deleting a paid expense voids or deletes its Purchase — and its BillPayment if one was pushed."*
+
+⚠️ **QuickBooks refuses to delete a Bill that has a payment applied.** So M-I queues each
+`bill_payment:void` **first** and makes `bill:void` **depend on the last of them**. That is what
+`depends_on_id` is for — and thanks to §2.6's in-drain cascade both still land in **one** drain.
+
+**Proven end to end:**
+
+```
+BEFORE  Bill 149 -> present (active)      BillPayment 153 -> present (active)
+delete the paid expense
+queued -> ["bill_payment:void", "bill:void (waits)"]
+ONE drain -> drained in 2 dependency passes, pushed: 2
+AFTER   Bill 149 -> gone (Object Not Found)   BillPayment 153 -> gone (Object Not Found)
+payment row -> {"qb_bill_payment_id":null,"qb_push_status":"not_pushed"}
+```
+
+The id is cleared on the way out, deliberately: leaving it would make
+`handleBillPaymentCreate`'s idempotency check read "already pushed" and refuse to record a corrected
+payment later.
+
+### ⚠️ A SILENT NO-OP CAUGHT BEFORE IT SHIPPED — `readSyncToken`'s response key
+
+`readSyncToken()` derived the JSON key as `Capitalize(resource)`. The URL path is lowercase
+(`/billpayment/153`) while **Intuit's response key is `BillPayment`** — capitalising the first letter
+yields `Billpayment`, which misses and returns `undefined`.
+
+**That returns a NULL SyncToken, and every caller reads a null as "already gone from QuickBooks" and
+returns `pushed`.** The delete would never have happened and the row would have reported success. The
+function now takes an explicit `responseKey` where the name is not simply capitalised, with the trap
+written at the parameter. Every other call site (`Invoice`, `Vendor`, `Bill`, `Purchase`) was checked
+and is genuinely just capitalised.
+
+### The UI
+
+Owner/Admin now get **Edit** and **Delete** on any expense row, paid included, through the existing
+capture modal — one mount serving both the author's pending edit and §2.4's correction. The delete
+confirm names the consequence when the row has reached QuickBooks: *"It has been sent to QuickBooks, so
+it will be removed there too."* `qb_push_status` was added to `getExpenses()`'s select to support it.
+
+**Regression case 7** in `s182-qb-purchase-routing.live.ts` asserts the **ordering** without a network:
+`bill:void.depends_on_id === bill_payment:void.id`. Without the dependency that test passes
+intermittently — whichever row the claim query happened to return first — which is exactly why it
+asserts the edge rather than the presence of two rows.
+
+`npx tsc --noEmit` real exit **`0`**. **`npx next build` real exit `0`.** Both QB harnesses green:
+**s181 (4) + s182 (7) = 11 tests, real exit `0`.**
