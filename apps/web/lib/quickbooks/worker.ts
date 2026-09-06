@@ -12,6 +12,7 @@ import {
   type QbQueueRow,
 } from './queue';
 import { notifyParked } from './park-notify';
+import { drainWebhookEvents } from './webhook-process';
 import { getAccessToken } from './tokens';
 
 /**
@@ -65,6 +66,15 @@ export interface DrainOutcome {
    * what sent an investigation at the claim query, which was never at fault.
    */
   waiting: number;
+  /**
+   * Inbound webhook notifications applied this pass [F1, M-N].
+   *
+   * ⚠️ THESE ARE SEPARATE FROM THE PUSH COUNTERS ON PURPOSE. The queue counters
+   * describe work going OUT; this describes work coming IN. Folding them
+   * together would make "pushed: 3" mean two different things.
+   */
+  webhooksProcessed: number;
+  webhooksFailed: number;
 }
 
 export async function runQbSync(admin: SupabaseClient): Promise<DrainOutcome> {
@@ -77,6 +87,8 @@ export async function runQbSync(admin: SupabaseClient): Promise<DrainOutcome> {
     failedTerminal: 0,
     skippedNotConnected: 0,
     waiting: 0,
+    webhooksProcessed: 0,
+    webhooksFailed: 0,
   };
 
   // Only tenants that are actually connected. A `needs_reauth` company is
@@ -96,6 +108,34 @@ export async function runQbSync(admin: SupabaseClient): Promise<DrainOutcome> {
     outcome.companiesConsidered += 1;
     const companyId = company.id as string;
 
+    // ⚠️ KEEP THE TOKEN ALIVE FOR EVERY CONNECTED COMPANY [F7, S187].
+    //
+    // The refresh only fires when the stored token has actually expired, so the
+    // usual cost of this line is one cheap DB read. What it buys: a company
+    // that has not invoiced or spent for months still refreshes on schedule.
+    //
+    // ⚠️ BEFORE THIS, `getAccessToken` WAS ONLY REACHED WHEN THERE WAS QUEUED
+    // WORK — the `continue` below skipped it — so a dormant tenant's refresh
+    // token quietly aged out and the customer discovered it by finding the
+    // connection dead.
+    //
+    // ⚠️ WHAT I ASSUMED, because I could not confirm it: that Intuit's 100-day
+    // inactivity expiry still applies ALONGSIDE the newer five-year maximum.
+    // Intuit's November 2025 note describes the 5-year cap as added, not as
+    // replacing the inactivity rule, and their doc pages would not load. This
+    // keep-alive is correct under EITHER reading, which is why it was written
+    // rather than waiting for an answer.
+    const conn = await getAccessToken(admin, companyId);
+
+    // ⚠️ INBOUND FIRST, AND BEFORE THE QUEUE-EMPTY EARLY-OUT [F1, M-N]. A
+    // company with no OUTBOUND backlog still has inbound payments to apply, and
+    // the `continue` below would have skipped them entirely — the same shape as
+    // the dormancy gap in F7. Webhook work must not depend on push work
+    // existing.
+    const inbound = await drainWebhookEvents(admin, companyId);
+    outcome.webhooksProcessed += inbound.processed;
+    outcome.webhooksFailed += inbound.failed;
+
     let rows = await claimDue(admin, companyId, ROWS_PER_COMPANY);
     if (rows.length === 0) {
       // Nothing claimable. Say whether that is because there is nothing to do,
@@ -104,10 +144,13 @@ export async function runQbSync(admin: SupabaseClient): Promise<DrainOutcome> {
       continue;
     }
 
-    const conn = await getAccessToken(admin, companyId);
     if (!conn) {
       // Not connected, needs_reauth, or a transient refresh failure. The rows
       // stay exactly as they are and flow on the next pass.
+      //
+      // ⚠️ COUNTED HERE, NOT AT THE KEEP-ALIVE ABOVE, deliberately: this metric
+      // means "work was waiting and we could not send it". A disconnected
+      // company with an empty queue is idle, not skipped.
       outcome.skippedNotConnected += 1;
       continue;
     }

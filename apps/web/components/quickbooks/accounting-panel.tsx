@@ -22,7 +22,12 @@
 
 import { useState } from 'react';
 import { brand } from '@/lib/brand';
-import type { QueueItem, QueueSummary, QuickBooksConnection } from '@/lib/services/quickbooks';
+import type {
+  QueueItem,
+  QueueSummary,
+  QuickBooksConnection,
+  ReadBudgetSummary,
+} from '@/lib/services/quickbooks';
 import {
   badgeStyle,
   cardStyle,
@@ -440,6 +445,8 @@ function SyncStatusCard({ queue }: { queue: QueueSummary }) {
         <Stat label="Needs attention" value={queue.failedTerminal} />
       </div>
 
+      <ReadBudgetLine budget={queue.readBudget} />
+
       {queue.needsAttention.length === 0 ? (
         <p style={{ color: color.muted, fontSize: '0.875rem', margin: '1rem 0 0' }}>
           Nothing needs your attention.
@@ -452,6 +459,46 @@ function SyncStatusCard({ queue }: { queue: QueueSummary }) {
         </ul>
       )}
     </section>
+  );
+}
+
+/**
+ * §6a — the metered-read counter, surfaced. [F4, S187]
+ *
+ * ⚠️ THE COUNTER EXISTED FROM THE START AND NOTHING READ IT. This line is the
+ * whole of F4's fix: `qb_read_budget` has been incremented on every successful
+ * data-OUT call since the connector shipped, and the conformance audit found no
+ * consumer anywhere in the app.
+ *
+ * ⚠️ NO PERCENTAGE, NO PROGRESS BAR, AND NO CEILING NUMBER — deliberately.
+ * The Builder quota figure this project works from (500,000/month, per
+ * WORKSPACE across every customer) is `7g1-spec.md`'s own S97 research and is
+ * flagged there as **re-confirmation-owed against Intuit**. Rendering an
+ * unverified denominator would turn a caveated figure into a number on a screen
+ * that an Owner reasonably treats as fact — and a "3% used" that is quietly
+ * wrong is worse than no bar at all. Show the count that IS measured; add the
+ * ceiling when the ceiling is confirmed.
+ *
+ * ⚠️ AND THE COUNT IS THIS COMPANY'S, WHILE THE QUOTA IS THE WORKSPACE'S. The
+ * sentence says so, because otherwise a customer reading a small number would
+ * draw exactly the wrong conclusion about how much room is left.
+ */
+function ReadBudgetLine({ budget }: { budget: ReadBudgetSummary }) {
+  const { thisMonth, lastMonth, lastReadAt } = budget;
+
+  return (
+    <div style={{ marginTop: '1rem', paddingTop: '0.875rem', borderTop: `1px solid ${color.cardBorder}` }}>
+      <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap' }}>
+        <Stat label="Reads this month" value={thisMonth} />
+        <Stat label="Last month" value={lastMonth} />
+      </div>
+      <p style={{ color: color.muted, fontSize: '0.8125rem', margin: '0.5rem 0 0' }}>
+        Sending records to QuickBooks is free and unlimited. This counts the times we had to read
+        something back — checking a payment, refreshing your account list. It is your company&rsquo;s
+        share of an allowance we hold across all customers.
+        {lastReadAt ? ` Last read ${formatDate(lastReadAt)}.` : ' Nothing read back yet this month.'}
+      </p>
+    </div>
   );
 }
 

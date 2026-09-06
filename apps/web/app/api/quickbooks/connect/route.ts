@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { appUrl } from '@/lib/app-origin';
 import { randomBytes } from 'crypto';
 import { createClient } from '@/lib/supabase-server';
 import {
@@ -32,7 +33,7 @@ export async function GET(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   if (!user) {
-    return NextResponse.redirect(new URL('/sign-in', request.url));
+    return NextResponse.redirect(appUrl('/sign-in', request));
   }
 
   const { data: profile } = await supabase
@@ -49,7 +50,7 @@ export async function GET(request: NextRequest) {
       `[qb-connect] denied: user=${user.id} role=${profile?.role ?? 'none'} — Owner-only.`
     );
     return NextResponse.redirect(
-      new URL('/dashboard/settings/accounting?qb_error=owner_only', request.url)
+      appUrl('/dashboard/settings/accounting?qb_error=owner_only', request)
     );
   }
 
@@ -58,7 +59,7 @@ export async function GET(request: NextRequest) {
   } catch {
     console.error('[qb-connect] QBO_CLIENT_ID / QBO_CLIENT_SECRET are not set on this deployment.');
     return NextResponse.redirect(
-      new URL('/dashboard/settings/accounting?qb_error=not_configured', request.url)
+      appUrl('/dashboard/settings/accounting?qb_error=not_configured', request)
     );
   }
 

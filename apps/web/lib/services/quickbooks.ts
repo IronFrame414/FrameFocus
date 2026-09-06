@@ -99,6 +99,29 @@ export interface QueueItem {
   conflict: { qbCustomerId: string; displayName: string; sentence: string } | null;
 }
 
+/**
+ * The metered-read counter, as the Accounting screen shows it. [F4, S187]
+ *
+ * ⚠️ THIS COUNT WAS MAINTAINED PERFECTLY AND READ BY NOTHING. `client.ts`
+ * incremented `qb_read_budget` on every 2xx CorePlus call from the day it
+ * shipped, and no query anywhere selected from the table — the conformance
+ * audit found every other reference to be a comment, a doc string, or the
+ * trial-deletion walk. A counter that exists to warn about a total outage had
+ * no consumer, which is the same as not having the counter.
+ *
+ * ⚠️ AND WHAT IT WARNS ABOUT IS A CLIFF. Intuit meters CorePlus (data-OUT)
+ * **per Workspace, across every connected company** — not per realm — and the
+ * Builder tier BLOCKS rather than throttles. Exhausting it stops every
+ * customer's sync at once, with no per-tenant degradation and no notice.
+ */
+export interface ReadBudgetSummary {
+  /** 2xx CorePlus calls this company has made in the current UTC month. */
+  thisMonth: number;
+  /** The same count for the previous month, so the number has a shape. */
+  lastMonth: number;
+  lastReadAt: string | null;
+}
+
 export interface QueueSummary {
   queued: number;
   inFlight: number;
@@ -106,6 +129,15 @@ export interface QueueSummary {
   failedTerminal: number;
   /** Rows a person has to act on: terminal failures and pending conflicts. */
   needsAttention: QueueItem[];
+  /**
+   * ⚠️ CARRIED ON THE QUEUE SUMMARY DELIBERATELY, NOT AS A SECOND PROP.
+   * `AccountingPanel` has TWO mount points — the Settings tab and the
+   * `/dashboard/settings/accounting` route Intuit launches at — and a new prop
+   * is precisely how those two drift out of agreement (PARITY [Josh, S122]).
+   * One reader feeds the Sync status card, so both surfaces get this or
+   * neither does.
+   */
+  readBudget: ReadBudgetSummary;
 }
 
 /**
@@ -133,6 +165,7 @@ export async function getQuickBooksQueueSummary(): Promise<QueueSummary> {
     failedTransient: 0,
     failedTerminal: 0,
     needsAttention: [],
+    readBudget: await readBudgetSummary(supabase),
   };
 
   for (const row of rows) {
@@ -159,4 +192,45 @@ export async function getQuickBooksQueueSummary(): Promise<QueueSummary> {
   }
 
   return summary;
+}
+
+/**
+ * The current and previous month's metered-read counts. [F4, S187]
+ *
+ * ⚠️ NO COMPANY FILTER, AND THAT IS NOT AN OMISSION. This runs as the
+ * signed-in user, and `qb_read_budget_select_owner_admin` already scopes the
+ * table to `get_my_company_id()` for Owner and Admin and returns nothing to
+ * anyone else. A second filter here would be the render-only gate the header
+ * of this file says not to add.
+ *
+ * ⚠️ ABSENT ROW MEANS ZERO, NOT UNKNOWN. The row is created lazily by the
+ * first metered read of the month, so "no row" is the honest answer "nothing
+ * has been read yet" — not a failure to look.
+ */
+async function readBudgetSummary(
+  supabase: Awaited<ReturnType<typeof createClient>>
+): Promise<ReadBudgetSummary> {
+  const now = new Date();
+  const period = (offset: number) =>
+    new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + offset, 1))
+      .toISOString()
+      .slice(0, 10);
+
+  const thisPeriod = period(0);
+  const lastPeriod = period(-1);
+
+  const { data } = await supabase
+    .from('qb_read_budget')
+    .select('period_month, coreplus_reads, last_read_at')
+    .in('period_month', [thisPeriod, lastPeriod]);
+
+  const rows = data ?? [];
+  const current = rows.find((r) => r.period_month === thisPeriod);
+  const previous = rows.find((r) => r.period_month === lastPeriod);
+
+  return {
+    thisMonth: current?.coreplus_reads ?? 0,
+    lastMonth: previous?.coreplus_reads ?? 0,
+    lastReadAt: current?.last_read_at ?? null,
+  };
 }

@@ -178,9 +178,45 @@ export async function getTokenBlob(
   }
 }
 
+/**
+ * Destroy a company's stored tokens. SCRUB FIRST, THEN DELETE. [M-P, S189]
+ *
+ * ⚠️ THE TWO STEPS ARE SEPARATE ROUND TRIPS ON PURPOSE, AND THAT IS THE WHOLE
+ * FIX. If they shared a transaction, a failed DELETE would roll the scrub back
+ * with it and the surviving row would still hold a live refresh token. Sending
+ * them separately means the scrub is already COMMITTED when the delete is
+ * attempted, so the worst end state is an empty husk rather than a working
+ * credential nobody is tracking.
+ *
+ * ⚠️ A FAILED SCRUB MUST NOT SKIP THE DELETE. The delete is the better outcome
+ * of the two; if it succeeds, the scrub was moot anyway. So the scrub failure
+ * is recorded and execution continues, rather than throwing here.
+ *
+ * The caller (`/api/quickbooks/disconnect`) treats a throw from this function
+ * as non-fatal and clears the connection regardless — deliberately, because a
+ * tenant whose Vault row is wedged must still be able to disconnect. What has
+ * changed is what that leaves behind: an orphan that `qb_vault_put` can now
+ * adopt on the next connect, instead of one that locked the tenant out for
+ * good.
+ */
 export async function forgetTokenBlob(admin: SupabaseClient, secretId: string): Promise<void> {
+  let scrubbed = true;
+  const { error: scrubError } = await admin.rpc('qb_vault_scrub', { p_secret_id: secretId });
+  if (scrubError) {
+    scrubbed = false;
+    // ⚠️ NEVER LOG THE PAYLOAD OR THE SECRET'S CONTENT — only that it failed.
+    console.error(`[qb-tokens] Vault scrub failed for secret ${secretId}: ${scrubError.message}`);
+  }
+
   const { error } = await admin.rpc('qb_vault_forget', { p_secret_id: secretId });
-  if (error) throw new Error(`Vault delete failed: ${error.message}`);
+  if (error) {
+    throw new Error(
+      `Vault delete failed: ${error.message}` +
+        (scrubbed
+          ? ' (the blob was scrubbed first, so the orphaned row holds no credential)'
+          : ' ⚠️ AND THE SCRUB ALSO FAILED — a live token blob may remain in Vault')
+    );
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -215,6 +251,44 @@ export interface QboConnection {
  * the blob once: if the stored refresh token has changed underneath us, another
  * process rotated it and we simply use the new one.
  */
+/**
+ * Try to take the refresh lease for a company. [F2, M-O]
+ *
+ * ⚠️ ONE ATOMIC CONDITIONAL UPDATE IS THE WHOLE MECHANISM. Postgres serialises
+ * the two writers, so exactly one gets a row back and holds the lease. There is
+ * no read-then-write window for a second process to slip through.
+ *
+ * A `SELECT … FOR UPDATE` cannot be used here: the refresh is an HTTPS round
+ * trip to Intuit, and a transaction cannot span it.
+ */
+const REFRESH_LEASE_SECONDS = 60;
+
+async function acquireRefreshLease(
+  admin: SupabaseClient,
+  companyId: string
+): Promise<boolean> {
+  const staleBefore = new Date(Date.now() - REFRESH_LEASE_SECONDS * 1000).toISOString();
+  const { data, error } = await admin
+    .from('companies')
+    .update({ qb_refresh_lock_at: new Date().toISOString() })
+    .eq('id', companyId)
+    .or(`qb_refresh_lock_at.is.null,qb_refresh_lock_at.lt.${staleBefore}`)
+    .select('id');
+
+  if (error) {
+    // ⚠️ FAIL OPEN, and say why. If the lease cannot be read we are back to the
+    // pre-M-O behaviour — a possible race — which is strictly better than
+    // refusing to refresh at all and letting every connection expire.
+    console.error(`[qb-tokens] refresh lease failed for company=${companyId}:`, error.message);
+    return true;
+  }
+  return (data ?? []).length > 0;
+}
+
+async function releaseRefreshLease(admin: SupabaseClient, companyId: string): Promise<void> {
+  await admin.from('companies').update({ qb_refresh_lock_at: null }).eq('id', companyId);
+}
+
 export async function getAccessToken(
   admin: SupabaseClient,
   companyId: string
@@ -254,10 +328,34 @@ export async function getAccessToken(
     };
   }
 
+  // ⚠️ ONLY ONE PROCESS MAY PRESENT THIS TOKEN [F2, M-O]. Intuit rotates the
+  // refresh token on roughly every use, and presenting an ALREADY-ROTATED one
+  // revokes the entire authorization chain — the customer is disconnected and
+  // must re-authorise by hand. The recovery below runs after that damage is
+  // done; this prevents it.
+  if (!(await acquireRefreshLease(admin, companyId))) {
+    // Someone else is refreshing right now. Re-read once — if they finished, we
+    // get their new token for free and never make the dangerous call at all.
+    const shared = await getTokenBlob(admin, secretId);
+    if (shared && new Date(shared.access_expires_at).getTime() > Date.now()) {
+      return {
+        companyId,
+        realmId: company.qb_realm_id as string,
+        accessToken: shared.access_token,
+      };
+    }
+    // Still expired: the holder has not finished. Returning null leaves the work
+    // queued for the next drain, which is the connector's normal resting state —
+    // and is far cheaper than racing them.
+    console.log(`[qb-tokens] refresh already in flight for company=${companyId}; deferring.`);
+    return null;
+  }
+
   let fresh: QboTokenBlob;
   try {
     fresh = await refreshTokens(blob.refresh_token);
   } catch (err) {
+    await releaseRefreshLease(admin, companyId);
     if (err instanceof QboTokenError && err.isInvalidGrant) {
       // The race described above — re-read once before condemning the grant.
       const reread = await getTokenBlob(admin, secretId);
@@ -290,6 +388,7 @@ export async function getAccessToken(
   }
 
   await storeRefreshed(admin, companyId, fresh, secretId);
+  await releaseRefreshLease(admin, companyId);
   return { companyId, realmId: company.qb_realm_id as string, accessToken: fresh.access_token };
 }
 

@@ -218,6 +218,34 @@ export async function resolveOrCreateVendor(
 /** Read one object's SyncToken. QuickBooks rejects any update or void without
  *  the CURRENT token — it is the optimistic-concurrency stamp, and a stale one
  *  is a 5010 fault. Metered. */
+/**
+ * Read the WHOLE object, not just its SyncToken. [F10, S187]
+ *
+ * ⚠️ THIS IS THE READ HALF OF READ-MODIFY-WRITE, AND IT COSTS NOTHING EXTRA —
+ * `readSyncToken()` was already making this exact call and throwing the body
+ * away.
+ *
+ * ⚠️ WHY IT MATTERS. QuickBooks REPLACES an object on a full update. Building
+ * the body from only the fields we manage therefore ERASES everything we do not
+ * know about — a customer message, payment terms, a billing email, a shipping
+ * address, custom fields — all of which the customer may have set in QuickBooks
+ * on an invoice we pushed. Merging our changes over the object as it actually
+ * exists is the only shape that cannot silently delete someone else's data.
+ */
+async function readEntity(
+  ctx: DrainContext,
+  resource: string,
+  id: string,
+  responseKey?: string
+): Promise<Record<string, unknown> | null> {
+  const result = (await qboRead(ctx.admin, ctx.conn, `/${resource}/${id}`)) as Record<
+    string,
+    Record<string, unknown> | undefined
+  >;
+  const key = responseKey ?? resource.charAt(0).toUpperCase() + resource.slice(1);
+  return result[key] ?? null;
+}
+
 async function readSyncToken(
   ctx: DrainContext,
   resource: string,
@@ -322,81 +350,28 @@ async function handleCustomerCreate(ctx: DrainContext, row: QbQueueRow): Promise
 }
 
 // ---------------------------------------------------------------------------
-// sub_customer:create — a project becomes a QuickBooks JOB under its client
+// ⚠️ sub_customer:create WAS HERE AND IS GONE [RULED Josh, S103 — M-M]
 // ---------------------------------------------------------------------------
-
-async function handleSubCustomerCreate(ctx: DrainContext, row: QbQueueRow): Promise<HandlerResult> {
-  const { data: project } = await ctx.admin
-    .from('projects')
-    .select('id, name, project_number, contact_id, qb_sub_customer_id')
-    .eq('id', row.entity_id)
-    .eq('company_id', ctx.companyId)
-    .maybeSingle();
-
-  if (!project) return { kind: 'terminal', reason: 'The project no longer exists.' };
-  if (project.qb_sub_customer_id) return { kind: 'pushed' };
-
-  const { data: contact } = await ctx.admin
-    .from('contacts')
-    .select('id, qb_customer_id, company_name, first_name, last_name')
-    .eq('id', project.contact_id as string)
-    .eq('company_id', ctx.companyId)
-    .maybeSingle();
-
-  if (!contact?.qb_customer_id) {
-    // The dependency row should have run first; if it has not, WAIT rather than
-    // fail. A sub-customer with no parent is not a record QuickBooks can hold.
-    return {
-      kind: 'park',
-      reason: 'Waiting for this project’s client to reach QuickBooks first.',
-    };
-  }
-
-  // `project_number` (PRJ-###) plus the job name — both already exist, so no new
-  // source field is needed. QuickBooks requires DisplayName to be unique across
-  // customers AND jobs, which the project number guarantees.
-  const displayName = `${project.project_number} — ${project.name}`;
-
-  let created;
-  try {
-    created = (await qboWrite(ctx.conn, '/customer', {
-      DisplayName: displayName,
-      Job: true,
-      ParentRef: { value: contact.qb_customer_id as string },
-    })) as { Customer?: { Id?: string } };
-  } catch (err) {
-    if (err instanceof QboApiError && err.qbCode === QB_DUPLICATE_NAME_CODE) {
-      // A job name collision is not the §5.2 client-identity question — the
-      // project number makes this name ours. Adopt the existing job.
-      const again = (await qboQuery(
-        ctx.admin,
-        ctx.conn,
-        `select Id from Customer where DisplayName = ${qbQuoteLiteral(displayName)}`
-      )) as { QueryResponse?: { Customer?: Array<{ Id: string }> } };
-      const raced = again.QueryResponse?.Customer?.[0]?.Id;
-      if (raced) {
-        await ctx.admin
-          .from('projects')
-          .update({ qb_sub_customer_id: raced })
-          .eq('id', row.entity_id)
-          .eq('company_id', ctx.companyId);
-        return { kind: 'pushed' };
-      }
-    }
-    throw err;
-  }
-
-  const qbId = created.Customer?.Id;
-  if (!qbId) return { kind: 'terminal', reason: 'QuickBooks accepted the job but returned no id.' };
-
-  await ctx.admin
-    .from('projects')
-    .update({ qb_sub_customer_id: qbId })
-    .eq('id', row.entity_id)
-    .eq('company_id', ctx.companyId);
-
-  return { kind: 'pushed' };
-}
+//
+// Removed: `handleSubCustomerCreate`, which created a QuickBooks Customer with
+// `Job: true` and a `ParentRef`.
+//
+// ⚠️ THE REASON IS A PRICING TIER. Sub-customers require QuickBooks **Plus or
+// Advanced**; Josh runs **Simple Start**. Left as built he would have to upgrade
+// to use his own product, and every contractor on Simple Start would be locked
+// out of the integration.
+//
+// **One Customer per client now. The project travels in the MEMO** — see
+// `projectRefs()` and the `PrivateNote` on invoices and purchases.
+//
+// ⚠️ JOSH HAS ACCEPTED WHAT A MEMO CANNOT DO — it does not group, roll up or
+// report — and does not want another field investigated. **Classes, Locations,
+// Projects and custom fields are all Plus/Advanced too**, so each would
+// reintroduce exactly the problem this removed.
+//
+// ⚠️ `projects.qb_sub_customer_id` IS KEPT AND IS NOW WRITTEN BY NOTHING. The
+// sub-customers it names still exist in QuickBooks with invoices referencing
+// them; the column is the record of which object an old invoice belongs to.
 
 // ---------------------------------------------------------------------------
 // invoice:create — THE flow that makes the pay-link exist (§1.2)
@@ -406,10 +381,42 @@ interface QbInvoiceLine {
   DetailType: string;
   Amount?: number;
   Description?: string;
-  SalesItemLineDetail?: { ItemRef: { value: string }; Qty?: number; UnitPrice?: number };
+  SalesItemLineDetail?: {
+    ItemRef: { value: string };
+    Qty?: number;
+    UnitPrice?: number;
+    TaxCodeRef?: { value: string };
+  };
   DescriptionLineDetail?: Record<string, never>;
   DiscountLineDetail?: { PercentBased: boolean };
 }
+
+/**
+ * ⚠️ THE INVOICE STATES ITS OWN TAX POSITION [F12, S187]. IT DOES NOT INHERIT ONE.
+ *
+ * ⚠️ WHICH SIDE IS AUTHORITATIVE, settled: **ours**. The invoice we sent is the
+ * document the client received and agreed to pay. And the platform carries no
+ * tax on invoices at all — `companies.default_tax_rate` exists but flows into
+ * ESTIMATES only (`estimates-client.ts`), and `invoices` / `invoice_lines` have
+ * no tax column. So `billed_total` is a tax-free figure, and the QuickBooks
+ * invoice must equal it exactly.
+ *
+ * ⚠️ WHY SAY SO WHEN IT ALREADY WORKS. Measured on the sandbox: QuickBooks was
+ * already choosing `NON` by itself and the totals agreed (INV-3675, $3000 both
+ * sides, `TxnTaxDetail: {TotalTax: 0}`). But that was QUICKBOOKS' DEFAULT, on a
+ * company with `TaxPrefs.UsingSalesTax: true` — a default that varies with the
+ * company's tax setup, the customer's exempt status and the item's own setting.
+ * **Relying on someone else's default for the total on a money document is the
+ * bug, whether or not it has fired yet**: the books would silently disagree with
+ * the document the client holds.
+ *
+ * ⚠️ `NON` IS US-SPECIFIC, and that is a deliberate, logged limit. Non-US
+ * QuickBooks uses different codes and `GlobalTaxCalculation` instead. If a
+ * non-US company ever connects, this ref is rejected by Intuit and the push
+ * FAILS LOUDLY with the queue's error — which is the right failure: visible,
+ * not a silently wrong total. Revisit here when that day comes.
+ */
+const NON_TAXABLE = { value: 'NON' } as const;
 
 /**
  * Build the QuickBooks invoice lines.
@@ -466,7 +473,7 @@ function buildInvoiceLines(
     DetailType: 'SalesItemLineDetail',
     Amount: money(line.billed_amount),
     Description: line.description,
-    SalesItemLineDetail: { ItemRef: { value: incomeItemId } },
+    SalesItemLineDetail: { ItemRef: { value: incomeItemId }, TaxCodeRef: NON_TAXABLE },
   }));
 
   // A bill with no derived lines (a lump-sum draw) is legitimate: one line for
@@ -476,7 +483,7 @@ function buildInvoiceLines(
       DetailType: 'SalesItemLineDetail',
       Amount: money(invoice.billed_total),
       Description: invoice.title || 'Progress billing',
-      SalesItemLineDetail: { ItemRef: { value: incomeItemId } },
+      SalesItemLineDetail: { ItemRef: { value: incomeItemId }, TaxCodeRef: NON_TAXABLE },
     });
   }
 
@@ -538,15 +545,17 @@ async function handleInvoiceCreate(ctx: DrainContext, row: QbQueueRow): Promise<
     };
   }
 
-  const { data: project } = await ctx.admin
-    .from('projects')
-    .select('id, qb_sub_customer_id')
-    .eq('id', invoice.project_id as string)
-    .eq('company_id', ctx.companyId)
-    .maybeSingle();
+  // ⚠️ THE CLIENT'S CUSTOMER, NOT A JOB [M-M]. _Superseded: the invoice waited
+  // for `projects.qb_sub_customer_id` and parked with "Waiting for this project
+  // to reach QuickBooks first."_ Sub-customers are removed (Simple Start), so
+  // the only thing an invoice waits for is the CLIENT.
+  const { customerRef, note: projectNote } = await projectRefs(
+    ctx,
+    invoice.project_id as string
+  );
 
-  if (!project?.qb_sub_customer_id) {
-    return { kind: 'park', reason: 'Waiting for this project to reach QuickBooks first.' };
+  if (!customerRef) {
+    return { kind: 'park', reason: 'Waiting for this client to reach QuickBooks first.' };
   }
 
   const { data: lines } = await ctx.admin
@@ -576,7 +585,20 @@ async function handleInvoiceCreate(ctx: DrainContext, row: QbQueueRow): Promise<
   }
 
   const body: Record<string, unknown> = {
-    CustomerRef: { value: project.qb_sub_customer_id as string },
+    CustomerRef: { value: customerRef },
+    // ⚠️ THE PROJECT NOW LIVES HERE AND NOWHERE ELSE ON AN INVOICE [M-M].
+    // Before the sub-customer removal the project WAS the CustomerRef, and the
+    // invoice carried no memo at all — so without this line the removal would
+    // have left QuickBooks holding invoices with no indication of which job they
+    // belong to. `DocNumber` still carries our invoice number, but nothing in
+    // QuickBooks alone would have named the project.
+    //
+    // ⚠️ `PrivateNote`, NOT `CustomerMemo` — a reversible default, logged.
+    // PrivateNote maps to the **Memo** field on the QuickBooks form, which is
+    // what "the memo" means to someone reading it there, and it matches what the
+    // Purchase path already does. Switch to `CustomerMemo` (1000 chars, PRINTS
+    // ON THE INVOICE the client receives) if Josh wants clients to see it.
+    ...(projectNote ? { PrivateNote: projectNote } : {}),
     Line: buildInvoiceLines(
       lineRows,
       {
@@ -713,10 +735,29 @@ async function handleInvoiceUpdate(ctx: DrainContext, row: QbQueueRow): Promise<
   // update, and a sparse update that omits `Line` leaves the old lines in place
   // — an amended invoice would then show the OLD amounts in the customer's
   // books while reading as synced here. Send the full object.
+  // ⚠️ GUARDED, WHERE THE OLD HELPER WAS NOT [M-M]. `subCustomerRef` returned
+  // `{ value: '' }` when unset and this line passed it straight to Intuit.
+  const updateCustomerRef = await customerRefForProject(ctx, invoice.project_id as string);
+  if (!updateCustomerRef) {
+    return { kind: 'park', reason: 'Waiting for this client to reach QuickBooks first.' };
+  }
+  const { note: updateNote } = await projectRefs(ctx, invoice.project_id as string);
+
+  // ⚠️ MERGE OVER WHAT QUICKBOOKS ACTUALLY HOLDS [F10]. A full update replaces
+  // the object, so anything we omit is DELETED — including fields the customer
+  // set themselves in QuickBooks (BillEmail, SalesTermRef, CustomerMemo,
+  // CustomField, addresses). `existing` is the object as it stands; our managed
+  // fields are spread AFTER it so they win, and everything else survives.
+  const existingInvoice =
+    (await readEntity(ctx, 'invoice', invoice.qb_invoice_id as string)) ?? {};
+
   await qboWrite(ctx.conn, '/invoice', {
+    ...existingInvoice,
     Id: invoice.qb_invoice_id,
     SyncToken: syncToken,
-    CustomerRef: await subCustomerRef(ctx, invoice.project_id as string),
+    CustomerRef: { value: updateCustomerRef },
+    // The project rides in the memo now — see the invoice:create note.
+    ...(updateNote ? { PrivateNote: updateNote } : {}),
     Line: buildInvoiceLines(
       (lines ?? []) as Array<{ description: string; billed_amount: number }>,
       {
@@ -743,14 +784,34 @@ async function handleInvoiceUpdate(ctx: DrainContext, row: QbQueueRow): Promise<
   return { kind: 'pushed' };
 }
 
-async function subCustomerRef(ctx: DrainContext, projectId: string): Promise<{ value: string }> {
+/**
+ * The QuickBooks **Customer** for a project's client. [M-M, superseding
+ * `subCustomerRef`]
+ *
+ * ⚠️ RETURNS NULL RATHER THAN AN EMPTY STRING, and that is the fix to a real
+ * edge the old helper had: it returned `{ value: '' }` when unset, and
+ * `handleInvoiceUpdate` passed that straight to Intuit as `CustomerRef`. Null
+ * forces every caller to decide what to do about a missing customer.
+ */
+async function customerRefForProject(
+  ctx: DrainContext,
+  projectId: string
+): Promise<string | null> {
   const { data: project } = await ctx.admin
     .from('projects')
-    .select('qb_sub_customer_id')
+    .select('contact_id')
     .eq('id', projectId)
     .eq('company_id', ctx.companyId)
     .maybeSingle();
-  return { value: (project?.qb_sub_customer_id as string) ?? '' };
+  if (!project?.contact_id) return null;
+
+  const { data: contact } = await ctx.admin
+    .from('contacts')
+    .select('qb_customer_id')
+    .eq('id', project.contact_id as string)
+    .eq('company_id', ctx.companyId)
+    .maybeSingle();
+  return (contact?.qb_customer_id as string | null) ?? null;
 }
 
 // ---------------------------------------------------------------------------
@@ -981,10 +1042,9 @@ async function handlePaymentCreate(ctx: DrainContext, row: QbQueueRow): Promise<
       };
     }
 
-    if (!customerRef) {
-      const ref = await subCustomerRef(ctx, invoice.project_id as string);
-      customerRef = ref.value || null;
-    }
+    // ⚠️ THE SUB-CUSTOMER BRANCH WAS HERE AND IS GONE [M-M]. It resolved the
+    // project's job and fell through to the client below; there is only the
+    // client now, so the fallback that follows the loop IS the whole answer.
 
     lines.push({
       Amount: money(Number(application.amount)),
@@ -1085,12 +1145,10 @@ async function handleRefundCreate(ctx: DrainContext, row: QbQueueRow): Promise<H
     return { kind: 'park', reason: 'Waiting for a QuickBooks income item to be chosen.' };
   }
 
-  // A refund on a project belongs to that job; one without belongs to the client.
+  // ⚠️ EVERY REFUND BELONGS TO THE CLIENT NOW [M-M]. _Superseded: "A refund on a
+  // project belongs to that job; one without belongs to the client."_ There are
+  // no jobs, so the client branch below is the only one left.
   let customerRef: string | null = null;
-  if (refund.project_id) {
-    const ref = await subCustomerRef(ctx, refund.project_id as string);
-    customerRef = ref.value || null;
-  }
   if (!customerRef) {
     const { data: contact } = await ctx.admin
       .from('contacts')
@@ -1274,19 +1332,24 @@ async function purchaseSettings(
 async function projectRefs(
   ctx: DrainContext,
   projectId: string
-): Promise<{ jobRef: string | null; note: string | null }> {
+): Promise<{ customerRef: string | null; note: string | null }> {
   const { data: project } = await ctx.admin
     .from('projects')
-    .select('qb_sub_customer_id, project_number, name')
+    .select('project_number, name')
     .eq('id', projectId)
     .eq('company_id', ctx.companyId)
     .maybeSingle();
 
-  if (!project) return { jobRef: null, note: null };
+  if (!project) return { customerRef: null, note: null };
   const number = project.project_number as string | null;
   const name = project.name as string | null;
   const note = [number, name].filter(Boolean).join(' — ') || null;
-  return { jobRef: (project.qb_sub_customer_id as string | null) ?? null, note };
+
+  // ⚠️ THE CLIENT'S CUSTOMER, NOT A JOB [M-M]. This used to be
+  // `projects.qb_sub_customer_id`. Attaching the line to the client is the most
+  // association Simple Start allows, and it costs nothing; the PROJECT itself
+  // now lives only in `note`, which the caller puts in the memo.
+  return { customerRef: await customerRefForProject(ctx, projectId), note };
 }
 
 async function buildPurchaseBody(
@@ -1296,7 +1359,7 @@ async function buildPurchaseBody(
   accountId: string,
   vendorId: string | null
 ): Promise<Record<string, unknown>> {
-  const { jobRef, note } = await projectRefs(ctx, expense.project_id);
+  const { customerRef, note } = await projectRefs(ctx, expense.project_id);
 
   return {
     // The account the money came FROM.
@@ -1316,7 +1379,9 @@ async function buildPurchaseBody(
         AccountBasedExpenseLineDetail: {
           // The account it was spent ON.
           AccountRef: { value: accountId },
-          ...(jobRef ? { CustomerRef: { value: jobRef }, BillableStatus: 'NotBillable' } : {}),
+          ...(customerRef
+            ? { CustomerRef: { value: customerRef }, BillableStatus: 'NotBillable' }
+            : {}),
         },
       },
     ],
@@ -1392,7 +1457,14 @@ async function handlePurchaseUpdate(ctx: DrainContext, row: QbQueueRow): Promise
 
   // Full object, not sparse — QuickBooks REPLACES the Line array, and omitting
   // it leaves the old amount in place while this side reads as synced.
+  // ⚠️ MERGE, DO NOT REPLACE [F10] — see the invoice update. A Purchase carries
+  // customer-set fields too (PaymentMethodRef, DocNumber, attachments' refs),
+  // and a body built only from what we manage would erase them.
+  const existingPurchase =
+    (await readEntity(ctx, 'purchase', expense.qb_purchase_id as string)) ?? {};
+
   await qboWrite(ctx.conn, '/purchase', {
+    ...existingPurchase,
     Id: expense.qb_purchase_id,
     SyncToken: syncToken,
     ...(await buildPurchaseBody(ctx, expense, settings.value, account.id, vendorId)),
@@ -1491,7 +1563,7 @@ async function handleExpensePaymentCreate(
   }
 
   const vendorId = await resolveOrCreateVendor(ctx, expense.supplier);
-  const { jobRef, note } = await projectRefs(ctx, expense.project_id);
+  const { customerRef, note } = await projectRefs(ctx, expense.project_id);
 
   const created = (await qboWrite(ctx.conn, '/purchase', {
     AccountRef: { value: settings.value.accountId },
@@ -1506,7 +1578,9 @@ async function handleExpensePaymentCreate(
         Description: expense.description ?? expense.supplier,
         AccountBasedExpenseLineDetail: {
           AccountRef: { value: account.id },
-          ...(jobRef ? { CustomerRef: { value: jobRef }, BillableStatus: 'NotBillable' } : {}),
+          ...(customerRef
+            ? { CustomerRef: { value: customerRef }, BillableStatus: 'NotBillable' }
+            : {}),
         },
       },
     ],
@@ -1538,8 +1612,14 @@ export async function handleQueueRow(
   switch (key) {
     case 'customer:create':
       return handleCustomerCreate(ctx, row);
+    // ⚠️ A NO-OP SUCCESS, AND `pushed` IS THE HONEST ANSWER [M-M]. Sub-customers
+    // are removed, so there is nothing to do — but this must NOT be terminal.
+    // `claimDue()` releases a dependant only when its dependency reaches
+    // `pushed`, and rebuild-test had a live `customer -> sub_customer -> invoice`
+    // chain queued when this shipped. Failing this row would strand that invoice
+    // forever; `pushed` releases it in the same drain.
     case 'sub_customer:create':
-      return handleSubCustomerCreate(ctx, row);
+      return { kind: 'pushed' };
     case 'invoice:create':
       return handleInvoiceCreate(ctx, row);
     case 'invoice:update':

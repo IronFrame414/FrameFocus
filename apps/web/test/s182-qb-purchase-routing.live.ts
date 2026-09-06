@@ -145,7 +145,7 @@ describe('S182 — receipts become Purchases; payables never sync', () => {
     expect(rows).not.toContain('bill:create');
   });
 
-  it('2 — the receipt depends on the job chain, so the project can be attached', async () => {
+  it('2 — the receipt waits for the CLIENT, so the project can be attached', async () => {
     const id = await approveExpense({ supplier: 'S182 chain probe' });
     const { data } = await admin
       .from('qb_sync_queue')
@@ -153,16 +153,21 @@ describe('S182 — receipts become Purchases; payables never sync', () => {
       .eq('entity_id', id)
       .eq('entity_type', 'purchase')
       .single();
-    // NULL only if the customer AND sub-customer both already exist — which is
-    // true once an earlier case has pushed them. Either way it must not be a
-    // dangling id.
+    // NULL only if the customer already exists — true once an earlier case has
+    // pushed it. Either way it must not be a dangling id.
     if (data?.depends_on_id) {
       const { data: dep } = await admin
         .from('qb_sync_queue')
         .select('entity_type')
         .eq('id', data.depends_on_id as string)
         .single();
-      expect(['customer', 'sub_customer']).toContain(dep?.entity_type);
+      // ⚠️ TIGHTENED [M-M, S186]. _Superseded: `expect(['customer',
+      // 'sub_customer']).toContain(...)`._ Sub-customers are removed (they
+      // need QuickBooks Plus; Josh runs Simple Start), so the ONLY dependency
+      // a push can now wait on is the client's Customer. The old assertion
+      // still passed after the removal — it admitted either — which is exactly
+      // the kind of test that stops guarding anything without going red.
+      expect(dep?.entity_type).toBe('customer');
     }
   });
 
@@ -170,6 +175,17 @@ describe('S182 — receipts become Purchases; payables never sync', () => {
   // ⚠️ THE FOUR PAYABLE TERMS. Each must block the push on its own.
   // `state` is only ONE of them, which is the whole point of this block.
   // -------------------------------------------------------------------------
+  it('2b — NOTHING enqueues a sub_customer any more [M-M]', async () => {
+    // Belt to the trigger's braces: `qb_enqueue_job_chain` no longer has the
+    // sub_customer arm, so a fresh approval must produce customer -> purchase
+    // with nothing between. Sub-customers need QuickBooks Plus; Josh runs
+    // Simple Start.
+    const id = await approveExpense({ supplier: 'S182 no-subcustomer' });
+    const rows = await queueFor(id);
+    expect(rows.some((r) => r.startsWith('sub_customer'))).toBe(false);
+    expect(rows).toContain('purchase:create');
+  });
+
   it('3 — a payable NEVER enqueues, by any of its four independent terms', async () => {
     const committed = await approveExpense({ state: 'committed' });
     expect(await queueFor(committed), 'state=committed is a commitment').toEqual([]);

@@ -559,3 +559,962 @@ F1 and should go first on effort alone.**
    project.
 5. **D — run one receipt against the real Simple Start company** as soon as production keys allow.
 6. F7, F3, F4/F8, F6 as before.
+
+---
+
+# ADDENDUM 2 — three items recorded, not fixed [S186]
+
+> **Read-only.** Handed to this run as "record without fixing". ⚠️ **Two of the three are not quite
+> what the note said, and recording them verbatim would have put a false claim in the register.**
+> Checked against the code before writing. **None is fixed here** — Part B is this run's work.
+
+### N1 — ⚠️ THE `parked` COUNTER IS PRESENT AND WORKING. The note is wrong.
+
+**Claim as handed over:** *"The `parked` counter is missing from the worker's outcome shape — the
+drain reports `parked: 0` while rows park."*
+
+**Measured:** `parked` is declared (`worker.ts:52`), initialised (`:75`) and incremented on every park
+(`:174`). It has been observed firing in two separate runs:
+
+```
+S182 park proof   -> {"companiesDrained":1,"pushed":0,"parked":1,...}
+S184 §4 proof     -> {"companiesDrained":1,"pushed":1,"parked":0,...}
+```
+
+**Rank: NOTED — nothing to fix.**
+
+⚠️ **The likely real observation behind the note:** a drain that reports `parked: 0` while a row *is*
+parked is the **normal** reading once the row has already parked on an earlier pass — a parked row is
+not re-claimed until its 5-minute clock expires, so subsequent drains legitimately report
+`parked: 0` **and `waiting: 1`**. That `waiting` field exists precisely to make that case legible
+(S181, F-N in §5). **If `waiting` was 0 too, that is a different and real bug — but it was not
+reproduced here.**
+
+### N2 — `intuit_tid` is captured NOWHERE, not "only on failures"
+
+**Claim as handed over:** *"`intuit_tid` is captured only on FAILURES."*
+
+**Measured:** `grep -rn "intuit_tid\|intuit-tid" apps/web` returns **nothing**. The header is read on
+neither the success nor the failure path — `call()` (`client.ts:70-123`) reads `response.text()` and
+parses the fault body, and **never touches `response.headers`**.
+
+**So the gap is wider than reported: no QuickBooks call, successful or failed, has an Intuit
+transaction id recorded.** ⚠️ **`intuit-tid` is the first thing Intuit support asks for**, and without
+it a "QuickBooks shows the wrong figure" report cannot be escalated — for a *successful* call least
+of all, since there is no error text to fall back on either.
+
+**Rank: HARDENING.** ⚠️ **But note it is worth more than most HARDENING items**, because its value is
+realised exactly when something has already gone wrong on a money path.
+
+**Shape of the fix (not done):** read `response.headers.get('intuit-tid')` in `call()`; store it on
+`qb_sync_queue` (a `last_intuit_tid` column) and on the pushed record's `qb_synced_at` sibling. One
+column and three lines in the client.
+
+### N3 — Sales tax: ⚠️ NEITHER WINS. The two are computed independently and never reconciled.
+
+**The question asked:** *"EZ Binder carries a rate and QuickBooks computes its own. Which wins? Could
+an invoice show one total here and another there?"*
+
+**What is actually true, measured:**
+
+| | Finding |
+| --- | --- |
+| Platform-side rate | `companies.default_tax_rate` exists — but it flows into **ESTIMATES only** (`estimates-client.ts:379`, `tax_rate: company.default_tax_rate`). |
+| Invoice-side rate | ⚠️ **`invoices` and `invoice_lines` have NO tax column at all** — confirmed against the live schema. |
+| What the connector sends | ⚠️ **No tax fields whatsoever.** The invoice body (`entities.ts:576-600`) carries `CustomerRef`, `Line`, `DocNumber`, `TxnDate`, `DueDate` and the three `AllowOnline*` flags — **no `TxnTaxDetail`, no `GlobalTaxCalculation`.** |
+
+**So the answer to "which wins" is neither — the question has no contest in it today.** The platform
+does not put tax on an invoice, so there is nothing to send; QuickBooks then applies **whatever the
+Customer's own default tax code says**, entirely outside our control or knowledge.
+
+> ⚠️ **CAN THE TOTALS DIVERGE? YES — and this is the part worth Josh's attention.**
+>
+> If the QuickBooks customer carries a default tax code, **QuickBooks will add tax that EZ Binder
+> never showed**, and the QuickBooks invoice total will exceed ours. Nothing in the build detects
+> that: the push writes `qb_push_status = 'pushed'` on a 2xx and never compares totals back.
+>
+> ⚠️ **It is invisible in our sandbox** — the fixture customers have no tax code — **so the handshake
+> could not have caught it and did not.**
+
+**Rank: BREAKS IN PRODUCTION (conditional on the customer having a tax code) — recorded, not
+investigated further, per this run's scope.**
+
+**What would settle it** (one read, no write): fetch a real customer from a production realm and check
+`DefaultTaxCodeRef`. **Not done — production is out of scope for this run.**
+
+---
+
+# ADDENDUM 3 — one finding surfaced by the sub-customer removal [S186]
+
+> **Recorded, not fixed** — outside this run's two jobs. Found while draining a real queue, not by
+> reading.
+
+### N4 — ⚠️ A DEPENDANT WHOSE DEPENDENCY GOES `failed_terminal` WAITS FOREVER
+
+**Rank: BREAKS IN PRODUCTION (silent, and it strands money documents)**
+
+**Observed on rebuild-test**, on Josh's own queued rows rather than a contrived case:
+
+```
+customer:create      = failed_terminal   "The client record no longer exists."
+sub_customer:create  = queued (waits on customer)      <- never claimable
+invoice:create       = queued (waits on sub_customer)  <- never claimable
+```
+
+`claimDue()` releases a dependant **only when its dependency reaches `pushed`**
+(`queue.ts:199-201` — `satisfied` is built solely from `d.status === 'pushed'`). **There is no
+propagation of terminal failure down the chain.** So when a dependency dies permanently, everything
+behind it sits `queued` forever — **claimable by nothing, retried by nothing, and counted by the
+`waiting` field as though it were merely patient.**
+
+⚠️ **It reads as healthy.** The rows are `queued`, not failed. `attempts` stays 0. The drain reports
+`waiting: N` — which S181 added precisely so a stalled queue would be visible, and which here says
+"work is waiting" when the truth is "work can never run".
+
+**How it happens in production**, no test-data weirdness required: any terminal failure on a customer
+push — a contact deleted between enqueue and drain, a `6240` duplicate-name conflict resolved the
+wrong way, a QuickBooks-side validation refusal — strands every invoice for that client.
+
+⚠️ **This is not caused by the sub-customer removal and predates it.** The removal shortens the chain
+(one dependency instead of two), which narrows the exposure but does not close it: an
+`invoice:create` still depends on a `customer:create` that can go terminal.
+
+**Fix, when it is scheduled:** when `markFailed()` writes `failed_terminal`, cascade to the rows whose
+`depends_on_id` is that row — either failing them with an inherited reason ("the client this invoice
+belongs to could not be created") or, better, **surfacing them through the existing
+`qb_sync_blocked` notification (M-H) so a person is told rather than a counter being incremented.**
+The dependency edge already exists in the table; nothing new is needed to find them.
+
+**Note for the queue's `waiting` counter:** it should probably distinguish *waiting on a live
+dependency* from *waiting on a dead one*. The second is not waiting.
+
+---
+
+# S187 — REMEDIATION RECORD
+
+*What this run actually did to the findings above. Written at the end of the run, from the commits
+and the command output, not from the plan.*
+
+> ⚠️ **Two findings came back different from how they were filed.** F13's premise was wrong — the
+> counter it says is missing has existed since the worker shipped — and the F10 exposure was
+> narrower than the finding described. Both are corrected in place below rather than quietly built
+> to. **A remediation record that only reports successes is not a record.**
+
+---
+
+## 1. What shipped, in order
+
+| # | Finding | Commit | Scope |
+| --- | --- | --- | --- |
+| 1 | **C** — disconnect leaves link columns behind | `b70de82` | `disconnect-resets.ts` (new), `disconnect/route.ts` |
+| 2 | **C-guard** — the link census test | `b70de82` | `test/s187-qb-link-census.test.ts` (new, 6 cases) |
+| 3 | **F1** — the webhook did all its work before answering | `c4e6997` + **M-N** | `webhook/route.ts`, `webhook-process.ts` (new), `worker.ts` |
+| 4 | **F12** — sales lines carried the company's default tax code | `37777aa` | `entities.ts` |
+| 5 | **F10** — a full-object update blanked fields we do not model | `37777aa` | `entities.ts` |
+| 6 | **F2** — two processes could refresh the same token | `2fcba89` + **M-O** | `tokens.ts`, migration, `database.ts` |
+| 7 | **F3** — signature compared base64 strings, not digest bytes | `8d9f663` | `webhook-verify.ts` |
+| 8 | **F7** — a dormant connection never refreshed | `1ce9dc6` | `worker.ts` |
+| 9 | **F4** — the read counter had no consumer | `fe67e80` | `services/quickbooks.ts`, `accounting-panel.tsx` |
+| 10 | **F13** — proof the drain reports `parked` | `1abcbf2` | `test/s187-qb-drain-parked.live.ts` (new, 4 cases) |
+
+Earlier in the same branch: `05ff25a` (**M-M**, sub-customers removed), `897d06d` and `43dd329`
+(audit addenda 2 and 3).
+
+**Deferred, not built, exactly as instructed: F5, F6, F8.** F5 has no code fix available — Intuit
+accepts any `minorversion` silently, so the pin cannot be validated from here; it is a
+re-read-the-page-each-release-cycle item. F6 (the discovery document) and F8 (surface the reconnect
+deadline) are unstarted and unblocked.
+
+---
+
+## 2. Migrations — rebuild-test AND the ledger
+
+**Three migrations this branch. All applied to rebuild-test only. Production untouched.**
+
+| Migration | What it adds | Applied | Ledger row |
+| --- | --- | --- | --- |
+| `20261460000000_qb_remove_sub_customers` (M-M) | drops the sub-customer path; project moves to the memo | ✅ | ✅ repaired by hand |
+| `20261470000000_qb_webhook_deferred_processing` (M-N) | `processed_at`, `process_attempts`, `process_error` | ✅ | ✅ repaired by hand |
+| `20261480000000_qb_refresh_lease` (M-O) | `companies.qb_refresh_lock_at` | ✅ | ✅ repaired by hand |
+
+⚠️ **The ledger repair is not optional and is not automatic.** MCP `apply_migration` writes no
+`supabase_migrations.schema_migrations` row, so each was inserted by hand and then verified by
+reading the table back. Verified at end of run — all three present, versions `…460000`, `…470000`,
+`…480000`. Without that row the next `supabase db push` re-runs an applied migration.
+
+`database.ts` was regenerated after M-O (10,219 → 10,231 lines) and committed with it.
+
+---
+
+## 3. Verification — the printed exit lines
+
+Every line below was read from the command's own printed status, not a wrapper's echo and not a
+summary.
+
+| Check | Result | Exit line |
+| --- | --- | --- |
+| `npx tsc --noEmit` | clean | **0** |
+| `npx next build` | **compiled**, 185 routes, `/dashboard/settings/accounting` among them | **0** |
+| `npx vitest run` (full unit suite) | **1053 passed, 1 failed** (1054) | **1** |
+| `webhook-verify.test.ts` | 13 passed | **0** |
+| `s187-qb-link-census.test.ts` | 6 passed | **0** |
+| `s187-qb-drain-parked.live.ts` | 4 passed | **0** |
+| live QB battery (7 files) | **76 passed, 5 failed** (81) | **1** |
+
+⚠️ **The build was run, not inferred from the type-check.** `tsc --noEmit` says nothing about a
+route module exporting a symbol Next rejects — the trap `disconnect-resets.ts` exists to avoid — so
+"pages must compile" was answered by `next build` printing exit 0.
+
+### 3a. ⚠️ The red results, and whether this run caused them
+
+**Neither is caused by this run's changes, and both were proven so rather than asserted.**
+
+**Unit suite — `s131-dashboard-access.test.ts`, 1 case.** It asserts `lib/device.ts` must not
+mention `CompanyRole` or `DASHBOARD_ROLES`; `device.ts` imports `CompanyRole` at line 1, put there
+by `1ed3d10` (*"[Nav] #101: desktop/mobile surface toggle"*), an ancestor of this branch. Checked
+out the branch point `0953822` and ran the file there: **fails identically, 1 failed / 10 passed.**
+Nothing in this run touched either file. **Inherited. Not fixed here — it belongs to the Nav work,
+and inventing a fix for it in a QuickBooks run is the drift the prompt forbids.**
+
+**Live battery — 5 cases, and they are all one thing.** `s143-Q5`, `s148-Q4` and `s149-G` (×2) all
+assert a world in which **the connector has never run**: that every `qb_*_id` is still null, that
+the company's Vault secret does not exist yet, that no `qb_read_budget` row exists for this month.
+7G is now connected to the sandbox and has pushed real objects, so invoice `146`, customer `62`, a
+real token secret and a real September counter row all exist. Ran the same three files at the
+branch point: **4 failed there too.**
+
+> ### ⚠️ AND THE FIFTH ONE IS WORSE THAN STALE — `s149-A` DESTROYS LIVE CONNECTOR STATE TO GO GREEN
+>
+> `s149-A` expects `contacts.qb_customer_id` to be **null**, and its `afterAll` **nulls it** as
+> cleanup (`s149-qb-queue-webhooks.live.ts:128`). So the file **fails on the first run and passes on
+> the second** — because the first run deleted the data that made it fail. That is precisely why it
+> appeared to pass at the branch point and fail at HEAD: the HEAD battery ran first and nulled the
+> link; the branch-point run then found it already gone. **Run order, not code.** Confirmed by
+> restoring the link and re-running at HEAD: it fails again.
+>
+> **This is not a cosmetic test smell.** Karen Foster's contact was linked to QuickBooks Customer
+> **62**; the harness nulled it. A contact with no `qb_customer_id` is re-pushed as a **new
+> customer**, so the next sync would have created a **duplicate Customer 62** in the connected
+> company's books. **The link was restored by hand at the end of this run and verified back at
+> `'62'`.**
+>
+> It is the S157 rule's own failure mode wearing its worst face: a test that makes itself green by
+> corrupting the state it was written to protect. **Recorded, not fixed — it is not one of the
+> listed findings.** Whoever picks it up: invert it, do not delete it, and take the `afterAll` out.
+
+---
+
+## 4. The five proofs asked for in §3 of the prompt
+
+1. **The webhook answers before it works.** `webhook/route.ts` now verifies the signature, inserts
+   the event rows and returns `{ok, recorded, duplicates}`. Every read, token refresh and DB write
+   moved to `webhook-process.ts`, drained by the worker. Intuit's 3-second budget is now spent on a
+   signature check and one insert.
+2. **A failed notification is retried by us.** `processed_at` separates *received* from *acted on*.
+   The UNIQUE index still dedupes deliveries; a duplicate now answers 200 and **leaves an
+   unprocessed row alone** for the worker. Before M-N, a delivery that timed out mid-processing was
+   deduped away on Intuit's retry and lost for good.
+3. **One refresh at a time.** M-O's 60-second lease on `companies.qb_refresh_lock_at`; exactly one
+   caller wins the conditional UPDATE. Exercised live — the F13 drain called `getAccessToken()`
+   twice through the lease path and completed both times.
+4. **The disconnect forgets everything.** `QB_LINK_RESETS` covers all eight tables;
+   `s187-qb-link-census.test.ts` parses the **generated** `database.ts` and fails if any `qb_%_id`
+   column is in neither the reset list nor the exempt map. Three columns were missing when it was
+   written.
+5. **The drain reports a non-zero `parked`.** `s187-qb-drain-parked.live.ts`, 4 cases, exit line 0.
+
+---
+
+## 5. ⚠️ F13 — THE FINDING WAS WRONG, AND HERE IS THE CORRECTION
+
+**Filed as:** *"the drain never reports `parked`."*
+
+**It always has.** `DrainOutcome.parked` is declared at `worker.ts:53`, incremented at
+`worker.ts:217` on every park, and `/api/cron/qb-sync` returns the outcome object verbatim. **No
+code was written to close F13**, and any claim that it was would be false.
+
+What was genuinely missing is a **proof**. The counter had never been watched increment; "it is
+wired" rested entirely on reading the code — the same standard the S181 investigation failed
+against, where a claim query that *appeared* to match was believed for an hour and was never the
+problem. So F13 shipped as a live harness rather than a fix.
+
+**The harness parks without touching Intuit**, deliberately: an approved refund with no
+`qb_object_type` parks at `entities.ts:1126`, before the handler looks anything up. No CorePlus
+quota spent, nothing written to the sandbox's books. **The queue row is produced by the real
+`qb_enqueue_refund` trigger on approval**, not seeded — seeding `qb_sync_queue` directly would have
+proved the counter and skipped everything that has to work for the counter to matter.
+
+Its four cases: the trigger fires · the drain returns `parked ≥ 1` with `pushed: 0` · the park
+leaves the row **`queued`** with the five-minute clock rather than failing it · a second drain
+reports it as **`waiting`**, not parked twice.
+
+---
+
+## 6. ⚠️ F7 — WHAT WAS ASSUMED ABOUT THE 100-DAY RULE
+
+**The change:** `runQbSync` now calls `getAccessToken()` for **every connected company**, above the
+queue-empty `continue` that previously skipped it. A company that does not invoice or spend for
+months now refreshes on schedule instead of discovering the connection dead.
+
+**The assumption, stated because it could not be confirmed:** that Intuit's **100-day inactivity
+expiry still applies alongside** the newer five-year maximum. Intuit's November 2025 note describes
+the five-year cap as *added*, not as *replacing* the inactivity rule, and their documentation pages
+would not load during the audit (§7) or during this run.
+
+⚠️ **The change is correct under either reading**, which is why it was written rather than held for
+an answer. If the 100-day rule is gone, a keep-alive costs one cheap DB read per company per cron
+tick and refreshes only when the stored token has actually expired. If it still stands, it is the
+difference between a working connection and a customer re-authorising by hand. **The asymmetry is
+what made this safe to decide without the answer.** It should still be confirmed.
+
+`skippedNotConnected` deliberately stays below the keep-alive: that metric means *"work was waiting
+and we could not send it"*, and a disconnected company with an empty queue is idle, not skipped.
+Moving it would have quietly changed what the number means.
+
+---
+
+## 7. ⚠️ F4 — WHY THERE IS NO PROGRESS BAR
+
+The counter is surfaced on the Sync status card as two numbers — reads this month, reads last month
+— plus the date of the last one, and a plain sentence saying that **sending** records is free and
+that this is the company's share of an allowance held across all customers.
+
+**No percentage, no bar, no ceiling number, and that is a decision rather than an omission.** The
+500,000/month Builder quota this project works from is `7g1-spec.md`'s own S97 research, which that
+document explicitly flags as **re-confirmation-owed against Intuit** ("the numbers are
+re-confirmation-owed; the ruling is not"). Rendering an unverified denominator turns a caveated
+figure into a fact on an Owner's screen. **A "3% used" that is quietly wrong is worse than no bar
+at all** — it invites exactly the complacency the counter exists to prevent. Show the count that is
+measured; add the ceiling when the ceiling is confirmed.
+
+It is carried on `QueueSummary` rather than as a new prop because `AccountingPanel` has **two mount
+points** — the Settings tab and the `/dashboard/settings/accounting` route Intuit launches at — and
+a second prop is exactly how those two drift apart (PARITY [Josh, S122]). One reader feeds the card,
+so both surfaces get it or neither does.
+
+---
+
+## 8. ⚠️ Does anything here make a questionnaire answer wrong?
+
+**No answer given to Intuit is falsified by this run. Two are now MORE true than when they were
+written, and one deserves a volunteered correction if the form is resubmitted.**
+
+- **Webhook signature verification — answered YES, still YES.** F3 changed *how* the comparison is
+  made (digest bytes rather than base64 strings), not *whether* it happens. Constant-time
+  throughout, before and after.
+- **Token storage and refresh — answered YES, now stronger.** F2 added serialisation that was not
+  there when the answer was given. The answer did not claim it, so nothing was overstated.
+- **The discovery document — answered NO, still accurately NO.** F6 was deferred by instruction.
+  ⚠️ Do not "improve" this answer on a resubmission; the endpoints are hardcoded and correct, and
+  saying otherwise would be the false statement.
+- **⚠️ Worth volunteering if the form is resubmitted:** the webhook endpoint's behaviour changed
+  materially. It previously did its work before acknowledging — which, against Intuit's 3-second
+  budget and endpoint-disabling retry policy, was a conformance defect, not just a latency one. It
+  now acknowledges first. **Nothing said to Intuit was untrue; the endpoint is simply now doing
+  what the answer implied.**
+
+---
+
+## 9. Still open
+
+**Nothing found in this run is left breaking in production.** What remains:
+
+- **F5, F6, F8** — deferred by instruction, unstarted, unblocked.
+- **The 100-day question (§6)** — needs a real answer from Intuit's docs when they load.
+- **The Builder quota figure (§7)** — blocks the read-budget ceiling and the alert threshold.
+- **`s143-Q5`, `s148-Q4`, `s149-A`, `s149-G` ×2** — five live cases asserting a pre-connection
+  world. **`s149-A` nulls a live QuickBooks link as cleanup and must be dealt with first (§3a).**
+- **`s131-dashboard-access`** — one inherited unit failure, belonging to the Nav work.
+- **Addendum 3's finding** — a dependant of a terminally-failed row waits forever. Unfixed, and
+  correctly not in this run's scope.
+
+⚠️ **The sparse-update question, asked in §4 of the prompt and answered here:** F10's read-modify-write
+was applied to **invoice and purchase updates**, which are the two paths that PUT a full object back.
+**No other handler has the pattern** — customer, payment and refund creates are POSTs of new
+objects, and the void path sends only the id and SyncToken. So the exposure is closed where it
+existed and does not exist elsewhere.
+
+---
+
+*Production database never touched. Every migration applied to rebuild-test only. Nothing was
+written to the connected QuickBooks company by this run — the one drain it performed parked before
+reaching the network. Test data seeded by this run was removed; one live link destroyed by an
+existing harness was restored and verified.*
+
+---
+
+# S188 — THE THREE OPEN ITEMS, CLOSED
+
+*The follow-up run. Its whole subject is tests, and the counts are the proof.*
+
+## 0. The counts
+
+| Suite | Before | After |
+| --- | --- | --- |
+| Unit (`npx vitest run`) | **1053 passed, 1 failed** (1054) · exit line **1** | **1057 passed, 0 failed** (1057) · exit line **0** |
+| Live QB battery, 7 files | **76 passed, 5 failed** (81) · exit line **1** | **82 passed, 0 failed** (82) · exit line **0** |
+| Live battery, immediately re-run | *not comparable — run 2 disagreed with run 1* | **82 passed** again, **identical** · exit line **0** |
+| `npx tsc --noEmit` | 0 | **0** |
+
+⚠️ **The third row is the one that matters.** Before this run the battery's result depended on the
+order it was run in, because a probe destroyed the data that made it fail. Two consecutive runs now
+agree, and `contacts.qb_customer_id` still reads **`62`** after both.
+
+Unit goes 1054 → 1057 because `s131` grew from 11 cases to 14. Live goes 81 → 82 because `s143-Q5`
+became two cases.
+
+---
+
+## 1. ⚠️ `s149-A` — the cleanup was destroying a live QuickBooks link
+
+**Fixed. Commit `140405d`.**
+
+The `afterAll` wrote `qb_customer_id: null` to the fixture contact as "restore". Correct for exactly
+as long as that column was always NULL — which was true until the connector shipped. After that it
+was a destructive write dressed as cleanup: the app **forgets a customer it has already created**,
+and the next push creates a second one.
+
+⚠️ **And the damage bought the green tick.** `S149-A` asserted the column was `null`, which the
+destruction guaranteed — so the file **failed on a live link and passed on the second run**. An
+assertion reachable by two different roads (the write was refused / the link was destroyed) tests
+neither.
+
+**What changed:**
+
+- **Inverted.** The probe proves the PM's write was REFUSED, so the column must be **unchanged**.
+  Originals are captured in `beforeAll` and compared against.
+- **The restore moved into the test that does the overwriting.** The service-role column-scope probe
+  genuinely must write these columns; it now puts the originals back immediately and asserts the
+  restore landed.
+- **Two self-heals narrowed.** They deleted by `company_id` alone. Harmless once; not now — a
+  `qb_sync_queue` row is a record's **pending push** and deleting it re-queues nothing (the enqueue
+  triggers fire on a *change*), so that invoice silently never reaches QuickBooks; and since M-N an
+  unprocessed `qb_webhook_events` row is **inbound work we owe**, so deleting it discards a real
+  client payment *and* dedupes away Intuit's retry.
+
+> ### ⚠️ ONE DELIBERATE DEVIATION FROM THE INSTRUCTION, LOGGED
+>
+> The instruction was *"INVERT the assertion and REMOVE the afterAll."* The assertion is inverted.
+> The `afterAll`'s three destructive writes are removed — but the **restore was relocated, not
+> abandoned**, because the service-role probe really does put `S149-cust` in that column. A bare
+> removal would have left the marker on the live link permanently, which is the same corruption with
+> a different value in it. The restore now sits where the overwritten value is actually known.
+
+### 1a. The sweep — what else has this shape
+
+**Nothing else does.** Every candidate was read, not just grepped:
+
+| Site | Verdict |
+| --- | --- |
+| `s148` `restore()` (`companies` qb columns, both tenants) | **Safe — and it is the model.** `snapshot()` in `beforeAll`, `restore()` in `afterAll`; the `disconnected` write is a *step inside* restore, needed because the shape CHECKs refuse a partial one. |
+| `s149-E` (`companies`, companyA) | **Safe.** Same snapshot/restore idiom, inline. |
+| `s143:180` `qb_object_type: null` | **Safe.** Operates on a refund the test created and then deletes. |
+| `s174-selections-email:309` `contacts.email = null` | **Safe, and better than mine was** — captures `priorEmail` and restores in a `finally`. |
+| `s97ct-reply-to:121` `companies.email = null` | **Benign.** Leaves the column in its documented natural state (no company on rebuild-test sets it). |
+| every `.delete()` on `contacts` / `invoices` / `projects` / `expenses` in the live harnesses | **Safe.** All scoped to ids or `MARKER` names the test created. |
+
+⚠️ **Residual, reported not fixed:** `s148` and `s149-E` set the **live** company to `disconnected`
+mid-test and rely on a later restore. A crash in that window leaves the connection severed. It is
+recoverable by reconnecting and it corrupts no books, so it is a lower class than what was fixed —
+but it is the same shape and worth closing when someone is next in these files.
+
+---
+
+## 2. `s131-dashboard-access` — a stale PROXY over a rule that was never broken
+
+**Fixed. Commit `89592f2`.**
+
+It asserted `lib/device.ts` must not contain the string `CompanyRole`, and went red when `1ed3d10`
+(*"[Nav] #101: desktop/mobile surface toggle"*) added `SURFACE_TOGGLE_ROLES` — a role-typed constant
+naming who **sees** the toggle.
+
+⚠️ **The rule was verified intact before anything was rewritten**, because "the test is stale" is
+exactly the conclusion that must not be assumed: `defaultSignedInPath` still reads
+`isPhoneUserAgent(userAgent) ? '/m' : '/dashboard'` and consults nothing else; `landingPathFor`
+branches on the saved surface preference and falls through to it; and **no path function reads
+`SURFACE_TOGGLE_ROLES`** — the constant is consumed by the UI that renders the toggle. A-6 holds, and
+it matters because the sign-in page renders with no session and therefore no role.
+
+So: **stale instrument, live rule.** The assertions now test the rule — arity (a role parameter would
+change it), real user-agent inputs through both functions, and a scoped guard that no landing
+function reads the role constant. The half that was never stale is kept: Ruling A's `DASHBOARD_ROLES`
+vocabulary stays out of this file entirely.
+
+**Mutation-tested:** giving `landingPathFor` a `role` argument that consults `SURFACE_TOGGLE_ROLES`
+turns two cases red. `device.ts` was restored; the commit contains no source change.
+
+---
+
+## 3. The five live failures — each judged before being touched
+
+⚠️ **The instruction was not to invert anything to green without saying which it was.** One at a
+time, then:
+
+| Probe | Stale test, or a real violation? |
+| --- | --- |
+| **`s149-A`** | **Real violation — by the TEST.** §1. Not stale at all; actively destructive. |
+| **`s143-Q5`** | **STALE, and it said so in its own title.** |
+| **`s148-Q4`** | **Sound test, wrong fixture** — and a near miss worth reading. |
+| **`s149-G` ×2** | **Sound tests, wrong fixture.** Not one assertion changed. |
+
+### `s143-Q5` — it asserted the absence of the feature that has since shipped
+
+The describe read *"nothing started consuming these columns"* and the case *"the reconciliation added
+no writer"*. At S143 these columns were **scaffolding**: a migration added them and nothing wrote
+them, and "still at rest" proved the migration had not quietly started doing something. **7G is the
+writer now — that was the entire point of building it**, so the case failed *on success*.
+
+**Inverted, not deleted** (S157), because the file otherwise stands as a claim that the connector
+does not exist. What replaces it is worth more than the original:
+
+- **A row marked `pushed` must carry the id it was pushed as.** `worker.ts`'s own header calls the
+  half-synced create *"the most dangerous path in 7G"* — QuickBooks accepts the object, the write-back
+  of the id fails, the record re-queues, and the retry creates a **second** one because QuickBooks has
+  no PUT. That failure is now visible on disk.
+- ⚠️ **The converse is deliberately NOT asserted.** An id *without* `pushed` is a record that synced
+  and has since been edited; it keeps its id while the status returns to `not_pushed` and the trigger
+  queues an update. Measured on rebuild-test: one invoice and two legacy expenses are in exactly that
+  state. Asserting the biconditional would fail on correct data — which is how a guard ends up deleted
+  instead of fixed.
+- ⚠️ **`expenses` is checked against BOTH id columns.** S182 moved expenses from Bill to Purchase, so
+  `qb_bill_id` is retired and `qb_purchase_id` live; legacy rows still point through the old one and a
+  single-column check would report them as half-synced.
+- The second case keeps Q5's original question where it is **still** the right question:
+  `time_clock_sessions.qb_time_activity_id` must stay null while `time_activity:create` returns
+  terminal (*"Module 6 payroll, not the 7G connector"*).
+
+**Mutation-tested:** forcing an expense to `pushed` with no id turns it red and names the row.
+
+### `s148-Q4` — the fixture, and the near miss
+
+`qb_vault_put` with no secret id calls `vault.create_secret(payload, 'qb_tokens_' || company)`, and
+the name is UNIQUE — so the probe collided with companyA's **real stored token**.
+
+⚠️ **The near miss is the more interesting half.** Had that name not been unique, this probe would
+have **overwritten the live OAuth blob** with `S148-rt` and severed the connection. The unique index
+is the only thing that made the failure loud instead of silent.
+
+`companyB` was tried and **rejected**: an earlier probe in the same file already claims its secret, so
+that fix would have been *order-dependent* — the exact defect this session exists to clear. It now
+uses a scratch uuid: `p_company_id` feeds nothing but the secret's name (no lookup, no foreign key),
+so the path is byte-for-byte identical and cannot touch a tenant.
+
+### `s149-G` ×2 — the connector now owns the row they seized
+
+They take `(company, current month)` and assert they created it. `recordCorePlusRead` creates exactly
+that row on the first metered read. **No assertion changed** — one row per company per month, the
+count cannot go negative, an Owner reads it, a PM does not, nobody may edit it. Only the period moved,
+to one the connector can never take.
+
+---
+
+## 4. Two things found on the way, reported not fixed
+
+### 4a. ⚠️ An orphaned vault secret would make a tenant unable to EVER reconnect
+
+Both halves of the lifecycle are correct today — the callback reads the existing `qb_token_secret_id`
+and passes it, so a reconnect **updates**; the disconnect calls `forgetTokenBlob` **before** nulling
+the column. Verified on rebuild-test: one company secret, no orphans.
+
+**The hole is the failure path.** `forgetTokenBlob`'s error is caught and logged, and the column is
+nulled regardless. If that delete ever fails, the secret survives orphaned under the name
+`qb_tokens_<company>` while the pointer to it is gone — and every future reconnect then calls
+`create_secret` with a duplicate name, gets 23505, and returns `vault_failed`. **The tenant can never
+reconnect, and the error tells them nothing.** Narrow, but permanent and silent. Not fixed here: it is
+a product change and outside these three items.
+
+### 4b. `qb_synced_at` is NULL on every row in the database — unresolved
+
+Including rows the connector demonstrably pushed. Established: **every** writer of
+`qb_push_status: 'pushed'` also writes `qb_synced_at` (exhaustive grep, nine sites), and the write
+**sticks** through the connector's own client (probed directly, then reverted). No trigger clears it.
+
+⚠️ **But three pushed expenses share an `updated_at` to the microsecond**, so something rewrote them
+in one bulk statement after they were pushed. The most likely author is **this campaign's own manual
+investigation on rebuild-test**, not the product — but that was not proven, so it is recorded as open
+rather than dismissed. It is cheap to settle: watch `qb_synced_at` on the next real push.
+
+---
+
+*No source file changed in this run — `device.ts` was mutated only to prove a guard bites, and
+restored. Migrations: none. Production: never touched. Rebuild-test left clean — vault back to its
+original three secrets, no leftover budget row, no live queue rows, no unprocessed webhook events,
+and the QuickBooks link reading `62` after two full batteries.*
+
+---
+
+# S189 — THE ORPHANED VAULT SECRET, CLOSED
+
+*One item, from S188 §4a. It is closed — and it broke something on the way, which is recorded here
+first because it needs an action from Josh.*
+
+> ## ⚠️ ACTION REQUIRED: REBUILD-TEST'S QUICKBOOKS CONNECTION MUST BE RE-AUTHORISED
+>
+> **I destroyed it during this run.** The company is `disconnected`, the realm is kept, and the
+> stored OAuth tokens are **gone and unrecoverable** — they were overwritten with a test payload and
+> then deleted. Only the OAuth flow can restore them: **Settings → Accounting → Connect QuickBooks**,
+> as the Owner.
+>
+> Nothing else on rebuild-test is affected, and no customer data was touched. **Production was never
+> touched.** The full account is §3 below; it is not buried.
+>
+> Until that reconnect, **`s187-qb-drain-parked.live.ts` fails 3 of 4** — its own guard says so in
+> those words (*"the company is not connected on rebuild-test … this is an environment failure, not a
+> code one"*). Every other harness is green.
+
+---
+
+## 1. The defect, and which shape was chosen
+
+The disconnect deletes the Vault secret, then nulls `companies.qb_token_secret_id`. The delete is
+best-effort — its error is caught and logged — and the column is nulled **regardless**, correctly,
+because a tenant must always be able to disconnect. So a delete that fails leaves the secret alive
+with nothing pointing at it. `vault.secrets` is UNIQUE on `name`, and this connector's names are
+deterministic — `qb_tokens_<company_id>` — so **the orphan owns that name**. Every later reconnect
+called `create_secret`, got 23505, and returned `qb_error=vault_failed`.
+
+⚠️ **Permanently.** Retrying is the one thing that cannot work, because the collision is
+deterministic. And the message shown says only that the connection could not be stored securely.
+
+### ⚠️ Not (a). The prompt's own axis decides it.
+
+**(a) "don't null the pointer when the delete fails" was considered and rejected.** It makes reconnect
+work and it is the smaller diff — but a token is a **credential**. Keeping the pointer does not make
+the credential less present; it makes the **row** tidy while a live refresh token sits in Vault,
+advertised by a company row that claims to be disconnected. The safe end state is the credential
+**gone**, not the pointer neat.
+
+It is also incomplete on its own terms: an orphan can equally arise from a crash between the two
+statements, a partial restore from backup, or manual surgery — and in every one of those **the
+pointer is already gone**, so keeping it was never an option.
+
+### What shipped instead — (b), plus something stronger than (a)
+
+1. **`qb_vault_scrub` — destroy the credential before trying to destroy the row.** The caller scrubs,
+   then deletes, as **two round trips**.
+   ⚠️ **They cannot share a transaction.** If they did, a failed DELETE would roll the scrub back
+   with it and the surviving orphan would still hold real tokens — precisely the outcome being
+   prevented. Separate statements mean the scrub is already **committed** when the delete is
+   attempted. Worst end state: an empty husk.
+2. **`qb_vault_put` adopts an orphan of the same name** rather than colliding with it — closing the
+   lockout for *every* cause of an orphan, which is why it lives in the function and not in a `catch`
+   in the route.
+
+**The two are independent on purpose.** Half 2 alone would let a tenant reconnect while a live
+credential sat in Vault until they did. Half 1 alone would leave a husk that still owned the name and
+still locked them out.
+
+---
+
+## 2. Proven by observation
+
+`apps/web/test/s189-qb-vault-orphan.live.ts`, six cases, **exit line 0**, run twice consecutively with
+identical results.
+
+⚠️ **Only the DELETE is stubbed, at the RPC boundary.** The real `qb_vault_scrub` runs against the
+real Vault, the real `forgetTokenBlob` takes its real error branch, and the orphan is a real row. The
+alternative — seeding a row that *looks* like an orphan — would have proved the recovery works against
+a fixture of my own construction while skipping the code that produces the state. That is the shape
+S188 spent a session removing from this suite.
+
+| # | Observation |
+| --- | --- |
+| 1, 2 | The ordinary store → read → delete cycle is **unchanged**, and *gone means gone* (`qb_vault_get` returns null, which distinguishes deleted from scrubbed-but-present). |
+| 3 | After a failed delete the row **survives holding `{"scrubbed":true}`** — not the token it held a moment earlier. This is the observation that the scrub committed separately. |
+| 4 | **The reconnect succeeds — no 23505** — and returns **the same id**, so it adopted rather than created. It *could not* have created: the name was taken. |
+| 5 | The recovered connection then disconnects cleanly, leaving nothing behind. |
+| 6 | A secret a company **still points at** is refused and left untouched. |
+
+**Counterfactual, because a passing test proves nothing about whether the fix is load-bearing:** with
+the pre-M-P `qb_vault_put` reinstalled, case 4 fails with `duplicate key value violates unique
+constraint "secrets_name_idx"` — the exact 23505 — while 1, 2, 3 and 5 still pass. The defect is real,
+the fix is what closes it, and the scrub half is independent of the adopt half. M-P was then restored
+and re-verified.
+
+---
+
+## 3. ⚠️ WHAT I BROKE, AND WHY THE FIRST VERSION WAS WRONG
+
+**The first version of M-P adopted anything under the name. That destroyed rebuild-test's live
+QuickBooks credential.**
+
+`s149-E` calls `qb_vault_put` for companyA **with no secret id** — asking Vault to *create* a token
+secret for the company that already had one, because it is the genuinely connected fixture.
+
+- **Before M-P:** 23505. `secretId.data` came back NULL and **nothing checked**. The `needs_reauth`
+  update that followed then violated `companies_qb_token_required_check`, and that error was ignored
+  too. ⚠️ **The probe had been passing while never reaching the state it exists to test.** The 23505
+  was an accidental guardrail over a swallowed error.
+- **After the unguarded M-P:** the call **adopted companyA's real OAuth blob**, overwrote it with
+  `{"refresh_token":"S149-rt"}`, returned the real id — and the cleanup at the end of that same test
+  **deleted the row**.
+
+`getAccessToken` then found a pointer with no Vault row and set `needs_reauth`, which is how it
+surfaced: my own S187 harness failed with *"the company is not connected."*
+
+**Two things follow, and both are now done:**
+
+1. **The guard.** Adoption requires a **true** orphan — an orphan is *defined* by nothing pointing at
+   it. If a company row still references the secret it is **in use**, and the call is refused loudly.
+   ⚠️ **The asymmetry is the argument:** refusing costs a caller an error on a path it should not have
+   taken; proceeding costs a customer their connection, silently, with the credential unrecoverable.
+   Case 6 is the permanent test.
+2. **The probe.** `s149-E` now uses a scratch company id for its secret — this test is about the
+   **queue** under `needs_reauth`, and whose credential backs the pointer has never mattered — and it
+   **asserts every error**, including the state change, with a message saying the rest is vacuous
+   without it.
+
+> ⚠️ **The lesson, recorded because it generalises.** The unguarded adoption was not careless in
+> isolation; it was correct for the production path, where the callback passes null *only* when the
+> pointer is already gone. What it did not survive was a **caller that had been failing silently for
+> months**. Removing an error can be a breaking change, because something may have been depending on
+> it — and a swallowed error is exactly the dependency you cannot see.
+
+---
+
+## 4. Test data — created and removed
+
+| Created | Removed |
+| --- | --- |
+| Vault secrets named `qb_tokens_<random-uuid>` (cases 1–5), one per case | Deleted in-test and again in `afterAll`; **verified gone** by `qb_vault_get` returning null |
+| A Vault secret for the Ridgeline QA tenant (case 6) | Deleted in the case's `finally`; the company's pointer snapshotted and restored |
+| One temporary reinstall of the **pre-M-P** `qb_vault_put`, for the counterfactual | Restored to M-P immediately after, and re-verified 6/6 |
+
+**Final rebuild-test state:** `vault.secrets` holds **2** rows — `qb_webhook_verifier_production` and
+`qb_webhook_verifier_sandbox` — and no `qb_tokens_*` at all, because the fixture connection is
+awaiting the re-authorisation at the top of this section. **No orphan was left behind by either
+path.** No queue rows, no webhook events, no seeded business records.
+
+---
+
+## 5. Counts
+
+| Check | Result | Exit line |
+| --- | --- | --- |
+| `npx tsc --noEmit` | clean | **0** |
+| `npx next build` | compiled | **0** |
+| Unit suite | **1057 passed, 0 failed** | **0** |
+| Live QB battery, 7 files (excl. `s187`) | **84 passed, 0 failed** | **0** |
+| `s189-qb-vault-orphan.live.ts`, run twice | **6 passed** each time | **0** |
+| `s187-qb-drain-parked.live.ts` | **1 passed, 3 failed** — needs the reconnect (§ top) | **1** |
+
+⚠️ **`qb_synced_at` was left alone**, as instructed. Still open, still unproven — S188 §4b.
+
+*Migration applied to rebuild-test only; ledger row inserted by hand and verified. Production never
+touched.*
+
+---
+
+# S190 — THE OAUTH CALLBACK "FAILURE" WAS THE CODESPACE, NOT THE CODE
+
+> ## ⚠️ TO FINISH THE CONNECT, FLIP PORT 3000 TO PUBLIC IN THE RUNNING CODESPACE
+>
+> **VS Code → PORTS panel → right-click 3000 → Port Visibility → Public.** (`gh` is not installed
+> here, so I could not do it for you; `gh codespace ports visibility 3000:public` is the CLI form.)
+> The committed `devcontainer.json` change only takes effect on a **rebuild**.
+>
+> Then retry Connect. Everything downstream of Intuit's redirect is verified working below.
+
+## 1. What it actually was
+
+**Not the route. Not the middleware. Not the vault change.** Requesting the exact URL Intuit is told
+to return to:
+
+```
+$ curl -D - "https://fantastic-palm-tree-…-3000.app.github.dev/api/quickbooks/callback?code=…"
+HTTP/2 302
+location: https://github.dev/pf-signin?…&tunnel=1
+```
+
+**Codespaces forwards ports PRIVATE by default**, and a private port answers any request without a
+GitHub tunnel cookie with a 302 to the port-forwarding sign-in interstitial. **The request never
+reaches the dev server**, which is precisely why nothing was ever logged for the callback.
+
+⚠️ **And it explains the asymmetry that made this confusing.** `/api/quickbooks/connect` logged
+fine because it is a **same-site** request from the already-authenticated tab, carrying the tunnel
+cookie. The return leg is a **cross-site navigation from `appcenter.intuit.com`**, which presents no
+such cookie. Same server, same port, opposite outcome — and the difference is invisible from inside
+the code.
+
+Every reported symptom follows without remainder: the `code` is swallowed by the interstitial, so the
+token is never stored, `qb_connection_state` stays `disconnected`, and `qb_income_item_id` keeps its
+stale `19` from an earlier connection because the post-connect probe never runs.
+
+## 2. What was ruled out, and how — by observation
+
+| Hypothesis | Verdict | The observation |
+| --- | --- | --- |
+| Middleware `'/api/:path*'` blocks the callback | **Disproved** | `curl` on localhost returns the route's **own** `qb_error=state_mismatch` redirect and its `clearState` cookie. |
+| …but only for an authenticated session | **Disproved properly** | ⚠️ My first curl sent **no cookie**, so it skipped every `user &&` branch — the wrong case. Re-run with a minted Owner session: identical result, route still reached. |
+| The middleware blocks the **webhook** (no session, ever) | **Disproved** | `POST` with no cookies returns `401 {"error":"Invalid signature"}` — the route's own check. The handler runs. |
+| My S189 vault change refuses where it used to swallow | **Disproved** | Ran the callback's exact store step: `qb_vault_put` → no error, secret created, company row → `connected` with the pointer set, vault round-trip verified. Then reverted. |
+| The route 404s / is not compiled | **Disproved** | It responds, with its own redirects, at every stage. |
+
+**The route is healthy end to end.** Driven past the CSRF nonce with a matching cookie, it walks
+nonce → session → owner check → token exchange and lands on `qb_error=exchange_failed` — the correct
+answer to my deliberately bogus `code`. Only Intuit's consent click is unexercised.
+
+## 3. ⚠️ The webhook shares the cause — but it is NOT a production defect
+
+The prompt anticipated that if the middleware were the cause, the webhook would be equally affected
+**and that this would be a production defect**. The first half is right and the second is not, because
+the cause turned out to be the tunnel rather than the middleware:
+
+- **In a Codespace** the webhook is equally broken. Intuit POSTs with **no session, ever**, so it
+  would see 302s instead of 200s and, after retries at 20/30/50 minutes, **disable the endpoint**.
+- **In production** there is no tunnel — Vercel serves the domain directly — and the middleware
+  demonstrably passes the webhook through (§2). **Nothing to fix in production.**
+
+So it is fixed by the same one-line visibility change, and it is a development-environment defect.
+
+## 4. The fix, and what it costs
+
+`.devcontainer/devcontainer.json` now sets `"visibility": "public"` on port 3000, with the reasoning
+in the file so the next person does not spend twenty minutes in the route.
+
+⚠️ **Stated plainly rather than left implicit: a public forwarded port is reachable by anyone holding
+the URL, and this dev server talks to rebuild-test.** That is a deliberate trade for developing an
+integration whose entire premise is that Intuit calls us. To opt out, set it back to `private` and
+accept that OAuth and webhooks cannot be exercised in a Codespace at all. **Josh's call — flag it if
+you would rather flip the port only while testing and back afterwards.**
+
+## 5. Instrumentation
+
+Temporary logging was added at the top of `middleware.ts` and of the callback's `GET`, then removed.
+`git status` shows both files byte-identical to `HEAD`; the only committed change is
+`devcontainer.json`. In the end the decisive evidence came from the **wire** — status lines and
+`Location` headers — not from the logs, because the request that mattered never arrived to be logged.
+
+## 6. Test data
+
+| Created | Removed |
+| --- | --- |
+| One Owner session (password sign-in, in-memory) | Never persisted; no cookie written anywhere but the curl invocation |
+| One synthetic token blob + Vault secret for the fixture company, to test the store step | Secret deleted and verified gone; company restored to `disconnected` with a null pointer |
+
+**Rebuild-test is exactly as it was**: `disconnected`, realm kept, no `qb_tokens_*` secret, awaiting
+the real re-authorisation still owed from S189.
+
+⚠️ **The user's dev server was never touched.** My own `next dev` failed to start with `EADDRINUSE`
+and was left dead rather than killing theirs.
+
+---
+
+# S190b — THE 404 WAS A CORRUPT DEV CACHE; THE DOUBLED PORT WAS `request.url`
+
+*Two defects, both settled on the wire. Neither was in the callback's contents, which is why reading
+them found nothing.*
+
+> ## ⚠️ ONE STEP REMAINS AND ONLY JOSH CAN DO IT
+>
+> **Click Connect and complete Intuit's consent.** Everything on both sides of that click is now
+> proven working (§3). The connection has been down since S189 and still needs a real
+> re-authorisation.
+>
+> ⚠️ **I restarted your dev server** (twice) and cleared `.next`. There is one running now, clean.
+
+---
+
+## 1. Defect A — the callback 404'd because its compiled module did not exist
+
+**`.next/server/app/api/quickbooks/callback/` was an EMPTY DIRECTORY**, while `connect/` beside it
+held a 49KB `route.js`. The route manifest still mapped
+`/api/quickbooks/callback/route -> app/api/quickbooks/callback/route.js`, so Next resolved the entry,
+found no module, and returned 404 **without ever dispatching a request** — which is exactly why
+nothing was logged.
+
+### Why, and it is the part worth remembering
+
+**Two `next dev` processes were running against the same `.next`.**
+
+| PID | Started | Role |
+| --- | --- | --- |
+| 93507 | 13:53:31 | held port 3000 — the one actually answering |
+| 392598 | **22:56:49** | could not bind, still compiling into the shared `.next` |
+
+The callback's empty artifact directory is stamped **22:57** — one second after the second server
+started. It wrote the manifest entry; the serving process then had a manifest pointing at a module it
+had never written.
+
+⚠️ **The bisect is what proved it, and reading the file never could.** A trivial route created
+*beside* the callback compiled and answered 200 **within one second**, while the callback stayed 404
+— so routing was healthy and the file was irrelevant. `touch`ing the source did nothing, because the
+manifest already claimed the route was built, so nothing triggered a rebuild. Permanent 404, clean
+file, clean `tsc`, clean `next build`.
+
+**Fix:** stop every `next dev`, delete `.next`, start exactly one. It then compiled
+(`✓ Compiled /api/quickbooks/callback in 825ms`), answered **307**, and **logged the request**.
+
+> ⚠️ **AND I CONTRIBUTED TO THIS, WHICH IS WHY IT IS RECORDED RATHER THAN JUST FIXED.** `next build`
+> writes to the same `.next` a running `next dev` is serving from. I ran a build during S188/S189
+> with the dev server up, and did it again in this run — the second time I watched it replace the
+> dev-compiled 159KB `route.js` with a 7KB build artifact. **Never run `next build` against a live
+> `next dev`**, and never run two dev servers, without `distDir` separating them.
+
+---
+
+## 2. Defect B — every redirect carried a doubled port
+
+Measured through the tunnel, with a probe route echoing what actually arrives:
+
+```
+host:              localhost:3000        <- Next builds request.url from THIS
+x-forwarded-host:  <name>-3000.app.github.dev
+x-forwarded-port:  443
+x-forwarded-proto: https
+```
+
+⚠️ **Next takes the scheme from `x-forwarded-proto` but the host from the plain `Host` header**, so
+`request.url` came out as `https://localhost:3000/…`. The proxy then rewrote `localhost` to the
+public host on the way out and **left the `:3000` behind**:
+
+```
+before   location: https://<name>-3000.app.github.dev:3000/sign-in
+after    location: https://<name>-3000.app.github.dev/sign-in
+```
+
+**This is what turned a working error path into a dead one.** `?qb_error=state_mismatch` is a
+sentence the user is meant to *read*; it was being delivered as an unreachable host.
+
+`lib/app-origin.ts` prefers the configured `NEXT_PUBLIC_APP_URL`, falling back to
+`x-forwarded-host`/`-proto`. ⚠️ **The preference is a security property, not only correctness:**
+`Host` and `X-Forwarded-Host` are caller-supplied, and a redirect built from them is textbook
+host-header injection. The configured value cannot be forged; the header fallback is still better
+than `request.url` because `x-forwarded-host` carries no port to double.
+
+Applied at **every** redirect that leaves the app: 3 sites in `connect`, `settingsUrl()` + `/sign-in`
+in `callback`, and **all 7** in `middleware.ts`.
+
+⚠️ **`qboRedirectUri()` already did it this way** — which is why the `redirect_uri` handed to Intuit
+was correct all along while the redirects beside it were broken. One route, two constructions, one
+bug. That is also the tell I should have followed sooner.
+
+---
+
+## 3. Proof — the connect chain, end to end through the real tunnel
+
+| Step | Observed |
+| --- | --- |
+| `/api/quickbooks/connect` as the Owner | **307** to `appcenter.intuit.com/connect/oauth2?…`, `qb_oauth_state` nonce set (64 chars) |
+| `/api/quickbooks/callback` with **that** nonce | passes CSRF → session → owner → reaches the token exchange; **`qb_error=exchange_failed`**, correct for a deliberately fake `code` |
+| every redirect above | resolves on the public host, **no doubled port** |
+| the token store | `qb_vault_put` → no error; company row → **`connected`** with the pointer **SET**; blob **reads back**; then reverted |
+
+**Only Intuit's consent click is unexercised** — it needs a human at their screen. Everything before
+it and everything after it is measured.
+
+## 4. Also checked
+
+- **Unit suite: 1057 passed, 0 failed**, exit line 0. One case (`s131`) went red because the
+  middleware refactor deleted the `url.pathname = …` syntax it keyed on; the **rule was verified
+  intact first**, then the assertion was repointed at the call site and *tightened* — the old anchor
+  also matched the import at the top of the file, which made it partly vacuous.
+- `npx next build` exit line **0**, callback listed.
+- Temporary instrumentation (a header-echo probe route) removed; `git status` clean apart from the
+  screenshot.
+
+## 5. Test data
+
+One in-memory Owner session; one synthetic token blob and Vault secret, **deleted and verified gone**,
+with the company restored to `disconnected` and a null pointer. **Rebuild-test is unchanged** — still
+awaiting the re-authorisation owed since S189.

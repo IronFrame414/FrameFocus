@@ -51,12 +51,32 @@ export function signatureMatches(
 ): boolean {
   if (!headerSignature) return false;
 
-  const computed = createHmac('sha256', verifierToken).update(rawBody, 'utf8').digest('base64');
+  // ⚠️ COMPARE DIGEST BYTES, NOT BASE64 STRINGS [F3, S187].
+  //
+  // _Superseded: `digest('base64')` compared byte-for-byte against the raw
+  // header string._ That is correct only while Intuit's encoding matches Node's
+  // exactly — standard base64, padded, same case. It is the same digest either
+  // way, so any difference in ENCODING (base64url, dropped `=` padding) would
+  // reject every notification while the signatures actually agreed, and nothing
+  // would say why.
+  //
+  // Decoding both sides removes that whole class: two 32-byte SHA-256 digests
+  // either match or they do not, however they were spelled.
+  const computed = createHmac('sha256', verifierToken).update(rawBody, 'utf8').digest();
 
-  const a = Buffer.from(computed);
-  const b = Buffer.from(headerSignature);
-  if (a.length !== b.length) return false;
-  return timingSafeEqual(a, b);
+  let provided: Buffer;
+  try {
+    // `base64` decoding in Node accepts base64url and unpadded input too, which
+    // is exactly the tolerance we want here.
+    provided = Buffer.from(headerSignature, 'base64');
+  } catch {
+    return false;
+  }
+
+  // `timingSafeEqual` THROWS on a length mismatch, so lengths are compared
+  // first — and that leaks only the length of a SHA-256 digest, a constant.
+  if (computed.length !== provided.length) return false;
+  return timingSafeEqual(computed, provided);
 }
 
 // ---------------------------------------------------------------------------

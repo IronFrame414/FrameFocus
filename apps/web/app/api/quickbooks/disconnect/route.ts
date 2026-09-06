@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
 import { forgetTokenBlob, getTokenBlob, revokeToken } from '@/lib/quickbooks/tokens';
+import { QB_LINK_RESETS } from '@/lib/quickbooks/disconnect-resets';
 
 /**
  * 7G — disconnect. TWO callers, one mechanism.
@@ -221,23 +222,39 @@ async function clearEntityLinks(
 ): Promise<number> {
   let cleared = 0;
 
-  const resets: Array<[string, Record<string, unknown>]> = [
-    ['contacts', { qb_customer_id: null }],
-    ['projects', { qb_sub_customer_id: null }],
-    [
-      'invoices',
-      { qb_invoice_id: null, qb_invoice_link: null, qb_push_status: 'not_pushed', qb_synced_at: null },
-    ],
-    ['client_payments', { qb_payment_id: null, qb_push_status: 'not_pushed', qb_synced_at: null }],
-    ['client_refunds', { qb_refund_id: null, qb_push_status: 'not_pushed', qb_synced_at: null }],
-    ['expenses', { qb_bill_id: null, qb_push_status: 'not_pushed', qb_synced_at: null }],
-  ];
+  // ⚠️ THE LIST LIVES IN `lib/quickbooks/disconnect-resets.ts`, NOT HERE. A
+  // route module cannot export it (Next.js rejects unrecognised route exports
+  // at build time while `tsc` says nothing), and `s187-qb-link-census.test.ts`
+  // has to import it — a list nothing can read is a list nothing can guard.
+  // Read that file's header before adding a `qb_*_id` column anywhere.
+  const resets = QB_LINK_RESETS;
 
   for (const [table, patch] of resets) {
+    // ⚠️ ONLY ROWS THAT ACTUALLY CARRY A LINK. A blanket update over the table
+    // is not merely wasteful — it is fragile in a way that DEFEATS THIS
+    // FUNCTION [found by running it, S187]:
+    //
+    // `expense_payments` carries `expense_payments_retainage_rate_recorded_check`
+    // as a **NOT VALID** constraint, so legacy rows are allowed to violate it —
+    // until something UPDATES them, at which point the row is re-checked and
+    // the write fails. One such row exists on rebuild-test
+    // (`retainage_withheld = 60.00`, `retainage_percent_applied = null`).
+    //
+    // ⚠️ AND THE FAILURE WOULD HAVE BEEN SILENT. The handler below logs and
+    // `continue`s, so a single unrelated legacy row would make the ENTIRE
+    // table's links survive "clear the links" — reintroducing the exact
+    // corruption this list was extended to prevent, by a different door.
+    //
+    // Scoping to rows with a non-null id fixes it: a row with nothing to forget
+    // is never touched, so its unrelated constraint is never re-evaluated.
+    const idColumns = Object.keys(patch).filter((c) => /^qb_\w+_id$/.test(c));
+    const linkFilter = idColumns.map((c) => `${c}.not.is.null`).join(',');
+
     const { error, count } = await admin
       .from(table)
       .update(patch, { count: 'exact' })
-      .eq('company_id', companyId);
+      .eq('company_id', companyId)
+      .or(linkFilter);
     if (error) {
       console.error(`[qb-disconnect] clearing ${table} for company=${companyId} failed:`, error.message);
       continue;
