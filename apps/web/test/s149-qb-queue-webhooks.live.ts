@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { randomUUID } from 'node:crypto';
 import { admin, assertRebuildTest, sessionFor } from './live-session';
 
 // ============================================================================
@@ -479,15 +480,47 @@ describe('S149-E — needs_reauth KEEPS QUEUEING [Josh, S148]', () => {
       .eq('id', companyA).single();
     const prior = priorState as Record<string, unknown>;
 
+    // ⚠️ A SCRATCH SECRET, AND ITS ERRORS ARE ASSERTED [S189]. Superseded call,
+    // quoted rather than deleted:
+    //
+    //     const secretId = await admin.rpc('qb_vault_put', {
+    //       p_company_id: companyA, p_payload: … });
+    //
+    // That asked Vault to CREATE a token secret for companyA — which already
+    // had one, because it is the genuinely connected fixture. `vault.secrets`
+    // is UNIQUE on name, so it raised 23505, `secretId.data` came back NULL,
+    // and **nothing here checked**. The `needs_reauth` update below then
+    // violated `companies_qb_token_required_check`, and that error was ignored
+    // too. ⚠️ THE PROBE HAD BEEN PASSING WHILE DOING ALMOST NOTHING — the
+    // 23505 was acting as an accidental guardrail over a swallowed error.
+    //
+    // M-P made `qb_vault_put` adopt an orphan of the same name instead of
+    // colliding, which removed that guardrail: the call adopted companyA's
+    // REAL OAuth blob, overwrote it, and the cleanup at the end of this test
+    // deleted it — destroying the rebuild-test connection. M-P now refuses to
+    // adopt a secret a company still points at, so this can only fail loudly;
+    // the probe is corrected here so it does not need that refusal.
+    //
+    // The scratch id is right on its own merits: this test is about the QUEUE
+    // under `needs_reauth`, and it needs a token pointer that satisfies the
+    // shape CHECK. Whose credential it is has never mattered.
+    const scratchSecretCompany = randomUUID();
     const secretId = await admin.rpc('qb_vault_put', {
-      p_company_id: companyA, p_payload: JSON.stringify({ refresh_token: `${MARKER}-rt` }),
+      p_company_id: scratchSecretCompany,
+      p_payload: JSON.stringify({ refresh_token: `${MARKER}-rt` }),
     });
+    expect(secretId.error, `qb_vault_put: ${secretId.error?.message}`).toBeNull();
+    expect(secretId.data, 'no secret id came back').toBeTruthy();
 
-    await admin.from('companies').update({
+    const { error: stateError } = await admin.from('companies').update({
       qb_realm_id: `${MARKER}-reauth-realm`,
       qb_token_secret_id: secretId.data as unknown as string,
       qb_connection_state: 'needs_reauth',
     }).eq('id', companyA);
+    expect(
+      stateError,
+      'the company never reached needs_reauth, so everything below is vacuous'
+    ).toBeNull();
 
     // Existing work is untouched…
     const { data: still } = await admin
