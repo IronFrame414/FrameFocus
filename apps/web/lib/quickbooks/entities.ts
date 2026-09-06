@@ -864,13 +864,14 @@ interface ExpenseRow {
   sub_contract_id: string | null;
   qb_bill_id: string | null;
   qb_purchase_id: string | null;
+  payment_account_id: string | null;
 }
 
 async function loadExpense(ctx: DrainContext, id: string): Promise<ExpenseRow | null> {
   const { data } = await ctx.admin
     .from('expenses')
     .select(
-      'id, project_id, cost_category, supplier, amount, description, expense_date, due_date, status, is_deleted, sub_contract_id, qb_bill_id, qb_purchase_id'
+      'id, project_id, cost_category, supplier, amount, description, expense_date, due_date, status, is_deleted, sub_contract_id, qb_bill_id, qb_purchase_id, payment_account_id'
     )
     .eq('id', id)
     .eq('company_id', ctx.companyId)
@@ -890,28 +891,41 @@ async function billAccountRef(
 
   const { data: company } = await ctx.admin
     .from('companies')
-    .select(column)
+    .select(`${column}, ${column}_id`)
     .eq('id', ctx.companyId)
     .single();
 
-  const path = (company as Record<string, string | null> | null)?.[column] ?? null;
+  const row = (company as Record<string, string | null> | null) ?? null;
+
+  // ⚠️ THE ID WINS, AND THIS IS THE WHOLE POINT OF M-J. An id was PICKED from
+  // the chart of accounts, so it cannot be a typo, and it survives a rename in
+  // QuickBooks. Josh hit the typo failure three times in one session against
+  // the name path — `Cost of goods sold:Subcontractor expenses` versus the real
+  // `Cost of Goods Sold:Subcontractor Expense`.
+  const mappedId = row?.[`${column}_id`] ?? null;
+  if (mappedId) return { ok: true, id: mappedId };
+
+  // ⚠️ THE NAME PATH IS THE LEGACY FALLBACK, kept so a company configured
+  // before M-J keeps syncing until someone opens the picker. It is the only
+  // remaining route that can park on a typo, and choosing an account removes it.
+  const path = row?.[column] ?? null;
   if (!path) {
     return {
       ok: false,
       reason:
-        `No QuickBooks account is mapped for ${expense.cost_category} costs. ` +
-        `Set it on Settings → Accounting, and this expense will sync automatically.`,
+        `No QuickBooks account is chosen for ${expense.cost_category} costs. ` +
+        `Pick one on Settings → Accounting, and this expense will sync automatically.`,
     };
   }
 
-  // ⚠️ THE PATH IS A NAME, NOT AN ID — resolve it (see resolveAccountId).
   const id = await resolveAccountId(ctx, path);
   if (!id) {
     return {
       ok: false,
       reason:
         `The QuickBooks account "${path}" mapped for ${expense.cost_category} costs was not ` +
-        `found in QuickBooks. Check the name on Settings → Accounting.`,
+        `found in QuickBooks. Pick it from the list on Settings → Accounting — the list is ` +
+        `read from QuickBooks, so it cannot be mistyped.`,
     };
   }
   return { ok: true, id };
@@ -1365,36 +1379,58 @@ interface PurchaseSettings {
 }
 
 /**
- * The company's Purchase posting settings, or the prompt that is missing.
+ * Which account paid for THIS expense.
  *
- * ⚠️ PARKS, NEVER FAILS — the income-item precedent (S103 Q10). Which bank
- * account paid for something is not a thing to guess, and a wrong guess writes
- * a real transaction into the customer's books against the wrong account.
+ * ⚠️ READ FROM THE EXPENSE, NOT THE COMPANY [M-J, superseding M-G]. M-G held a
+ * single company-wide default in `companies.qb_payment_account_*`; those columns
+ * are dropped. Josh: a contractor has business checking, one or more cards,
+ * maybe petty cash, and **a Purchase must say which one paid or the books are
+ * wrong.** The account is chosen on the expense, pre-filled from the author's
+ * default.
+ *
+ * ⚠️ THIS SHOULD NO LONGER BE REACHABLE AS A PARK, and the park is kept anyway.
+ * `enforce_expense_payment_account` (M-J) refuses to approve a syncing expense
+ * without an account, so by the time a row reaches the queue it has one. But a
+ * row queued BEFORE that trigger shipped, or an account soft-deleted between
+ * approval and drain, would arrive here empty — and parking is still better
+ * than pushing a Purchase to a guessed account. Belt to the trigger's braces.
  */
 async function purchaseSettings(
-  ctx: DrainContext
+  ctx: DrainContext,
+  expense: ExpenseRow
 ): Promise<{ ok: true; value: PurchaseSettings } | { ok: false; reason: string }> {
-  const { data: company } = await ctx.admin
-    .from('companies')
-    .select('qb_payment_account_id, qb_payment_account_name, qb_payment_type')
-    .eq('id', ctx.companyId)
-    .single();
-
-  const accountId = (company?.qb_payment_account_id as string | null) ?? null;
-  if (!accountId) {
+  if (!expense.payment_account_id) {
     return {
       ok: false,
       reason:
-        'QuickBooks needs to know which account paid for this — a bank or credit card ' +
-        'account. Choose one on the Accounting settings tab, and this expense will sync.',
+        'This expense does not say which account paid for it. Open it and choose one, ' +
+        'and it will sync.',
     };
   }
 
-  // Cash | Check | CreditCard. Defaulted rather than parked a second time: the
-  // account is the meaningful choice, and Check is what a contractor's default
-  // "paid from the business account" looks like in QuickBooks.
-  const paymentType = (company?.qb_payment_type as string | null) ?? 'Check';
-  return { ok: true, value: { accountId, paymentType } };
+  const { data: account } = await ctx.admin
+    .from('company_payment_accounts')
+    .select('qb_account_id, name, payment_type, is_deleted')
+    .eq('id', expense.payment_account_id)
+    .eq('company_id', ctx.companyId)
+    .maybeSingle();
+
+  if (!account || account.is_deleted) {
+    return {
+      ok: false,
+      reason:
+        'The account this expense was paid from is no longer on your payment-account list. ' +
+        'Choose another on the expense, or add it back on Settings → Accounting.',
+    };
+  }
+
+  return {
+    ok: true,
+    value: {
+      accountId: account.qb_account_id as string,
+      paymentType: (account.payment_type as string) ?? 'Check',
+    },
+  };
 }
 
 /**
@@ -1481,7 +1517,7 @@ async function handlePurchaseCreate(ctx: DrainContext, row: QbQueueRow): Promise
   const account = await billAccountRef(ctx, expense);
   if (!account.ok) return { kind: 'park', reason: account.reason };
 
-  const settings = await purchaseSettings(ctx);
+  const settings = await purchaseSettings(ctx, expense);
   if (!settings.ok) return { kind: 'park', reason: settings.reason };
 
   // ⚠️ A MISSING SUPPLIER IS NOT FATAL HERE, and that differs from the bill
@@ -1523,7 +1559,7 @@ async function handlePurchaseUpdate(ctx: DrainContext, row: QbQueueRow): Promise
   const account = await billAccountRef(ctx, expense);
   if (!account.ok) return { kind: 'park', reason: account.reason };
 
-  const settings = await purchaseSettings(ctx);
+  const settings = await purchaseSettings(ctx, expense);
   if (!settings.ok) return { kind: 'park', reason: settings.reason };
 
   const syncToken = await readSyncToken(ctx, 'purchase', expense.qb_purchase_id);
@@ -1617,7 +1653,7 @@ async function handleBillPaymentCreate(
     return { kind: 'terminal', reason: 'This expense has no supplier name to pay in QuickBooks.' };
   }
 
-  const settings = await purchaseSettings(ctx);
+  const settings = await purchaseSettings(ctx, expense);
   if (!settings.ok) return { kind: 'park', reason: settings.reason };
 
   // ⚠️ NET, NOT GROSS. `amount` is the GROSS billed against the stage; what

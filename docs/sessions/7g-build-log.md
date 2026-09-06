@@ -1978,3 +1978,127 @@ what made a parked row look permanently stuck.
 - **The pay-link** — `InvoiceLink` is absent from a plain read **and** from `?include=invoiceLink` on
   a live unpaid invoice. Not retrievable without QuickBooks Payments on the realm. `qb_payments_enabled`
   now keys on the link alone, so it stays **false** in sandbox, honestly.
+
+---
+
+## Unit 20 — M-J: accounts are PICKED from QuickBooks, not typed
+
+**Migration `20261430000000_qb_account_selection.sql`.** rebuild-test: ⚠️ **failed once, then
+`{"success":true}`.** Ledger repaired to the canonical `20261430000000`.
+
+> ⚠️ **THE FAILURE IS WORTH RECORDING BECAUSE IT WAS THE GOOD KIND.** Postgres refused:
+> *"cannot drop column qb_payment_account_id … trigger companies_qb_wake_parked_queue on table
+> companies depends on [it]"*. **A trigger's `WHEN` clause is a real dependency on every column it
+> names.** The migration is atomic, so nothing half-applied — verified before retrying
+> (`company_payment_accounts` absent, old column still present). The trigger drop moved above the
+> column drops.
+
+### §4 — the five things established BEFORE building
+
+**1. Which call returns the chart of accounts, and what it costs.**
+`select Id, Name, FullyQualifiedName, AccountType from Account where Active = true maxresults 1000` —
+**one call, all 93 sandbox accounts**, and `qb_read_budget.coreplus_reads` advanced by **exactly one**
+(59 → 60, `last_read_at` moved). Cheap, but not free.
+
+> ⚠️ **AND A TRAP IN MY OWN PROBE, RECORDED BECAUSE IT IS THE SAME CLASS AS READING A WRAPPER'S EXIT
+> STATUS.** The first probe read `reads_used` — **there is no such column**; it is `coreplus_reads`.
+> `data?.reads_used ?? 0` turned a wrong column name into a confident `0` before AND after, i.e.
+> "the fetch is free". A `??` default over an unvalidated field is a silent lie. The real figure came
+> from reading the table.
+
+**2. Which account types QuickBooks accepts** — measured by making Intuit refuse, 14 types each way:
+
+| position | accepted |
+| --- | --- |
+| `Purchase.AccountRef` (paid **from**) | **Bank · Credit Card · Other Current Liability** — 3 of 14 |
+| line `AccountRef` (spent **on**) | **12 of 14** — only Accounts Payable and Accounts Receivable refused |
+
+⚠️ **So the two pickers are filtered differently because Intuit behaves differently, not by taste.**
+The GL picker filters by **exclusion**, not by an "expense accounts only" allowlist — QuickBooks
+allows almost anything there, and a filter we invented would hide an account somebody's accountant
+told them to use. `Other Current Liability` is in the payment list **because Intuit accepts it**, and
+it is how a petty-cash or owner-payable clearing account is often typed.
+
+**3. Where the per-user default belongs — `company_members`, and it is not a close call.**
+`profiles` is user-global; `company_members` is company-scoped and already carries per-member settings
+(`schedule_color`, `member_type`). Three reasons, the first decisive:
+1. the FK target is company-scoped — a default on `profiles` could point at **another company's**
+   account;
+2. one person can be a member of two companies and spend from a different card in each;
+3. expenses are already authored by `author_member_id`, so the default is read on the same key.
+
+⚠️ **And a claim I wrote and then disproved before shipping it.** I justified a trigger by saying the
+existing `company_members` UPDATE policy was "wider than Owner/Admin (members maintain their own
+display name)". **It is not** — `company_members_update_authorized` is already Owner/Admin-only, so
+RLS satisfies the ruling by itself. The trigger stays anyway, with the corrected reason: *that policy
+is exactly the kind that gets widened*, and the session that adds a "let members set their own
+display name" screen will be thinking about display names, not about where money posts.
+
+**4. Does the expense already record how it was paid?** ⚠️ **No — and the prompt's premise is wrong
+in a way worth stating.** There is no payment-method concept on `expenses`.
+`expense_payments.method` exists, but that is 7C's record of how a **bill was settled**, a different
+object at a different time. Nothing was reused because there was nothing to reuse.
+
+⚠️ **AND `expenses.commitment_only` DOES NOT EXIST.** The prompt names it as the thing not to block.
+The real discriminator is the same five-term payable predicate M-G filters on — `state`,
+`sub_contract_id`, `purchase_order_id`, `is_retainage`, and the existence of payments. **This is the
+second run in a row that a single-column commitment flag has been assumed;** the blocking trigger
+uses the real predicate, so 7C is not blocked.
+
+**5. What happens to the four stored GL names.** Nothing is dropped and nothing is guessed. The
+`gl_account_*` columns are **kept and demoted to cached display labels**; the mapping moves to four
+new `gl_account_*_id` columns. `billAccountRef()` prefers the id and falls back to name resolution, so
+a company configured before M-J keeps syncing until someone opens the picker. **Backfilling ids would
+need a live QuickBooks call, which a migration must not make** — the refresh does it instead, and
+`syncStoredLabels()` re-reads the labels in the same pass so a rename in QuickBooks updates the screen
+while the mapping never moved.
+
+### `companies.qb_payment_account_id / _name / _type` are DROPPED
+
+They shipped in M-G **earlier in this same unmerged branch**, as one company-wide default. Their value
+is migrated into `company_payment_accounts` first, and every member of that company gets it as their
+default so the flow keeps working.
+
+⚠️ **Keeping them "as a fallback" was rejected:** a company-wide default beside a per-expense account
+is exactly the second source of truth that makes it impossible to say which account posted a
+transaction. **Both dependent triggers were updated in the same migration** — `enforce_companies_qb_scope`
+named all three, and M-F's `WHEN` clause named two. A `WHEN` clause referencing a dropped column makes
+**every** `companies` UPDATE fail, which is the half of a column drop that gets forgotten.
+
+⚠️ **One more measured correction:** the backfill's member UPDATE originally joined on `company_id`
+alone — an unordered pick the moment a company has two accounts (S165 category 2, where ordering
+would only make the wrong choice stable). Scoped to the exact migrated account.
+
+### The cache, and what invalidates it
+
+`qb_account_cache`, one row per company, JSONB, **replaced wholesale** — it mirrors someone else's
+table, so an account deleted in QuickBooks must disappear rather than linger in a picker.
+
+- **Refresh** (visible control) — the only guaranteed invalidation.
+- **Disconnect** — the row is deleted, on **every** disconnect including `keep`. ⚠️ Account ids are
+  realm-local: reconnecting to a different QuickBooks company would otherwise offer the old company's
+  accounts, and picking one would post real money to an id that means something else. **A cache is not
+  a link** — `mode: 'keep'` preserves links, and rebuilding this costs one read.
+- ⚠️ **NOT by time.** A stale *label* is cosmetic — the stored id is what posts — so a TTL would spend
+  reads to fix nothing.
+
+### The screens
+
+`components/quickbooks/account-settings.tsx`, mounted at **both** the Settings → Accounting tab and
+`/dashboard/settings/accounting` (Intuit's launch URL) per the PARITY ruling.
+
+- **Cost accounts** — four pickers, `FullyQualifiedName · type`, with the legacy typed name shown as
+  *"(typed — re-pick to lock it)"* so a pre-M-J company can see what it has.
+- **Payment accounts** — the list, add/remove, with the copy that stops the one mistake that matters:
+  *"This is money out of these accounts. The accounts above are what it was spent on."*
+- **Who spends from what** — every non-subcontractor member and their default.
+  ⚠️ **The member query excludes subcontractors rather than including "employees".** Measured: the
+  `member_type` values in use are `crew` (5) and `subcontractor` (545). **An allowlist on the guessed
+  value `employee` would have returned an EMPTY list and read as "nobody has a default yet".**
+- ⚠️ **Renders `null` entirely when disconnected**, per the ruling — the component decides, so both
+  mount points obey without either remembering to. **The company fixed burden ($/hr) is deliberately
+  NOT hidden**: it is payroll, has no QuickBooks involvement, and hiding it would take a working
+  setting from every disconnected company.
+
+`npx tsc --noEmit` real exit **`0`**. **`npx next build` real exit `0`** — `/api/quickbooks/accounts`
+compiled; `/api/quickbooks/payment-account` (M-G's) removed.

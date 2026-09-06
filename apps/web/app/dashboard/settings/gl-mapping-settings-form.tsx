@@ -35,12 +35,15 @@ type FieldKey =
   | 'gl_account_other'
   | 'fixed_burden_per_hour';
 
-const FIELD_DEFS: { key: Exclude<FieldKey, 'fixed_burden_per_hour'>; label: string }[] = [
-  { key: 'gl_account_labor', label: 'Labor' },
-  { key: 'gl_account_material', label: 'Material' },
-  { key: 'gl_account_subcontractor', label: 'Subcontractor' },
-  { key: 'gl_account_other', label: 'Other' },
-];
+// ⚠️ EMPTIED, NOT DELETED [M-J, S103]. The four free-text GL account paths
+// moved to `components/quickbooks/account-settings.tsx`, where they are PICKED
+// from QuickBooks' chart of accounts and stored as ids. Typing them is what
+// parked Josh's expenses three times in one session.
+//
+// The array stays so the rest of this form — the company fixed burden, which
+// has nothing to do with QuickBooks and must stay visible to a DISCONNECTED
+// company — keeps its shape and its autosave wiring.
+const FIELD_DEFS: { key: Exclude<FieldKey, 'fixed_burden_per_hour'>; label: string }[] = [];
 
 const SAVE_DEBOUNCE_MS = 1000;
 

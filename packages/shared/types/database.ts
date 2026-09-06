@@ -1278,9 +1278,13 @@ export type Database = {
           estimate_number_sequence: number
           fixed_burden_per_hour: number | null
           gl_account_labor: string | null
+          gl_account_labor_id: string | null
           gl_account_material: string | null
+          gl_account_material_id: string | null
           gl_account_other: string | null
+          gl_account_other_id: string | null
           gl_account_subcontractor: string | null
+          gl_account_subcontractor_id: string | null
           gps_clock_mode: string
           id: string
           invoice_number_prefix: string
@@ -1301,9 +1305,6 @@ export type Database = {
           qb_income_item_id: string | null
           qb_income_item_name: string | null
           qb_last_refresh_at: string | null
-          qb_payment_account_id: string | null
-          qb_payment_account_name: string | null
-          qb_payment_type: string | null
           qb_payments_enabled: boolean
           qb_realm_id: string | null
           qb_reauth_required_after: string | null
@@ -1359,9 +1360,13 @@ export type Database = {
           estimate_number_sequence?: number
           fixed_burden_per_hour?: number | null
           gl_account_labor?: string | null
+          gl_account_labor_id?: string | null
           gl_account_material?: string | null
+          gl_account_material_id?: string | null
           gl_account_other?: string | null
+          gl_account_other_id?: string | null
           gl_account_subcontractor?: string | null
+          gl_account_subcontractor_id?: string | null
           gps_clock_mode?: string
           id?: string
           invoice_number_prefix?: string
@@ -1382,9 +1387,6 @@ export type Database = {
           qb_income_item_id?: string | null
           qb_income_item_name?: string | null
           qb_last_refresh_at?: string | null
-          qb_payment_account_id?: string | null
-          qb_payment_account_name?: string | null
-          qb_payment_type?: string | null
           qb_payments_enabled?: boolean
           qb_realm_id?: string | null
           qb_reauth_required_after?: string | null
@@ -1440,9 +1442,13 @@ export type Database = {
           estimate_number_sequence?: number
           fixed_burden_per_hour?: number | null
           gl_account_labor?: string | null
+          gl_account_labor_id?: string | null
           gl_account_material?: string | null
+          gl_account_material_id?: string | null
           gl_account_other?: string | null
+          gl_account_other_id?: string | null
           gl_account_subcontractor?: string | null
+          gl_account_subcontractor_id?: string | null
           gps_clock_mode?: string
           id?: string
           invoice_number_prefix?: string
@@ -1463,9 +1469,6 @@ export type Database = {
           qb_income_item_id?: string | null
           qb_income_item_name?: string | null
           qb_last_refresh_at?: string | null
-          qb_payment_account_id?: string | null
-          qb_payment_account_name?: string | null
-          qb_payment_type?: string | null
           qb_payments_enabled?: boolean
           qb_realm_id?: string | null
           qb_reauth_required_after?: string | null
@@ -1494,6 +1497,7 @@ export type Database = {
           company_id: string
           created_at: string | null
           created_by: string | null
+          default_payment_account_id: string | null
           deleted_at: string | null
           display_name: string
           id: string
@@ -1508,6 +1512,7 @@ export type Database = {
           company_id?: string
           created_at?: string | null
           created_by?: string | null
+          default_payment_account_id?: string | null
           deleted_at?: string | null
           display_name: string
           id?: string
@@ -1522,6 +1527,7 @@ export type Database = {
           company_id?: string
           created_at?: string | null
           created_by?: string | null
+          default_payment_account_id?: string | null
           deleted_at?: string | null
           display_name?: string
           id?: string
@@ -1541,10 +1547,70 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "company_members_default_payment_account_id_fkey"
+            columns: ["default_payment_account_id"]
+            isOneToOne: false
+            referencedRelation: "company_payment_accounts"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "company_members_profile_id_fkey"
             columns: ["profile_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      company_payment_accounts: {
+        Row: {
+          account_type: string
+          company_id: string
+          created_at: string | null
+          created_by: string | null
+          deleted_at: string | null
+          id: string
+          is_deleted: boolean | null
+          name: string
+          payment_type: string
+          qb_account_id: string
+          updated_at: string | null
+          updated_by: string | null
+        }
+        Insert: {
+          account_type: string
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          is_deleted?: boolean | null
+          name: string
+          payment_type?: string
+          qb_account_id: string
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Update: {
+          account_type?: string
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          is_deleted?: boolean | null
+          name?: string
+          payment_type?: string
+          qb_account_id?: string
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "company_payment_accounts_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
             referencedColumns: ["id"]
           },
         ]
@@ -4060,6 +4126,7 @@ export type Database = {
           id: string
           is_deleted: boolean | null
           is_retainage: boolean
+          payment_account_id: string | null
           project_id: string
           purchase_order_id: string | null
           qb_bill_id: string | null
@@ -4099,6 +4166,7 @@ export type Database = {
           id?: string
           is_deleted?: boolean | null
           is_retainage?: boolean
+          payment_account_id?: string | null
           project_id: string
           purchase_order_id?: string | null
           qb_bill_id?: string | null
@@ -4138,6 +4206,7 @@ export type Database = {
           id?: string
           is_deleted?: boolean | null
           is_retainage?: boolean
+          payment_account_id?: string | null
           project_id?: string
           purchase_order_id?: string | null
           qb_bill_id?: string | null
@@ -4184,6 +4253,13 @@ export type Database = {
             columns: ["company_id"]
             isOneToOne: false
             referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "expenses_payment_account_id_fkey"
+            columns: ["payment_account_id"]
+            isOneToOne: false
+            referencedRelation: "company_payment_accounts"
             referencedColumns: ["id"]
           },
           {
@@ -6944,6 +7020,53 @@ export type Database = {
             columns: ["profile_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      qb_account_cache: {
+        Row: {
+          accounts: Json
+          company_id: string
+          created_at: string | null
+          created_by: string | null
+          deleted_at: string | null
+          fetched_at: string | null
+          id: string
+          is_deleted: boolean | null
+          updated_at: string | null
+          updated_by: string | null
+        }
+        Insert: {
+          accounts?: Json
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          deleted_at?: string | null
+          fetched_at?: string | null
+          id?: string
+          is_deleted?: boolean | null
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Update: {
+          accounts?: Json
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          deleted_at?: string | null
+          fetched_at?: string | null
+          id?: string
+          is_deleted?: boolean | null
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "qb_account_cache_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
             referencedColumns: ["id"]
           },
         ]

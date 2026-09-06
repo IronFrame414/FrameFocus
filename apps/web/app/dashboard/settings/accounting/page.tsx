@@ -5,6 +5,8 @@ import {
   getQuickBooksQueueSummary,
 } from '@/lib/services/quickbooks';
 import { AccountingPanel } from '@/components/quickbooks/accounting-panel';
+import { AccountSettings } from '@/components/quickbooks/account-settings';
+import { getMemberDefaults, getPaymentAccounts } from '@/lib/services/qb-accounts';
 import { color, h2Style } from '@/lib/theme';
 import { brand } from '@/lib/brand';
 
@@ -70,9 +72,11 @@ export default async function AccountingSettingsPage({
     redirect('/dashboard');
   }
 
-  const [connection, queue] = await Promise.all([
+  const [connection, queue, paymentAccounts, members] = await Promise.all([
     getQuickBooksConnection(),
     getQuickBooksQueueSummary(),
+    getPaymentAccounts(),
+    getMemberDefaults(),
   ]);
 
   let notice: { kind: 'ok' | 'error'; message: string } | null = null;
@@ -101,6 +105,16 @@ export default async function AccountingSettingsPage({
         queue={queue}
         isOwner={profile.role === 'owner'}
         notice={notice}
+      />
+      {/* PARITY [Josh, S122] — the SAME component the Settings tab mounts.
+          Renders nothing while disconnected, by the S103 ruling. */}
+      <AccountSettings
+        connected={connection?.state === 'connected'}
+        glIds={connection?.glAccountIds ?? { labor: null, material: null, subcontractor: null, other: null }}
+        glNames={connection?.glAccountNames ?? { labor: null, material: null, subcontractor: null, other: null }}
+        paymentAccounts={paymentAccounts}
+        members={members}
+        canEdit
       />
     </div>
   );

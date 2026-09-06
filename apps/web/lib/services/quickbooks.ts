@@ -23,11 +23,20 @@ export interface QuickBooksConnection {
   paymentsEnabled: boolean;
   incomeItemId: string | null;
   incomeItemName: string | null;
-  /** M-G: which account a Purchase posts against, and the tender label. Both
-   *  are required by the Purchase API; an unset account parks every expense. */
-  paymentAccountId: string | null;
-  paymentAccountName: string | null;
-  paymentType: string | null;
+  /** M-J: the four GL mappings as QuickBooks Account IDs. The `*Name` values
+   *  beside them are cached labels, not the mapping — see M-J's header. */
+  glAccountIds: {
+    labor: string | null;
+    material: string | null;
+    subcontractor: string | null;
+    other: string | null;
+  };
+  glAccountNames: {
+    labor: string | null;
+    material: string | null;
+    subcontractor: string | null;
+    other: string | null;
+  };
 }
 
 export async function getQuickBooksConnection(): Promise<QuickBooksConnection | null> {
@@ -47,7 +56,7 @@ export async function getQuickBooksConnection(): Promise<QuickBooksConnection | 
   const { data } = await supabase
     .from('companies')
     .select(
-      'qb_connection_state, qb_realm_id, qb_connected_at, qb_last_refresh_at, qb_refresh_rotated_at, qb_reauth_required_after, qb_payments_enabled, qb_income_item_id, qb_income_item_name, qb_payment_account_id, qb_payment_account_name, qb_payment_type'
+      'qb_connection_state, qb_realm_id, qb_connected_at, qb_last_refresh_at, qb_refresh_rotated_at, qb_reauth_required_after, qb_payments_enabled, qb_income_item_id, qb_income_item_name, gl_account_labor, gl_account_material, gl_account_subcontractor, gl_account_other, gl_account_labor_id, gl_account_material_id, gl_account_subcontractor_id, gl_account_other_id'
     )
     .eq('id', profile.company_id)
     .single();
@@ -63,9 +72,18 @@ export async function getQuickBooksConnection(): Promise<QuickBooksConnection | 
     paymentsEnabled: Boolean(data.qb_payments_enabled),
     incomeItemId: data.qb_income_item_id,
     incomeItemName: data.qb_income_item_name,
-    paymentAccountId: data.qb_payment_account_id,
-    paymentAccountName: data.qb_payment_account_name,
-    paymentType: data.qb_payment_type,
+    glAccountIds: {
+      labor: data.gl_account_labor_id,
+      material: data.gl_account_material_id,
+      subcontractor: data.gl_account_subcontractor_id,
+      other: data.gl_account_other_id,
+    },
+    glAccountNames: {
+      labor: data.gl_account_labor,
+      material: data.gl_account_material,
+      subcontractor: data.gl_account_subcontractor,
+      other: data.gl_account_other,
+    },
   };
 }
 

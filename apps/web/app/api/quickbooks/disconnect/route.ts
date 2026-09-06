@@ -175,6 +175,26 @@ async function performDisconnect(
     })
     .eq('id', companyId);
 
+  // ⚠️ THE ACCOUNT CACHE GOES ON EVERY DISCONNECT, `keep` INCLUDED [M-J]. It
+  // mirrors ONE realm's chart of accounts, and account ids are realm-local — a
+  // reconnect to a different QuickBooks company would otherwise offer the old
+  // company's accounts, and picking one would post real money to an id that
+  // means something else entirely. Serving nothing is strictly safer than
+  // serving another business's chart.
+  //
+  // ⚠️ NOTE THIS IS NOT PART OF `mode === 'clear'`. That choice is about
+  // KEEPING THE LINKS between our records and QuickBooks objects, which is
+  // exactly what makes a reconnect to the SAME realm work. A cache is not a
+  // link — it is a copy of someone else's list, and it costs one metered read
+  // to rebuild.
+  const { error: cacheError } = await admin
+    .from('qb_account_cache')
+    .delete()
+    .eq('company_id', companyId);
+  if (cacheError) {
+    console.error(`[qb-disconnect] could not clear the account cache:`, cacheError.message);
+  }
+
   let clearedLinks: number | null = null;
   if (mode === 'clear') {
     clearedLinks = await clearEntityLinks(admin, companyId);

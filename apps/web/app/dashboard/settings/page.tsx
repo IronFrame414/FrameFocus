@@ -7,6 +7,8 @@ import { ProposalSettingsForm } from './proposal-settings-form';
 import { TimeTrackingSettingsForm } from './time-tracking-settings-form';
 import { GLMappingSettingsForm } from './gl-mapping-settings-form';
 import { AccountingPanel } from '@/components/quickbooks/accounting-panel';
+import { AccountSettings } from '@/components/quickbooks/account-settings';
+import { getMemberDefaults, getPaymentAccounts } from '@/lib/services/qb-accounts';
 import {
   getQuickBooksConnection,
   getQuickBooksQueueSummary,
@@ -197,9 +199,11 @@ export default async function SettingsPage({
   // 7G §5.1 — the connection state and sync queue for the Accounting tab.
   // Both reads are caller-scoped (the signed-in user, not the service role), so
   // RLS does the gating; see lib/services/quickbooks.ts.
-  const [qbConnection, qbQueue] = await Promise.all([
+  const [qbConnection, qbQueue, qbPaymentAccounts, qbMembers] = await Promise.all([
     getQuickBooksConnection(),
     getQuickBooksQueueSummary(),
+    getPaymentAccounts(),
+    getMemberDefaults(),
   ]);
 
   // §8.11.1 — the seven tabs. The Documents tab hosts the categories manager
@@ -243,6 +247,21 @@ export default async function SettingsPage({
             queue={qbQueue}
             isOwner={profile.role === 'owner'}
           />
+          {/* ⚠️ RENDERS NOTHING WHEN DISCONNECTED [RULED Josh, S103]: "the GL
+              account fields are NOT VISIBLE AT ALL — hide the section, do not
+              disable it." The component decides, so both mount points obey it
+              without either remembering to. */}
+          <AccountSettings
+            connected={qbConnection?.state === 'connected'}
+            glIds={qbConnection?.glAccountIds ?? { labor: null, material: null, subcontractor: null, other: null }}
+            glNames={qbConnection?.glAccountNames ?? { labor: null, material: null, subcontractor: null, other: null }}
+            paymentAccounts={qbPaymentAccounts}
+            members={qbMembers}
+            canEdit
+          />
+          {/* Keeps the company fixed burden ($/hr), which is payroll and has
+              nothing to do with QuickBooks — it must stay for a disconnected
+              company. Its four GL text fields moved into AccountSettings. */}
           <GLMappingSettingsForm settings={glMappingSettings} />
         </div>
       ),
