@@ -940,3 +940,203 @@ existed and does not exist elsewhere.
 written to the connected QuickBooks company by this run — the one drain it performed parked before
 reaching the network. Test data seeded by this run was removed; one live link destroyed by an
 existing harness was restored and verified.*
+
+---
+
+# S188 — THE THREE OPEN ITEMS, CLOSED
+
+*The follow-up run. Its whole subject is tests, and the counts are the proof.*
+
+## 0. The counts
+
+| Suite | Before | After |
+| --- | --- | --- |
+| Unit (`npx vitest run`) | **1053 passed, 1 failed** (1054) · exit line **1** | **1057 passed, 0 failed** (1057) · exit line **0** |
+| Live QB battery, 7 files | **76 passed, 5 failed** (81) · exit line **1** | **82 passed, 0 failed** (82) · exit line **0** |
+| Live battery, immediately re-run | *not comparable — run 2 disagreed with run 1* | **82 passed** again, **identical** · exit line **0** |
+| `npx tsc --noEmit` | 0 | **0** |
+
+⚠️ **The third row is the one that matters.** Before this run the battery's result depended on the
+order it was run in, because a probe destroyed the data that made it fail. Two consecutive runs now
+agree, and `contacts.qb_customer_id` still reads **`62`** after both.
+
+Unit goes 1054 → 1057 because `s131` grew from 11 cases to 14. Live goes 81 → 82 because `s143-Q5`
+became two cases.
+
+---
+
+## 1. ⚠️ `s149-A` — the cleanup was destroying a live QuickBooks link
+
+**Fixed. Commit `140405d`.**
+
+The `afterAll` wrote `qb_customer_id: null` to the fixture contact as "restore". Correct for exactly
+as long as that column was always NULL — which was true until the connector shipped. After that it
+was a destructive write dressed as cleanup: the app **forgets a customer it has already created**,
+and the next push creates a second one.
+
+⚠️ **And the damage bought the green tick.** `S149-A` asserted the column was `null`, which the
+destruction guaranteed — so the file **failed on a live link and passed on the second run**. An
+assertion reachable by two different roads (the write was refused / the link was destroyed) tests
+neither.
+
+**What changed:**
+
+- **Inverted.** The probe proves the PM's write was REFUSED, so the column must be **unchanged**.
+  Originals are captured in `beforeAll` and compared against.
+- **The restore moved into the test that does the overwriting.** The service-role column-scope probe
+  genuinely must write these columns; it now puts the originals back immediately and asserts the
+  restore landed.
+- **Two self-heals narrowed.** They deleted by `company_id` alone. Harmless once; not now — a
+  `qb_sync_queue` row is a record's **pending push** and deleting it re-queues nothing (the enqueue
+  triggers fire on a *change*), so that invoice silently never reaches QuickBooks; and since M-N an
+  unprocessed `qb_webhook_events` row is **inbound work we owe**, so deleting it discards a real
+  client payment *and* dedupes away Intuit's retry.
+
+> ### ⚠️ ONE DELIBERATE DEVIATION FROM THE INSTRUCTION, LOGGED
+>
+> The instruction was *"INVERT the assertion and REMOVE the afterAll."* The assertion is inverted.
+> The `afterAll`'s three destructive writes are removed — but the **restore was relocated, not
+> abandoned**, because the service-role probe really does put `S149-cust` in that column. A bare
+> removal would have left the marker on the live link permanently, which is the same corruption with
+> a different value in it. The restore now sits where the overwritten value is actually known.
+
+### 1a. The sweep — what else has this shape
+
+**Nothing else does.** Every candidate was read, not just grepped:
+
+| Site | Verdict |
+| --- | --- |
+| `s148` `restore()` (`companies` qb columns, both tenants) | **Safe — and it is the model.** `snapshot()` in `beforeAll`, `restore()` in `afterAll`; the `disconnected` write is a *step inside* restore, needed because the shape CHECKs refuse a partial one. |
+| `s149-E` (`companies`, companyA) | **Safe.** Same snapshot/restore idiom, inline. |
+| `s143:180` `qb_object_type: null` | **Safe.** Operates on a refund the test created and then deletes. |
+| `s174-selections-email:309` `contacts.email = null` | **Safe, and better than mine was** — captures `priorEmail` and restores in a `finally`. |
+| `s97ct-reply-to:121` `companies.email = null` | **Benign.** Leaves the column in its documented natural state (no company on rebuild-test sets it). |
+| every `.delete()` on `contacts` / `invoices` / `projects` / `expenses` in the live harnesses | **Safe.** All scoped to ids or `MARKER` names the test created. |
+
+⚠️ **Residual, reported not fixed:** `s148` and `s149-E` set the **live** company to `disconnected`
+mid-test and rely on a later restore. A crash in that window leaves the connection severed. It is
+recoverable by reconnecting and it corrupts no books, so it is a lower class than what was fixed —
+but it is the same shape and worth closing when someone is next in these files.
+
+---
+
+## 2. `s131-dashboard-access` — a stale PROXY over a rule that was never broken
+
+**Fixed. Commit `89592f2`.**
+
+It asserted `lib/device.ts` must not contain the string `CompanyRole`, and went red when `1ed3d10`
+(*"[Nav] #101: desktop/mobile surface toggle"*) added `SURFACE_TOGGLE_ROLES` — a role-typed constant
+naming who **sees** the toggle.
+
+⚠️ **The rule was verified intact before anything was rewritten**, because "the test is stale" is
+exactly the conclusion that must not be assumed: `defaultSignedInPath` still reads
+`isPhoneUserAgent(userAgent) ? '/m' : '/dashboard'` and consults nothing else; `landingPathFor`
+branches on the saved surface preference and falls through to it; and **no path function reads
+`SURFACE_TOGGLE_ROLES`** — the constant is consumed by the UI that renders the toggle. A-6 holds, and
+it matters because the sign-in page renders with no session and therefore no role.
+
+So: **stale instrument, live rule.** The assertions now test the rule — arity (a role parameter would
+change it), real user-agent inputs through both functions, and a scoped guard that no landing
+function reads the role constant. The half that was never stale is kept: Ruling A's `DASHBOARD_ROLES`
+vocabulary stays out of this file entirely.
+
+**Mutation-tested:** giving `landingPathFor` a `role` argument that consults `SURFACE_TOGGLE_ROLES`
+turns two cases red. `device.ts` was restored; the commit contains no source change.
+
+---
+
+## 3. The five live failures — each judged before being touched
+
+⚠️ **The instruction was not to invert anything to green without saying which it was.** One at a
+time, then:
+
+| Probe | Stale test, or a real violation? |
+| --- | --- |
+| **`s149-A`** | **Real violation — by the TEST.** §1. Not stale at all; actively destructive. |
+| **`s143-Q5`** | **STALE, and it said so in its own title.** |
+| **`s148-Q4`** | **Sound test, wrong fixture** — and a near miss worth reading. |
+| **`s149-G` ×2** | **Sound tests, wrong fixture.** Not one assertion changed. |
+
+### `s143-Q5` — it asserted the absence of the feature that has since shipped
+
+The describe read *"nothing started consuming these columns"* and the case *"the reconciliation added
+no writer"*. At S143 these columns were **scaffolding**: a migration added them and nothing wrote
+them, and "still at rest" proved the migration had not quietly started doing something. **7G is the
+writer now — that was the entire point of building it**, so the case failed *on success*.
+
+**Inverted, not deleted** (S157), because the file otherwise stands as a claim that the connector
+does not exist. What replaces it is worth more than the original:
+
+- **A row marked `pushed` must carry the id it was pushed as.** `worker.ts`'s own header calls the
+  half-synced create *"the most dangerous path in 7G"* — QuickBooks accepts the object, the write-back
+  of the id fails, the record re-queues, and the retry creates a **second** one because QuickBooks has
+  no PUT. That failure is now visible on disk.
+- ⚠️ **The converse is deliberately NOT asserted.** An id *without* `pushed` is a record that synced
+  and has since been edited; it keeps its id while the status returns to `not_pushed` and the trigger
+  queues an update. Measured on rebuild-test: one invoice and two legacy expenses are in exactly that
+  state. Asserting the biconditional would fail on correct data — which is how a guard ends up deleted
+  instead of fixed.
+- ⚠️ **`expenses` is checked against BOTH id columns.** S182 moved expenses from Bill to Purchase, so
+  `qb_bill_id` is retired and `qb_purchase_id` live; legacy rows still point through the old one and a
+  single-column check would report them as half-synced.
+- The second case keeps Q5's original question where it is **still** the right question:
+  `time_clock_sessions.qb_time_activity_id` must stay null while `time_activity:create` returns
+  terminal (*"Module 6 payroll, not the 7G connector"*).
+
+**Mutation-tested:** forcing an expense to `pushed` with no id turns it red and names the row.
+
+### `s148-Q4` — the fixture, and the near miss
+
+`qb_vault_put` with no secret id calls `vault.create_secret(payload, 'qb_tokens_' || company)`, and
+the name is UNIQUE — so the probe collided with companyA's **real stored token**.
+
+⚠️ **The near miss is the more interesting half.** Had that name not been unique, this probe would
+have **overwritten the live OAuth blob** with `S148-rt` and severed the connection. The unique index
+is the only thing that made the failure loud instead of silent.
+
+`companyB` was tried and **rejected**: an earlier probe in the same file already claims its secret, so
+that fix would have been *order-dependent* — the exact defect this session exists to clear. It now
+uses a scratch uuid: `p_company_id` feeds nothing but the secret's name (no lookup, no foreign key),
+so the path is byte-for-byte identical and cannot touch a tenant.
+
+### `s149-G` ×2 — the connector now owns the row they seized
+
+They take `(company, current month)` and assert they created it. `recordCorePlusRead` creates exactly
+that row on the first metered read. **No assertion changed** — one row per company per month, the
+count cannot go negative, an Owner reads it, a PM does not, nobody may edit it. Only the period moved,
+to one the connector can never take.
+
+---
+
+## 4. Two things found on the way, reported not fixed
+
+### 4a. ⚠️ An orphaned vault secret would make a tenant unable to EVER reconnect
+
+Both halves of the lifecycle are correct today — the callback reads the existing `qb_token_secret_id`
+and passes it, so a reconnect **updates**; the disconnect calls `forgetTokenBlob` **before** nulling
+the column. Verified on rebuild-test: one company secret, no orphans.
+
+**The hole is the failure path.** `forgetTokenBlob`'s error is caught and logged, and the column is
+nulled regardless. If that delete ever fails, the secret survives orphaned under the name
+`qb_tokens_<company>` while the pointer to it is gone — and every future reconnect then calls
+`create_secret` with a duplicate name, gets 23505, and returns `vault_failed`. **The tenant can never
+reconnect, and the error tells them nothing.** Narrow, but permanent and silent. Not fixed here: it is
+a product change and outside these three items.
+
+### 4b. `qb_synced_at` is NULL on every row in the database — unresolved
+
+Including rows the connector demonstrably pushed. Established: **every** writer of
+`qb_push_status: 'pushed'` also writes `qb_synced_at` (exhaustive grep, nine sites), and the write
+**sticks** through the connector's own client (probed directly, then reverted). No trigger clears it.
+
+⚠️ **But three pushed expenses share an `updated_at` to the microsecond**, so something rewrote them
+in one bulk statement after they were pushed. The most likely author is **this campaign's own manual
+investigation on rebuild-test**, not the product — but that was not proven, so it is recorded as open
+rather than dismissed. It is cheap to settle: watch `qb_synced_at` on the next real push.
+
+---
+
+*No source file changed in this run — `device.ts` was mutated only to prove a guard bites, and
+restored. Migrations: none. Production: never touched. Rebuild-test left clean — vault back to its
+original three secrets, no leftover budget row, no live queue rows, no unprocessed webhook events,
+and the QuickBooks link reading `62` after two full batteries.*
