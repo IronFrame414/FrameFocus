@@ -1,6 +1,8 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { randomUUID } from 'node:crypto';
 import { admin, assertRebuildTest } from './live-session';
+import { notifyParked } from '@/lib/quickbooks/park-notify';
+import type { QbQueueRow } from '@/lib/quickbooks/queue';
 
 // ============================================================================
 // S182 — M-G: which expenses reach QuickBooks, and as WHAT.
@@ -93,7 +95,16 @@ describe('S182 — receipts become Purchases; payables never sync', () => {
   });
 
   afterAll(async () => {
-    if (madePayments.length) await admin.from('expense_payments').delete().in('id', madePayments);
+    // ⚠️ QUEUE ROWS ARE KEYED ON THE PAYMENT ID, NOT THE EXPENSE ID, and the
+    // first version of this cleanup missed that. It deleted the payments and
+    // left their `bill_payment:create` rows pointing at nothing, which the next
+    // drain correctly failed as terminal ("The payment no longer exists") —
+    // two unexplained red rows in a shared queue, from a test that had passed.
+    // Delete the queue rows for BOTH id spaces.
+    if (madePayments.length) {
+      await admin.from('qb_sync_queue').delete().in('entity_id', madePayments);
+      await admin.from('expense_payments').delete().in('id', madePayments);
+    }
     if (madeExpenses.length) {
       await admin.from('qb_sync_queue').delete().in('entity_id', madeExpenses);
       await admin.from('expenses').delete().in('id', madeExpenses);
@@ -181,6 +192,59 @@ describe('S182 — receipts become Purchases; payables never sync', () => {
       .single();
     if (p2?.id) madePayments.push(p2.id as string);
     expect(await queueFor(p2!.id as string)).toContain('bill_payment:create');
+  });
+
+  // -------------------------------------------------------------------------
+  // §2.3 — a park has to reach a person, and must not shout every five minutes.
+  // -------------------------------------------------------------------------
+  it('6 — a park notifies Owner/Admin once per REASON, not once per drain', async () => {
+    const rowId = randomUUID();
+    const fakeRow = {
+      id: rowId,
+      company_id: COMPANY,
+      realm_id: REALM,
+      entity_type: 'purchase',
+      entity_id: randomUUID(),
+      operation: 'create',
+      depends_on_id: null,
+      status: 'queued',
+      attempts: 0,
+      next_attempt_at: null,
+      last_error: null,
+      created_at: null,
+    } as unknown as QbQueueRow;
+
+    const count = async () => {
+      const { data } = await admin
+        .from('notifications')
+        .select('id, body')
+        .eq('company_id', COMPANY)
+        .eq('source_table', 'qb_sync_queue')
+        .eq('source_id', rowId);
+      return data ?? [];
+    };
+
+    try {
+      await notifyParked(admin, COMPANY, fakeRow, 'S182 reason ONE');
+      const first = await count();
+      // One row PER RECIPIENT — notifications are per-person by design, so the
+      // count is the manager audience, not 1.
+      expect(first.length).toBeGreaterThan(0);
+
+      // ⚠️ THE SAME REASON AGAIN MUST ADD NOTHING. A parked row re-checks every
+      // five minutes; keying on the row alone would be twelve an hour.
+      await notifyParked(admin, COMPANY, fakeRow, 'S182 reason ONE');
+      expect((await count()).length, 'same reason must not duplicate').toBe(first.length);
+
+      // ⚠️ BUT A DIFFERENT REASON IS NEWS. The S182 bill parked twice for
+      // different reasons (vendor unmapped, then a bad GL account); the second
+      // is a new thing to act on, so it must land.
+      await notifyParked(admin, COMPANY, fakeRow, 'S182 reason TWO');
+      const bodies = new Set((await count()).map((n) => n.body as string));
+      expect(bodies).toEqual(new Set(['S182 reason ONE', 'S182 reason TWO']));
+    } finally {
+      await admin.from('notifications').delete().eq('source_id', rowId);
+    }
   });
 
   it('5 — the queue accepts the two new entity types', async () => {

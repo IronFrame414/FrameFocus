@@ -30,7 +30,11 @@ const CHIP_TYPES: Record<Exclude<NotificationChip, 'all'>, readonly Notification
   // po_item_missing is FIELD by ruling (R-Q4): it names a specific run's gap,
   // not a stock posture — the low_stock-is-Money tiebreak cuts the other way.
   field: ['incident', 'daily_log_missing', 'still_clocked_in', 'timesheet_ready', 'punch_assigned', 'po_item_missing'],
-  account: ['trial_warning'],
+  // qb_sync_blocked is ACCOUNT, not Money: it names a CONNECTION that needs
+  // configuring, not a figure that needs approving. The QuickBooks connection is
+  // already treated as billing-adjacent (CLAUDE.md owner-only #4), which is the
+  // same reasoning that puts trial_warning here.
+  account: ['trial_warning', 'qb_sync_blocked'],
   // 'mention' and 'assignment' appear under Everything only — see above.
 };
 
@@ -52,6 +56,8 @@ export function chipFor(type: NotificationType): Exclude<NotificationChip, 'all'
  * exist because something needs approving, denying, resolving or ordering.
  */
 export const DECISION_TYPES: readonly NotificationType[] = [
+  // Nothing moves until a person answers — that is the definition of a park.
+  'qb_sync_blocked',
   'timesheet_ready',
   'selection_approved',
   'selection_denied',

@@ -1700,3 +1700,99 @@ clean tree, where it fails identically. Not touched by this work and not fixed h
 
 ⚠️ **One of this run's own edits was caught by `brand-literals.test.ts`** — a code comment named the
 product in prose, which that guard forbids outside `lib/brand.ts`. Reworded; the guard did its job.
+
+---
+
+## Unit 17 — §2.6 the cascade, and §2.3 a park that reaches a person
+
+### §2.6 — customer → job → invoice in ONE drain, not three
+
+`claimDue` resolves `depends_on_id` **once, at claim time**, so a customer pushed in a pass did not
+release its sub-customer until the NEXT invocation. Measured in Unit 14: the Purchase proof needed
+**three drains**. At the five-minute cron that is **fifteen minutes** before an invoice reaches
+QuickBooks.
+
+**Established safe before it was changed, rather than after.** The drain now re-claims in a loop, and
+it cannot spin because **every outcome removes the row from contention**:
+
+| outcome | why it cannot be re-claimed |
+| --- | --- |
+| `pushed` / `failed_terminal` | terminal status — outside the claim query's `status IN` |
+| `failed_transient` | `next_attempt_at` moves into the future (backoff) |
+| parked | stays `queued`, `next_attempt_at` **+5 minutes** |
+
+⚠️ **AND IT DOES NOT RAISE THE PER-TENANT BUDGET.** `ROWS_PER_COMPANY` exists so one long tenant drain
+cannot starve the others. The budget now spans the **whole drain**, not each pass — cascading is about
+**latency inside that allowance, never throughput.** A pass that pushes nothing ends the loop, so a
+queue of independent rows still costs exactly one pass.
+
+**Proven:**
+
+```
+queued before -> customer:create, sub_customer:create(waits), purchase:create(waits)
+ONE drain:
+  [qb-worker] company=… drained in 3 dependency passes.
+  -> {"companiesDrained":1,"pushed":4,…}
+  expense -> {"qb_purchase_id":"155","qb_push_status":"pushed"}
+  project -> {"project_number":"PRJ-103","qb_sub_customer_id":"67"}
+  QB Purchase 155 job = {"value":"67","name":"PRJ-103 — kitchen test"}
+```
+
+⚠️ **The same run produced two `failed_terminal` rows, and they were chased rather than shrugged at.**
+`"The payment no longer exists."` — orphan `bill_payment` rows left by the **S182 harness's own
+cleanup**, which deleted the payments but not their queue rows, because those rows are keyed on the
+PAYMENT id and the cleanup only swept the EXPENSE ids. The handler was correct; the harness leaked.
+Fixed there, and the two rows removed.
+
+### §2.3 — the park was invisible where it happened
+
+Josh hit the customer-name conflict **while sending an invoice** and saw nothing: the send succeeded,
+the sync silently stopped, and the prompt that would unblock it sat on Settings → Accounting — a page
+he had no reason to open.
+
+⚠️ **"Surface it at send" is not buildable as stated, and this is why: there is nothing to show at
+send.** The queue row is created there, but it does not PARK until a drain runs minutes later. A
+banner at send would have to predict a failure that has not happened. **So: notify** — raised by the
+drain, which is the only thing that knows.
+
+**M-H `20261410000000_qb_sync_blocked_notification.sql`** adds `qb_sync_blocked` to the
+`notifications` type CHECK. ⚠️ **That CHECK is an ALLOWLIST rebuilt in full on every change** — the
+live definition was read and matched value-for-value before adding to it, because restating it from
+memory would silently drop a value and break its producer. A comment on the constraint now says so.
+
+**One producer covers every park reason, including ones not written yet.** `notifyParked()` is called
+from the worker wherever `parkAwaitingHuman()` is, so a new park reason is announced without anyone
+remembering to add a notification — the same argument M-E makes for triggers over call sites.
+
+⚠️ **OWNER + ADMIN ONLY, AND THAT IS A FLOOR DECISION, NOT A CONVENIENCE.** `last_error` is stored
+**verbatim** in the notification body and **can contain money** — the invoice line-sum guard puts
+dollar figures in its park text. R7 puts the Financial Visibility Floor in the STORED text, so the
+audience must be the roles allowed to read those figures.
+
+⚠️ **DEDUPED ON (row, REASON) — not on the row alone.** A parked row re-checks every five minutes, so
+keying on the row alone is the difference between one notification and twelve an hour. But keying on
+the row *only* would swallow a genuinely new blocker: **the S182 bill parked twice for different
+reasons** (vendor unmapped, then an unresolvable GL account), and the second is news. Comparing the
+body distinguishes "still stuck on the same thing" from "stuck on something else now".
+
+Chip = **Account**, not Money: it names a **connection that needs configuring**, not a figure that
+needs approving — the same reasoning that puts `trial_warning` there, and consistent with the
+QuickBooks connection being billing-adjacent (CLAUDE.md owner-only #4). Added to `DECISION_TYPES`,
+because nothing moves until a person answers, which is the definition of a park. Link key `qb` →
+`/dashboard/settings/accounting`; **mobile resolves to `null` deliberately** — there is no `/m`
+accounting screen, and `links.ts`'s own comments record what happens when a link key points at a
+route that does not exist.
+
+**Proven end to end:**
+
+```
+park          -> parked: 1, notifications: 2 (one per Owner/Admin recipient)
+                 "QuickBooks sync needs you — an expense" / link: qb
+drain again   -> parked: 1, notifications STILL 2   (same reason -> no new row)
+restore acct  -> M-F un-parks -> pushed: 1, qb_purchase_id 156
+```
+
+Regression case 6 in `s182-qb-purchase-routing.live.ts` asserts all three properties **without a
+network**: one notification per recipient, the same reason adds nothing, a different reason lands.
+
+`npx tsc --noEmit` real exit **`0`**. **`npx next build` real exit `0`.**

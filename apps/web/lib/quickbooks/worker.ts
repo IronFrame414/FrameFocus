@@ -11,6 +11,7 @@ import {
   parkAwaitingHuman,
   type QbQueueRow,
 } from './queue';
+import { notifyParked } from './park-notify';
 import { getAccessToken } from './tokens';
 
 /**
@@ -95,7 +96,7 @@ export async function runQbSync(admin: SupabaseClient): Promise<DrainOutcome> {
     outcome.companiesConsidered += 1;
     const companyId = company.id as string;
 
-    const rows = await claimDue(admin, companyId, ROWS_PER_COMPANY);
+    let rows = await claimDue(admin, companyId, ROWS_PER_COMPANY);
     if (rows.length === 0) {
       // Nothing claimable. Say whether that is because there is nothing to do,
       // or because there IS work and it is waiting on something. See `waiting`.
@@ -113,54 +114,98 @@ export async function runQbSync(admin: SupabaseClient): Promise<DrainOutcome> {
 
     outcome.companiesDrained += 1;
     const ctx = newDrainContext(admin, conn, companyId);
+    let budget = ROWS_PER_COMPANY;
+    let passes = 0;
 
-    for (const row of rows) {
-      // ⚠️ A ROW QUEUED FOR A DIFFERENT REALM IS NEVER PUSHED. The queue is
-      // partitioned by realm precisely so a reconnect to another QuickBooks
-      // company cannot silently retarget old work into a stranger's books.
-      // /callback escalates these on reconnect; this is the belt to that braces.
-      if (row.realm_id && row.realm_id !== conn.realmId) {
-        await markFailed(
-          admin,
-          row,
-          'Queued for a different QuickBooks company than the one now connected.',
-          false
-        );
-        outcome.failedTerminal += 1;
-        continue;
+    // ⚠️ CASCADE THE DEPENDENCY CHAIN WITHIN ONE DRAIN [§2.6, S182].
+    //
+    // `claimDue` resolves `depends_on_id` ONCE, at claim time, so a customer
+    // pushed in this pass does not release its sub-customer until the NEXT
+    // invocation. customer -> sub_customer -> invoice therefore took THREE
+    // drains, and at a five-minute cron that is **fifteen minutes** before an
+    // invoice reaches QuickBooks. Measured, not assumed: the Purchase proof in
+    // Unit 14 needed exactly three.
+    //
+    // ⚠️ IT IS SAFE BECAUSE EVERY OUTCOME REMOVES THE ROW FROM CONTENTION, so
+    // the loop cannot re-claim what it just handled and cannot spin:
+    //   pushed           -> terminal status
+    //   failed_terminal  -> terminal status
+    //   failed_transient -> `next_attempt_at` moves into the future (backoff)
+    //   parked           -> stays `queued`, `next_attempt_at` +5 minutes
+    // Each is excluded by the claim query's own filters on the next pass.
+    //
+    // ⚠️ AND IT DOES NOT RAISE THE PER-TENANT BUDGET. `budget` spans the whole
+    // drain, not each pass. ROWS_PER_COMPANY exists so a long single-tenant
+    // drain cannot starve the others; cascading is about LATENCY within that
+    // allowance, never about throughput. A pass that pushes nothing ends the
+    // loop, so a queue of independent rows still costs exactly one pass.
+    while (rows.length > 0 && budget > 0) {
+      passes += 1;
+      const pushedBefore = outcome.pushed;
+
+      for (const row of rows) {
+        // ⚠️ A ROW QUEUED FOR A DIFFERENT REALM IS NEVER PUSHED. The queue is
+        // partitioned by realm precisely so a reconnect to another QuickBooks
+        // company cannot silently retarget old work into a stranger's books.
+        // /callback escalates these on reconnect; this is the belt to that braces.
+        if (row.realm_id && row.realm_id !== conn.realmId) {
+          await markFailed(
+            admin,
+            row,
+            'Queued for a different QuickBooks company than the one now connected.',
+            false
+          );
+          outcome.failedTerminal += 1;
+          continue;
+        }
+
+        await markInFlight(admin, row.id);
+
+        try {
+          const result = await handleQueueRow(ctx, row);
+          if (result.kind === 'pushed') {
+            await markPushed(admin, row.id);
+            outcome.pushed += 1;
+          } else if (result.kind === 'park') {
+            await parkAwaitingHuman(admin, row.id, result.reason);
+            // §2.3 — a park has to reach a person, not just a settings screen.
+            // Deduped on (row, reason) inside; never throws.
+            await notifyParked(admin, companyId, row, result.reason);
+            outcome.parked += 1;
+          } else {
+            await markFailed(admin, row, result.reason, false);
+            outcome.failedTerminal += 1;
+            await markRecordFailed(admin, companyId, row);
+          }
+        } catch (err) {
+          const retryable = err instanceof QboApiError ? err.retryable : true;
+          const message =
+            err instanceof QboApiError
+              ? err.message
+              : `Unexpected error: ${(err as Error).message}`;
+          await markFailed(admin, row, message, retryable);
+          if (retryable) {
+            outcome.failedTransient += 1;
+          } else {
+            outcome.failedTerminal += 1;
+            await markRecordFailed(admin, companyId, row);
+          }
+          console.error(
+            `[qb-worker] company=${companyId} row=${row.id} ${row.entity_type}:${row.operation} failed (retryable=${retryable}):`,
+            message
+          );
+        }
       }
 
-      await markInFlight(admin, row.id);
+      budget -= rows.length;
+      // Only a PUSH can have released a dependant. A pass that parked or failed
+      // everything has changed nothing for anyone waiting, so stop.
+      if (outcome.pushed === pushedBefore || budget <= 0) break;
+      rows = await claimDue(admin, companyId, budget);
+    }
 
-      try {
-        const result = await handleQueueRow(ctx, row);
-        if (result.kind === 'pushed') {
-          await markPushed(admin, row.id);
-          outcome.pushed += 1;
-        } else if (result.kind === 'park') {
-          await parkAwaitingHuman(admin, row.id, result.reason);
-          outcome.parked += 1;
-        } else {
-          await markFailed(admin, row, result.reason, false);
-          outcome.failedTerminal += 1;
-          await markRecordFailed(admin, companyId, row);
-        }
-      } catch (err) {
-        const retryable = err instanceof QboApiError ? err.retryable : true;
-        const message =
-          err instanceof QboApiError ? err.message : `Unexpected error: ${(err as Error).message}`;
-        await markFailed(admin, row, message, retryable);
-        if (retryable) {
-          outcome.failedTransient += 1;
-        } else {
-          outcome.failedTerminal += 1;
-          await markRecordFailed(admin, companyId, row);
-        }
-        console.error(
-          `[qb-worker] company=${companyId} row=${row.id} ${row.entity_type}:${row.operation} failed (retryable=${retryable}):`,
-          message
-        );
-      }
+    if (passes > 1) {
+      console.log(`[qb-worker] company=${companyId} drained in ${passes} dependency passes.`);
     }
   }
 
