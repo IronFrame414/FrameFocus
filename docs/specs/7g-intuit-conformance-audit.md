@@ -1397,3 +1397,124 @@ the real re-authorisation still owed from S189.
 
 ⚠️ **The user's dev server was never touched.** My own `next dev` failed to start with `EADDRINUSE`
 and was left dead rather than killing theirs.
+
+---
+
+# S190b — THE 404 WAS A CORRUPT DEV CACHE; THE DOUBLED PORT WAS `request.url`
+
+*Two defects, both settled on the wire. Neither was in the callback's contents, which is why reading
+them found nothing.*
+
+> ## ⚠️ ONE STEP REMAINS AND ONLY JOSH CAN DO IT
+>
+> **Click Connect and complete Intuit's consent.** Everything on both sides of that click is now
+> proven working (§3). The connection has been down since S189 and still needs a real
+> re-authorisation.
+>
+> ⚠️ **I restarted your dev server** (twice) and cleared `.next`. There is one running now, clean.
+
+---
+
+## 1. Defect A — the callback 404'd because its compiled module did not exist
+
+**`.next/server/app/api/quickbooks/callback/` was an EMPTY DIRECTORY**, while `connect/` beside it
+held a 49KB `route.js`. The route manifest still mapped
+`/api/quickbooks/callback/route -> app/api/quickbooks/callback/route.js`, so Next resolved the entry,
+found no module, and returned 404 **without ever dispatching a request** — which is exactly why
+nothing was logged.
+
+### Why, and it is the part worth remembering
+
+**Two `next dev` processes were running against the same `.next`.**
+
+| PID | Started | Role |
+| --- | --- | --- |
+| 93507 | 13:53:31 | held port 3000 — the one actually answering |
+| 392598 | **22:56:49** | could not bind, still compiling into the shared `.next` |
+
+The callback's empty artifact directory is stamped **22:57** — one second after the second server
+started. It wrote the manifest entry; the serving process then had a manifest pointing at a module it
+had never written.
+
+⚠️ **The bisect is what proved it, and reading the file never could.** A trivial route created
+*beside* the callback compiled and answered 200 **within one second**, while the callback stayed 404
+— so routing was healthy and the file was irrelevant. `touch`ing the source did nothing, because the
+manifest already claimed the route was built, so nothing triggered a rebuild. Permanent 404, clean
+file, clean `tsc`, clean `next build`.
+
+**Fix:** stop every `next dev`, delete `.next`, start exactly one. It then compiled
+(`✓ Compiled /api/quickbooks/callback in 825ms`), answered **307**, and **logged the request**.
+
+> ⚠️ **AND I CONTRIBUTED TO THIS, WHICH IS WHY IT IS RECORDED RATHER THAN JUST FIXED.** `next build`
+> writes to the same `.next` a running `next dev` is serving from. I ran a build during S188/S189
+> with the dev server up, and did it again in this run — the second time I watched it replace the
+> dev-compiled 159KB `route.js` with a 7KB build artifact. **Never run `next build` against a live
+> `next dev`**, and never run two dev servers, without `distDir` separating them.
+
+---
+
+## 2. Defect B — every redirect carried a doubled port
+
+Measured through the tunnel, with a probe route echoing what actually arrives:
+
+```
+host:              localhost:3000        <- Next builds request.url from THIS
+x-forwarded-host:  <name>-3000.app.github.dev
+x-forwarded-port:  443
+x-forwarded-proto: https
+```
+
+⚠️ **Next takes the scheme from `x-forwarded-proto` but the host from the plain `Host` header**, so
+`request.url` came out as `https://localhost:3000/…`. The proxy then rewrote `localhost` to the
+public host on the way out and **left the `:3000` behind**:
+
+```
+before   location: https://<name>-3000.app.github.dev:3000/sign-in
+after    location: https://<name>-3000.app.github.dev/sign-in
+```
+
+**This is what turned a working error path into a dead one.** `?qb_error=state_mismatch` is a
+sentence the user is meant to *read*; it was being delivered as an unreachable host.
+
+`lib/app-origin.ts` prefers the configured `NEXT_PUBLIC_APP_URL`, falling back to
+`x-forwarded-host`/`-proto`. ⚠️ **The preference is a security property, not only correctness:**
+`Host` and `X-Forwarded-Host` are caller-supplied, and a redirect built from them is textbook
+host-header injection. The configured value cannot be forged; the header fallback is still better
+than `request.url` because `x-forwarded-host` carries no port to double.
+
+Applied at **every** redirect that leaves the app: 3 sites in `connect`, `settingsUrl()` + `/sign-in`
+in `callback`, and **all 7** in `middleware.ts`.
+
+⚠️ **`qboRedirectUri()` already did it this way** — which is why the `redirect_uri` handed to Intuit
+was correct all along while the redirects beside it were broken. One route, two constructions, one
+bug. That is also the tell I should have followed sooner.
+
+---
+
+## 3. Proof — the connect chain, end to end through the real tunnel
+
+| Step | Observed |
+| --- | --- |
+| `/api/quickbooks/connect` as the Owner | **307** to `appcenter.intuit.com/connect/oauth2?…`, `qb_oauth_state` nonce set (64 chars) |
+| `/api/quickbooks/callback` with **that** nonce | passes CSRF → session → owner → reaches the token exchange; **`qb_error=exchange_failed`**, correct for a deliberately fake `code` |
+| every redirect above | resolves on the public host, **no doubled port** |
+| the token store | `qb_vault_put` → no error; company row → **`connected`** with the pointer **SET**; blob **reads back**; then reverted |
+
+**Only Intuit's consent click is unexercised** — it needs a human at their screen. Everything before
+it and everything after it is measured.
+
+## 4. Also checked
+
+- **Unit suite: 1057 passed, 0 failed**, exit line 0. One case (`s131`) went red because the
+  middleware refactor deleted the `url.pathname = …` syntax it keyed on; the **rule was verified
+  intact first**, then the assertion was repointed at the call site and *tightened* — the old anchor
+  also matched the import at the top of the file, which made it partly vacuous.
+- `npx next build` exit line **0**, callback listed.
+- Temporary instrumentation (a header-echo probe route) removed; `git status` clean apart from the
+  screenshot.
+
+## 5. Test data
+
+One in-memory Owner session; one synthetic token blob and Vault secret, **deleted and verified gone**,
+with the company restored to `disconnected` and a null pointer. **Rebuild-test is unchanged** — still
+awaiting the re-authorisation owed since S189.
