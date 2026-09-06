@@ -108,6 +108,25 @@ export async function runQbSync(admin: SupabaseClient): Promise<DrainOutcome> {
     outcome.companiesConsidered += 1;
     const companyId = company.id as string;
 
+    // ⚠️ KEEP THE TOKEN ALIVE FOR EVERY CONNECTED COMPANY [F7, S187].
+    //
+    // The refresh only fires when the stored token has actually expired, so the
+    // usual cost of this line is one cheap DB read. What it buys: a company
+    // that has not invoiced or spent for months still refreshes on schedule.
+    //
+    // ⚠️ BEFORE THIS, `getAccessToken` WAS ONLY REACHED WHEN THERE WAS QUEUED
+    // WORK — the `continue` below skipped it — so a dormant tenant's refresh
+    // token quietly aged out and the customer discovered it by finding the
+    // connection dead.
+    //
+    // ⚠️ WHAT I ASSUMED, because I could not confirm it: that Intuit's 100-day
+    // inactivity expiry still applies ALONGSIDE the newer five-year maximum.
+    // Intuit's November 2025 note describes the 5-year cap as added, not as
+    // replacing the inactivity rule, and their doc pages would not load. This
+    // keep-alive is correct under EITHER reading, which is why it was written
+    // rather than waiting for an answer.
+    const conn = await getAccessToken(admin, companyId);
+
     // ⚠️ INBOUND FIRST, AND BEFORE THE QUEUE-EMPTY EARLY-OUT [F1, M-N]. A
     // company with no OUTBOUND backlog still has inbound payments to apply, and
     // the `continue` below would have skipped them entirely — the same shape as
@@ -125,10 +144,13 @@ export async function runQbSync(admin: SupabaseClient): Promise<DrainOutcome> {
       continue;
     }
 
-    const conn = await getAccessToken(admin, companyId);
     if (!conn) {
       // Not connected, needs_reauth, or a transient refresh failure. The rows
       // stay exactly as they are and flow on the next pass.
+      //
+      // ⚠️ COUNTED HERE, NOT AT THE KEEP-ALIVE ABOVE, deliberately: this metric
+      // means "work was waiting and we could not send it". A disconnected
+      // company with an empty queue is idle, not skipped.
       outcome.skippedNotConnected += 1;
       continue;
     }
