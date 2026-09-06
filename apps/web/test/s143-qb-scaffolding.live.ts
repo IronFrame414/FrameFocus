@@ -289,15 +289,90 @@ describe('S143-Q4 — ONE write rule: a PM cannot hand-write sync state (B1)', (
   });
 });
 
-describe('S143-Q5 — nothing started consuming these columns', () => {
-  it('every row is still at rest — the reconciliation added no writer', async () => {
+// ============================================================================
+// ⚠️ S143-Q5 IS INVERTED [S188]. THE TEST WAS STALE; THE RULE IT NAMED IS NOT.
+// ============================================================================
+//
+// Superseded, quoted rather than deleted:
+//
+//     describe('S143-Q5 — nothing started consuming these columns', …
+//       it('every row is still at rest — the reconciliation added no writer', …
+//         expect(r.qb_push_status).toBe('not_pushed');
+//         expect(r[idColumn]).toBeNull();
+//
+// ⚠️ IT ASSERTED THE ABSENCE OF THE FEATURE THAT HAS SINCE SHIPPED, and it said
+// so in its own title. At S143 these columns were SCAFFOLDING: a reconciliation
+// migration added them and nothing wrote them, so "still at rest" was the proof
+// that the migration had not quietly started doing something. **7G is the
+// writer now. That was the entire point of building it**, so the case failed
+// on success — the one shape CLAUDE.md's S157 rule says to invert rather than
+// delete, because the file otherwise reads as a standing claim that the
+// connector does not exist.
+//
+// ⚠️ WHAT SURVIVES IS THE HALF THAT WAS NEVER ABOUT SCAFFOLDING: **the
+// connector is still the ONLY writer, and it writes the id and the status
+// TOGETHER.** That second clause is worth more than the original ever was —
+// `worker.ts`'s own header calls a half-synced create "the most dangerous path
+// in 7G": QuickBooks accepts the object and the write-back of the id fails, so
+// the record re-queues and a retry creates a SECOND invoice, QuickBooks having
+// no PUT. A row marked `pushed` with no id is that failure, on disk.
+//
+// ⚠️ THE CONVERSE IS NOT ASSERTED, DELIBERATELY. An id WITHOUT `pushed` is
+// legitimate and common: a record that synced and has since been edited keeps
+// its id while the status returns to `not_pushed` and the enqueue trigger
+// queues an update. Measured on rebuild-test — one invoice and two legacy
+// expenses are in exactly that state. Asserting the biconditional would fail
+// on correct data, which is how a guard gets deleted instead of fixed.
+describe('S143-Q5 — the connector is the only writer, and it writes id and status together', () => {
+  it('⚠️ no row is marked `pushed` without the id it was pushed as', async () => {
+    // ⚠️ `expenses` IS CHECKED AGAINST TWO COLUMNS, and that is not defensive
+    // padding. The S182 ruling reversal moved expenses from Bill to Purchase,
+    // so `qb_bill_id` is the RETIRED column and `qb_purchase_id` the live one.
+    // Legacy rows pushed under the old model still carry a bill id, and a
+    // single-column check would report them as half-synced. `SYNCED` still
+    // names `qb_bill_id` for this table — left as it is, because the column
+    // still exists and the old rows still point through it.
+    const idColumnsFor: Record<string, string[]> = {
+      expenses: ['qb_bill_id', 'qb_purchase_id'],
+    };
+
     for (const { table, idColumn } of SYNCED) {
-      const { data } = await admin.from(table).select(`qb_push_status, ${idColumn}`);
+      const columns = idColumnsFor[table] ?? [idColumn];
+      const { data, error } = await admin
+        .from(table)
+        .select(`id, qb_push_status, ${columns.join(', ')}`);
+      expect(error, `${table} is missing a QB column`).toBeNull();
+
       for (const r of (data ?? []) as unknown as Record<string, unknown>[]) {
-        expect(r.qb_push_status, `${table} has a row that is no longer at rest`).toBe('not_pushed');
-        expect(r[idColumn], `${table}.${idColumn} was populated by something`).toBeNull();
+        if (r.qb_push_status !== 'pushed') continue;
+        const carried = columns.some((c) => r[c] !== null && r[c] !== undefined);
+        expect(
+          carried,
+          `${table} row ${r.id} says 'pushed' but carries no QuickBooks id in ` +
+            `${columns.join(' or ')}. That is the half-synced create: QuickBooks ` +
+            `accepted the object and the write-back failed, so a retry will create ` +
+            `a SECOND one — QuickBooks has no PUT.`
+        ).toBe(true);
       }
     }
+  });
+
+  it('⚠️ nothing writes the column the connector deliberately REFUSES', async () => {
+    // `time_activity:create` returns terminal — "Time export to QuickBooks is
+    // Module 6 payroll, not the 7G connector" (`entities.ts:1667-1671`). So
+    // `time_clock_sessions.qb_time_activity_id` must stay null for as long as
+    // that refusal stands. A value here means something OTHER than the
+    // connector wrote it, which is the original Q5 question asked where it is
+    // still the right question.
+    const { data } = await admin
+      .from('time_clock_sessions')
+      .select('id, qb_time_activity_id')
+      .not('qb_time_activity_id', 'is', null);
+    expect(
+      (data ?? []).map((r) => (r as { id: string }).id),
+      'a time activity id exists, but the connector refuses to create one — ' +
+        'either Module 6 landed (update this test) or something hand-wrote it'
+    ).toEqual([]);
   });
 });
 

@@ -555,8 +555,25 @@ describe('S149-F — webhook idempotency, which protects a PAID read', () => {
 });
 
 describe('S149-G — the read-budget counter', () => {
+  // ⚠️ A HISTORICAL PERIOD, NOT THIS MONTH [S188]. Superseded line, quoted:
+  //
+  //     const period = new Date().toISOString().slice(0, 8) + '01';
+  //
+  // These probes seize a (company, period) pair and assert they created it.
+  // That worked while nothing else wrote the table. **The connector now owns
+  // the CURRENT month's row for the connected company** — `recordCorePlusRead`
+  // creates it on the first metered read — so the probe's own insert collided
+  // with real data and the case failed on a working system.
+  //
+  // ⚠️ THE ASSERTIONS THEMSELVES WERE NEVER WRONG, and none of them changed:
+  // one row per company per month, the count cannot go negative, an Owner reads
+  // it, a PM does not, and nobody may edit it. Only the fixture moved. The
+  // connector always writes the first of the CURRENT month, so a long-past
+  // period is a pair it can never take.
+  const PERIOD = '2020-01-01';
+
   it('one row per company per month, and the count cannot go negative', async () => {
-    const period = new Date().toISOString().slice(0, 8) + '01';
+    const period = PERIOD;
     const { data, error } = await admin
       .from('qb_read_budget').insert({ company_id: companyA, period_month: period, coreplus_reads: 10 })
       .select('id').single();

@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { randomUUID } from 'node:crypto';
 import { admin, assertRebuildTest, sessionFor } from './live-session';
 
 // ============================================================================
@@ -296,7 +297,33 @@ describe('S148-Q3 — one realm binds to at most one tenant', () => {
 });
 
 describe('S148-Q4 — ENCRYPTION: the reason Vault was chosen over an app-layer key', () => {
+  // ⚠️ THIS ROUND-TRIP RUNS AGAINST A SCRATCH ID, NOT A REAL TENANT [S188].
+  // Superseded usage, quoted rather than deleted: both `qb_vault_put` calls
+  // below passed `p_company_id: companyA`.
+  //
+  // `qb_vault_put` with no `p_secret_id` calls `vault.create_secret(payload,
+  // 'qb_tokens_' || company_id, …)`, and `vault.secrets` carries a UNIQUE index
+  // on the name. So creating a token secret for a company **that already holds
+  // one** raises 23505. companyA is now genuinely connected and genuinely holds
+  // one, so the probe collided with a real stored token and failed on a
+  // perfectly healthy system.
+  //
+  // ⚠️ IT WAS ALSO THE MORE DANGEROUS OF THE TWO OUTCOMES. Had the name not
+  // been unique, this probe would have OVERWRITTEN the live OAuth blob with
+  // `S148-rt` and severed the connection.
+  //
+  // ⚠️ AND companyB IS NOT THE ANSWER EITHER — tried, and it failed the same
+  // way: the `needs_reauth` probe above already claims companyB's secret
+  // earlier in the same run, so the fix would have been order-dependent, which
+  // is the defect this whole session is cleaning up.
+  //
+  // `qb_vault_put` uses `p_company_id` for NOTHING but the secret's name — no
+  // lookup, no foreign key — so a fresh uuid exercises byte-for-byte the same
+  // path while being unable to collide with, or overwrite, any tenant's token.
+  // The property under test is that Vault encrypts and round-trips. That is a
+  // property of Vault, not of which tenant happens to be connected.
   it('the service role can write a secret and read it back decrypted', async () => {
+    const scratchCompany = randomUUID();
     const payload = JSON.stringify({
       access_token: `${MARKER}-at`,
       refresh_token: `${MARKER}-rt`,
@@ -305,7 +332,7 @@ describe('S148-Q4 — ENCRYPTION: the reason Vault was chosen over an app-layer 
     });
 
     const { data: id, error } = await admin.rpc('qb_vault_put', {
-      p_company_id: companyA,
+      p_company_id: scratchCompany,
       p_payload: payload,
     });
     expect(error, `qb_vault_put: ${error?.message}`).toBeNull();
@@ -320,7 +347,7 @@ describe('S148-Q4 — ENCRYPTION: the reason Vault was chosen over an app-layer 
     // REPLACES, never merges — a rotation must not leave the old token behind.
     const rotated = JSON.stringify({ refresh_token: `${MARKER}-rt-rotated` });
     await admin.rpc('qb_vault_put', {
-      p_company_id: companyA,
+      p_company_id: scratchCompany,
       p_payload: rotated,
       p_secret_id: id as unknown as string,
     });
