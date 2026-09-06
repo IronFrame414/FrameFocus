@@ -2102,3 +2102,104 @@ table, so an account deleted in QuickBooks must disappear rather than linger in 
 
 `npx tsc --noEmit` real exit **`0`**. **`npx next build` real exit `0`** — `/api/quickbooks/accounts`
 compiled; `/api/quickbooks/payment-account` (M-G's) removed.
+
+---
+
+## Unit 21 — the account ON the expense, and the sweep M-J set off
+
+**Migration `20261440000000_qb_account_cache_upsert_key.sql` (M-K).** rebuild-test
+`{"success":true}`; ledger canonical.
+
+### ⚠️ M-K exists because M-J shipped an unupsertable table, found by RUNNING it
+
+M-J gave `qb_account_cache` a **partial** unique index (`WHERE is_deleted = false`) while
+`refreshAccountCache()` writes with `.upsert(…, { onConflict: 'company_id' })`. Postgres:
+
+> *"there is no unique or exclusion constraint matching the ON CONFLICT specification"*
+
+**`ON CONFLICT (col)` cannot use a partial index** unless the statement repeats the predicate, which
+PostgREST's `upsert` cannot send. ⚠️ **The failure was swallowed into a friendly "Could not save the
+account list", so the Refresh button would have looked merely broken rather than structurally
+impossible.** Reading the SQL would not have caught it; running it did on the first attempt.
+
+**Fixed by dropping the predicate, not by working around it**, because the predicate was wrong:
+this table holds one row per company and is **hard-deleted** on disconnect, so `is_deleted` was
+inherited boilerplate. ⚠️ **`company_payment_accounts` KEEPS its partial index** and that is not
+inconsistent — removing an account there IS a soft delete, because `expenses.payment_account_id`
+still references the row and a hard delete would erase which account paid for a transaction already
+in the books. Its route does select-then-insert/update for exactly that reason.
+
+### The expense side
+
+- **Capture form** — a *"Paid from"* picker, pre-filled from the author's default.
+  ⚠️ **The default only fills an EMPTY field.** On an edit the row already says which account paid,
+  and overwriting that with the *current user's* default would silently move where a recorded
+  expense posted.
+- **Review popup** — the same picker, pre-filled from the **reviewer's** default when the capture
+  came from someone who has none.
+- ⚠️ **Both hide the field entirely when the company has configured no accounts.** An empty dropdown
+  invites configuring something that is not there; approval is what surfaces the real problem.
+- **Blocking at review**, with the message that names the fix — the client check and
+  `enforce_expense_payment_account` say the same sentence. ⚠️ **This is the reversal Josh asked for:**
+  *"an error at entry or review, not a silent park later … it catches the problem where the person
+  has the context, instead of blocking a sync hours later on a page they are not looking at."*
+
+### The seven §5 proofs, by observation on rebuild-test
+
+```
+1. refresh -> {"ok":true,"count":93}   REAL accounts, e.g.
+   {"id":"69","name":"Accounting","path":"Legal & Professional Fees:Accounting","type":"Expense"}
+   GL candidates 91 (AP/AR excluded: 2)
+   PAY candidates 7: Checking/Bank, Savings/Bank, Mastercard/CC, Visa/CC,
+                     + 3 Other Current Liability
+   stored GL -> {"gl_account_material_id":"80", ...}      <- an ID, not a typed name
+2. DISCONNECTED markup length 0 | connected 1943; "Cost accounts" absent when off
+3. approve WITH an account -> ALLOWED; drain -> pushed 1
+   QB Purchase 172  AccountRef = {"value":"35","name":"Checking"}
+                    line account = {"value":"80","name":"Cost of Goods Sold"}
+4. approve WITHOUT an account -> REFUSED:
+   "Choose which account paid for this expense before approving it."
+5. default set for Dave Whitfield; pre-fill never overwrites the row's own value
+6. COMMITMENT approved fine, queued rows 0
+7. every park raises the S182 notification -- one producer, all reasons
+```
+
+⚠️ **§3 needed no new mechanism.** S182's `notifyParked()` hangs off `parkAwaitingHuman()`, so the
+two new park reasons (no account on the expense; the account was removed from the list) are announced
+without anything being added. **And the payment-account park is now nearly unreachable by design** —
+the blocking rule catches it at review. It is kept as belt to those braces for rows queued before
+M-J, or an account soft-deleted between approval and drain.
+
+### ⚠️ THE SWEEP — three tests went red, and two were REAL DEFECTS I HAD SHIPPED
+
+CLAUDE.md's S157 rule in practice: *"a fix session must go looking for OLDER tests that assert the
+behaviour it just overturned."*
+
+**1. `deletion-census` — a real data-protection gap.** *"Tables with company_id in NEITHER the walk
+NOR SURVIVES … `company_payment_accounts`, `qb_account_cache`."* A trial deletion would have left
+both standing. Added to `COMPANY_TABLES`, and **the position is a real constraint, not tidiness**:
+`expenses.payment_account_id` is NO ACTION, so the list cannot go before `expenses`.
+
+**2. `s182` case 1 — my own harness, silently no-op'd.** *"expected [] to include
+'purchase:create'"*, which reads like an enqueue bug and is not one: `approveExpense({})` seeded a
+receipt with no account, M-J refused the approval, and **the helper ignored the error**, so the row
+stayed pending and enqueued nothing. Two fixes, and the second matters more: the helper now supplies
+an account, **and it throws when an approval is refused**. Fire-and-forget writes in a harness turn
+tomorrow's rule change into a mystery in an unrelated assertion.
+
+**3. `s123-still-clocked-in` — a false positive, and a miss from LAST run.** Its exact allowlist of
+migrations mentioning `still_clocked_in` grew a fifth entry, because M-H restates the whole
+`notifications_type_check` allowlist. ⚠️ **This broke at M-H in Unit 17 and I did not catch it then:
+I ran `tsc` and `next build` after that migration but NOT the unit suite.** A migration that touches
+a shared CHECK constraint can break a test in a module it has nothing to do with; only the suite says
+so. Allowlist extended with the reason, and a note that a list whose five entries all arrived the
+same way is measuring the wrong thing — kept anyway, because it has now forced five authors to state
+in writing that their migration does not emit that notification.
+
+### Verification
+
+`npx tsc --noEmit` real exit **`0`**. **`npx next build` real exit `0`.**
+**Live harnesses s181 + s182 + s183 = 19 tests, real exit `0`.**
+**Committed unit suite: 1047 passed, 1 failed, real exit `1`** — ⚠️ the failure is
+`s131-dashboard-access`, **pre-existing and unrelated**, proven last run by stashing and re-running
+on the clean tree.

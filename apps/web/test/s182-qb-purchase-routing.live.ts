@@ -26,6 +26,10 @@ const COMPANY = '03bb903f-1084-4ab4-afb8-03192cb58d30';
 const REALM = '9341457813274121';
 
 let projectId = '';
+/** ⚠️ M-J [S183] — an expense that WILL sync cannot be approved without saying
+ *  which account paid. Every receipt this file approves therefore needs one.
+ *  The absence case is not lost: S183 case 5 asserts the refusal. */
+let paymentAccountId = '';
 /** ⚠️ REQUIRED EXPLICITLY. `expenses.author_member_id` defaults to
  *  `get_my_member_id()`, which is NULL under the service role — the harness
  *  writes as service role (triggers fire for every role; RLS is not what this
@@ -57,6 +61,9 @@ async function approveExpense(fields: Record<string, unknown>): Promise<string> 
       amount: 100,
       cost_category: 'material',
       status: 'pending',
+      // Overridable by `fields` — case 3 deliberately seeds payables, which
+      // need no account because they never sync.
+      payment_account_id: paymentAccountId || null,
       ...fields,
     })
     .select('id')
@@ -64,7 +71,17 @@ async function approveExpense(fields: Record<string, unknown>): Promise<string> 
   if (error) throw new Error(`seed expense failed: ${error.message}`);
   const id = data!.id as string;
   madeExpenses.push(id);
-  await admin.from('expenses').update({ status: 'approved' }).eq('id', id);
+
+  // ⚠️ ASSERT THE APPROVAL LANDED. It used to be fire-and-forget, and when M-J
+  // added `enforce_expense_payment_account` this helper silently stopped
+  // approving anything — case 1 then failed with "expected [] to include
+  // 'purchase:create'", which reads like an enqueue bug and is not one. A
+  // refused approval must say so here, where the cause is.
+  const { error: approveError } = await admin
+    .from('expenses')
+    .update({ status: 'approved' })
+    .eq('id', id);
+  if (approveError) throw new Error(`approval refused: ${approveError.message}`);
   return id;
 }
 
@@ -92,6 +109,16 @@ describe('S182 — receipts become Purchases; payables never sync', () => {
       .limit(1)
       .single();
     memberId = member!.id as string;
+
+    const { data: account } = await admin
+      .from('company_payment_accounts')
+      .select('id')
+      .eq('company_id', COMPANY)
+      .eq('is_deleted', false)
+      .order('created_at', { ascending: true })
+      .limit(1)
+      .maybeSingle();
+    paymentAccountId = (account?.id as string) ?? '';
   });
 
   afterAll(async () => {
