@@ -1256,3 +1256,122 @@ all harness queue rows deleted.
 park mechanism was right, the claim query was right, and the Accounting panel was right — the drain's
 response was the one surface that could not tell an operator which world they were in, and that is
 where five minutes of waiting turned into a hunt through a query that had nothing wrong with it.
+
+---
+
+## Unit 13 — grounding the handshake fixes: three premises checked before any code
+
+**Run:** S182 (2026-09-06), unattended, same branch. ⚠️ **The tree was found on `main`** — someone
+checked out `main` after S181's commit. Nothing was lost (`feature/7g-quickbooks` still pointed at
+`3d48c10`); switched back before touching anything. Recorded because a run that had started editing
+on `main` would have been editing production's branch.
+
+**rebuild-test idle at start:** `qb_sync_queue` 10 rows, all `pushed`.
+
+### ⚠️ §2.7 CORRECTED — MCP *does* write a ledger row, and the build log has been wrong since Unit 1
+
+Unit 1 records *"MCP wrote NO row — repaired by hand"*, and S181's commit message repeats it. **Both
+are wrong, and the check that produced them is the trap.**
+
+`mcp__supabase__apply_migration` **writes a ledger row under its own auto-generated version** (a real
+timestamp) with the **file basename** as the name. So the canonical version we intended is genuinely
+absent, and a `select … where version in ('20261350000000', …)` returns `[]` — which reads as "no row
+was written" when in fact a row was written *under a different key*. **Verifying by the intended
+version is what hid this.** The correct check is by NAME.
+
+The result is **two rows per migration**, not the one duplicate §2.7 describes:
+
+| canonical (hand-written) | MCP auto-stamp (deleted) |
+| --- | --- |
+| `20261350000000 / qb_invoice_link` | `20260905200516 / 20261350000000_qb_invoice_link` |
+| `20261360000000 / qb_webhook_verifier` | `20260905200526 / 20261360000000_qb_webhook_verifier` |
+| `20261370000000 / qb_inbound_payment` | `20260905205304 / 20261370000000_qb_inbound_payment` |
+| `20261380000000 / qb_enqueue_triggers` | `20260905205859 / 20261380000000_qb_enqueue_triggers` |
+| `20261390000000 / qb_wake_parked_on_settings` | `20260906115701 / qb_wake_parked_on_settings` |
+| `20261340000000 / …paid_invoice_void_refusal` | `20260905153858 / paid_invoice_void_refusal` |
+
+**Those six were deleted** (7G scope). Each was verified to have its canonical counterpart present
+first, so no record of an applied migration was lost.
+
+⚠️ **SIX MORE ORPHANS OF THE SAME SHAPE EXIST, from earlier non-7G sessions, and are LEFT IN PLACE**
+— they belong to other branches' records and are out of this run's scope:
+
+```sql
+-- rebuild-test only. Verify the canonical counterpart exists before deleting.
+delete from supabase_migrations.schema_migrations where version in (
+  '20260902234053',  -- 20261210000000_also_send_to_freeze
+  '20260902235227',  -- 20261220000000_award_basis_side_table
+  '20260902235732',  -- 20261230000000_sub_bid_request_surface
+  '20260903000100',  -- 20261240000000_sub_bid_request_token_rpcs
+  '20260903201700',  -- 20261265000000_contacts_email_dedupe
+  '20260903234921'   -- 20261290000000_cost_catalog_updated_by_definer
+);
+```
+
+**Why it matters at all:** the orphan versions match no local file, so `supabase migration list` shows
+them forever as remote-only. They cannot cause a re-apply (the canonical version is present), so this
+is noise rather than danger — but it is noise that looks like danger to the next reader.
+
+### ⚠️ §2.5 — THE PREMISE IS FALSE. `updated_at` is never NULL, and the stated consequence is inverted.
+
+The report: *"`claimRows` selects `updated_at`, but trigger-enqueued rows have it NULL … a crashed
+`in_flight` row would never be reclaimed."* **Measured, not reasoned:**
+
+```sql
+select public.qb_enqueue(<company>,'vendor',<uuid>,'create',null);
+-- -> created_at 13:03:46.554207+00, updated_at 13:03:46.554207+00, updated_at_is_null = false
+```
+
+`qb_sync_queue.updated_at` carries `DEFAULT now()` (20260929000000), and `qb_enqueue` does not name
+the column, so the default applies. **A trigger-enqueued row has `updated_at = created_at`.**
+
+**And the consequence is inverted even in the hypothetical.** `claimDue` reads
+`const touched = r.updated_at ? new Date(…).getTime() : 0`. A NULL would map to `0`, and
+`0 < staleBefore` is **true** — so a NULL-`updated_at` row would be reclaimed **immediately**, not
+never. The failure mode described cannot occur in either direction.
+
+**One real thing was found next to it and is fixed:** `markInFlight()` wrote `updated_at` explicitly
+*as well as* the trigger. Harmless today (both write `now()`), but `updated_at` is the reclaim clock
+`claimDue` reads, and CLAUDE.md's service-layer contract exists precisely so a trigger-owned column
+has one writer. Removed.
+
+### The Intuit contract, established against the live sandbox rather than recalled
+
+Two throwaway probes (deleted; nothing committed) answered three questions the units below depend on.
+
+**1. A QuickBooks Purchase — what is actually required** (§1a). Measured by making the API refuse:
+
+| Attempt | Result |
+| --- | --- |
+| `Line` only | ❌ *"Required parameter **PaymentType** is missing in the request"* |
+| `AccountRef` + `Line`, no PaymentType | ❌ same |
+| `PaymentType` + `Line`, **no AccountRef** | ❌ *"**Invalid account type**: … You may need to select a different type of account"* |
+| `AccountRef` + `PaymentType` + `Line` | ✅ **created (Id 150), deleted again** |
+
+⚠️ **BOTH are required. `PaymentType` ∈ Cash \| Check \| CreditCard, and `AccountRef` must be a Bank
+or Credit Card account** — the account the money came *from*. The sandbox offers Checking (35),
+Savings (36), Mastercard (41), Visa (42).
+
+**2. Where the project can go** (§2.8). The full probe kept every field:
+
+- `PrivateNote` — **round-tripped verbatim**, including the em dash: `"PRJ-107 — Harbor Bath Renovation"`.
+- `DocNumber` — supported.
+- ⚠️ **`Line[].AccountBasedExpenseLineDetail.CustomerRef` — supported, and it is the BETTER field.**
+  It came back resolved (`{"value":"1","name":"Amy's Bird Sanctuary"}`). This is the *same* mechanism
+  the invoice path already uses to carry the project, so an expense can point at the **sub-customer**
+  (`PRJ-107 — …`) rather than only describing it in prose. **Both are used** — see Unit 14.
+
+**3. The pay-link is NOT retrievable here** (§2.1). Against invoice **145**, live and unpaid
+(`Balance: 3000`), with `AllowOnlineACHPayment: true` and `AllowOnlineCreditCardPayment: true`:
+
+| Read | `InvoiceLink` |
+| --- | --- |
+| `/invoice/145` | **absent** |
+| `/invoice/145?include=invoiceLink` (the documented mechanism) | **absent** |
+
+⚠️ **So §2.2's diagnosis is confirmed exactly: the flags echo back `true` while no link exists.** The
+"Scan to pay" QR on QuickBooks' own PDF is rendered by QuickBooks' presentation layer; it is not an
+accounting-API field. `?include=invoiceLink` is the right call and it returns nothing on a realm
+without QuickBooks Payments — which is the residual Unit 8 already flagged at Step 5.
+
+**Nothing else in this unit.** Grounding and one one-line fix.

@@ -235,10 +235,12 @@ export async function countWaiting(
 }
 
 export async function markInFlight(admin: SupabaseClient, rowId: string): Promise<void> {
-  await admin
-    .from('qb_sync_queue')
-    .update({ status: 'in_flight', updated_at: new Date().toISOString() })
-    .eq('id', rowId);
+  // ⚠️ `updated_at` IS NOT SET HERE, DELIBERATELY [S182]. The BEFORE UPDATE
+  // trigger `qb_sync_queue_updated_at` sets it, and CLAUDE.md's service-layer
+  // contract says service code must not write it as well. It matters more than
+  // convention here: `updated_at` is the STALE-RECLAIM CLOCK that `claimDue`
+  // reads, so two writers of one clock is exactly the thing to avoid.
+  await admin.from('qb_sync_queue').update({ status: 'in_flight' }).eq('id', rowId);
 }
 
 export async function markPushed(admin: SupabaseClient, rowId: string): Promise<void> {
