@@ -1140,3 +1140,165 @@ rather than dismissed. It is cheap to settle: watch `qb_synced_at` on the next r
 restored. Migrations: none. Production: never touched. Rebuild-test left clean — vault back to its
 original three secrets, no leftover budget row, no live queue rows, no unprocessed webhook events,
 and the QuickBooks link reading `62` after two full batteries.*
+
+---
+
+# S189 — THE ORPHANED VAULT SECRET, CLOSED
+
+*One item, from S188 §4a. It is closed — and it broke something on the way, which is recorded here
+first because it needs an action from Josh.*
+
+> ## ⚠️ ACTION REQUIRED: REBUILD-TEST'S QUICKBOOKS CONNECTION MUST BE RE-AUTHORISED
+>
+> **I destroyed it during this run.** The company is `disconnected`, the realm is kept, and the
+> stored OAuth tokens are **gone and unrecoverable** — they were overwritten with a test payload and
+> then deleted. Only the OAuth flow can restore them: **Settings → Accounting → Connect QuickBooks**,
+> as the Owner.
+>
+> Nothing else on rebuild-test is affected, and no customer data was touched. **Production was never
+> touched.** The full account is §3 below; it is not buried.
+>
+> Until that reconnect, **`s187-qb-drain-parked.live.ts` fails 3 of 4** — its own guard says so in
+> those words (*"the company is not connected on rebuild-test … this is an environment failure, not a
+> code one"*). Every other harness is green.
+
+---
+
+## 1. The defect, and which shape was chosen
+
+The disconnect deletes the Vault secret, then nulls `companies.qb_token_secret_id`. The delete is
+best-effort — its error is caught and logged — and the column is nulled **regardless**, correctly,
+because a tenant must always be able to disconnect. So a delete that fails leaves the secret alive
+with nothing pointing at it. `vault.secrets` is UNIQUE on `name`, and this connector's names are
+deterministic — `qb_tokens_<company_id>` — so **the orphan owns that name**. Every later reconnect
+called `create_secret`, got 23505, and returned `qb_error=vault_failed`.
+
+⚠️ **Permanently.** Retrying is the one thing that cannot work, because the collision is
+deterministic. And the message shown says only that the connection could not be stored securely.
+
+### ⚠️ Not (a). The prompt's own axis decides it.
+
+**(a) "don't null the pointer when the delete fails" was considered and rejected.** It makes reconnect
+work and it is the smaller diff — but a token is a **credential**. Keeping the pointer does not make
+the credential less present; it makes the **row** tidy while a live refresh token sits in Vault,
+advertised by a company row that claims to be disconnected. The safe end state is the credential
+**gone**, not the pointer neat.
+
+It is also incomplete on its own terms: an orphan can equally arise from a crash between the two
+statements, a partial restore from backup, or manual surgery — and in every one of those **the
+pointer is already gone**, so keeping it was never an option.
+
+### What shipped instead — (b), plus something stronger than (a)
+
+1. **`qb_vault_scrub` — destroy the credential before trying to destroy the row.** The caller scrubs,
+   then deletes, as **two round trips**.
+   ⚠️ **They cannot share a transaction.** If they did, a failed DELETE would roll the scrub back
+   with it and the surviving orphan would still hold real tokens — precisely the outcome being
+   prevented. Separate statements mean the scrub is already **committed** when the delete is
+   attempted. Worst end state: an empty husk.
+2. **`qb_vault_put` adopts an orphan of the same name** rather than colliding with it — closing the
+   lockout for *every* cause of an orphan, which is why it lives in the function and not in a `catch`
+   in the route.
+
+**The two are independent on purpose.** Half 2 alone would let a tenant reconnect while a live
+credential sat in Vault until they did. Half 1 alone would leave a husk that still owned the name and
+still locked them out.
+
+---
+
+## 2. Proven by observation
+
+`apps/web/test/s189-qb-vault-orphan.live.ts`, six cases, **exit line 0**, run twice consecutively with
+identical results.
+
+⚠️ **Only the DELETE is stubbed, at the RPC boundary.** The real `qb_vault_scrub` runs against the
+real Vault, the real `forgetTokenBlob` takes its real error branch, and the orphan is a real row. The
+alternative — seeding a row that *looks* like an orphan — would have proved the recovery works against
+a fixture of my own construction while skipping the code that produces the state. That is the shape
+S188 spent a session removing from this suite.
+
+| # | Observation |
+| --- | --- |
+| 1, 2 | The ordinary store → read → delete cycle is **unchanged**, and *gone means gone* (`qb_vault_get` returns null, which distinguishes deleted from scrubbed-but-present). |
+| 3 | After a failed delete the row **survives holding `{"scrubbed":true}`** — not the token it held a moment earlier. This is the observation that the scrub committed separately. |
+| 4 | **The reconnect succeeds — no 23505** — and returns **the same id**, so it adopted rather than created. It *could not* have created: the name was taken. |
+| 5 | The recovered connection then disconnects cleanly, leaving nothing behind. |
+| 6 | A secret a company **still points at** is refused and left untouched. |
+
+**Counterfactual, because a passing test proves nothing about whether the fix is load-bearing:** with
+the pre-M-P `qb_vault_put` reinstalled, case 4 fails with `duplicate key value violates unique
+constraint "secrets_name_idx"` — the exact 23505 — while 1, 2, 3 and 5 still pass. The defect is real,
+the fix is what closes it, and the scrub half is independent of the adopt half. M-P was then restored
+and re-verified.
+
+---
+
+## 3. ⚠️ WHAT I BROKE, AND WHY THE FIRST VERSION WAS WRONG
+
+**The first version of M-P adopted anything under the name. That destroyed rebuild-test's live
+QuickBooks credential.**
+
+`s149-E` calls `qb_vault_put` for companyA **with no secret id** — asking Vault to *create* a token
+secret for the company that already had one, because it is the genuinely connected fixture.
+
+- **Before M-P:** 23505. `secretId.data` came back NULL and **nothing checked**. The `needs_reauth`
+  update that followed then violated `companies_qb_token_required_check`, and that error was ignored
+  too. ⚠️ **The probe had been passing while never reaching the state it exists to test.** The 23505
+  was an accidental guardrail over a swallowed error.
+- **After the unguarded M-P:** the call **adopted companyA's real OAuth blob**, overwrote it with
+  `{"refresh_token":"S149-rt"}`, returned the real id — and the cleanup at the end of that same test
+  **deleted the row**.
+
+`getAccessToken` then found a pointer with no Vault row and set `needs_reauth`, which is how it
+surfaced: my own S187 harness failed with *"the company is not connected."*
+
+**Two things follow, and both are now done:**
+
+1. **The guard.** Adoption requires a **true** orphan — an orphan is *defined* by nothing pointing at
+   it. If a company row still references the secret it is **in use**, and the call is refused loudly.
+   ⚠️ **The asymmetry is the argument:** refusing costs a caller an error on a path it should not have
+   taken; proceeding costs a customer their connection, silently, with the credential unrecoverable.
+   Case 6 is the permanent test.
+2. **The probe.** `s149-E` now uses a scratch company id for its secret — this test is about the
+   **queue** under `needs_reauth`, and whose credential backs the pointer has never mattered — and it
+   **asserts every error**, including the state change, with a message saying the rest is vacuous
+   without it.
+
+> ⚠️ **The lesson, recorded because it generalises.** The unguarded adoption was not careless in
+> isolation; it was correct for the production path, where the callback passes null *only* when the
+> pointer is already gone. What it did not survive was a **caller that had been failing silently for
+> months**. Removing an error can be a breaking change, because something may have been depending on
+> it — and a swallowed error is exactly the dependency you cannot see.
+
+---
+
+## 4. Test data — created and removed
+
+| Created | Removed |
+| --- | --- |
+| Vault secrets named `qb_tokens_<random-uuid>` (cases 1–5), one per case | Deleted in-test and again in `afterAll`; **verified gone** by `qb_vault_get` returning null |
+| A Vault secret for the Ridgeline QA tenant (case 6) | Deleted in the case's `finally`; the company's pointer snapshotted and restored |
+| One temporary reinstall of the **pre-M-P** `qb_vault_put`, for the counterfactual | Restored to M-P immediately after, and re-verified 6/6 |
+
+**Final rebuild-test state:** `vault.secrets` holds **2** rows — `qb_webhook_verifier_production` and
+`qb_webhook_verifier_sandbox` — and no `qb_tokens_*` at all, because the fixture connection is
+awaiting the re-authorisation at the top of this section. **No orphan was left behind by either
+path.** No queue rows, no webhook events, no seeded business records.
+
+---
+
+## 5. Counts
+
+| Check | Result | Exit line |
+| --- | --- | --- |
+| `npx tsc --noEmit` | clean | **0** |
+| `npx next build` | compiled | **0** |
+| Unit suite | **1057 passed, 0 failed** | **0** |
+| Live QB battery, 7 files (excl. `s187`) | **84 passed, 0 failed** | **0** |
+| `s189-qb-vault-orphan.live.ts`, run twice | **6 passed** each time | **0** |
+| `s187-qb-drain-parked.live.ts` | **1 passed, 3 failed** — needs the reconnect (§ top) | **1** |
+
+⚠️ **`qb_synced_at` was left alone**, as instructed. Still open, still unproven — S188 §4b.
+
+*Migration applied to rebuild-test only; ledger row inserted by hand and verified. Production never
+touched.*
