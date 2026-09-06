@@ -78,9 +78,29 @@ describe('D-54 — hidden AND route-guarded, in both seats', () => {
     // /dashboard/billing/plans — a dashboard page they may not reach and, being
     // Owner-only, one they could do nothing with. Order is the whole of it.
     const mw = read('../middleware.ts');
-    expect(mw.indexOf('dashboardDeniedRedirect')).toBeLessThan(
-      mw.indexOf("url.pathname = '/dashboard/billing/plans'")
-    );
+
+    // ⚠️ REPOINTED, NOT WEAKENED [S190]. Superseded instrument, quoted:
+    //
+    //     mw.indexOf('dashboardDeniedRedirect')
+    //     mw.indexOf("url.pathname = '/dashboard/billing/plans'")
+    //
+    // The redirect construction changed — middleware now builds absolute URLs
+    // from the EXTERNAL origin (`appUrl`) because `request.nextUrl` carries the
+    // internal host behind a proxy, which was appending a doubled port and
+    // turning every recoverable error into an unreachable page. That deleted
+    // the `url.pathname = …` line this keyed on, so `indexOf` returned -1 and
+    // the case failed while the RULE it protects was untouched.
+    //
+    // Verified before repointing: the guard is still ahead of the billing
+    // redirect in the source. Both anchors are now tighter than what they
+    // replace — the first matches the CALL, not the import at the top of the
+    // file, which the old one also matched and which made the comparison
+    // partly vacuous.
+    const guardAt = mw.indexOf('dashboardDeniedRedirect(profile?.role)');
+    const billingAt = mw.indexOf("'/dashboard/billing/plans'");
+    expect(guardAt, 'the role guard call was not found — re-point this test').toBeGreaterThan(-1);
+    expect(billingAt, 'the billing redirect was not found — re-point this test').toBeGreaterThan(-1);
+    expect(guardAt).toBeLessThan(billingAt);
   });
 
   // ⚠️ INVERTED AT S164, NOT DELETED. `CLAUDE.md` — a fix session must sweep for
