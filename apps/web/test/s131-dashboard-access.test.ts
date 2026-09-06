@@ -10,6 +10,7 @@ import {
   SUBCONTRACTOR_HOME_PATH,
   CLIENT_PLACEHOLDER_PATH,
 } from '@/lib/dashboard-access';
+import { defaultSignedInPath, landingPathFor } from '@/lib/device';
 
 // ============================================================================
 // RULING A [Josh, S131] — DASHBOARD_ROLES, enforced.
@@ -130,13 +131,87 @@ describe('D-54 — hidden AND route-guarded, in both seats', () => {
 });
 
 describe('M6M A-6 is untouched', () => {
+  // ==========================================================================
+  // ⚠️ THIS CASE WAS RED, AND THE RULE IT PROTECTS WAS NEVER BROKEN [S188].
+  // ==========================================================================
+  //
+  // Superseded assertion, quoted rather than deleted:
+  //
+  //     const device = read('../lib/device.ts');
+  //     expect(device).not.toContain('CompanyRole');
+  //     expect(device).not.toContain('DASHBOARD_ROLES');
+  //
+  // The RULE is right and stands: Ruling A governs the DASHBOARD-BLOCKED
+  // redirect, A-6 governs the sign-in LANDING, Josh split them [S131], and if
+  // the landing decision ever learns about role then the sign-in page — which
+  // renders with no session and therefore no role — is the caller that breaks.
+  //
+  // ⚠️ THE PROXY IS WHAT WENT WRONG. "The file must not contain the string
+  // `CompanyRole`" is not the rule; it was a cheap stand-in for the rule, and
+  // it held only while `device.ts` contained nothing but the UA branch. `1ed3d10`
+  // ("[Nav] #101: desktop/mobile surface toggle") added `SURFACE_TOGGLE_ROLES`
+  // — a role-typed constant naming who SEES the toggle — and the case went red
+  // on the import that constant needs.
+  //
+  // ⚠️ VERIFIED BEFORE REWRITING, because "the test is stale" is exactly the
+  // conclusion that must not be assumed: `defaultSignedInPath` still reads
+  // `isPhoneUserAgent(userAgent) ? '/m' : '/dashboard'` and consults nothing
+  // else; `landingPathFor` branches on the saved surface preference and falls
+  // through to it; and NO path function in the file reads
+  // `SURFACE_TOGGLE_ROLES`. The constant is consumed by the UI that renders
+  // the toggle. **The rule is intact; the instrument was wrong.**
+  //
+  // So the assertions below test the rule directly. Arity is a runtime fact
+  // that a comment cannot fake, and it is what a role parameter would change.
+
   it('defaultSignedInPath still branches on user agent alone', () => {
-    // Ruling A governs the DASHBOARD-BLOCKED redirect; A-6 governs the sign-in
-    // LANDING. Josh split them [S131]. If this file ever learns about role, the
-    // sign-in page — which renders with no session and therefore no role — is
-    // the caller that breaks.
+    // One parameter, and it is the user agent. Adding a role would change this.
+    expect(
+      defaultSignedInPath.length,
+      'defaultSignedInPath took a second argument — if that is a role, A-6 is broken'
+    ).toBe(1);
+
+    // And it really does branch on the UA rather than ignoring it.
+    expect(defaultSignedInPath('Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)')).toBe('/m');
+    expect(defaultSignedInPath('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)')).toBe('/dashboard');
+    expect(defaultSignedInPath(null)).toBe('/dashboard');
+  });
+
+  it('landingPathFor takes a saved preference and a user agent — not a role', () => {
+    expect(landingPathFor.length, 'landingPathFor grew an argument').toBe(2);
+    expect(landingPathFor('desktop', 'iPhone')).toBe('/dashboard');
+    expect(landingPathFor('mobile', 'Macintosh')).toBe('/m');
+    // With no preference it IS defaultSignedInPath, which is A-6 preserved for
+    // everyone who never touches the toggle.
+    expect(landingPathFor(null, 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)')).toBe('/m');
+  });
+
+  it('⚠️ the landing decision still knows nothing about DASHBOARD_ROLES', () => {
+    // The half of the original assertion that was never stale, kept verbatim in
+    // effect: Ruling A's constant must not leak into the landing path. This one
+    // is a string check on purpose — the point is that the dashboard guard's
+    // vocabulary is absent from this file entirely.
     const device = read('../lib/device.ts');
-    expect(device).not.toContain('CompanyRole');
     expect(device).not.toContain('DASHBOARD_ROLES');
+    expect(device).not.toContain('isDashboardRole');
+  });
+
+  it('the role-typed constant that replaced the ban is UI-only, not a path input', () => {
+    // ⚠️ THE GUARD THAT REPLACES THE STRING BAN. `SURFACE_TOGGLE_ROLES` is
+    // allowed to exist here; what it must never do is decide a path. If a
+    // future edit makes either landing function consult it, this goes red and
+    // names why.
+    const device = read('../lib/device.ts');
+    const pathFunctions = device.slice(device.indexOf('export function defaultSignedInPath'));
+    const bodies = pathFunctions
+      .split('export ')
+      .filter((chunk) => /^function (defaultSignedInPath|landingPathFor|isPhoneUserAgent)\b/.test(chunk));
+    expect(bodies.length, 'the path functions moved — re-point this guard').toBeGreaterThanOrEqual(1);
+    for (const body of bodies) {
+      expect(
+        body,
+        'a landing function reads SURFACE_TOGGLE_ROLES — A-6 says the landing knows no role'
+      ).not.toContain('SURFACE_TOGGLE_ROLES');
+    }
   });
 });
