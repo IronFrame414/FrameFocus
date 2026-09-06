@@ -23,7 +23,11 @@ export type QbEntityType =
   | 'refund'
   | 'vendor'
   | 'bill'
-  | 'time_activity';
+  | 'time_activity'
+  // M-G [S103]: an actual cost is a Purchase, not a Bill. `bill` survives only
+  // for the two that already exist in QuickBooks.
+  | 'purchase'
+  | 'bill_payment';
 
 export type QbOperation = 'create' | 'update' | 'void';
 

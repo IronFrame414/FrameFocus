@@ -171,6 +171,8 @@ export async function runQbSync(admin: SupabaseClient): Promise<DrainOutcome> {
 const RECORD_TABLE_FOR_ENTITY: Record<string, string> = {
   invoice: 'invoices',
   bill: 'expenses',
+  purchase: 'expenses',
+  bill_payment: 'expense_payments',
   payment: 'client_payments',
   refund: 'client_refunds',
 };

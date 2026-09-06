@@ -55,6 +55,49 @@ export async function listIncomeItems(
   }
 }
 
+export interface QbPaymentAccount {
+  id: string;
+  name: string;
+  type: string;
+}
+
+/**
+ * The Bank and Credit Card accounts a Purchase can be posted against. [M-G]
+ *
+ * ⚠️ ONLY THESE TWO TYPES, and it is the API that says so, not a preference:
+ * a Purchase with `PaymentType` but no `AccountRef` is refused with
+ * *"Invalid account type"*, and the account it wants is the one the money came
+ * FROM. Offering an expense account here would produce a refusal the Owner
+ * could not interpret.
+ *
+ * Same failure posture as `listIncomeItems`: a failed probe returns an empty
+ * list rather than throwing, so a settings screen degrades to "none found"
+ * instead of erroring.
+ */
+export async function listPaymentAccounts(
+  admin: SupabaseClient,
+  conn: QboConnection
+): Promise<QbPaymentAccount[]> {
+  try {
+    const result = (await qboQuery(
+      admin,
+      conn,
+      "select Id, Name, AccountType from Account where AccountType in ('Bank','Credit Card') maxresults 100"
+    )) as {
+      QueryResponse?: { Account?: Array<{ Id: string; Name: string; AccountType?: string }> };
+    };
+
+    return (result.QueryResponse?.Account ?? []).map((a) => ({
+      id: a.Id,
+      name: a.Name,
+      type: a.AccountType ?? 'Bank',
+    }));
+  } catch (err) {
+    console.error(`[qb-connection] payment-account probe failed for ${conn.companyId}:`, err);
+    return [];
+  }
+}
+
 export const DEFAULT_INCOME_ITEM_NAME = 'Construction Income';
 
 /** Read the QuickBooks company's own name, for the connection card. */

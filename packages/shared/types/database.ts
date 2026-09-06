@@ -1301,6 +1301,9 @@ export type Database = {
           qb_income_item_id: string | null
           qb_income_item_name: string | null
           qb_last_refresh_at: string | null
+          qb_payment_account_id: string | null
+          qb_payment_account_name: string | null
+          qb_payment_type: string | null
           qb_payments_enabled: boolean
           qb_realm_id: string | null
           qb_reauth_required_after: string | null
@@ -1379,6 +1382,9 @@ export type Database = {
           qb_income_item_id?: string | null
           qb_income_item_name?: string | null
           qb_last_refresh_at?: string | null
+          qb_payment_account_id?: string | null
+          qb_payment_account_name?: string | null
+          qb_payment_type?: string | null
           qb_payments_enabled?: boolean
           qb_realm_id?: string | null
           qb_reauth_required_after?: string | null
@@ -1457,6 +1463,9 @@ export type Database = {
           qb_income_item_id?: string | null
           qb_income_item_name?: string | null
           qb_last_refresh_at?: string | null
+          qb_payment_account_id?: string | null
+          qb_payment_account_name?: string | null
+          qb_payment_type?: string | null
           qb_payments_enabled?: boolean
           qb_realm_id?: string | null
           qb_reauth_required_after?: string | null
@@ -3963,6 +3972,9 @@ export type Database = {
           note: string | null
           over_stage: boolean
           paid_date: string
+          qb_bill_payment_id: string | null
+          qb_push_status: string
+          qb_synced_at: string | null
           retainage_percent_applied: number | null
           retainage_withheld: number
           updated_at: string | null
@@ -3981,6 +3993,9 @@ export type Database = {
           note?: string | null
           over_stage?: boolean
           paid_date: string
+          qb_bill_payment_id?: string | null
+          qb_push_status?: string
+          qb_synced_at?: string | null
           retainage_percent_applied?: number | null
           retainage_withheld?: number
           updated_at?: string | null
@@ -3999,6 +4014,9 @@ export type Database = {
           note?: string | null
           over_stage?: boolean
           paid_date?: string
+          qb_bill_payment_id?: string | null
+          qb_push_status?: string
+          qb_synced_at?: string | null
           retainage_percent_applied?: number | null
           retainage_withheld?: number
           updated_at?: string | null
@@ -4045,6 +4063,7 @@ export type Database = {
           project_id: string
           purchase_order_id: string | null
           qb_bill_id: string | null
+          qb_purchase_id: string | null
           qb_push_status: string
           qb_synced_at: string | null
           rejected_at: string | null
@@ -4083,6 +4102,7 @@ export type Database = {
           project_id: string
           purchase_order_id?: string | null
           qb_bill_id?: string | null
+          qb_purchase_id?: string | null
           qb_push_status?: string
           qb_synced_at?: string | null
           rejected_at?: string | null
@@ -4121,6 +4141,7 @@ export type Database = {
           project_id?: string
           purchase_order_id?: string | null
           qb_bill_id?: string | null
+          qb_purchase_id?: string | null
           qb_push_status?: string
           qb_synced_at?: string | null
           rejected_at?: string | null
@@ -9730,6 +9751,10 @@ export type Database = {
           p_entity_type: string
           p_operation: string
         }
+        Returns: string
+      }
+      qb_enqueue_job_chain: {
+        Args: { p_company_id: string; p_project_id: string }
         Returns: string
       }
       qb_record_inbound_payment: {

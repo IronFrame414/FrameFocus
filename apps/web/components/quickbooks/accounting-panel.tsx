@@ -84,6 +84,7 @@ export function AccountingPanel({ connection, queue, isOwner, notice }: Accounti
       {isConnected || needsReauth ? (
         <>
           <IncomeItemCard connection={connection!} isOwner={isOwner} />
+          <PaymentAccountCard connection={connection!} isOwner={isOwner} />
           <PaymentsCard connection={connection!} />
           <SyncStatusCard queue={queue} />
         </>
@@ -294,6 +295,143 @@ function DisconnectControl() {
 }
 
 /** §5.1 onboarding copy — "no income Item" [RULED S103 Q10]. */
+/**
+ * M-G — the account a Purchase posts against.
+ *
+ * ⚠️ THIS IS NOT THE GL MAPPING, AND THE COPY HAS TO SAY SO. The `gl_account_*`
+ * fields on this same settings page are the accounts an expense is spent ON.
+ * This is the account the money came FROM. The QuickBooks API calls both
+ * `AccountRef`, one level apart in the same request, and swapping them posts
+ * the spend to the bank.
+ */
+function PaymentAccountCard({
+  connection,
+  isOwner,
+}: {
+  connection: QuickBooksConnection;
+  isOwner: boolean;
+}) {
+  const [accounts, setAccounts] = useState<Array<{ id: string; name: string; type: string }> | null>(
+    null
+  );
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function load() {
+    setBusy(true);
+    setError(null);
+    try {
+      const response = await fetch('/api/quickbooks/payment-account');
+      const body = (await response.json()) as {
+        accounts?: Array<{ id: string; name: string; type: string }>;
+        error?: string;
+      };
+      if (!response.ok) {
+        setError(body.error ?? 'Could not read your QuickBooks accounts.');
+      } else {
+        setAccounts(body.accounts ?? []);
+      }
+    } catch {
+      setError('Could not reach the server.');
+    }
+    setBusy(false);
+  }
+
+  async function choose(account: { id: string; name: string; type: string }) {
+    setBusy(true);
+    const response = await fetch('/api/quickbooks/payment-account', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: account.id,
+        name: account.name,
+        // A card account pays by card; anything else defaults to Check, which
+        // is what "paid from the business account" looks like in QuickBooks.
+        paymentType: account.type === 'Credit Card' ? 'CreditCard' : 'Check',
+      }),
+    });
+    if (response.ok) {
+      window.location.reload();
+      return;
+    }
+    const body = (await response.json().catch(() => ({}))) as { error?: string };
+    setError(body.error ?? 'Could not save.');
+    setBusy(false);
+  }
+
+  return (
+    <section style={{ ...cardStyle, padding: '1.25rem' }}>
+      <h2 style={h2Style}>Expense payment account</h2>
+
+      {connection.paymentAccountName ? (
+        <p style={{ color: color.body, fontSize: '0.875rem', margin: '0.5rem 0 1rem' }}>
+          Expenses are recorded in QuickBooks as paid from{' '}
+          <strong>{connection.paymentAccountName}</strong>.
+        </p>
+      ) : (
+        <p style={{ color: color.warning, fontSize: '0.875rem', margin: '0.5rem 0 1rem' }}>
+          QuickBooks needs to know <strong>which account paid</strong> for an expense — a bank or
+          credit card account. Nothing is lost until you choose: approved expenses wait, and sync as
+          soon as this is set.
+        </p>
+      )}
+
+      <p style={{ color: color.muted, fontSize: '0.8125rem', margin: '0 0 1rem' }}>
+        This is the account money came <em>from</em>. The accounts an expense is spent{' '}
+        <em>on</em> are the GL mappings further down this page.
+      </p>
+
+      {isOwner ? (
+        <>
+          <button type="button" onClick={load} disabled={busy} style={secondaryButtonStyle}>
+            {busy ? 'Loading…' : connection.paymentAccountName ? 'Change account' : 'Choose an account'}
+          </button>
+
+          {accounts !== null ? (
+            accounts.length === 0 ? (
+              <p style={{ color: color.muted, fontSize: '0.875rem', marginTop: '0.75rem' }}>
+                No bank or credit card accounts were found in QuickBooks.
+              </p>
+            ) : (
+              <ul
+                style={{
+                  listStyle: 'none',
+                  padding: 0,
+                  margin: '0.75rem 0 0',
+                  display: 'grid',
+                  gap: '0.5rem',
+                }}
+              >
+                {accounts.map((account) => (
+                  <li key={account.id}>
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => choose(account)}
+                      style={{ ...secondaryButtonStyle, width: '100%', textAlign: 'left' }}
+                    >
+                      {account.name}
+                      <span style={{ color: color.muted }}> — {account.type}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )
+          ) : null}
+        </>
+      ) : (
+        <p style={{ color: color.muted, fontSize: '0.875rem', margin: 0 }}>
+          Only the Owner can change this.
+        </p>
+      )}
+
+      {error ? (
+        <p style={{ color: color.danger, fontSize: '0.875rem', marginTop: '0.75rem' }}>{error}</p>
+      ) : null}
+    </section>
+  );
+}
+
 function IncomeItemCard({
   connection,
   isOwner,

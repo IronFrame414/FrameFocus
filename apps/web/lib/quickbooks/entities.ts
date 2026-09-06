@@ -567,31 +567,54 @@ async function handleInvoiceCreate(ctx: DrainContext, row: QbQueueRow): Promise<
 
   // ⚠️ CORRECTION TO 7g2 §3.1, recorded in the build log: the accounting API
   // exposes NO "QuickBooks Payments is enabled" field on CompanyInfo or
-  // Preferences. The capability is observable HERE and only here — a company
-  // without Payments gets the AllowOnline* flags echoed back FALSE and no
-  // InvoiceLink. This is the authoritative source for `qb_payments_enabled`.
-  const paymentsEnabled = Boolean(
-    qbInvoice.InvoiceLink ||
-      qbInvoice.AllowOnlineACHPayment ||
-      qbInvoice.AllowOnlineCreditCardPayment
-  );
+  // Preferences. The capability is observable HERE and only here.
+  //
+  // ⚠️ AMENDED [S182] — THE OLD TEST WAS A FALSE POSITIVE, AND THE HANDSHAKE
+  // CAUGHT IT. _Superseded, quoted rather than deleted:_
+  //
+  //     _const paymentsEnabled = Boolean(_
+  //     _  qbInvoice.InvoiceLink ||_
+  //     _    qbInvoice.AllowOnlineACHPayment ||_
+  //     _    qbInvoice.AllowOnlineCreditCardPayment_
+  //     _);_
+  //
+  // and the claim it rested on — *"a company without Payments gets the
+  // AllowOnline* flags echoed back FALSE"* — is simply not true. Measured
+  // against the sandbox on invoice 145, live and unpaid: **ACH `true`, card
+  // `true`, and NO `InvoiceLink`** — not on a plain read, and not on
+  // `?include=invoiceLink` either. The settings panel was therefore telling
+  // Josh his invoices carry a "Pay online" link when they carry nothing.
+  //
+  // ⚠️ THE FLAGS ARE PERMISSION; THE LINK IS CAPABILITY. "You are allowed to be
+  // paid online" is a preference on the invoice. "Here is where to pay" only
+  // exists once the realm actually has QuickBooks Payments. Only the second one
+  // can be shown to a user, so only the second one may set this flag.
+  const payLink = qbInvoice.InvoiceLink ?? null;
+  const paymentsEnabled = Boolean(payLink);
 
   await ctx.admin
     .from('invoices')
     .update({
       qb_invoice_id: qbInvoice.Id,
       // RULED [S103, Q4] — STORED, because it prints on a client-held document.
-      qb_invoice_link: qbInvoice.InvoiceLink ?? null,
+      qb_invoice_link: payLink,
       qb_push_status: 'pushed',
       qb_synced_at: new Date().toISOString(),
     })
     .eq('id', row.entity_id)
     .eq('company_id', ctx.companyId);
 
-  await ctx.admin
-    .from('companies')
-    .update({ qb_payments_enabled: paymentsEnabled })
-    .eq('id', ctx.companyId);
+  // ⚠️ ONLY EVER SET TRUE, NEVER BACK TO FALSE. A create response that carries
+  // no link is not proof the realm lacks Payments — it is also what a transient
+  // omission looks like. Turning the flag off on that evidence would make the
+  // Pay-online surfaces flicker for a company that genuinely has Payments.
+  // Disconnect clears it; nothing else does.
+  if (paymentsEnabled) {
+    await ctx.admin
+      .from('companies')
+      .update({ qb_payments_enabled: true })
+      .eq('id', ctx.companyId);
+  }
 
   return { kind: 'pushed' };
 }
@@ -791,13 +814,14 @@ interface ExpenseRow {
   is_deleted: boolean | null;
   sub_contract_id: string | null;
   qb_bill_id: string | null;
+  qb_purchase_id: string | null;
 }
 
 async function loadExpense(ctx: DrainContext, id: string): Promise<ExpenseRow | null> {
   const { data } = await ctx.admin
     .from('expenses')
     .select(
-      'id, project_id, cost_category, supplier, amount, description, expense_date, due_date, status, is_deleted, sub_contract_id, qb_bill_id'
+      'id, project_id, cost_category, supplier, amount, description, expense_date, due_date, status, is_deleted, sub_contract_id, qb_bill_id, qb_purchase_id'
     )
     .eq('id', id)
     .eq('company_id', ctx.companyId)
@@ -881,6 +905,25 @@ async function buildBillBody(
   };
 }
 
+/**
+ * ⚠️ NOT DISPATCHED. SUPERSEDED BY `handlePurchaseCreate` [RULED Josh, S103].
+ * DO NOT RE-WIRE IT.
+ *
+ * Kept, not deleted, because it is the record of what the Bill era did and
+ * because `resolveSubcontractorEin` below it is careful code worth keeping for
+ * whenever sub payables get a QuickBooks path again. `handleQueueRow` returns
+ * terminal for `bill:create` and says why; that is the live behaviour.
+ *
+ * ⚠️ AND ONE THING DIED WITH IT — 1099 TRACKING. The vendor `TaxIdentifier` /
+ * `Vendor1099` stamp below is reachable ONLY from this function, and it needs
+ * `expenses.sub_contract_id` to find the EIN (the three-hop chain in
+ * `resolveSubcontractorEin`). A receipt has no `sub_contract_id` by definition —
+ * that column is one of the five terms that make a row a PAYABLE, and payables
+ * no longer sync. So no Purchase can ever carry a 1099 stamp, and no
+ * subcontractor vendor will be marked 1099 in QuickBooks by this connector.
+ * **That is a tax-reporting consequence of the S103 ruling, not an oversight,
+ * and it is flagged for Josh rather than quietly accepted.**
+ */
 async function handleBillCreate(ctx: DrainContext, row: QbQueueRow): Promise<HandlerResult> {
   const expense = await loadExpense(ctx, row.entity_id);
   if (!expense) return { kind: 'terminal', reason: 'The expense no longer exists.' };
@@ -1248,6 +1291,340 @@ async function handleRefundCreate(ctx: DrainContext, row: QbQueueRow): Promise<H
  * handles that stays `queued` is invisible work that never completes and never
  * complains — the worst outcome available. It is escalated so a person sees it.
  */
+// ---------------------------------------------------------------------------
+// purchase:create / update / void — an ACTUAL COST goes OUT as a Purchase
+// ---------------------------------------------------------------------------
+//
+// ⚠️ THIS REPLACES THE BILL PATH FOR EVERYTHING NEW [RULED Josh, S103]. A Bill
+// is an obligation; pushing one made Josh go into QuickBooks and mark it paid
+// by hand, which is the step the integration exists to remove. A Purchase is
+// money already spent — nothing to clear.
+//
+// ⚠️ TWO FIELDS NAMED `AccountRef`, ONE LEVEL APART, MEANING OPPOSITE THINGS:
+//
+//   body.AccountRef ............. the account the money came FROM
+//                                 (Bank or Credit Card) — `qb_payment_account_id`
+//   line.…Detail.AccountRef ..... the expense account it was spent ON
+//                                 — the `gl_account_*` mapping
+//
+// Swapping them posts the spend to the bank account and the payment to the
+// expense account. Both are required; both were measured (M-G's header).
+
+interface PurchaseSettings {
+  accountId: string;
+  paymentType: string;
+}
+
+/**
+ * The company's Purchase posting settings, or the prompt that is missing.
+ *
+ * ⚠️ PARKS, NEVER FAILS — the income-item precedent (S103 Q10). Which bank
+ * account paid for something is not a thing to guess, and a wrong guess writes
+ * a real transaction into the customer's books against the wrong account.
+ */
+async function purchaseSettings(
+  ctx: DrainContext
+): Promise<{ ok: true; value: PurchaseSettings } | { ok: false; reason: string }> {
+  const { data: company } = await ctx.admin
+    .from('companies')
+    .select('qb_payment_account_id, qb_payment_account_name, qb_payment_type')
+    .eq('id', ctx.companyId)
+    .single();
+
+  const accountId = (company?.qb_payment_account_id as string | null) ?? null;
+  if (!accountId) {
+    return {
+      ok: false,
+      reason:
+        'QuickBooks needs to know which account paid for this — a bank or credit card ' +
+        'account. Choose one on the Accounting settings tab, and this expense will sync.',
+    };
+  }
+
+  // Cash | Check | CreditCard. Defaulted rather than parked a second time: the
+  // account is the meaningful choice, and Check is what a contractor's default
+  // "paid from the business account" looks like in QuickBooks.
+  const paymentType = (company?.qb_payment_type as string | null) ?? 'Check';
+  return { ok: true, value: { accountId, paymentType } };
+}
+
+/**
+ * The project, as QuickBooks will show it. [§2.8, asked for by Josh at S182]
+ *
+ * ⚠️ THE PROJECT GOES IN TWO PLACES, AND THE SECOND IS THE REAL ONE:
+ *
+ *   1. `PrivateNote` — prose. Always present, survives a project with no client.
+ *   2. `Line[].…Detail.CustomerRef` — the SUB-CUSTOMER, i.e. the job itself.
+ *      This is the field that makes QuickBooks' own job-costing reports work,
+ *      and it is the same mechanism the invoice path already uses.
+ *
+ * ⚠️ WHY THE MEMO WAS EMPTY ON BILL 147, and it was not a missing field.
+ * `buildBillBody()` has always set the line `CustomerRef` when the project
+ * carries `qb_sub_customer_id`. **Only the invoice trigger ever built the
+ * customer -> sub-customer chain**, so an expense-only project never had a job
+ * to point at — PRJ-102 still has `qb_sub_customer_id` NULL. M-G gives the
+ * expense trigger the same chain; this reads the result.
+ */
+async function projectRefs(
+  ctx: DrainContext,
+  projectId: string
+): Promise<{ jobRef: string | null; note: string | null }> {
+  const { data: project } = await ctx.admin
+    .from('projects')
+    .select('qb_sub_customer_id, project_number, name')
+    .eq('id', projectId)
+    .eq('company_id', ctx.companyId)
+    .maybeSingle();
+
+  if (!project) return { jobRef: null, note: null };
+  const number = project.project_number as string | null;
+  const name = project.name as string | null;
+  const note = [number, name].filter(Boolean).join(' — ') || null;
+  return { jobRef: (project.qb_sub_customer_id as string | null) ?? null, note };
+}
+
+async function buildPurchaseBody(
+  ctx: DrainContext,
+  expense: ExpenseRow,
+  settings: PurchaseSettings,
+  accountId: string,
+  vendorId: string | null
+): Promise<Record<string, unknown>> {
+  const { jobRef, note } = await projectRefs(ctx, expense.project_id);
+
+  return {
+    // The account the money came FROM.
+    AccountRef: { value: settings.accountId },
+    PaymentType: settings.paymentType,
+    TxnDate: qbDate(expense.expense_date),
+    // ⚠️ `EntityRef` on a Purchase is the payee and needs its `type`. Omitted
+    // entirely when the supplier could not be resolved — an EntityRef with a
+    // value and no type is rejected, and a Purchase is legal without one.
+    ...(vendorId ? { EntityRef: { value: vendorId, type: 'Vendor' } } : {}),
+    ...(note ? { PrivateNote: note } : {}),
+    Line: [
+      {
+        DetailType: 'AccountBasedExpenseLineDetail',
+        Amount: money(Number(expense.amount)),
+        Description: expense.description ?? undefined,
+        AccountBasedExpenseLineDetail: {
+          // The account it was spent ON.
+          AccountRef: { value: accountId },
+          ...(jobRef ? { CustomerRef: { value: jobRef }, BillableStatus: 'NotBillable' } : {}),
+        },
+      },
+    ],
+  };
+}
+
+async function handlePurchaseCreate(ctx: DrainContext, row: QbQueueRow): Promise<HandlerResult> {
+  const expense = await loadExpense(ctx, row.entity_id);
+  if (!expense) return { kind: 'terminal', reason: 'The expense no longer exists.' };
+  // Idempotency: the half-synced-create guard every handler opens with.
+  if (expense.qb_purchase_id) return { kind: 'pushed' };
+  if (expense.qb_bill_id) {
+    return { kind: 'terminal', reason: 'This expense is already in QuickBooks as a bill.' };
+  }
+  if (expense.status !== 'approved') {
+    return { kind: 'terminal', reason: 'Only approved expenses are sent to QuickBooks.' };
+  }
+
+  const account = await billAccountRef(ctx, expense);
+  if (!account.ok) return { kind: 'park', reason: account.reason };
+
+  const settings = await purchaseSettings(ctx);
+  if (!settings.ok) return { kind: 'park', reason: settings.reason };
+
+  // ⚠️ A MISSING SUPPLIER IS NOT FATAL HERE, and that differs from the bill
+  // path on purpose. A Bill is owed TO someone, so a vendor is structural. A
+  // Purchase is a record of spend and QuickBooks accepts one with no payee.
+  const vendorId = await resolveOrCreateVendor(ctx, expense.supplier);
+
+  const created = (await qboWrite(
+    ctx.conn,
+    '/purchase',
+    await buildPurchaseBody(ctx, expense, settings.value, account.id, vendorId)
+  )) as { Purchase?: { Id?: string } };
+
+  const qbId = created.Purchase?.Id;
+  if (!qbId) {
+    return { kind: 'terminal', reason: 'QuickBooks accepted the expense but returned no id.' };
+  }
+
+  await ctx.admin
+    .from('expenses')
+    .update({
+      qb_purchase_id: qbId,
+      qb_push_status: 'pushed',
+      qb_synced_at: new Date().toISOString(),
+    })
+    .eq('id', row.entity_id)
+    .eq('company_id', ctx.companyId);
+
+  return { kind: 'pushed' };
+}
+
+async function handlePurchaseUpdate(ctx: DrainContext, row: QbQueueRow): Promise<HandlerResult> {
+  const expense = await loadExpense(ctx, row.entity_id);
+  if (!expense) return { kind: 'terminal', reason: 'The expense no longer exists.' };
+  if (!expense.qb_purchase_id) {
+    return { kind: 'terminal', reason: 'This expense has never reached QuickBooks.' };
+  }
+
+  const account = await billAccountRef(ctx, expense);
+  if (!account.ok) return { kind: 'park', reason: account.reason };
+
+  const settings = await purchaseSettings(ctx);
+  if (!settings.ok) return { kind: 'park', reason: settings.reason };
+
+  const syncToken = await readSyncToken(ctx, 'purchase', expense.qb_purchase_id);
+  if (!syncToken) {
+    return { kind: 'terminal', reason: 'This expense could not be found in QuickBooks.' };
+  }
+
+  const vendorId = await resolveOrCreateVendor(ctx, expense.supplier);
+
+  // Full object, not sparse — QuickBooks REPLACES the Line array, and omitting
+  // it leaves the old amount in place while this side reads as synced.
+  await qboWrite(ctx.conn, '/purchase', {
+    Id: expense.qb_purchase_id,
+    SyncToken: syncToken,
+    ...(await buildPurchaseBody(ctx, expense, settings.value, account.id, vendorId)),
+  });
+
+  await ctx.admin
+    .from('expenses')
+    .update({ qb_synced_at: new Date().toISOString(), qb_push_status: 'pushed' })
+    .eq('id', row.entity_id)
+    .eq('company_id', ctx.companyId);
+
+  return { kind: 'pushed' };
+}
+
+/** Deleted here, deleted there. Same `operation=delete` shape as a Bill — the
+ *  accounting API has no void for either. Our own row keeps its audit trail. */
+async function handlePurchaseVoid(ctx: DrainContext, row: QbQueueRow): Promise<HandlerResult> {
+  const expense = await loadExpense(ctx, row.entity_id);
+  if (!expense) return { kind: 'terminal', reason: 'The expense no longer exists.' };
+  if (!expense.qb_purchase_id) return { kind: 'pushed' };
+
+  const syncToken = await readSyncToken(ctx, 'purchase', expense.qb_purchase_id);
+  // Already gone from QuickBooks. The outcome we wanted; not a failure.
+  if (!syncToken) return { kind: 'pushed' };
+
+  await qboWrite(ctx.conn, '/purchase?operation=delete', {
+    Id: expense.qb_purchase_id,
+    SyncToken: syncToken,
+  });
+
+  await ctx.admin
+    .from('expenses')
+    .update({ qb_synced_at: new Date().toISOString() })
+    .eq('id', row.entity_id)
+    .eq('company_id', ctx.companyId);
+
+  return { kind: 'pushed' };
+}
+
+// ---------------------------------------------------------------------------
+// bill_payment:create — paying a bill HERE closes it THERE  [§1b]
+// ---------------------------------------------------------------------------
+//
+// ⚠️ THE HANDSHAKE PROVED THIS WAS MISSING. Josh approved an $800 bill (QB 149)
+// and paid it in EZ Binder. Nothing was enqueued, and QB 149 sat OPEN.
+//
+// ⚠️ THIS ONLY EVER SETTLES A LEGACY BILL. Nothing creates a Bill any more, so
+// the set this can act on is closed and shrinking. A receipt pushed as a
+// Purchase is already money-out; paying it again would double-count the spend,
+// which is why M-G's trigger guards on `qb_bill_id IS NOT NULL`.
+async function handleBillPaymentCreate(
+  ctx: DrainContext,
+  row: QbQueueRow
+): Promise<HandlerResult> {
+  const { data: payment } = await ctx.admin
+    .from('expense_payments')
+    .select('id, expense_id, amount, retainage_withheld, paid_date, is_deleted, qb_bill_payment_id')
+    .eq('id', row.entity_id)
+    .eq('company_id', ctx.companyId)
+    .maybeSingle();
+
+  if (!payment) return { kind: 'terminal', reason: 'The payment no longer exists.' };
+  if (payment.qb_bill_payment_id) return { kind: 'pushed' };
+  if (payment.is_deleted) {
+    return { kind: 'terminal', reason: 'This payment was removed before it reached QuickBooks.' };
+  }
+
+  const expense = await loadExpense(ctx, payment.expense_id as string);
+  if (!expense) return { kind: 'terminal', reason: 'The expense no longer exists.' };
+  if (!expense.qb_bill_id) {
+    return {
+      kind: 'terminal',
+      reason: 'This expense is not a QuickBooks bill, so there is nothing to settle.',
+    };
+  }
+
+  const vendorId = await resolveOrCreateVendor(ctx, expense.supplier);
+  if (!vendorId) {
+    return { kind: 'terminal', reason: 'This expense has no supplier name to pay in QuickBooks.' };
+  }
+
+  const settings = await purchaseSettings(ctx);
+  if (!settings.ok) return { kind: 'park', reason: settings.reason };
+
+  // ⚠️ NET, NOT GROSS. `amount` is the GROSS billed against the stage; what
+  // actually left the company is `amount − retainage_withheld` (7C, S91 — see
+  // netCashOut() in payables-shared.ts). Paying the gross would settle the bill
+  // with money that is still being held.
+  const net = money(Number(payment.amount) - Number(payment.retainage_withheld ?? 0));
+  if (net <= 0) {
+    return {
+      kind: 'terminal',
+      reason: 'This payment withheld its full amount as retainage, so no cash left to record.',
+    };
+  }
+
+  // ⚠️ BillPayment's PayType admits only Check and CreditCard — there is no
+  // Cash. A company set to Cash therefore files as Check rather than parking:
+  // the bill closing correctly matters more than the tender label, and the
+  // account it settles from is right either way.
+  const payType = settings.value.paymentType === 'CreditCard' ? 'CreditCard' : 'Check';
+  const { note } = await projectRefs(ctx, expense.project_id);
+
+  const created = (await qboWrite(ctx.conn, '/billpayment', {
+    VendorRef: { value: vendorId },
+    PayType: payType,
+    TotalAmt: net,
+    TxnDate: qbDate(payment.paid_date as string),
+    ...(payType === 'CreditCard'
+      ? { CreditCardPayment: { CCAccountRef: { value: settings.value.accountId } } }
+      : { CheckPayment: { BankAccountRef: { value: settings.value.accountId } } }),
+    ...(note ? { PrivateNote: note } : {}),
+    Line: [
+      {
+        Amount: net,
+        LinkedTxn: [{ TxnId: expense.qb_bill_id, TxnType: 'Bill' }],
+      },
+    ],
+  })) as { BillPayment?: { Id?: string } };
+
+  const qbId = created.BillPayment?.Id;
+  if (!qbId) {
+    return { kind: 'terminal', reason: 'QuickBooks accepted the payment but returned no id.' };
+  }
+
+  await ctx.admin
+    .from('expense_payments')
+    .update({
+      qb_bill_payment_id: qbId,
+      qb_push_status: 'pushed',
+      qb_synced_at: new Date().toISOString(),
+    })
+    .eq('id', row.entity_id)
+    .eq('company_id', ctx.companyId);
+
+  return { kind: 'pushed' };
+}
+
 export async function handleQueueRow(
   ctx: DrainContext,
   row: QbQueueRow
@@ -1264,8 +1641,26 @@ export async function handleQueueRow(
       return handleInvoiceUpdate(ctx, row);
     case 'invoice:void':
       return handleInvoiceVoid(ctx, row);
+    case 'purchase:create':
+      return handlePurchaseCreate(ctx, row);
+    case 'purchase:update':
+      return handlePurchaseUpdate(ctx, row);
+    case 'purchase:void':
+      return handlePurchaseVoid(ctx, row);
+    case 'bill_payment:create':
+      return handleBillPaymentCreate(ctx, row);
+    // ⚠️ `bill:create` IS GONE, NOT MOVED [RULED Josh, S103]. Nothing enqueues
+    // one any more (M-G dropped the arm). A row of this shape can only come
+    // from before that migration or by hand, and creating the payable it asks
+    // for is exactly the hand-work the ruling removes. The two arms below
+    // survive because Bills 147 and 149 are real and still need maintaining.
     case 'bill:create':
-      return handleBillCreate(ctx, row);
+      return {
+        kind: 'terminal',
+        reason:
+          'Expenses now sync to QuickBooks as purchases, not bills. This queued bill is ' +
+          'from the earlier design and was not sent.',
+      };
     case 'bill:update':
       return handleBillUpdate(ctx, row);
     case 'bill:void':

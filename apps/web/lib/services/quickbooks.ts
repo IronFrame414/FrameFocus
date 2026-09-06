@@ -23,6 +23,11 @@ export interface QuickBooksConnection {
   paymentsEnabled: boolean;
   incomeItemId: string | null;
   incomeItemName: string | null;
+  /** M-G: which account a Purchase posts against, and the tender label. Both
+   *  are required by the Purchase API; an unset account parks every expense. */
+  paymentAccountId: string | null;
+  paymentAccountName: string | null;
+  paymentType: string | null;
 }
 
 export async function getQuickBooksConnection(): Promise<QuickBooksConnection | null> {
@@ -42,7 +47,7 @@ export async function getQuickBooksConnection(): Promise<QuickBooksConnection | 
   const { data } = await supabase
     .from('companies')
     .select(
-      'qb_connection_state, qb_realm_id, qb_connected_at, qb_last_refresh_at, qb_refresh_rotated_at, qb_reauth_required_after, qb_payments_enabled, qb_income_item_id, qb_income_item_name'
+      'qb_connection_state, qb_realm_id, qb_connected_at, qb_last_refresh_at, qb_refresh_rotated_at, qb_reauth_required_after, qb_payments_enabled, qb_income_item_id, qb_income_item_name, qb_payment_account_id, qb_payment_account_name, qb_payment_type'
     )
     .eq('id', profile.company_id)
     .single();
@@ -58,6 +63,9 @@ export async function getQuickBooksConnection(): Promise<QuickBooksConnection | 
     paymentsEnabled: Boolean(data.qb_payments_enabled),
     incomeItemId: data.qb_income_item_id,
     incomeItemName: data.qb_income_item_name,
+    paymentAccountId: data.qb_payment_account_id,
+    paymentAccountName: data.qb_payment_account_name,
+    paymentType: data.qb_payment_type,
   };
 }
 

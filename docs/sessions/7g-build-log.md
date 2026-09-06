@@ -1375,3 +1375,151 @@ accounting-API field. `?include=invoiceLink` is the right call and it returns no
 without QuickBooks Payments — which is the residual Unit 8 already flagged at Step 5.
 
 **Nothing else in this unit.** Grounding and one one-line fix.
+
+---
+
+## Unit 14 — M-G: expenses are PURCHASES. The Bill era ends here.
+
+**Migration `20261400000000_qb_purchase_and_bill_payment.sql` (M-G).** rebuild-test:
+`{"success":true}`. ⚠️ **Ledger: the MCP auto-stamp appeared as predicted in Unit 13 and was replaced
+by the canonical `20261400000000 / qb_purchase_and_bill_payment`** — the first time that repair was
+made knowing what it was fixing. Verified present, single row.
+
+### ⚠️ THE FIELD JOSH ASKED US TO ESTABLISH IS NOT THE ONE HE EXPECTED
+
+The prompt: *"which platform field distinguishes an actual cost from a commitment? … find the
+underlying column, because the enqueue trigger must filter on it."* There is a column that looks
+exactly like the answer:
+
+```
+expenses.state   CHECK (state = ANY (ARRAY['committed','actual']))   DEFAULT 'actual'
+```
+
+**It is the wrong answer, and the handshake's own data proves it.** QB Bills **147 and 149** are
+both `state = 'actual'` — and both sit on the **Bills & commitments** tab. That tab is not keyed on
+`state`. It is keyed on 7C's payable predicate (`isPayableRow` / `PAYABLE_OR_FILTER`), five terms:
+
+```
+sub_contract_id IS NOT NULL  OR purchase_order_id IS NOT NULL  OR is_retainage
+  OR EXISTS (payments)       OR state = 'committed'
+```
+
+`money-representation.md` §4.5 states it outright — **"money sorts by ORIGIN, never `state`"** — and
+mirrors the same five terms in SQL inside `recompute_budget_item_actual` / `_committed`.
+
+**So a RECEIPT is `NOT payable`, and that is what the trigger filters on.** The predicate is COPIED
+term-for-term and marked read-never-modify: the spec locks it, and it is simultaneously the budget
+recompute's origin test, so changing it here would silently move every budget number in the platform.
+
+### What now syncs, and what stopped
+
+| Row | Before (M-E) | Now (M-G) |
+| --- | --- | --- |
+| Receipt — approved, `NOT payable` | Bill | **Purchase** |
+| Payable — sub contract / PO / retainage / has payments / `committed` | Bill | **nothing** |
+| Payment against an expense holding a `qb_bill_id` | nothing | **BillPayment** |
+| Legacy Bill edited / deleted | Bill update / delete | **unchanged** — guarded on `qb_bill_id` |
+
+`bill:create` is gone from the trigger AND returns terminal in the dispatch with copy that says why,
+so a row queued before this migration cannot quietly create a payable after it.
+
+### Proven end to end on the live sandbox — QuickBooks Purchase 151
+
+An approved receipt (Sherwin-Williams, $421.88, Cypress Deck Addition) re-approved so the trigger
+fired for real:
+
+```
+queue    -> purchase:create=queued(waits), sub_customer:create=queued(waits), customer:create=queued
+drain x3 -> customer, then job, then purchase
+expense  -> {"qb_purchase_id":"151","qb_bill_id":null,"qb_push_status":"pushed"}
+
+QUICKBOOKS PURCHASE 151
+  PaymentType: Check      AccountRef : {"value":"35","name":"Checking"}      <- money came FROM
+  PrivateNote: "PRJ-1884 — Cypress Deck Addition"
+  EntityRef  : {"value":"64","name":"Sherwin-Williams","type":"Vendor"}
+  TotalAmt   : 421.88
+  line acct  : {"value":"80","name":"Cost of Goods Sold"}                    <- spent ON
+  line job   : {"value":"63","name":"PRJ-1884 — Cypress Deck Addition"}
+```
+
+**No Bill. No payable. Nothing to mark paid by hand** — which was the whole point of the ruling.
+
+### §2.8 — the project. The cause was NOT a missing field.
+
+`buildBillBody()` has **always** set a line-level `CustomerRef` when the project carries
+`qb_sub_customer_id`. It never fired because **only the invoice trigger ever built the customer →
+sub-customer chain.** PRJ-102 (behind bill 147) still has `qb_sub_customer_id` NULL today. The
+expense had no job to point at.
+
+So the fix is the chain, not a field — and the chain is now **one function called twice**
+(`qb_enqueue_job_chain`), not copied into the expense trigger. CLAUDE.md's PARITY ruling in its
+literal words: *"a second implementation that does the same thing IS the divergence, written in a
+form that looks like agreement."*
+
+**The project lands in two places, and the second is the real one:**
+
+1. `PrivateNote` — prose, always present, survives a project with no client.
+2. **`Line[].…Detail.CustomerRef` — the sub-customer itself**, which is what makes QuickBooks' own
+   job-costing reports work. This is the *better field* the prompt asked about, and it is the same
+   mechanism the invoice path already uses.
+
+### §2.2 — the false positive, fixed at the root
+
+_Superseded, quoted rather than deleted:_
+
+```js
+const paymentsEnabled = Boolean(
+  qbInvoice.InvoiceLink || qbInvoice.AllowOnlineACHPayment || qbInvoice.AllowOnlineCreditCardPayment);
+```
+
+The comment above it justified the `||` with *"a company without Payments gets the AllowOnline* flags
+echoed back FALSE"*. **Measured: that is false.** Invoice 145, live and unpaid: ACH `true`, card
+`true`, **no `InvoiceLink`**. The panel was telling Josh his invoices carry a Pay-online link when
+they carry nothing.
+
+**The flags are PERMISSION; the link is CAPABILITY.** Keyed on `InvoiceLink` alone now — and
+**only ever set TRUE, never back to false**: a create response missing the link is not proof the
+realm lacks Payments, and flipping it off on that evidence would make the Pay-online surfaces
+flicker for a company that has it. Disconnect clears it; nothing else does.
+
+*(rebuild-test already read `false` — the Step 8 disconnect had cleared it — so no data repair was owed.)*
+
+### The three settings a Purchase needs, and the screen for them
+
+`companies.qb_payment_account_id` / `_name` / `qb_payment_type`, **Owner-only** — added to
+`enforce_companies_qb_scope`. **Reversible default, logged:** Owner-only rather than Owner+Admin,
+matching `qb_income_item_id` (its exact analogue on the revenue side) rather than the `gl_account_*`
+text fields, because this one names the bank account money leaves from.
+
+New route `/api/quickbooks/payment-account` (GET lists Bank + Credit Card accounts, POST stores the
+choice) and a **PaymentAccountCard** on the shared Accounting panel. ⚠️ **The copy exists to stop one
+specific mistake:** the card says *"This is the account money came **from**. The accounts an expense
+is spent **on** are the GL mappings further down this page."* Both are called `AccountRef` in the
+same request body one level apart, and swapping them posts the spend to the bank.
+
+⚠️ **M-F's un-park trigger was extended in the same migration** to fire on `qb_payment_account_id`
+and `qb_payment_type`. Without it the Purchase path would have **reintroduced the exact defect M-F
+closed at S181** — park on "choose an account", Owner chooses one, row waits out five minutes anyway.
+The route therefore does no manual un-park and says so, which is the point of having built it as a
+trigger rather than a list of call sites.
+
+### ⚠️ TWO CONSEQUENCES OF THE RULING, NEITHER PAPERED OVER
+
+**1. Subcontractor cost stops reaching QuickBooks.** A sub-contract payable syncs as neither a Bill
+(forbidden) nor a Purchase (it is a payable). Pushing a Purchase when such a payable is **paid**
+would fix it and is a one-line change to the `expense_payments` trigger — **but that is money
+movement into the customer's books that no ruling authorises, so it was NOT done.** Needs Josh.
+
+**2. 1099 tracking dies with the Bill path.** The vendor `TaxIdentifier` / `Vendor1099` stamp is
+reachable only from `handleBillCreate`, and it needs `expenses.sub_contract_id` to find the EIN.
+A receipt has no `sub_contract_id` **by definition** — that column is one of the five terms that make
+a row a payable. So no Purchase can ever carry a 1099 stamp. `handleBillCreate` is kept, not deleted,
+with a banner saying it is not dispatched and must not be re-wired; the tax consequence is written
+there too.
+
+**Also observed and owed to §2.6:** the chain took **three drains** — customer, then job, then
+purchase, one dependency level each. Confirmed, not yet fixed.
+
+`npx tsc --noEmit` real exit **`0`**. **`npx next build` real exit `0`** — `/api/quickbooks/payment-account`
+compiled. ⚠️ **`next build` replaced `.next` under the running `next dev` and killed it**; the proof
+was re-run in-process (proven equivalent at S181) and the dev server is restarted at the end of this run.
