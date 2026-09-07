@@ -1490,3 +1490,80 @@ tally (`✘`/`×` line count) beside it.
 
 Scratchpad files live under `/tmp/claude-…/scratchpad` and are outside the repo; nothing from them is
 staged or tracked.
+
+---
+
+## S104c Phase 3 — what was fixed
+
+| finding | ruling | commit | outcome |
+| --- | --- | --- | --- |
+| **R1** | preserve theirs, append the marker | `7cd701b` | `withMarker()` idempotent; the update path feeds the existing memo back in |
+| **R2** | also gate on `qb_push_status='failed'` | `7cd701b` | `priorAttemptReachedIntuit()`; the column added to all three selects |
+| **R3** | widen to a `TxnDate` range | `7cd701b` | ±90 days, `maxresults 1000`, limits stated in code and test |
+| **R4** | hold the cursor after a failed insert | `48030cd` | `CdcOutcome.failedToQueue` gates the cursor write |
+| **R5** | extract the loop, test on synthetic payments | `48030cd` | `reconcileOnePayment()`; 7 cases over real rows |
+| **R6** | fix the stale citations | `d48f1c4` | both now name `qb_vendor_map_company_realm_supplier_key` |
+| **R7** | count vendor-map failures | `d48f1c4` | `DrainOutcome.vendorMapWriteFailures` |
+| **R10** | add the 8 and 2 boundaries | `d48f1c4` | 9 cases |
+| **R8, R9, R11, R3-residual** | not fixed | `TECH_DEBT` | filed as `#4-7gqb` and `#5-7gqb` |
+
+### ⚠️ A premise in the Phase 2 answer that measurement corrected
+
+Josh: *"R1 means marker-bearing Purchases already exist in the sandbox from this session's tests."*
+
+**Measured: 39 Purchases in the sandbox, ZERO carrying an `[FF:` marker.** No drain has run since the
+marker shipped — the queue's six rows are all still `queued`, and `resolveOrCreateVendor()` (which the
+vendor-map test does exercise) creates a **Vendor**, not a Purchase.
+
+**The instruction stands anyway, and is now enforced rather than remembered:** a test freezes
+`linkMarker()`'s output at `[FF:<id>]` and asserts `memoMatches()` recognises every composition the
+module can produce. Composition may change; the token may not.
+
+**And the same census made R1 worse than I had graded it.** 22 of the 39 Purchases carry no
+`PrivateNote` at all — so "expense with no project note", the case that silently replaced a
+bookkeeper's memo, is the **common** case in this data, not the edge I called it.
+
+### Three defects the tests caught during Phase 3, in my own work
+
+1. **The adoption-guard census went red** — it matched `/if \(row\.attempts > 0\) \{/`, which R2
+   replaced. Correct behaviour from the census; **I had already committed R1/R2/R3 before reading the
+   suite output**, and fixed it in a follow-up (`ba9f4a1`) rather than amending it away. The census
+   is now also asserted to check that `qb_push_status` appears in at least three selects — **without
+   that column the predicate reads `undefined` and the entire R2 fix is a silent no-op.**
+2. **My `adoptionWindow` assertion was wrong**, not the code: I asserted a window centred on the
+   newest sandbox Purchase reaches the oldest (107 days apart), which ±90 does not and which is not
+   what the window is for. Corrected, with the wrong version recorded in the file.
+3. **A CDC fixture passed `'v1'` into a `timestamptz` column.** That was a bad fixture — and it is
+   also the only cheap way to reach the `'failed'` branch that now holds the cursor, so it was kept
+   as its own deliberate case rather than discarded.
+
+### Final verification — printed exit lines
+
+```
+no dev server running
+NEXT_BUILD_EXIT=0            build error lines: 0
+
+VITEST_UNIT_EXIT=0
+ Test Files  82 passed (82)
+      Tests  1122 passed (1122)          failure-marked lines: 0
+
+VITEST_LIVE_EXIT=0
+ Test Files  5 passed (5)
+      Tests  18 passed (18)              failure-marked lines: 0
+```
+
+**Rebuild-test after the run** — every test cleans up only what it created:
+
+| | |
+| --- | --- |
+| `qb_sync_queue` | 6 (unchanged) · **0** `S104-TEST` residue |
+| `qb_webhook_events` | 0 · **0** `S104C` residue |
+| `client_payments` | 2 (unchanged) · **0** `S104C` residue |
+| `qb_vendor_map` | 0 · connection **`connected`** |
+| `expense_payments` violating the check | **0** |
+
+### The state of the branch
+
+**Nothing merged, nothing pushed.** `main` is still at `51a6725`. No migration was written in
+Phase 3 — every fix was code or test, so **no fifth production push is owed**. The four migrations
+already on production remain the complete DB half.
