@@ -163,3 +163,64 @@ export async function adoptExistingByMarker(
   }
   return null;
 }
+
+// ---------------------------------------------------------------------------
+// The third number
+// ---------------------------------------------------------------------------
+
+/**
+ * ⚠️ RULED [Josh, S104]: **THIS SYSTEM COMPUTES THE TOTAL. QUICKBOOKS RECEIVES
+ * IT AND DOES NOT CALCULATE.** This is the check that makes the ruling
+ * enforceable rather than merely intended.
+ *
+ * ----------------------------------------------------------------------------
+ * ⚠️ THERE ARE THREE NUMBERS, AND ONLY TWO WERE EVER COMPARED
+ * ----------------------------------------------------------------------------
+ * `handleInvoiceCreate` already refuses when the LINES disagree with
+ * `billed_total` — *"MONEY THAT DOES NOT FOOT IS FLAGGED, NOT ADJUSTED"*. But
+ * that compares two of OUR numbers. The third is what QuickBooks reports back
+ * in `TotalAmt`, and **that is the one the books actually use.** It was
+ * declared in the response type and never read.
+ *
+ * ⚠️ WHY IT CAN DIFFER AT ALL, given we send explicit `TaxCodeRef: 'NON'`.
+ * Because `NON` is the INSTRUCTION, not the outcome. QuickBooks Online computes
+ * tax server-side from the customer's taxable status and the company's tax
+ * setup; the sandbox company runs with `TaxPrefs.UsingSalesTax: true` and
+ * `TaxGroupCodeRef 2` [measured S104]. `NON` resolves that computation to zero
+ * — but a rejected code, a non-US realm (where `NON` is invalid and
+ * `GlobalTaxCalculation` governs instead), or a customer-level override are all
+ * ways the arithmetic can come back different. **A silent difference here is an
+ * invoice showing one total to the client and another in the books**, which is
+ * the entire risk this item exists to close.
+ *
+ * ⚠️ AND IT FIRES AFTER THE OBJECT EXISTS, WHICH IS WHY THE MESSAGE SAYS SO.
+ * We cannot un-send it. What we can do is refuse to record it as a good push
+ * and tell a person exactly which QuickBooks object to go and look at.
+ *
+ * ⚠️ A VOID IS NOT A MISMATCH — DO NOT CALL THIS ON ONE. QuickBooks zeroes the
+ * lines of a voided invoice and returns `TotalAmt: 0` while our row keeps its
+ * original `billed_total`. Measured on INV-3676: ours 291.44, QuickBooks 0,
+ * both correct. A total check on the void path would fail every void.
+ */
+export function totalMismatch(
+  expected: number,
+  reported: number | undefined,
+  qbDescription: string
+): HandlerResult | null {
+  // ⚠️ ABSENT IS NOT ZERO. A response that omits `TotalAmt` tells us nothing,
+  // and treating the omission as 0 would invent a mismatch on every such reply.
+  if (reported === undefined || reported === null) return null;
+
+  // Half a cent: the same tolerance the lines-vs-total foot check already uses,
+  // so the two never disagree about what "equal" means.
+  if (Math.abs(Number(reported) - expected) <= 0.005) return null;
+
+  return {
+    kind: 'terminal',
+    reason:
+      `QuickBooks recorded ${qbDescription} as $${Number(reported).toFixed(2)}, but this ` +
+      `record is $${expected.toFixed(2)}. The two must agree — the books would show a ` +
+      `different figure from the document. The QuickBooks entry EXISTS and needs to be ` +
+      `corrected or removed there before this is pushed again.`,
+  };
+}

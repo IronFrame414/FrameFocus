@@ -7,6 +7,7 @@ import {
   adoptExistingByMarker,
   adoptExistingInvoice,
   recordLink,
+  totalMismatch,
   withMarker,
 } from './reconcile';
 
@@ -416,6 +417,23 @@ interface QbInvoiceLine {
  * bug, whether or not it has fired yet**: the books would silently disagree with
  * the document the client holds.
  *
+ * ⚠️ EXTENDED TO THE EXPENSE PATH AND MADE ENFORCEABLE [S104]. F12 stated the
+ * position on SALES lines only; `buildPurchaseBody` and the expense-payment
+ * Purchase sent no tax field at all and were inheriting the default this header
+ * warns about. Both now send `NON`. **And stating a position is not the same as
+ * checking it held** — `totalMismatch()` in `reconcile.ts` now compares what
+ * QuickBooks reports back in `TotalAmt` against our own figure on every create
+ * and on the invoice update, which is the half that makes the ruling
+ * enforceable rather than merely intended.
+ *
+ * ⚠️ MEASURED AGAINST THE SANDBOX AT S104, read from the API rather than from
+ * our record of what we sent: Invoice 145 `TotalAmt 3000`, ours 3000.00,
+ * `TxnTaxDetail {TotalTax: 0}`, both lines `NON`. Purchases 151/155/156/175 all
+ * agreed to the cent — **and all came back `taxCode=NON` although we sent no
+ * tax field**, which is precisely the borrowed default this header calls the
+ * bug. `TaxPrefs` on that company: `UsingSalesTax: true`, `TaxGroupCodeRef 2`,
+ * `Country US`.
+ *
  * ⚠️ `NON` IS US-SPECIFIC, and that is a deliberate, logged limit. Non-US
  * QuickBooks uses different codes and `GlobalTaxCalculation` instead. If a
  * non-US company ever connects, this ref is rejected by Intuit and the push
@@ -669,6 +687,16 @@ async function handleInvoiceCreate(ctx: DrainContext, row: QbQueueRow): Promise<
     return { kind: 'terminal', reason: 'QuickBooks accepted the invoice but returned no id.' };
   }
 
+  // ⚠️ THE RULING'S ENFORCEMENT POINT [Josh, S104]. Retainage is a
+  // DiscountLineDetail, so what QuickBooks should hold is the NET RECEIVABLE —
+  // the same figure `buildInvoiceLines` constructed.
+  const totalFault = totalMismatch(
+    money(Number(invoice.billed_total) - Number(invoice.retainage_withheld)),
+    qbInvoice.TotalAmt,
+    `invoice ${qbInvoice.Id}`
+  );
+  if (totalFault) return totalFault;
+
   // ⚠️ CORRECTION TO 7g2 §3.1, recorded in the build log: the accounting API
   // exposes NO "QuickBooks Payments is enabled" field on CompanyInfo or
   // Preferences. The capability is observable HERE and only here.
@@ -787,7 +815,7 @@ async function handleInvoiceUpdate(ctx: DrainContext, row: QbQueueRow): Promise<
   const existingInvoice =
     (await readEntity(ctx, 'invoice', invoice.qb_invoice_id as string)) ?? {};
 
-  await qboWrite(ctx.conn, '/invoice', {
+  const updated = (await qboWrite(ctx.conn, '/invoice', {
     ...existingInvoice,
     Id: invoice.qb_invoice_id,
     SyncToken: syncToken,
@@ -809,7 +837,17 @@ async function handleInvoiceUpdate(ctx: DrainContext, row: QbQueueRow): Promise<
     ...(invoice.invoice_number ? { DocNumber: invoice.invoice_number } : {}),
     ...(qbDate(invoice.issue_date as string | null) ? { TxnDate: qbDate(invoice.issue_date as string | null) } : {}),
     ...(qbDate(invoice.due_date as string | null) ? { DueDate: qbDate(invoice.due_date as string | null) } : {}),
-  });
+  })) as { Invoice?: { TotalAmt?: number } };
+
+  // ⚠️ AN AMENDMENT IS EXACTLY WHERE THE TOTALS CAN PART COMPANY [S104]. The
+  // create path is checked; an update replaces the whole `Line` array, so it
+  // recomputes from scratch and has the same failure available to it.
+  const totalFault = totalMismatch(
+    money(Number(invoice.billed_total) - Number(invoice.retainage_withheld)),
+    updated.Invoice?.TotalAmt,
+    `invoice ${invoice.qb_invoice_id}`
+  );
+  if (totalFault) return totalFault;
 
   const linkFailure = await recordLink(
     ctx,
@@ -1433,6 +1471,15 @@ async function buildPurchaseBody(
         AccountBasedExpenseLineDetail: {
           // The account it was spent ON.
           AccountRef: { value: accountId },
+          // ⚠️ THE EXPENSE PATH STATES ITS TAX POSITION TOO [S104]. F12 [S187]
+          // did this for sales lines and left the Purchase path inheriting
+          // QuickBooks' default. Measured at S104: Purchases 151/155/156/175
+          // all came back `taxCode=NON` — but WE never sent it, so that was
+          // Intuit's default on a company with `UsingSalesTax: true`, exactly
+          // the "relying on someone else's default for the total on a money
+          // document" that F12's own header calls the bug. Same `NON`, same
+          // US-only limitation, same deliberate loud failure off-US.
+          TaxCodeRef: NON_TAXABLE,
           ...(customerRef
             ? { CustomerRef: { value: customerRef }, BillableStatus: 'NotBillable' }
             : {}),
@@ -1496,12 +1543,19 @@ async function handlePurchaseCreate(ctx: DrainContext, row: QbQueueRow): Promise
     ctx.conn,
     '/purchase',
     await buildPurchaseBody(ctx, expense, settings.value, account.id, vendorId)
-  )) as { Purchase?: { Id?: string } };
+  )) as { Purchase?: { Id?: string; TotalAmt?: number } };
 
   const qbId = created.Purchase?.Id;
   if (!qbId) {
     return { kind: 'terminal', reason: 'QuickBooks accepted the expense but returned no id.' };
   }
+
+  const totalFault = totalMismatch(
+    money(Number(expense.amount)),
+    created.Purchase?.TotalAmt,
+    `Purchase ${qbId}`
+  );
+  if (totalFault) return totalFault;
 
   const linkFailure = await recordLink(
     ctx,
@@ -1697,18 +1751,24 @@ async function handleExpensePaymentCreate(
         Description: expense.description ?? expense.supplier,
         AccountBasedExpenseLineDetail: {
           AccountRef: { value: account.id },
+          // Same ruling as `buildPurchaseBody` — see the note there [S104].
+          TaxCodeRef: NON_TAXABLE,
           ...(customerRef
             ? { CustomerRef: { value: customerRef }, BillableStatus: 'NotBillable' }
             : {}),
         },
       },
     ],
-  })) as { Purchase?: { Id?: string } };
+  })) as { Purchase?: { Id?: string; TotalAmt?: number } };
 
   const qbId = created.Purchase?.Id;
   if (!qbId) {
     return { kind: 'terminal', reason: 'QuickBooks accepted the payment but returned no id.' };
   }
+
+  // `net`, not `amount` — the withheld portion never left the company.
+  const totalFault = totalMismatch(net, created.Purchase?.TotalAmt, `Purchase ${qbId}`);
+  if (totalFault) return totalFault;
 
   const linkFailure = await recordLink(
     ctx,
