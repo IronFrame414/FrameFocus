@@ -39,6 +39,39 @@ import { qbQuoteLiteral, qboQuery } from './client';
  * cannot scope around it, because it must update the one row it just pushed.
  */
 
+/**
+ * Has a previous attempt at this record already reached Intuit? [R2, S104c]
+ *
+ * ⚠️ TWO SIGNALS, BECAUSE EITHER ONE ALONE HAS A HOLE, AND THEY FAIL IN
+ * OPPOSITE DIRECTIONS.
+ *
+ * `attempts` lives on the QUEUE ROW. It is the right signal when the same row is
+ * retried, and it survives the case where our own table is unwritable — which is
+ * exactly the failure that created the first orphan.
+ *
+ * ⚠️ BUT A TERMINAL FAILURE RETIRES THAT ROW. `idx_qb_sync_queue_one_live_per_
+ * entity_op` only covers `queued`/`in_flight`/`failed_transient`, so once a row
+ * is `failed_terminal` a **new** row for the same (entity, operation) can be
+ * enqueued — with `attempts = 0`. Gating on attempts alone, that row would not
+ * probe, and QuickBooks has no PUT: the create would make a SECOND object.
+ *
+ * Reachable today by a deliberate status round-trip, which is precisely what
+ * someone does when a sync has visibly failed:
+ *   * `qb_enqueue_expense` re-enqueues `purchase:create` on
+ *     `approved -> not approved -> approved`;
+ *   * `qb_enqueue_invoice` on `sent -> draft -> sent`.
+ *
+ * `qb_push_status` lives on the RECORD, is written by `markRecordFailed()` on
+ * every terminal outcome, and survives the queue row being replaced. Between
+ * them the two cover both shapes.
+ */
+export function priorAttemptReachedIntuit(
+  row: { attempts: number },
+  record: { qb_push_status?: string | null } | null | undefined
+): boolean {
+  return row.attempts > 0 || record?.qb_push_status === 'failed';
+}
+
 /** The durable link stamped into a QuickBooks object's `PrivateNote`. */
 export function linkMarker(entityId: string): string {
   return `[FF:${entityId}]`;
@@ -52,10 +85,36 @@ export function linkMarker(entityId: string): string {
  * records the `PrivateNote` vs `CustomerMemo` choice and why). So the marker is
  * visible to a bookkeeper and to nobody else, which is exactly right: it is a
  * reconciliation key, not customer-facing text.
+ *
+ * ⚠️ INTERNAL IS NOT THE SAME AS OURS [R1, ruled Josh, S104c]. **A bookkeeper
+ * types in that field**, and the first version of this shipped as an
+ * unconditional `PrivateNote: withMarker(note, id)` on a body shared by create
+ * AND update — so an expense with no project note REPLACED whatever they had
+ * written with the bare marker. Measured on the sandbox: **22 of 39 Purchases
+ * carry no project note**, so that was the common case, not the edge.
+ *
+ * ⚠️ That is the inverse of the bug F10's read-modify-write exists to prevent —
+ * *"anything we omit is DELETED, including fields the customer set themselves"* —
+ * committed while fixing a different one. The update path now feeds the existing
+ * memo back in, and this function appends rather than replaces.
+ *
+ * ⚠️ THE MARKER STRING ITSELF IS FROZEN. `linkMarker()` has always returned
+ * `[FF:<row id>]` and must keep returning exactly that: anything already written
+ * to a customer's books is adoptable only for as long as `memoMatches()` still
+ * recognises it. Change the composition freely; never change the token.
  */
 export function withMarker(note: string | null | undefined, entityId: string): string {
   const marker = linkMarker(entityId);
-  return note ? `${note} ${marker}` : marker;
+  if (!note) return marker;
+  // ⚠️ IDEMPOTENT [R1, S104c]. `buildPurchaseBody` is shared by create AND
+  // update, and the update path now feeds it the memo QuickBooks already holds.
+  // Without this test the marker would be appended again on every amendment and
+  // the memo would grow a tail of identical tags.
+  //
+  // ⚠️ IT TESTS FOR *THIS ROW'S* MARKER, NOT FOR MARKER-SHAPED TEXT. A memo
+  // carrying some other row's `[FF:…]` — or a bookkeeper's own square brackets —
+  // must still receive ours.
+  return note.includes(marker) ? note : `${note} ${marker}`;
 }
 
 /** True when a QuickBooks object's memo carries OUR marker for this row. */
@@ -135,8 +194,26 @@ export async function adoptExistingInvoice(
  * ⚠️ THE QUERY FILTERS ON `TxnDate`, NOT ON THE MEMO, AND THAT IS A LIMIT OF
  * INTUIT'S QUERY LANGUAGE RATHER THAN A CHOICE. `PrivateNote` is not a
  * filterable field on these entities, so the marker cannot appear in the WHERE
- * clause. One transaction date is a small enough page to scan in memory, and
- * `TxnDate` is a value we set ourselves, so we always know it exactly.
+ * clause; the date narrows the page and the marker is matched in memory.
+ *
+ * ⚠️ A RANGE, NOT THE EXACT DAY [R3, ruled Josh, S104c]. The first version
+ * matched `TxnDate = <the record's date today>`, which quietly made the DATE
+ * part of the key — and `expenses.expense_date` is **mutable**
+ * (`enforce_expenses_column_scope` does not freeze it, and Owner/Admin bypass
+ * that trigger outright). Edit the date between the failed push and the retry
+ * and the probe looks at the wrong day, finds nothing, and creates a SECOND
+ * Purchase. The window is human-length, because a terminal failure does not
+ * auto-retry.
+ *
+ * `paid_date` and an invoice's `DocNumber` are frozen by their own triggers, so
+ * only the expense path had the hole — but the range costs the same single
+ * metered read for all of them.
+ *
+ * ⚠️ `maxresults` IS THE LIMIT OF THIS APPROACH, and it is stated rather than
+ * hidden: Intuit caps a page at 1000. A realm with more than 1000 Purchases
+ * inside the window would truncate, and a truncated page can miss the marker and
+ * duplicate. 39 exist on the sandbox today. If that ever stops being comfortable
+ * the answer is a queryable key of our own, not a wider net.
  *
  * ⚠️ A NULL RESULT MEANS "NOT FOUND BY THIS MARKER", NEVER "does not exist".
  * An object created BEFORE the marker shipped carries no marker and will not be
@@ -144,6 +221,19 @@ export async function adoptExistingInvoice(
  * why nothing downstream may treat null as permission to create a second one
  * without other evidence.
  */
+/** Days either side of the record's current date that the probe will scan. */
+export const ADOPTION_WINDOW_DAYS = 90;
+
+/** The inclusive `TxnDate` range to scan around a record's current date. */
+export function adoptionWindow(txnDate: string): { from: string; to: string } {
+  const centre = new Date(`${txnDate}T00:00:00Z`).getTime();
+  const day = 24 * 60 * 60 * 1000;
+  return {
+    from: new Date(centre - ADOPTION_WINDOW_DAYS * day).toISOString().slice(0, 10),
+    to: new Date(centre + ADOPTION_WINDOW_DAYS * day).toISOString().slice(0, 10),
+  };
+}
+
 export async function adoptExistingByMarker(
   ctx: DrainContext,
   qbEntity: 'Purchase' | 'Payment' | 'CreditMemo' | 'RefundReceipt',
@@ -151,10 +241,12 @@ export async function adoptExistingByMarker(
   txnDate: string | undefined
 ): Promise<string | null> {
   if (!txnDate) return null;
+  const { from, to } = adoptionWindow(txnDate);
   const found = (await qboQuery(
     ctx.admin,
     ctx.conn,
-    `select * from ${qbEntity} where TxnDate = ${qbQuoteLiteral(txnDate)}`
+    `select * from ${qbEntity} where TxnDate >= ${qbQuoteLiteral(from)} ` +
+      `and TxnDate <= ${qbQuoteLiteral(to)} maxresults 1000`
   )) as { QueryResponse?: Record<string, Array<{ Id: string; PrivateNote?: string }> | undefined> };
 
   const rows = found.QueryResponse?.[qbEntity] ?? [];

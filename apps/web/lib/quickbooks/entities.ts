@@ -6,6 +6,7 @@ import type { QbQueueRow } from './queue';
 import {
   adoptExistingByMarker,
   adoptExistingInvoice,
+  priorAttemptReachedIntuit,
   recordLink,
   totalMismatch,
   withMarker,
@@ -607,7 +608,9 @@ async function handleInvoiceCreate(ctx: DrainContext, row: QbQueueRow): Promise<
   const { data: invoice } = await ctx.admin
     .from('invoices')
     .select(
-      'id, project_id, invoice_number, title, issue_date, due_date, billed_total, retainage_withheld, status, qb_invoice_id'
+      // `qb_push_status` is read by `priorAttemptReachedIntuit` [R2, S104c] —
+      // without it the predicate sees `undefined` and the guard is a no-op.
+      'id, project_id, invoice_number, title, issue_date, due_date, billed_total, retainage_withheld, status, qb_invoice_id, qb_push_status'
     )
     .eq('id', row.entity_id)
     .eq('company_id', ctx.companyId)
@@ -719,7 +722,7 @@ async function handleInvoiceCreate(ctx: DrainContext, row: QbQueueRow): Promise<
   // what `recordLink` now reports rather than swallowing — the invoice is
   // already there under our own `DocNumber`. Adopt it instead of duplicating
   // it. Costs one METERED read, and only on a retry.
-  if (row.attempts > 0) {
+  if (priorAttemptReachedIntuit(row, invoice)) {
     const existingId = await adoptExistingInvoice(
       ctx,
       invoice.invoice_number as string | null
@@ -1019,6 +1022,8 @@ const GL_COLUMN_FOR_CATEGORY: Record<string, string> = {
 
 interface ExpenseRow {
   id: string;
+  /** Read by `priorAttemptReachedIntuit` [R2, S104c]. */
+  qb_push_status?: string | null;
   project_id: string;
   cost_category: string;
   supplier: string;
@@ -1038,7 +1043,8 @@ async function loadExpense(ctx: DrainContext, id: string): Promise<ExpenseRow | 
   const { data } = await ctx.admin
     .from('expenses')
     .select(
-      'id, project_id, cost_category, supplier, amount, description, expense_date, due_date, status, is_deleted, sub_contract_id, qb_bill_id, qb_purchase_id, payment_account_id'
+      // `qb_push_status` [R2, S104c] — see the invoice select.
+      'id, project_id, cost_category, supplier, amount, description, expense_date, due_date, status, is_deleted, sub_contract_id, qb_bill_id, qb_purchase_id, payment_account_id, qb_push_status'
     )
     .eq('id', id)
     .eq('company_id', ctx.companyId)
@@ -1511,7 +1517,17 @@ async function buildPurchaseBody(
   expense: ExpenseRow,
   settings: PurchaseSettings,
   accountId: string,
-  vendorId: string | null
+  vendorId: string | null,
+  /**
+   * The memo QuickBooks currently holds, on the UPDATE path only [R1, S104c].
+   *
+   * ⚠️ USED ONLY WHEN WE HAVE NO PROJECT NOTE OF OUR OWN. When a project note
+   * exists it wins, exactly as it did before the marker shipped — that part of
+   * the behaviour is unchanged. What this restores is the case where it does
+   * not: the field used to be OMITTED then, so the bookkeeper's memo survived
+   * the read-modify-write. Undefined on create, where there is nothing to keep.
+   */
+  existingNote?: string | null
 ): Promise<Record<string, unknown>> {
   const { customerRef, note } = await projectRefs(ctx, expense.project_id);
 
@@ -1527,10 +1543,14 @@ async function buildPurchaseBody(
     // ⚠️ THE MARKER IS THE ONLY DURABLE LINK BACK TO OUR ROW [S104]. A Purchase
     // has no natural key of ours — no DocNumber we set, no number a person
     // would recognise — so without it an orphaned Purchase can never be matched
-    // to the expense that created it. `PrivateNote` is internal (it is the
-    // QuickBooks Memo field), so this is visible to a bookkeeper and to nobody
-    // else. See `reconcile.ts`.
-    PrivateNote: withMarker(note, expense.id),
+    // to the expense that created it.
+    //
+    // ⚠️ AND IT NEVER DESTROYS A MEMO TO GET THERE [R1, S104c]. `PrivateNote` is
+    // the QuickBooks **Memo** field and a bookkeeper types in it. Our project
+    // note wins when we have one — unchanged — but when we do not, the memo
+    // QuickBooks already holds is carried through and the marker is appended.
+    // `withMarker()` is idempotent, so an amendment does not grow a tail of tags.
+    PrivateNote: withMarker(note ?? existingNote, expense.id),
     Line: [
       {
         DetailType: 'AccountBasedExpenseLineDetail',
@@ -1584,7 +1604,7 @@ async function handlePurchaseCreate(ctx: DrainContext, row: QbQueueRow): Promise
   // `handleInvoiceCreate`; here the key is the `[FF:<id>]` marker in
   // `PrivateNote` rather than a DocNumber, because a Purchase carries no
   // number of ours. Only on a retry, and only one METERED read.
-  if (row.attempts > 0) {
+  if (priorAttemptReachedIntuit(row, expense)) {
     const existingId = await adoptExistingByMarker(
       ctx,
       'Purchase',
@@ -1673,7 +1693,17 @@ async function handlePurchaseUpdate(ctx: DrainContext, row: QbQueueRow): Promise
     ...existingPurchase,
     Id: expense.qb_purchase_id,
     SyncToken: syncToken,
-    ...(await buildPurchaseBody(ctx, expense, settings.value, account.id, vendorId)),
+    ...(await buildPurchaseBody(
+      ctx,
+      expense,
+      settings.value,
+      account.id,
+      vendorId,
+      // R1 [S104c] — hand back the memo QuickBooks holds so a bookkeeper's text
+      // survives an amendment. `readEntity` fetched the whole object precisely
+      // so the update could merge rather than overwrite (F10).
+      (existingPurchase as { PrivateNote?: string }).PrivateNote ?? null
+    )),
   });
 
   const linkFailure = await recordLink(
@@ -1739,7 +1769,8 @@ async function handleExpensePaymentCreate(
   const { data: payment } = await ctx.admin
     .from('expense_payments')
     .select(
-      'id, expense_id, amount, retainage_withheld, paid_date, is_deleted, qb_purchase_id, payment_account_id'
+      // `qb_push_status` [R2, S104c] — see the invoice select.
+      'id, expense_id, amount, retainage_withheld, paid_date, is_deleted, qb_purchase_id, payment_account_id, qb_push_status'
     )
     .eq('id', row.entity_id)
     .eq('company_id', ctx.companyId)
@@ -1783,7 +1814,7 @@ async function handleExpensePaymentCreate(
   // rebuild-test), so the link write below genuinely fails — and until S104 it
   // failed silently while the handler returned `pushed`. A Purchase then
   // existed in QuickBooks with nothing pointing at it. See `reconcile.ts`.
-  if (row.attempts > 0) {
+  if (priorAttemptReachedIntuit(row, payment as { qb_push_status?: string | null })) {
     const existingId = await adoptExistingByMarker(
       ctx,
       'Purchase',
