@@ -557,3 +557,54 @@ question is **non-sub vendors** — `expenses.supplier` is free text with no row
 to — which is why the entry itself offers "and/or a `qb_vendor_map` table keyed on the supplier
 string". Carried to Phase 2.
 
+---
+
+## Phase 2 — rulings received
+
+| Question | Ruling |
+| --- | --- |
+| QBO readback (token expired) | **Refresh and read**, read-only GETs, through the app's own path |
+| Ledger gap `20261440000000` | **Repair rebuild-test only.** Josh checks production himself. |
+| Item 2 fix scope | **All three:** check the error in all nine writers, backfill `retainage_percent_applied` on the 7 rows, VALIDATE the constraint |
+| Item 3 shape | **`failed_terminal` with the cause named** — *conditional on first confirming queue rows are never deleted or archived*, "because if completed rows get purged, 'missing' means 'succeeded'" |
+
+### ⚠️ And the thing I failed to ask, raised by Josh
+
+> *"A real QuickBooks Purchase exists with no local `qb_purchase_id`. Fix the writers and the next
+> drain pushes it again — duplicate expenses in your books. **Reconciliation has to land with the
+> writer fix, not after it.** Sandbox Purchases 151/152/155/156 are the candidates. This is
+> `#2-7gqb`'s class arriving early."*
+
+**He is right, and it inverts the shape of the fix.** Making the writers fail loudly turns a silent
+wrong-state into a **retryable** one, and a retry of a create whose QuickBooks object already exists
+is a duplicate financial record. The error check on its own is a net negative without an idempotency
+answer shipped in the same step.
+
+**Confirmed by measurement:** `expenses` hold `qb_purchase_id` 151, 155, 156 and 175. Sandbox
+Purchase **152 is referenced by no local row** — the orphan already exists.
+
+## Phase 3 — build
+
+### Step 3.0 — Josh's precondition: are queue rows ever deleted or archived?
+
+**Answered: NO. Marking a dependant terminal on a missing dependency is safe.**
+
+| path | result |
+| --- | --- |
+| `lib/quickbooks/queue.ts` | `markPushed()` sets `status='pushed'`; the row **stays**. No delete anywhere. |
+| all `supabase/migrations/*.sql` | `grep -niE 'delete +from +(public\.)?qb_sync_queue'` → **0 hits** |
+| all 13 crons in `vercel.json` | none references `qb_sync_queue` |
+| `apps/web/app/**`, `lib/**` | no `.delete()` on the table outside `test/` |
+| `lib/trial/deletion.ts:400` | deletes it as part of **whole-tenant** trial deletion — the dependant goes with it |
+
+Two caveats recorded rather than glossed:
+
+1. **Tests delete queue rows** (`s149`, `s181`, `s182`, `s183`, `s187` — by `entity_id` or
+   `company_id`). On rebuild-test a test could delete a dependency and strand a dependant. That is
+   fixture churn, not product semantics, and the new terminal state makes it *visible* rather than
+   invisible — which is the improvement, not a regression.
+2. `is_deleted` exists on the table and `claimDue()` filters `is_deleted=false`, but the dependency
+   resolution query does **not** filter it. A soft-deleted-but-`pushed` dependency therefore still
+   releases its dependant. Left as-is deliberately: `pushed` is a fact about QuickBooks, and soft-
+   deleting the bookkeeping row does not un-push it.
+
