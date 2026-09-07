@@ -7212,6 +7212,59 @@ export type Database = {
           },
         ]
       }
+      qb_vendor_map: {
+        Row: {
+          company_id: string
+          created_at: string | null
+          created_by: string | null
+          deleted_at: string | null
+          id: string
+          is_deleted: boolean | null
+          qb_vendor_id: string
+          realm_id: string
+          supplier_key: string | null
+          supplier_name: string
+          updated_at: string | null
+          updated_by: string | null
+        }
+        Insert: {
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          is_deleted?: boolean | null
+          qb_vendor_id: string
+          realm_id: string
+          supplier_key?: string | null
+          supplier_name: string
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Update: {
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          is_deleted?: boolean | null
+          qb_vendor_id?: string
+          realm_id?: string
+          supplier_key?: string | null
+          supplier_name?: string
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "qb_vendor_map_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       qb_webhook_events: {
         Row: {
           company_id: string | null

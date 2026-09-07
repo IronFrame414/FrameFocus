@@ -89,4 +89,13 @@ export const QB_LINK_EXEMPT: Record<string, string> = {
   // the mapping, so clearing the id would leave a nameless orphan rather than
   // forgetting anything.
   'company_payment_accounts.qb_account_id': 'Settings mapping; the row IS the mapping.',
+
+  // ⚠️ EXEMPT BY CONSTRUCTION, NOT BY JUDGEMENT [#1-7gqb, S104]. Every row of
+  // `qb_vendor_map` carries `realm_id`, and `resolveOrCreateVendor()` filters on
+  // it, so a mapping written under one QuickBooks company can never be READ
+  // under another. That is strictly stronger than clearing on disconnect:
+  // clearing depends on this list being maintained, and the three columns this
+  // census exists to catch were missed precisely that way. There is nothing to
+  // forget, and forgetting to forget it cannot hurt.
+  'qb_vendor_map.qb_vendor_id': 'Realm-scoped by column and by query; a stale realm can never match.',
 };

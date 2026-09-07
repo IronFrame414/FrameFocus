@@ -164,15 +164,35 @@ export async function resolveAccountId(
 /**
  * Resolve a supplier name to a QuickBooks Vendor, creating one if absent.
  *
- * ⚠️ THERE IS NOWHERE TO PERSIST A VENDOR ID, AND THAT IS A REAL GAP, NOT AN
+ * ⚠️ CLOSED [S104] — `#1-7gqb`. _Superseded, quoted rather than deleted:_
+ * _"THERE IS NOWHERE TO PERSIST A VENDOR ID, AND THAT IS A REAL GAP, NOT AN
  * OVERSIGHT HERE. `expenses.supplier` is FREE TEXT and `subcontractors` carries
- * NO `qb_vendor_id` column (checked against the live schema this run). So a
- * vendor cannot be modelled the way a customer is — there is no row to write
- * the id back to.
+ * NO `qb_vendor_id` column … the vendor is resolved by DisplayName on each bill
+ * push, memoised for the drain. That is one extra metered read per distinct
+ * supplier per drain, not per bill."_
  *
- * Consequence, stated plainly: the vendor is resolved by DisplayName on each
- * bill push, memoised for the drain. That is one extra metered read per distinct
- * supplier per drain, not per bill.
+ * There is somewhere now: `qb_vendor_map` (`20261520000000`), keyed on
+ * (company, realm, normalised supplier string). **Keyed on the STRING and not on
+ * `subcontractors.id`, because an expense carries `sub_contract_id` and a
+ * free-text `supplier` and no subcontractor FK at all** — the string is what
+ * this function actually resolves, for a sub and for a hardware store alike.
+ *
+ * ⚠️ THE LOOKUP ORDER IS CHEAPEST-FIRST, and that ordering is the fix:
+ *   1. `ctx.vendorCache`  — free, this drain only
+ *   2. `qb_vendor_map`    — a DB read, FREE against Intuit's quota
+ *   3. `select … from Vendor` — **METERED**
+ *   4. create
+ * Steps 3 and 4 write their result back to step 2, so a supplier costs one
+ * metered read ONCE rather than once per drain forever.
+ *
+ * ⚠️ AND IT CLOSES THE SECOND, WORSE COST: a supplier RENAMED inside QuickBooks
+ * used to become a SECOND Vendor on the next push, because the lookup key was
+ * the display name — the one thing that had changed. The stored id survives a
+ * rename; QuickBooks resolves ids, not names.
+ *
+ * ⚠️ THE MAP IS A CACHE OF A FACT, NOT A CLAIM ABOUT ONE. If the stored id no
+ * longer exists in QuickBooks the push fails loudly with Intuit's own error,
+ * which is the right failure. Nothing here fabricates a vendor.
  *
  * ⚠️ AND UNLIKE A CUSTOMER, A NAME COLLISION HERE IS NOT A CONFLICT TO ASK
  * ABOUT. Two clients called "Acme" are plausibly two different clients; a
@@ -187,6 +207,28 @@ export async function resolveOrCreateVendor(
   const key = displayName.trim();
   if (!key) return null;
   if (ctx.vendorCache.has(key)) return ctx.vendorCache.get(key)!;
+
+  // 2. The durable map. Scoped by realm as well as company: a mapping written
+  //    under one QuickBooks company must never be read under another, and
+  //    scoping makes that structurally impossible rather than dependent on a
+  //    disconnect reset list being maintained (see s187-qb-link-census).
+  const { data: mapped } = await ctx.admin
+    .from('qb_vendor_map')
+    .select('qb_vendor_id')
+    .eq('company_id', ctx.companyId)
+    .eq('realm_id', ctx.conn.realmId)
+    .eq('supplier_key', key.toLowerCase())
+    .eq('is_deleted', false)
+    // Scoped, not merely limited: idx_qb_vendor_map_one_live makes at most one
+    // live row match this predicate (CLAUDE.md, S165).
+    .limit(1)
+    .maybeSingle();
+
+  if (mapped?.qb_vendor_id) {
+    const cached = mapped.qb_vendor_id as string;
+    ctx.vendorCache.set(key, cached);
+    return cached;
+  }
 
   const found = (await qboQuery(
     ctx.admin,
@@ -215,6 +257,32 @@ export async function resolveOrCreateVendor(
       } else {
         throw err;
       }
+    }
+  }
+
+  // 5. Remember it, so the metered read above is paid once rather than once per
+  //    drain. `upsert` on the live-row index: two drains resolving the same
+  //    supplier in the same instant is a race we would rather absorb than fail.
+  //
+  //    ⚠️ THE WRITE IS NOT ALLOWED TO BREAK THE PUSH. This is a cache. If it
+  //    fails we have still resolved the vendor correctly and the expense should
+  //    still reach QuickBooks; the only cost is that the next drain pays the
+  //    metered read again. Logged, never thrown.
+  if (id) {
+    const { error: mapError } = await ctx.admin.from('qb_vendor_map').upsert(
+      {
+        company_id: ctx.companyId,
+        realm_id: ctx.conn.realmId,
+        supplier_name: key,
+        qb_vendor_id: id,
+      },
+      { onConflict: 'company_id,realm_id,supplier_key' }
+    );
+    if (mapError) {
+      console.error(
+        `[qb-vendor] could not remember vendor ${id} for "${key}" company=${ctx.companyId}:`,
+        mapError.message
+      );
     }
   }
 
