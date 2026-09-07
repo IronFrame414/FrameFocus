@@ -3,6 +3,12 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { QB_DUPLICATE_NAME_CODE, QboApiError, qbQuoteLiteral, qboQuery, qboRead, qboWrite } from './client';
 import type { QboConnection } from './tokens';
 import type { QbQueueRow } from './queue';
+import {
+  adoptExistingByMarker,
+  adoptExistingInvoice,
+  recordLink,
+  withMarker,
+} from './reconcile';
 
 /**
  * 7G — the entity mappers. Platform rows in, QuickBooks objects out.
@@ -621,6 +627,33 @@ async function handleInvoiceCreate(ctx: DrainContext, row: QbQueueRow): Promise<
   const dueDate = qbDate(invoice.due_date as string | null);
   if (dueDate) body.DueDate = dueDate;
 
+  // ⚠️ A RETRY MUST NOT CREATE A SECOND INVOICE [S104]. QuickBooks has no PUT;
+  // a second POST is a second document in the customer's books. If a previous
+  // attempt reached Intuit and failed only on the way back — which is exactly
+  // what `recordLink` now reports rather than swallowing — the invoice is
+  // already there under our own `DocNumber`. Adopt it instead of duplicating
+  // it. Costs one METERED read, and only on a retry.
+  if (row.attempts > 0) {
+    const existingId = await adoptExistingInvoice(
+      ctx,
+      invoice.invoice_number as string | null
+    );
+    if (existingId) {
+      const adopted = await recordLink(
+        ctx,
+        'invoices',
+        row.entity_id,
+        {
+          qb_invoice_id: existingId,
+          qb_push_status: 'pushed',
+          qb_synced_at: new Date().toISOString(),
+        },
+        `invoice ${existingId} (adopted from an earlier attempt)`
+      );
+      return adopted ?? { kind: 'pushed' };
+    }
+  }
+
   const created = (await qboWrite(ctx.conn, '/invoice', body)) as {
     Invoice?: {
       Id?: string;
@@ -663,17 +696,20 @@ async function handleInvoiceCreate(ctx: DrainContext, row: QbQueueRow): Promise<
   const payLink = qbInvoice.InvoiceLink ?? null;
   const paymentsEnabled = Boolean(payLink);
 
-  await ctx.admin
-    .from('invoices')
-    .update({
+  const linkFailure = await recordLink(
+    ctx,
+    'invoices',
+    row.entity_id,
+    {
       qb_invoice_id: qbInvoice.Id,
       // RULED [S103, Q4] — STORED, because it prints on a client-held document.
       qb_invoice_link: payLink,
       qb_push_status: 'pushed',
       qb_synced_at: new Date().toISOString(),
-    })
-    .eq('id', row.entity_id)
-    .eq('company_id', ctx.companyId);
+    },
+    `invoice ${qbInvoice.Id}`
+  );
+  if (linkFailure) return linkFailure;
 
   // ⚠️ ONLY EVER SET TRUE, NEVER BACK TO FALSE. A create response that carries
   // no link is not proof the realm lacks Payments — it is also what a transient
@@ -775,11 +811,14 @@ async function handleInvoiceUpdate(ctx: DrainContext, row: QbQueueRow): Promise<
     ...(qbDate(invoice.due_date as string | null) ? { DueDate: qbDate(invoice.due_date as string | null) } : {}),
   });
 
-  await ctx.admin
-    .from('invoices')
-    .update({ qb_synced_at: new Date().toISOString(), qb_push_status: 'pushed' })
-    .eq('id', row.entity_id)
-    .eq('company_id', ctx.companyId);
+  const linkFailure = await recordLink(
+    ctx,
+    'invoices',
+    row.entity_id,
+    { qb_synced_at: new Date().toISOString(), qb_push_status: 'pushed' },
+    `invoice ${invoice.qb_invoice_id}`
+  );
+  if (linkFailure) return linkFailure;
 
   return { kind: 'pushed' };
 }
@@ -844,11 +883,14 @@ async function handleInvoiceVoid(ctx: DrainContext, row: QbQueueRow): Promise<Ha
     ...(invoice.qb_void_memo ? { PrivateNote: invoice.qb_void_memo } : {}),
   });
 
-  await ctx.admin
-    .from('invoices')
-    .update({ qb_synced_at: new Date().toISOString() })
-    .eq('id', row.entity_id)
-    .eq('company_id', ctx.companyId);
+  const linkFailure = await recordLink(
+    ctx,
+    'invoices',
+    row.entity_id,
+    { qb_synced_at: new Date().toISOString() },
+    `invoice ${invoice.qb_invoice_id} (voided)`
+  );
+  if (linkFailure) return linkFailure;
 
   return { kind: 'pushed' };
 }
@@ -1079,15 +1121,18 @@ async function handlePaymentCreate(ctx: DrainContext, row: QbQueueRow): Promise<
   const qbId = created.Payment?.Id;
   if (!qbId) return { kind: 'terminal', reason: 'QuickBooks accepted the payment but returned no id.' };
 
-  await ctx.admin
-    .from('client_payments')
-    .update({
+  const linkFailure = await recordLink(
+    ctx,
+    'client_payments',
+    row.entity_id,
+    {
       qb_payment_id: qbId,
       qb_push_status: 'pushed',
       qb_synced_at: new Date().toISOString(),
-    })
-    .eq('id', row.entity_id)
-    .eq('company_id', ctx.companyId);
+    },
+    `payment ${qbId}`
+  );
+  if (linkFailure) return linkFailure;
 
   return { kind: 'pushed' };
 }
@@ -1185,15 +1230,18 @@ async function handleRefundCreate(ctx: DrainContext, row: QbQueueRow): Promise<H
     return { kind: 'terminal', reason: `QuickBooks accepted the ${responseKey} but returned no id.` };
   }
 
-  await ctx.admin
-    .from('client_refunds')
-    .update({
+  const linkFailure = await recordLink(
+    ctx,
+    'client_refunds',
+    row.entity_id,
+    {
       qb_refund_id: qbId,
       qb_push_status: 'pushed',
       qb_synced_at: new Date().toISOString(),
-    })
-    .eq('id', row.entity_id)
-    .eq('company_id', ctx.companyId);
+    },
+    `${responseKey} ${qbId}`
+  );
+  if (linkFailure) return linkFailure;
 
   return { kind: 'pushed' };
 }
@@ -1370,7 +1418,13 @@ async function buildPurchaseBody(
     // entirely when the supplier could not be resolved — an EntityRef with a
     // value and no type is rejected, and a Purchase is legal without one.
     ...(vendorId ? { EntityRef: { value: vendorId, type: 'Vendor' } } : {}),
-    ...(note ? { PrivateNote: note } : {}),
+    // ⚠️ THE MARKER IS THE ONLY DURABLE LINK BACK TO OUR ROW [S104]. A Purchase
+    // has no natural key of ours — no DocNumber we set, no number a person
+    // would recognise — so without it an orphaned Purchase can never be matched
+    // to the expense that created it. `PrivateNote` is internal (it is the
+    // QuickBooks Memo field), so this is visible to a bookkeeper and to nobody
+    // else. See `reconcile.ts`.
+    PrivateNote: withMarker(note, expense.id),
     Line: [
       {
         DetailType: 'AccountBasedExpenseLineDetail',
@@ -1411,6 +1465,33 @@ async function handlePurchaseCreate(ctx: DrainContext, row: QbQueueRow): Promise
   // Purchase is a record of spend and QuickBooks accepts one with no payee.
   const vendorId = await resolveOrCreateVendor(ctx, expense.supplier);
 
+  // ⚠️ A RETRY MUST NOT CREATE A SECOND PURCHASE [S104]. See the same guard on
+  // `handleInvoiceCreate`; here the key is the `[FF:<id>]` marker in
+  // `PrivateNote` rather than a DocNumber, because a Purchase carries no
+  // number of ours. Only on a retry, and only one METERED read.
+  if (row.attempts > 0) {
+    const existingId = await adoptExistingByMarker(
+      ctx,
+      'Purchase',
+      expense.id,
+      qbDate(expense.expense_date)
+    );
+    if (existingId) {
+      const adopted = await recordLink(
+        ctx,
+        'expenses',
+        row.entity_id,
+        {
+          qb_purchase_id: existingId,
+          qb_push_status: 'pushed',
+          qb_synced_at: new Date().toISOString(),
+        },
+        `Purchase ${existingId} (adopted from an earlier attempt)`
+      );
+      return adopted ?? { kind: 'pushed' };
+    }
+  }
+
   const created = (await qboWrite(
     ctx.conn,
     '/purchase',
@@ -1422,15 +1503,18 @@ async function handlePurchaseCreate(ctx: DrainContext, row: QbQueueRow): Promise
     return { kind: 'terminal', reason: 'QuickBooks accepted the expense but returned no id.' };
   }
 
-  await ctx.admin
-    .from('expenses')
-    .update({
+  const linkFailure = await recordLink(
+    ctx,
+    'expenses',
+    row.entity_id,
+    {
       qb_purchase_id: qbId,
       qb_push_status: 'pushed',
       qb_synced_at: new Date().toISOString(),
-    })
-    .eq('id', row.entity_id)
-    .eq('company_id', ctx.companyId);
+    },
+    `Purchase ${qbId}`
+  );
+  if (linkFailure) return linkFailure;
 
   return { kind: 'pushed' };
 }
@@ -1470,11 +1554,14 @@ async function handlePurchaseUpdate(ctx: DrainContext, row: QbQueueRow): Promise
     ...(await buildPurchaseBody(ctx, expense, settings.value, account.id, vendorId)),
   });
 
-  await ctx.admin
-    .from('expenses')
-    .update({ qb_synced_at: new Date().toISOString(), qb_push_status: 'pushed' })
-    .eq('id', row.entity_id)
-    .eq('company_id', ctx.companyId);
+  const linkFailure = await recordLink(
+    ctx,
+    'expenses',
+    row.entity_id,
+    { qb_synced_at: new Date().toISOString(), qb_push_status: 'pushed' },
+    `Purchase ${expense.qb_purchase_id}`
+  );
+  if (linkFailure) return linkFailure;
 
   return { kind: 'pushed' };
 }
@@ -1495,11 +1582,14 @@ async function handlePurchaseVoid(ctx: DrainContext, row: QbQueueRow): Promise<H
     SyncToken: syncToken,
   });
 
-  await ctx.admin
-    .from('expenses')
-    .update({ qb_synced_at: new Date().toISOString() })
-    .eq('id', row.entity_id)
-    .eq('company_id', ctx.companyId);
+  const linkFailure = await recordLink(
+    ctx,
+    'expenses',
+    row.entity_id,
+    { qb_synced_at: new Date().toISOString() },
+    `Purchase ${expense.qb_purchase_id} (deleted)`
+  );
+  if (linkFailure) return linkFailure;
 
   return { kind: 'pushed' };
 }
@@ -1565,12 +1655,41 @@ async function handleExpensePaymentCreate(
   const vendorId = await resolveOrCreateVendor(ctx, expense.supplier);
   const { customerRef, note } = await projectRefs(ctx, expense.project_id);
 
+  // ⚠️ THIS IS THE HANDLER THE S104 DEFECT WAS FOUND ON, so read the guard as
+  // load-bearing rather than defensive. `expense_payments` carries a NOT VALID
+  // check constraint that REJECTS any update to a legacy row (7 of 17 on
+  // rebuild-test), so the link write below genuinely fails — and until S104 it
+  // failed silently while the handler returned `pushed`. A Purchase then
+  // existed in QuickBooks with nothing pointing at it. See `reconcile.ts`.
+  if (row.attempts > 0) {
+    const existingId = await adoptExistingByMarker(
+      ctx,
+      'Purchase',
+      payment.id as string,
+      qbDate(payment.paid_date as string)
+    );
+    if (existingId) {
+      const adopted = await recordLink(
+        ctx,
+        'expense_payments',
+        row.entity_id,
+        {
+          qb_purchase_id: existingId,
+          qb_push_status: 'pushed',
+          qb_synced_at: new Date().toISOString(),
+        },
+        `Purchase ${existingId} (adopted from an earlier attempt)`
+      );
+      return adopted ?? { kind: 'pushed' };
+    }
+  }
+
   const created = (await qboWrite(ctx.conn, '/purchase', {
     AccountRef: { value: settings.value.accountId },
     PaymentType: settings.value.paymentType,
     TxnDate: qbDate(payment.paid_date as string),
     ...(vendorId ? { EntityRef: { value: vendorId, type: 'Vendor' } } : {}),
-    ...(note ? { PrivateNote: note } : {}),
+    PrivateNote: withMarker(note, payment.id as string),
     Line: [
       {
         DetailType: 'AccountBasedExpenseLineDetail',
@@ -1591,15 +1710,18 @@ async function handleExpensePaymentCreate(
     return { kind: 'terminal', reason: 'QuickBooks accepted the payment but returned no id.' };
   }
 
-  await ctx.admin
-    .from('expense_payments')
-    .update({
+  const linkFailure = await recordLink(
+    ctx,
+    'expense_payments',
+    row.entity_id,
+    {
       qb_purchase_id: qbId,
       qb_push_status: 'pushed',
       qb_synced_at: new Date().toISOString(),
-    })
-    .eq('id', row.entity_id)
-    .eq('company_id', ctx.companyId);
+    },
+    `Purchase ${qbId}`
+  );
+  if (linkFailure) return linkFailure;
 
   return { kind: 'pushed' };
 }
