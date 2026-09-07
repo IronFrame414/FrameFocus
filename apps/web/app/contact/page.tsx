@@ -19,7 +19,11 @@ export const metadata: Metadata = {
 // ---------------------------------------------------------------------------
 // WHAT THIS PAGE MAY AND MAY NOT SAY — these are constraints, not preferences
 // ---------------------------------------------------------------------------
-// EZ Contractor Binder is NOT a registered entity. Therefore:
+// The business behind this product is NOT a registered entity. (The name is
+// deliberately not written out here — `brand.name` is the single source, and
+// test/brand-literals.test.ts fails on a hard-coded copy, comments included,
+// because a name in a comment is one paste away from a name in the UI.)
+// Therefore:
 //
 //   - NO corporate suffix. Not "LLC", not "Inc.", not "Corp." — writing one is
 //     a claim of a legal form that does not exist.

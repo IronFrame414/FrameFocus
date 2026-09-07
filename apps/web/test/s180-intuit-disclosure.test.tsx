@@ -133,7 +133,10 @@ describe('7G §5.5 — placement 1: the marketing pages', () => {
  * THE PUBLIC CONTACT PAGE — one published address, and no claim about who owns
  * the business.
  *
- * ⚠️ EZ Contractor Binder is NOT a registered entity. A corporate suffix or a
+ * ⚠️ The business behind the product is NOT a registered entity. (The name is
+ * not spelled out here either — brand-literals.test.ts guards app/, lib/ and
+ * components/ rather than test/, but the reason it does applies just as well.)
+ * A corporate suffix or a
  * claim of incorporation on a public page is a false statement about a real
  * business, and an Intuit reviewer reads these pages. Josh's personal email
  * also leaked onto public surfaces once and was cleaned up; this keeps it out.
