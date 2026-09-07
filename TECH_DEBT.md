@@ -80,9 +80,11 @@ Complete as of Session 40. All polish items closed. Module 4 build is unblocked.
 > All three were found while building 7G and are **owed work with a known fix**, not deferred
 > decisions — `#3-7gqb` was the one exception (owed work blocked on a ruling) and is now **CLOSED [S182]**.
 >
-> ⚠️ **ALL THREE ARE NOW CLOSED. `#1-7gqb` and `#2-7gqb` were built at S104**; see each entry's
-> banner. Nothing in this block is owed. The provisional ids still need converting to real numbers
-> from main's file when the branch lands, per the S136 rule — a closed entry keeps its id.
+> ⚠️ **`#1-7gqb` and `#2-7gqb` were built at S104**; see each entry's banner. **`#4-7gqb` and
+> `#5-7gqb` were opened at S104c by the pre-merge review and ARE owed** — both are things Josh
+> ruled out of this branch rather than defects left unnoticed. The provisional ids still need
+> converting to real numbers from main's file when the branch lands, per the S136 rule — a closed
+> entry keeps its id.
 
 #### `#1-7gqb` — ✅ **CLOSED [S104]** — there is somewhere now: `qb_vendor_map`
 
@@ -182,6 +184,51 @@ FrameFocus that is missing — but nothing surfaces it on a screen.
 **Fix.** The **CDC backstop poll** already specified as 7g2 §9 item 9 (hourly cadence ruled at S143),
 which reconciles QuickBooks against our records and catches exactly this. `qb_read_budget` exists to
 keep that affordable.
+
+#### `#4-7gqb` — a TERMINAL sync failure reaches no person, only a screen state and a log
+
+**Raised S104c, in the pre-merge review. RULED [Josh]: not fixed in this branch.**
+
+**What.** `worker.ts` calls `notifyParked()` on a **park** and nothing on a **terminal** failure. A
+terminal outcome writes `qb_push_status = 'failed'` onto the record (`markRecordFailed()`) and a
+`[qb-worker]` line to the log. Both are real, and neither reaches anybody who is not already looking
+at that record.
+
+**Why it matters more than it sounds.** After S104 a terminal failure is the outcome when
+**QuickBooks accepted an object and we could not record the link** — an orphaned Purchase or Invoice
+in the customer's books, which `recordLink()`'s message describes in detail to nobody. The park path,
+which is a *less* serious state, is the one that notifies.
+
+**Why it was not fixed here.** Terminal also covers ordinary, uninteresting outcomes — *"a draft
+invoice is not sent to QuickBooks"*, *"only approved expenses are sent"*, *"this refund was
+cancelled"*. Notifying all of them would train the reader to ignore the category. The fix needs a
+distinction between *"this record is not eligible"* and *"this record is now inconsistent with
+QuickBooks"*, and that is a design decision, not a wiring job.
+
+**Fix.** Either a `severity` on `HandlerResult`, or notify only when `recordLink()` / `totalMismatch()`
+produced the terminal — the two that mean an object exists in the books that our side disagrees with.
+
+#### `#5-7gqb` — adoption's remaining holes, both bounded and both stated
+
+**Raised S104c. RULED [Josh]: the two big ones fixed (R2, R3); these two accepted.**
+
+The `[FF:<id>]` marker plus `adoptExistingByMarker()` is what stops a retried push creating a second
+financial record. Two residual gaps survive the S104c fixes:
+
+1. **A date edit larger than `ADOPTION_WINDOW_DAYS` (90) still escapes.** The probe scans
+   `TxnDate` ± 90 days around the record's *current* date and matches the marker in memory, because
+   `PrivateNote` is not filterable in Intuit's query language. A year-typo correction is the
+   realistic case that would exceed it. **The answer if this ever bites is a queryable key of our
+   own, not a wider net** — a wider net runs into (2).
+2. **Intuit caps a query page at 1000.** A realm with more than 1000 Purchases inside the window
+   would truncate, and a truncated page can miss the marker and duplicate. 39 exist on the sandbox
+   today, so this is a scale problem rather than a present one.
+
+**And one that is not adoption's to fix:** two overlapping drains can both claim the same queue row —
+`markInFlight` is a reclaim clock, not a lock (`STALE_IN_FLIGHT_MS` 10 min against a 5-minute cron).
+Both would see `attempts = 0` and neither would probe. `worker.ts`'s header already records this
+residual window; it is repeated here only so a reader of the adoption code does not assume the
+markers closed it.
 
 #### `#3-7gqb` — ✅ **CLOSED [S182]** — see [`TECH_DEBT_CLOSED.md`](TECH_DEBT_CLOSED.md)
 
