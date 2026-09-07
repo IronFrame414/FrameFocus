@@ -17,7 +17,9 @@
  *
  * FAILING-THEN-PASSING: every assertion here fails before 20261003000000 — tests
  * 1/2/3/5 because `retainage_percent_applied` does not exist, test 4 because the
- * NOT VALID constraint does not exist.
+ * constraint does not exist. (⚠️ It was NOT VALID from S151 until S104, which
+ * back-filled and VALIDATED it — 20261500000000. Test 4 is unaffected: it has
+ * always asserted a NEW row, which was checked under both.)
  *
  * FIXTURES: created and torn down here (#144's rule — a live harness that reads
  * another run's leftovers is not standalone). Nothing pre-existing is written.
@@ -356,8 +358,21 @@ describe('S151-B1 — the applied rate is recorded and never restated', () => {
   });
 
   it('4. a withhold with NO recorded rate is refused by the database', async () => {
-    // The NOT VALID constraint, checked against a new row. Direct insert, not
-    // the RPC — the RPC always sets the rate, so the RPC cannot exercise this.
+    // ⚠️ AMENDED [S104] — the constraint is no longer NOT VALID. _Superseded
+    // comment, quoted rather than deleted:_ _"The NOT VALID constraint, checked
+    // against a new row."_ It is now VALIDATED (20261500000000): the seven
+    // grandfathered rows were back-filled from their own arithmetic, so the
+    // rule holds over EVERY row rather than only over new ones. This assertion
+    // is unchanged and still correct — it was always about a new row.
+    //
+    // ⚠️ WHY IT HAD TO CHANGE. `NOT VALID` exempts a row only until something
+    // UPDATEs it; the whole row is then re-checked and the write fails. That
+    // made the seven grandfathered rows permanently un-writable, which broke
+    // the 7G connector's QuickBooks link write-back SILENTLY. See
+    // `s104-qb-link-integrity.test.ts` and `lib/quickbooks/reconcile.ts`.
+    //
+    // Direct insert, not the RPC — the RPC always sets the rate, so the RPC
+    // cannot exercise this.
     const stage1 = await stageByLabel(1);
     const { error } = await admin.from('expense_payments').insert({
       company_id: companyId,
