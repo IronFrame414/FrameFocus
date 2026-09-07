@@ -78,13 +78,30 @@ describe('S104-A — no unchecked QuickBooks link write survives in entities.ts'
     // ⚠️ THE PAIRING IS THE POINT [Josh, S104]. Checking the error turns a
     // silent wrong state into a RETRYABLE one, and QuickBooks has no PUT — a
     // retried create is a second financial record. Each of the three create
-    // handlers that can now fail after reaching Intuit must guard on
-    // `row.attempts > 0` first.
-    const guards = entitiesTs.match(/if \(row\.attempts > 0\) \{/g) ?? [];
+    // handlers that can fail after reaching Intuit must probe first.
+    //
+    // ⚠️ AMENDED [R2, S104c] — AND THIS TEST WENT RED WHEN THE FIX LANDED, WHICH
+    // IS WHY IT IS WORTH HAVING. _Superseded matcher:_ `/if \(row\.attempts > 0\) \{/`.
+    // Gating on `row.attempts` alone was the R2 hole: `attempts` lives on the
+    // QUEUE ROW, and a terminal failure retires that row, so a re-enqueued one
+    // arrives with `attempts = 0` and never probed. The guard is now
+    // `priorAttemptReachedIntuit(row, record)`, which also reads the RECORD's
+    // `qb_push_status`.
+    const guards = entitiesTs.match(/if \(priorAttemptReachedIntuit\(/g) ?? [];
     expect(
       guards.length,
       'a create handler can fail after reaching QuickBooks and has no adoption guard — ' +
         'a retry would duplicate the record'
+    ).toBeGreaterThanOrEqual(3);
+
+    // ⚠️ AND THE PREDICATE MUST BE ABLE TO SEE WHAT IT READS. If a handler's
+    // `select` omits `qb_push_status` the predicate silently reads `undefined`
+    // and the whole R2 fix is a no-op — the exact class of silent failure this
+    // branch exists to remove. Three selects feed the three guards.
+    const selects = entitiesTs.match(/qb_push_status'/g) ?? [];
+    expect(
+      selects.length,
+      'a handler guards on qb_push_status but never selects it — the guard is dead'
     ).toBeGreaterThanOrEqual(3);
   });
 
