@@ -37,6 +37,12 @@ export type HandlerResult =
   | { kind: 'terminal'; reason: string };
 
 export interface DrainContext {
+  /**
+   * Vendor-map writes that failed this drain [R7, S104c]. Non-fatal by design;
+   * counted so a persistent failure reaches the drain's response instead of
+   * living only in `console.error`.
+   */
+  vendorMapWriteFailures: number;
   admin: SupabaseClient;
   conn: QboConnection;
   companyId: string;
@@ -56,7 +62,14 @@ export function newDrainContext(
   conn: QboConnection,
   companyId: string
 ): DrainContext {
-  return { admin, conn, companyId, accountCache: new Map(), vendorCache: new Map() };
+  return {
+    admin,
+    conn,
+    companyId,
+    accountCache: new Map(),
+    vendorCache: new Map(),
+    vendorMapWriteFailures: 0,
+  };
 }
 
 /**
@@ -220,8 +233,15 @@ export async function resolveOrCreateVendor(
     .eq('realm_id', ctx.conn.realmId)
     .eq('supplier_key', key.toLowerCase())
     .eq('is_deleted', false)
-    // Scoped, not merely limited: idx_qb_vendor_map_one_live makes at most one
-    // live row match this predicate (CLAUDE.md, S165).
+    // Scoped, not merely limited: the UNIQUE constraint
+    // `qb_vendor_map_company_realm_supplier_key` makes at most one row match
+    // this exact predicate (CLAUDE.md, S165).
+    //
+    // ⚠️ CORRECTED [R6, S104c] — this said `idx_qb_vendor_map_one_live`, which
+    // `20261530000000` DROPPED. The reasoning held (the plain UNIQUE is
+    // stricter than the partial index it replaced) but the citation was to an
+    // object that no longer exists, in a comment whose whole job is to justify
+    // a `.limit(1)`.
     .limit(1)
     .maybeSingle();
 
@@ -262,7 +282,9 @@ export async function resolveOrCreateVendor(
   }
 
   // 5. Remember it, so the metered read above is paid once rather than once per
-  //    drain. `upsert` on the live-row index: two drains resolving the same
+  //    drain. `upsert` on `qb_vendor_map_company_realm_supplier_key` — the
+  //    plain UNIQUE constraint `20261530000000` put in place of the partial
+  //    index, which `ON CONFLICT` could not use. Two drains resolving the same
   //    supplier in the same instant is a race we would rather absorb than fail.
   //
   //    ⚠️ THE WRITE IS NOT ALLOWED TO BREAK THE PUSH. This is a cache. If it
@@ -280,6 +302,13 @@ export async function resolveOrCreateVendor(
       { onConflict: 'company_id,realm_id,supplier_key' }
     );
     if (mapError) {
+      // ⚠️ COUNTED, NOT ONLY LOGGED [R7, S104c]. This write is deliberately
+      // non-fatal — a cache failure must not stop an expense reaching
+      // QuickBooks — and that is exactly how the partial-index defect survived a
+      // whole session: every push worked, the map stayed empty, and the only
+      // evidence was a log line nobody reads. The counter surfaces a PERSISTENT
+      // failure in the drain's own response.
+      ctx.vendorMapWriteFailures += 1;
       console.error(
         `[qb-vendor] could not remember vendor ${id} for "${key}" company=${ctx.companyId}:`,
         mapError.message

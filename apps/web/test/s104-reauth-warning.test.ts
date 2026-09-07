@@ -36,6 +36,19 @@ describe('S104-H — reauthThreshold()', () => {
     expect(reauthThreshold(inDays(30), NOW)?.threshold).toBe(30);
   });
 
+  it('says nothing at 31 and everything between 30 and 8 reports 30', () => {
+    // ⚠️ 8 IS THE BOUNDARY THE FIRST VERSION OF THIS TEST OMITTED. It is the
+    // last day that must still read 30 rather than escalating early — the
+    // mirror of the 7-day case below, and the side an off-by-one lands on.
+    expect(reauthThreshold(inDays(8), NOW)?.threshold).toBe(30);
+    expect(reauthThreshold(inDays(8), NOW)?.daysLeft).toBe(8);
+  });
+
+  it('2 days out reports 7, not 1 — the other omitted boundary', () => {
+    expect(reauthThreshold(inDays(2), NOW)?.threshold).toBe(7);
+    expect(reauthThreshold(inDays(2), NOW)?.daysLeft).toBe(2);
+  });
+
   it('escalates through 30 -> 7 -> 1 rather than re-firing the widest', () => {
     // ⚠️ WARN_AT_DAYS IS DESCENDING AND THE ORDER IS LOAD-BEARING: `find` takes
     // the FIRST threshold the deadline is inside, so a connection 3 days out

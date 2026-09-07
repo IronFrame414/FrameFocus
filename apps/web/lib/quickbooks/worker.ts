@@ -93,6 +93,16 @@ export interface DrainOutcome {
   cdcRecovered: number;
   /** Reconnect-deadline warnings raised this pass [F8, S104]. */
   reauthWarnings: number;
+  /**
+   * Vendor-map writes that failed [R7, S104c].
+   *
+   * ⚠️ NON-ZERO MEANS THE SUPPLIER CACHE IS NOT BEING WRITTEN, and the symptom
+   * is invisible from the outside: every push still succeeds, the map stays
+   * empty, and each drain silently pays a METERED read per distinct supplier
+   * again. That is exactly how the partial-index defect survived a whole
+   * session — the write is deliberately non-fatal, so nothing failed loudly.
+   */
+  vendorMapWriteFailures: number;
 }
 
 export async function runQbSync(admin: SupabaseClient): Promise<DrainOutcome> {
@@ -110,6 +120,7 @@ export async function runQbSync(admin: SupabaseClient): Promise<DrainOutcome> {
     cdcPolled: 0,
     cdcRecovered: 0,
     reauthWarnings: 0,
+    vendorMapWriteFailures: 0,
   };
 
   // Only tenants that are actually connected. A `needs_reauth` company is
@@ -298,6 +309,19 @@ export async function runQbSync(admin: SupabaseClient): Promise<DrainOutcome> {
       // everything has changed nothing for anyone waiting, so stop.
       if (outcome.pushed === pushedBefore || budget <= 0) break;
       rows = await claimDue(admin, companyId, budget);
+    }
+
+    // ⚠️ AGGREGATED AFTER THE WHOLE TENANT'S DRAIN [R7, S104c]. `ctx` lives for
+    // one company's drain, and `vendorMapWriteFailures` accumulates across every
+    // pass within it. Folding it in here rather than per row is what makes a
+    // PERSISTENT failure legible: one failure is noise, a count equal to the
+    // number of distinct suppliers is a broken cache.
+    outcome.vendorMapWriteFailures += ctx.vendorMapWriteFailures;
+    if (ctx.vendorMapWriteFailures > 0) {
+      console.error(
+        `[qb-worker] company=${companyId}: ${ctx.vendorMapWriteFailures} vendor-map write(s) ` +
+          `failed. Pushes still succeeded, but every drain will re-pay a metered read per supplier.`
+      );
     }
 
     if (passes > 1) {
