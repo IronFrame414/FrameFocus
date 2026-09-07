@@ -116,7 +116,12 @@ describe('7G §5.5 — placement 1: the marketing pages', () => {
     const publicPages = pages.filter((p) =>
       readFileSync(join(appRoot, p), 'utf8').includes('SiteHeader')
     );
-    expect(publicPages.length, 'expected to find public marketing pages').toBeGreaterThan(4);
+    // A VACUITY GUARD, NOT A CENSUS. There are five public pages today, so
+    // `> 4` would sit exactly on the boundary and go red if one were ever
+    // legitimately retired — failing for a reason that has nothing to do with
+    // the disclosure. The named list above is what pins the exact set; this
+    // only has to prove the filter matched something.
+    expect(publicPages.length, 'expected to find public marketing pages').toBeGreaterThan(2);
 
     for (const page of publicPages) {
       const source = readFileSync(join(appRoot, page), 'utf8');
