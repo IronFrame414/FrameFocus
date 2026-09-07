@@ -769,3 +769,445 @@ threshold order (with a comment confidently asserting the opposite).
 pattern: a write that must not break the caller will not tell you it failed, so the only thing that
 ever surfaces it is a test that reads the result back. The prompt said measurement beat reading both
 times it was tried in the previous campaign; it beat reading four times out of four here.
+
+---
+
+# S104b — Production migration readiness
+
+> Read-only. **Nothing was pushed, nothing was applied, production was not contacted.**
+> CLI link confirmed at `nmyphyhmfttxkdoposvf` (`framefocus-rebuild-test`) at the start of this pass
+> and never moved. Working tree clean on `feature/s104-qb-hardening`.
+
+## ⚠️ FIRST — a correction to Task 3's premise, and it matters before anything else
+
+**Task 3 asks how to "confirm the CLI is linked to production immediately before the push, and
+re-link to rebuild-test immediately after." That procedure cannot be performed, and attempting it is
+itself the hazard.**
+
+`supabase db push` against production is **unavailable from this Codespace** and always has been:
+
+| checked | result |
+| --- | --- |
+| `SUPABASE_DB_PASSWORD` in `apps/web/.env.local` | **absent** (0 matches) |
+| `SUPABASE_DB_PASSWORD` in the shell | **UNSET** |
+| `SUPABASE_ACCESS_TOKEN` in the shell | SET |
+
+`supabase link` / `db push` need the database password. Without it the CLI cannot reach production at
+all — so **the CLI has never been pointed at production, and there is nothing to re-link afterwards.**
+
+This is not inference from memory; it is the repo's own record.
+`docs/sessions/production-push-log.md` §4.1–4.2 documents the S103 production push and states the
+mechanism:
+
+> *"reached via the **Supabase Management API `/v1/projects/{ref}/database/query`** endpoint … each
+> request is a SINGLE implicit transaction. So each migration is applied as `<DDL>; INSERT ledger` in
+> ONE atomic request — a failure rolls back the migration AND records no ledger row."*
+
+and records that the CLI link **was not moved**, because the Management API is linkless.
+
+⚠️ **The safety property this creates is worth naming, because Task 3's framing would have removed
+it.** `scripts/live-sql.mjs` — the only repo tool that speaks to the Management API — hard-pins
+`REQUIRED_REF = 'nmyphyhmfttxkdoposvf'` and refuses anything that is not a read. **There is
+currently no path in this repository that can write to production.** Linking the CLI to production
+"for the push" would create one, and leave it behind.
+
+**So the corrected instruction is: the CLI stays on rebuild-test throughout. It is never linked to
+production, before or after.** The push sequence in Task 3 below uses the **Supabase dashboard SQL
+Editor**, which is the same channel (`/database/query`) with a human in front of it — which is
+exactly what "attended, one at a time" asks for.
+
+---
+
+## Task 1 — per-migration production readiness
+
+### Shared property: all four are fully transactional
+
+Every statement in all four migrations is transactional in PostgreSQL — there is no
+`CREATE INDEX CONCURRENTLY`, no `ALTER TYPE … ADD VALUE`, no `VACUUM`. Applied as one script (the
+SQL Editor's multi-statement request is a single implicit transaction, per the S103 record),
+**each migration is all-or-nothing: a failure leaves the database exactly as it was and writes no
+ledger row.**
+
+**And none of the four deletes or rewrites production data.** M1's `UPDATE` matches zero production
+rows (verified); M2, M3 and M4 only add objects. The worst outcome of a failure is "nothing
+happened".
+
+---
+
+### 1 · `20261500000000_expense_payments_retainage_rate_backfill.sql`
+
+Six statements: a `DO` guard, the `UPDATE`, a `DO` assertion, `ALTER TABLE … VALIDATE CONSTRAINT`,
+two `COMMENT`s.
+
+**Can it fail, and how would it fail?**
+
+| failure | trigger | outcome |
+| --- | --- | --- |
+| `RAISE EXCEPTION` from the pre-flight `DO` | a row whose implied rate is not exactly `numeric(5,2)` | aborts **before any write**; whole migration rolls back; no ledger row |
+| `RAISE EXCEPTION` from the post-check `DO` | a violating row survived the `UPDATE` | rolls back |
+| `42704 undefined_object` on `VALIDATE CONSTRAINT` | the constraint does not exist on production | rolls back cleanly |
+| `23514 check_violation` on `VALIDATE` | some row violates the constraint predicate | rolls back cleanly |
+
+**The predicate question Task 1 raises — answered, and the answer is that they are equivalent here.**
+
+- back-fill `WHERE`: `retainage_withheld <> 0 AND retainage_percent_applied IS NULL`
+- what `VALIDATE` checks: `NOT (retainage_withheld = 0 OR retainage_percent_applied IS NOT NULL)`
+
+These are De Morgan duals and identical **for non-NULL `retainage_withheld`**. The only way they
+could diverge is a NULL `retainage_withheld` — and that case is safe from both directions: a CHECK
+constraint passes when its predicate evaluates to NULL, and the back-fill's `WHERE` also skips it.
+So a NULL row is neither back-filled nor a violation.
+
+On rebuild-test `retainage_withheld` is **`NOT NULL`** (17 rows, 0 violating, 96 kB). Josh's query
+below confirms the same on production rather than assuming the column definitions match.
+
+⚠️ **Verified zero on the back-fill predicate therefore carries to `VALIDATE` — but confirm the
+constraint's existence and state, because that is the one thing the earlier verification did not
+cover.**
+
+**The lock, which is the reassuring part.** `ALTER TABLE … VALIDATE CONSTRAINT` acquires only a
+**`SHARE UPDATE EXCLUSIVE`** lock. It does **not** block `SELECT`, `INSERT`, `UPDATE` or `DELETE` —
+the application keeps working throughout. It does block other `ALTER TABLE`, `CREATE INDEX`,
+`VACUUM FULL` and a concurrent `VALIDATE`. It performs one sequential scan of the table, so duration
+is proportional to size; Josh's query returns the production row count and table size so this is a
+known number rather than a hope.
+
+**If the constraint is already validated on production**, `VALIDATE CONSTRAINT` is a silent no-op and
+the migration succeeds harmlessly.
+
+---
+
+### 2 · `20261510000000_qb_cdc_backstop.sql`
+
+`ALTER TABLE public.companies ADD COLUMN IF NOT EXISTS qb_cdc_polled_at timestamptz` + one `COMMENT`.
+
+- **Cannot fail on "already exists"** — `IF NOT EXISTS` makes it idempotent. Confirm absence anyway,
+  to know whether it is a real change or a no-op.
+- **Adding a nullable column with no default is metadata-only** from PostgreSQL 11 onward — a
+  `pg_attribute` row, **no table rewrite**, independent of row count.
+- ⚠️ **The risk is not the rewrite; it is lock queuing.** `ADD COLUMN` takes `ACCESS EXCLUSIVE`
+  briefly. On `companies` — which the middleware touches on essentially every authenticated request —
+  a long-running statement holding a conflicting lock makes this `ALTER` wait, **and every subsequent
+  query on `companies` queues behind it.** The statement itself is instantaneous; the queue is the
+  hazard. Run it when the site is quiet, and if in any doubt prefix the SQL-Editor script with
+  `SET LOCAL lock_timeout = '5s';` so it gives up rather than blocking traffic.
+
+---
+
+### 3 · `20261520000000_qb_vendor_map.sql`
+
+Creates a table with FKs, three column defaults, two triggers, a function, RLS and one policy.
+**This migration was authored against rebuild-test, so every dependency is listed and must be
+verified rather than assumed.** All eight are present on rebuild-test (measured this pass):
+
+| dependency | used by | rebuild-test |
+| --- | --- | --- |
+| `public.get_my_company_id()` | `company_id` default **and** the RLS policy | ✅ |
+| `public.update_updated_at()` | `qb_vendor_map_updated_at` trigger | ✅ |
+| `auth.uid()` | `created_by` / `updated_by` defaults | ✅ |
+| `gen_random_uuid()` | `id` default | ✅ |
+| `public.companies` | `company_id` FK | ✅ |
+| `auth.users` | `created_by` / `updated_by` FKs | ✅ |
+| role `authenticated` | `CREATE POLICY … TO authenticated` | ✅ |
+| PostgreSQL ≥ 12 | `supplier_key` is a **generated column** | ✅ (17.6) |
+
+⚠️ **Four statements in this file are NOT idempotent** — `CREATE TRIGGER` ×2 (PostgreSQL has no
+`CREATE TRIGGER IF NOT EXISTS`, even in 17) and `CREATE POLICY`, while `CREATE TABLE`/`CREATE INDEX`
+carry `IF NOT EXISTS`. **That mix is only dangerous if the file is partially applied or re-run**;
+neither can happen in a single atomic request against a database where the table does not yet exist.
+It does mean: **this file can be applied exactly once.** If it ever needs re-running, drop the table
+first.
+
+The table is created empty, so every statement is instantaneous.
+
+---
+
+### 4 · `20261530000000_qb_vendor_map_upsert_key.sql`
+
+`DROP INDEX IF EXISTS` → `DROP CONSTRAINT IF EXISTS` → `ADD CONSTRAINT … UNIQUE`.
+
+- **Depends on migration 3 in the same push.** Run without it, `ALTER TABLE public.qb_vendor_map`
+  raises `42P01 undefined_table`, the migration rolls back, nothing is applied and no ledger row is
+  written. A clean, loud failure.
+- `ADD CONSTRAINT … UNIQUE` builds an index under `ACCESS EXCLUSIVE`, on a table with **zero rows** —
+  instantaneous.
+
+**⚠️ Must 3 and 4 go in one sitting? — the honest answer is "no, but they must both precede the code
+deploy", and here is why that distinction is the important one.**
+
+If the push stops between them, production holds `qb_vendor_map` with only the **partial** unique
+index. `resolveOrCreateVendor()`'s `.upsert(…, { onConflict: 'company_id,realm_id,supplier_key' })`
+then fails with `42P10` — *"there is no unique or exclusion constraint matching the ON CONFLICT
+specification"* — and **that write is deliberately non-fatal, so it logs `[qb-vendor]` and carries
+on.** The map stays permanently empty, the metered read is paid every drain, and the supplier-rename
+hazard returns. **Exactly the S104 defect, silently reinstated on production.**
+
+But that only bites **once the new code is running**. Under DB-before-code, nothing on production
+calls `qb_vendor_map` until `main` deploys. So:
+
+> **The rule is not "3 and 4 in one sitting". It is: 3 AND 4 must both be on production before the
+> code deploys.** Run them back to back anyway — there is no reason to leave a table half-configured,
+> and the gap is a footgun for whoever looks next.
+
+---
+
+## Task 2 — ledger integrity beyond the top 20
+
+**Run in the production SQL Editor. Read-only. Paste the output back.**
+
+```sql
+-- S104b · production migration-ledger integrity. READ ONLY.
+WITH led AS (SELECT version, name FROM supabase_migrations.schema_migrations)
+SELECT 'total rows'                AS check, count(*)::text                       AS value FROM led
+UNION ALL SELECT 'oldest version',  min(version)                                          FROM led
+UNION ALL SELECT 'newest version',  max(version)                                          FROM led
+UNION ALL SELECT 'rows at/below 20261490000000',
+       count(*) FILTER (WHERE version <= '20261490000000')::text                          FROM led
+UNION ALL SELECT 'DUPLICATE versions',
+       coalesce(string_agg(v, ', '), 'none')
+       FROM (SELECT version AS v FROM led GROUP BY version HAVING count(*) > 1) d
+UNION ALL SELECT 'version NOT 14 digits',
+       coalesce(string_agg(version, ', '), 'none')
+       FROM led WHERE version !~ '^[0-9]{14}$'
+UNION ALL SELECT 'MCP-signature rows (name prefix <> version)',
+       coalesce(string_agg(version || ' -> ' || name, ' | '), 'none')
+       FROM led WHERE name ~ '^[0-9]{14}_' AND substring(name from 1 for 14) <> version
+UNION ALL SELECT 'fingerprint (md5 of ordered versions <= 20261490000000)',
+       md5(string_agg(version, ',' ORDER BY version))
+       FROM led WHERE version <= '20261490000000';
+```
+
+### What the answers should be, stated in advance so a mismatch is obvious
+
+| check | expected | why |
+| --- | --- | --- |
+| `rows at/below 20261490000000` | **211** | 211 local migration files have a version ≤ the production tip |
+| `DUPLICATE versions` | `none` | all 215 local filenames are unique 14-digit prefixes |
+| `version NOT 14 digits` | `none` | — |
+| `MCP-signature rows` | `none` | this is the **exact fingerprint of the rebuild-test damage** |
+| `fingerprint` | **`d195ea9ecadcb18ccd360970f5a37dd3`** | computed locally over the same 211 versions, same ordering, same separator |
+
+⚠️ **"Gaps" in the arithmetic sense are meaningless here** — versions are timestamps, not a dense
+sequence, so consecutive rows legitimately jump. The fingerprint replaces gap-hunting: it matches
+**only** if production's ledger is exactly the 211 local versions ≤ the tip, in order, with nothing
+extra and nothing missing. One wrong, absent or added row changes it.
+
+⚠️ **The `MCP-signature rows` check is the one that matters most.** Rebuild-test's eight duplicates
+all had this shape — `version` a wall-clock stamp like `20260902234053`, `name` the intended filename
+`20261210000000_also_send_to_freeze`. That is what `mcp__supabase__apply_migration` writes, and it is
+worse than writing no row at all because it *looks* applied until `db push` refuses. If production
+shows any, **stop and report before applying anything.**
+
+### And a second query — the four migrations' production preconditions
+
+```sql
+-- S104b · preconditions for the four pending migrations. READ ONLY.
+SELECT 'pg version' AS check, current_setting('server_version_num') AS value
+UNION ALL SELECT 'constraint exists',
+       (EXISTS (SELECT 1 FROM pg_constraint
+                WHERE conname = 'expense_payments_retainage_rate_recorded_check'
+                  AND conrelid = 'public.expense_payments'::regclass))::text
+UNION ALL SELECT 'constraint convalidated',
+       coalesce((SELECT convalidated::text FROM pg_constraint
+                 WHERE conname = 'expense_payments_retainage_rate_recorded_check'
+                   AND conrelid = 'public.expense_payments'::regclass), 'CONSTRAINT ABSENT')
+UNION ALL SELECT 'rows VIOLATING the constraint predicate',
+       (SELECT count(*)::text FROM expense_payments
+        WHERE NOT (retainage_withheld = 0 OR retainage_percent_applied IS NOT NULL))
+UNION ALL SELECT 'expense_payments rows',      (SELECT count(*)::text FROM expense_payments)
+UNION ALL SELECT 'expense_payments size',      pg_size_pretty(pg_total_relation_size('public.expense_payments'))
+UNION ALL SELECT 'retainage_withheld nullable',
+       (SELECT is_nullable FROM information_schema.columns
+        WHERE table_schema='public' AND table_name='expense_payments' AND column_name='retainage_withheld')
+UNION ALL SELECT 'companies.qb_cdc_polled_at already exists',
+       (to_regclass('public.companies') IS NOT NULL AND EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_schema='public' AND table_name='companies' AND column_name='qb_cdc_polled_at'))::text
+UNION ALL SELECT 'qb_vendor_map already exists', (to_regclass('public.qb_vendor_map') IS NOT NULL)::text
+UNION ALL SELECT 'dep get_my_company_id()',  (to_regprocedure('public.get_my_company_id()') IS NOT NULL)::text
+UNION ALL SELECT 'dep update_updated_at()',  (to_regprocedure('public.update_updated_at()') IS NOT NULL)::text
+UNION ALL SELECT 'dep auth.uid()',           (to_regprocedure('auth.uid()') IS NOT NULL)::text
+UNION ALL SELECT 'dep gen_random_uuid()',    (to_regprocedure('pg_catalog.gen_random_uuid()') IS NOT NULL)::text
+UNION ALL SELECT 'dep auth.users',           (to_regclass('auth.users') IS NOT NULL)::text
+UNION ALL SELECT 'dep role authenticated',   (EXISTS (SELECT 1 FROM pg_roles WHERE rolname='authenticated'))::text;
+```
+
+**Every row must read `true` / a number, except `qb_cdc_polled_at already exists` and
+`qb_vendor_map already exists`, which must read `false`, and `rows VIOLATING…` which must read `0`.**
+`constraint convalidated` reading `false` is the expected and desirable state — it means M1 has work
+to do. Reading `CONSTRAINT ABSENT` is a **STOP**: M1 would error.
+
+---
+
+## Task 3 — the push sequence
+
+**Route: Supabase dashboard SQL Editor, production project `jwkcknyuyvcwcdeskrmz`. The CLI is not
+involved and is not linked to production at any point.**
+
+### Step 0 — before anything
+
+1. Run **both** Task 2 queries. Confirm every expected value. **Any `MCP-signature row`, any
+   duplicate, or a fingerprint mismatch is a hard stop.**
+2. Confirm the CLI is still on rebuild-test — it should never have moved:
+   ```bash
+   cat supabase/.temp/linked-project.json     # expect: framefocus-rebuild-test / nmyphyhmfttxkdoposvf
+   npx supabase projects list                 # the ● marks the linked project
+   ```
+3. Read `20261500000000`'s header. **It overturns S151's deliberate grandfathering decision** — that
+   is a ruling change, and it is the one migration here that would have altered data had production
+   held violating rows.
+
+### Steps 1–4 — one migration at a time
+
+For **each** file in order — `20261500000000`, `20261510000000`, `20261520000000`,
+`20261530000000` — in a **fresh** SQL Editor tab:
+
+```sql
+BEGIN;
+
+-- >>> paste the ENTIRE contents of the .sql file here <<<
+
+INSERT INTO supabase_migrations.schema_migrations (version, name, statements)
+VALUES ('<14-digit version>', '<name after the underscore>',
+        ARRAY['-- applied via SQL Editor, S104b, attended']);
+
+COMMIT;
+```
+
+⚠️ **The explicit `BEGIN`/`COMMIT` is belt-and-braces.** The endpoint already runs a multi-statement
+request as one implicit transaction (S103, verified by forcing an error mid-script), but stating it
+removes any dependence on that behaviour holding.
+
+⚠️ **The ledger `INSERT` goes in the SAME script as the DDL, never as a follow-up.** That is the
+whole lesson of the rebuild-test damage: a migration applied without its ledger row, or a ledger row
+without its migration, is drift that surfaces later as a refused push.
+
+The four `VALUES` pairs:
+
+| # | version | name |
+| --- | --- | --- |
+| 1 | `20261500000000` | `expense_payments_retainage_rate_backfill` |
+| 2 | `20261510000000` | `qb_cdc_backstop` |
+| 3 | `20261520000000` | `qb_vendor_map` |
+| 4 | `20261530000000` | `qb_vendor_map_upsert_key` |
+
+### After each one, before starting the next
+
+```sql
+-- after 1
+SELECT convalidated FROM pg_constraint
+ WHERE conname='expense_payments_retainage_rate_recorded_check';          -- expect true
+-- after 2
+SELECT count(*) FROM information_schema.columns
+ WHERE table_schema='public' AND table_name='companies' AND column_name='qb_cdc_polled_at';  -- 1
+-- after 3
+SELECT to_regclass('public.qb_vendor_map') IS NOT NULL AS tbl,
+       (SELECT count(*) FROM pg_trigger WHERE tgrelid='public.qb_vendor_map'::regclass
+          AND NOT tgisinternal) AS triggers,                              -- expect 2
+       (SELECT count(*) FROM pg_policies WHERE tablename='qb_vendor_map') AS policies;  -- expect 1
+-- after 4
+SELECT conname, pg_get_constraintdef(oid) FROM pg_constraint
+ WHERE conrelid='public.qb_vendor_map'::regclass AND contype='u';   -- plain UNIQUE, no WHERE clause
+SELECT indexname FROM pg_indexes WHERE tablename='qb_vendor_map';   -- idx_..._one_live must be GONE
+
+-- and after EVERY one:
+SELECT version, name FROM supabase_migrations.schema_migrations ORDER BY version DESC LIMIT 3;
+```
+
+⚠️ **Check the ledger row AND the object, every time.** Either alone can lie: the object without the
+row is the MCP failure mode, the row without the object is the reverse. Both together is the only
+proof.
+
+### Then, and only then, the code
+
+**`database.ts` needs no regeneration.** It was regenerated on this branch from rebuild-test —
+which already carries all four migrations — and both `qb_cdc_polled_at` and the `qb_vendor_map`
+types are committed. Running `npm run db:types` after the production push would regenerate from
+rebuild-test again and produce an identical file. **Nothing to do.**
+
+**Deploy is `git push origin main` after the merge; Vercel auto-deploys `apps/web` from `main`.**
+
+⚠️ **Why DB genuinely must come first here — concretely, not as a slogan.** `worker.ts` now selects
+`qb_cdc_polled_at` in its connected-companies query, and `resolveOrCreateVendor()` queries
+`qb_vendor_map`. With the code deployed and the migrations absent, PostgREST answers `42703
+undefined_column` / `42P01 undefined_table`, `runQbSync` logs *"could not list connected companies"*
+and returns all-zero — **the sync drain stops, and reports an idle queue while doing so.** That is
+precisely the S181 reporting collapse this session spent effort removing.
+
+The saving grace, stated so the risk is not overstated: **no company on production has ever connected
+to QuickBooks** — every `qb_realm_id` is null — so a code-first deploy would break a drain that
+currently has nothing to do. It would still be wrong, still log an error every five minutes, and
+still mask a genuine failure. Order it properly.
+
+---
+
+## Task 4 — reversibility
+
+| # | reversible? | how |
+| --- | --- | --- |
+| 1 `20261500000000` | ⚠️ **not by an undo** | see below |
+| 2 `20261510000000` | ✅ cleanly | `ALTER TABLE public.companies DROP COLUMN qb_cdc_polled_at;` |
+| 3 `20261520000000` | ✅ cleanly | `DROP TABLE public.qb_vendor_map;` **plus** `DROP FUNCTION public.set_qb_vendor_map_updated_by();` |
+| 4 `20261530000000` | ✅ but see the trap | drop the constraint, recreate the partial index |
+
+### ⚠️ M1 is the one that cannot be cleanly reversed — read this before starting
+
+**PostgreSQL has no `ALTER TABLE … INVALIDATE CONSTRAINT`.** Once a constraint is validated there is
+no statement that returns it to `NOT VALID`. The only route back is to drop and re-add it:
+
+```sql
+ALTER TABLE public.expense_payments
+  DROP CONSTRAINT expense_payments_retainage_rate_recorded_check;
+ALTER TABLE public.expense_payments
+  ADD CONSTRAINT expense_payments_retainage_rate_recorded_check
+    CHECK (retainage_withheld = 0 OR retainage_percent_applied IS NOT NULL) NOT VALID;
+```
+
+**That is a re-creation, not an undo**, and between the two statements the rule is unenforced.
+
+**How much this actually matters on production: very little, and the reason is worth stating.** On
+production the `UPDATE` writes **zero rows** (verified). So M1's entire net effect there is *"a
+constraint that was already true of every row is now marked as checked."* **No production data
+changes.** The irreversibility is real but the thing being made irreversible is a strengthening with
+no data movement behind it — which is a very different proposition from the same migration run
+against rebuild-test, where it back-filled seven rows.
+
+⚠️ **On rebuild-test the back-fill IS a data change and IS irreversible** — the seven original NULLs
+are gone, recoverable only from the derivation (`retainage_withheld / amount`). Recorded because the
+same file behaves differently on the two databases.
+
+### The trap in reverting M4
+
+**Reverting M4 alone re-creates the exact bug it fixed.** The partial index cannot back
+`ON CONFLICT`, so `resolveOrCreateVendor()`'s upsert fails `42P10` — non-fatally and silently.
+**Revert M3 and M4 together, or neither.** If a revert is ever needed:
+
+```sql
+DROP TABLE public.qb_vendor_map;                        -- takes its triggers, policy, indexes
+DROP FUNCTION public.set_qb_vendor_map_updated_by();    -- NOT cascaded by DROP TABLE
+```
+
+### And whichever is reverted — delete its ledger row
+
+```sql
+DELETE FROM supabase_migrations.schema_migrations WHERE version = '<version>';
+```
+
+A ledger row without its objects is the rebuild-test failure mode inverted, and it makes the next
+push believe work is done that is not.
+
+---
+
+## Summary for Josh
+
+- **Nothing blocks the push that I can see from here.** All eight dependencies for M3 exist on
+  rebuild-test; two production queries above confirm them there.
+- **No migration in this set deletes or rewrites production data.** M1's `UPDATE` matches zero rows;
+  the other three only add objects.
+- **All four are atomic** — a failure leaves nothing behind and writes no ledger row.
+- **Two hard stops before you start:** any `MCP-signature row` or duplicate in the production ledger,
+  and `CONSTRAINT ABSENT` on the precondition query.
+- **One thing that is not cleanly reversible:** M1's `VALIDATE CONSTRAINT` (drop-and-re-add only) —
+  though on production it moves no data.
+- **The CLI stays on rebuild-test throughout.** Task 3's link/re-link step describes something that
+  cannot be done and should not be attempted.
