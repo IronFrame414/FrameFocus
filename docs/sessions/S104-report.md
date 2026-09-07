@@ -263,3 +263,146 @@ FINDING 2-A/2-B: push a Purchase to QuickBooks, fail the local update against th
 constraint if their row is one of the 7 poisoned ones, and report `pushed`. **Items 2 and 3 meet
 here.**
 
+---
+
+### Item 8 — TECH_DEBT classification pass (REPORT ONLY — nothing moved, nothing renumbered)
+
+**Count verified:** `grep -cE "^ *- \*\*#" TECH_DEBT.md` → **186**. Matches the prompt.
+`TECH_DEBT.md` 2846 lines, `TECH_DEBT_CLOSED.md` 102, `TECH_DEBT_IDEAS.md` 103.
+
+**Method, exactly as ruled:** classified on the entry's own text only. No per-entry investigation, no
+codebase checks. Order below is document order.
+
+**Proposed result: OPEN 186 → 101. CLOSED +71. IDEAS +14.** A 46% reduction in OPEN.
+
+#### A note on the "(original entry)" pairs, because it is 22 of the 71
+
+`TECH_DEBT.md` keeps a superseded original beside its closing entry (`#117` / `#117 (original
+entry)`, `#132`, `#133`, `#128`, `#131`, `#137`, `#138`, `#135`, `#140`, `#141`, `#142`, `#145`,
+`#129`, `#139`, `#134`, `#130`, `#102`, `#110`, `#2-trial`, `#9`, `#1-m7cpl`). **The pair travels
+together** — an original whose closure has shipped is closed, and splitting the pair across two files
+would leave the closure record without the thing it closes. Where the newer half is itself still open
+(`#110`, `#131`), only the ORIGINAL moves and the newer half stays OPEN.
+
+#### → CLOSED (71)
+
+| # | id | why |
+| ---: | --- | --- |
+| 12 | `#4-regbacklog` | marked ✅ CLOSED [register close-out, S180] |
+| 17 | `#3-s174` | ✅ CLOSED [S175] |
+| 18 | `#4-s174` | ✅ CLOSED [S175] as WON'T BUILD, DB now enforces |
+| 20 | `#6-s174` | ✅ NOT A DEFECT, raised and closed S174 |
+| 22 | `#1-s168` | ✅ CLOSED [S175 item 6] |
+| 24 | `#2-s168` | ✅ CLOSED [S175 item 6] |
+| 25 | `#1-s167fx` | ✅ CLOSED [S168] |
+| 27 | `#2-m9` | CLOSED [S170] — migration named in the entry |
+| 29 | `#4-m9` | 🔴 FIXED HERE, raised and closed S164 |
+| 30 | `#5-m9` | "both repaired in the same session" |
+| 34 | `#2-7i` | ✅ FIXED [S150] |
+| 35 | `#1-7i` | ✅ CLOSED [S150] |
+| 36 | `#3-7i` | ✅ CLOSED [S150] — superseded |
+| 37 | `#1-s143` | ✅ FIXED [S148] |
+| 38 | `#1-s147` | ✅ FIXED [S147] |
+| 39 | `#2-s147` | ✅ FIXED [S147b] |
+| 40 | `#1-s146` | ✅ FIXED [S146] |
+| 41 | `#2-s146` | RULED [Josh, S146] it should NOT get a backstop — decision made, nothing owed |
+| 43 | `#5-s146` | ✅ FIXED [S146] |
+| 44 | `#4-s146` | ✅ FIXED [S146] |
+| 45 | `#1-m7cpl` | ✅ CLOSED [Josh, S150] |
+| 46 | `#1-m7cpl (original entry)` | pair of the above |
+| 55 | `#84` | sent-CO void + supersession chain shipped at S168 — `#3-s174` names it in its own text |
+| 57 | `#102` | ✅ CLOSED [S103], OBSOLETE |
+| 58 | `#102 (original)` | pair |
+| 65 | `#110 (original)` | superseded by the S103 REASSESSED entry (#64), which stays OPEN |
+| 66 | `#112` | DOCUMENTED-ACCEPTED (Josh, S93) |
+| 71 | `#117` | ✅ CLOSED [S121] |
+| 72 | `#117 (original)` | pair |
+| 73 | `#132` | ✅ CLOSED [S122] |
+| 74 | `#132 (original)` | pair |
+| 75 | `#133` | ✅ CLOSED [S122] |
+| 76 | `#133 (original)` | pair |
+| 84 | `#9` | ✅ CLOSED [S103] as STALE |
+| 85 | `#9 (bare stub)` | pair |
+| 89 | `#128` | ✅ CLOSED [S122] |
+| 90 | `#128 (original)` | pair |
+| 92 | `#131 (original)` | superseded by the S123 AMENDED entry (#91), which stays OPEN |
+| 93 | `#137` | ✅ CLOSED [S122] |
+| 94 | `#137 (original)` | pair |
+| 95 | `#138` | ✅ CLOSED [S122] |
+| 96 | `#138 (original)` | pair |
+| 97 | `#135` | ✅ CLOSED [S122] |
+| 98 | `#135 (original)` | pair |
+| 105 | `#140` | ✅ FULLY CLOSED [S122] |
+| 106 | `#140 (S115)` | pair |
+| 107 | `#141` | ✅ CLOSED [S122] |
+| 108 | `#141 (original)` | pair |
+| 109 | `#142` | ✅ CLOSED [S122] |
+| 110 | `#142 (original)` | pair |
+| 111 | `#145` | ✅ CLOSED [S123] as MITIGATED |
+| 112 | `#145 (original)` | pair |
+| 116 | `#92` | DOCUMENTED-ACCEPTED BEHAVIOR, "not a fix item" — the entry says so |
+| 117 | `#93` | DOCUMENTED-ACCEPTED (S87) |
+| 118 | `#129` | ✅ CLOSED [S122] |
+| 119 | `#129 (original)` | pair |
+| 120 | `#139` | ✅ CLOSED [S122] |
+| 121 | `#139 (original)` | pair |
+| 122 | `#134` | ✅ CLOSED [S122] |
+| 123 | `#134 (original)` | pair |
+| 131 | `#130` | ✅ CLOSED [S123] as NOT A DEFECT |
+| 132 | `#130 (original)` | pair |
+| 134 | `#30` | SUPERSEDED IN DIRECTION [S97] — the PWA ruling replaced it; CLAUDE.md carries the ruling |
+| 135 | `#31` | "No tests. Test infrastructure not set up." — self-evidently superseded; ten later entries are *about* the suite (`#135`, `#138`, `#149`, `#150`, `#152`) |
+| 148 | `#54` | asks for a dedicated `getTrash()`; CLAUDE.md's trash-bin section names `files.ts` as the canonical example of all three functions **including `getTrash()`** |
+| 151 | `#57` | the entry itself says "Won't fix; documented for clarity" |
+| 173 | `#146` | "ACCEPTED AS SERVICE-LAYER, NO TRIGGER OWED. RULED [Josh, S122]" |
+| 180 | `#2-trial` | ✅ BUILT [S138] |
+| 181 | `#2-trial (original)` | pair |
+| 182 | `#151 renumbering note` | administrative; the renumber is discharged |
+| 186 | `#154` | "it is NOT a defect. Do not fix and do not delete." |
+
+#### → IDEAS (14) — the DECISION was deferred
+
+| # | id | the deferred decision, in the entry's own words |
+| ---: | --- | --- |
+| 2 | `#1-estred` | assemblies / alternate item sources — "**Deferred a SECOND time**" |
+| 3 | `#2-estred` | proposal templates — "**Deferral is not rejection** … blocked on one unanswered question" |
+| 8 | `#1-email` | incident fan-out — "**AND NOBODY HAS RULED THAT IT SHOULD**" |
+| 9 | `#1-regbacklog` | custom composable roles — "**ruled toward custom ROLES instead**", scope undecided |
+| 52 | `#6` | source CHECK "**may be** too restrictive" — whether to widen is unanswered |
+| 54 | `#83` | typed signature — "**consider also** persisting the typed text string" |
+| 69 | `#115` | expense capture model — "**DEFERRED-POST-LAUNCH (Josh, S94)**", explicitly under review |
+| 125 | `#24` | "**Defer.**" — blocked on a JWT custom-claims decision |
+| 153 | `#60` | AI add-on "**pricing structure undecided** … Decide pricing model" |
+| 155 | `#62` | AI tag suggestion review — "(post-launch)", a proposed capture model |
+| 157 | `#67` | "**Either** delete the file … **or** …" — the choice is the open part |
+| 167 | `#77` | "not blocking, **flagged for awareness** if data quality matters later" |
+| 177 | `#150` | sharding reverted; "recorded precisely so a **future** sharding attempt starts from this list" |
+| 178 | `#1-trial` | "**deliberately not scheduled — because nobody has confirmed we may delete these records on this timetable**" |
+
+#### → stays OPEN (101)
+
+`#1-cai` · `#3-estred` · `#4-estred` · `#5-estred` · `#1-delsweep` · `#2-regbacklog` ·
+`#3-regbacklog` · `#1-dialogsweep` · `#1-s174` · `#2-s174` · `#1-s175` · `#5-s174` · `#1-s175i6` ·
+`#3-s168` · `#1-m9` · `#3-m9` · `#1-audit` · `#2-audit` · `#3-audit` · `#3-s146` · `#1` · `#2` ·
+`#3` · `#4` · `#5` · `#7` · `#86` · `#105` · `#106` · `#107` · `#108` · `#109` · `#110 (REASSESSED)` ·
+`#113` · `#114` · `#116` · `#119` · `#120` · `#121` · `#122` · `#125` · `#126` · `#8` · `#10` ·
+`#12` · `#90` · `#131 (AMENDED)` · `#13` · `#89` · `#100` · `#101` · `#18` · `#19` · `#20` · `#21` ·
+`#91` · `#95` · `#25` · `#50` · `#51` · `#27` · `#29` · `#118` · `#32` · `#33` · `#34` · `#36` ·
+`#37` · `#38` · `#39` · `#40` · `#47` · `#49` · `#52` · `#53` · `#55` · `#56` · `#58` · `#61` ·
+`#64` · `#68` · `#69` · `#70` · `#71` · `#72` · `#73` · `#74` · `#75` · `#76` · `#78` · `#87` ·
+`#123` · `#124` · `#88` · `#147` · `#148` · `#149` · `#3-trial` · `#151` · `#152` · `#153`
+
+#### Judgement calls, stated so they can be overruled cheaply
+
+- **`#31` "No tests"** is the boldest CLOSED. It is not marked closed anywhere; I closed it as
+  self-evidently superseded. If that reads as too aggressive, it costs one line to leave OPEN.
+- **`#84`** (sent COs uneditable) and **`#54`** (`getTrash()`) are closed on supersession stated in
+  OTHER entries / CLAUDE.md, not on their own text. Same offer.
+- **`#41`, `#66`, `#116`, `#117`, `#146`, `#154`, `#57`** are "ruled won't-do / documented-accepted"
+  — a decision that was **made**, not deferred, so CLOSED rather than IDEAS.
+- **`#53`** (flattened markup export) I left OPEN even though `#129`'s closure shipped a
+  `drawShapes()` rasteriser, because `#53` asks for export to email/PDF/downloads specifically and
+  proving that is out of scope for a cheap pass.
+- **`#107`** (Committed column dead) I left OPEN for the same reason: CLAUDE.md now describes
+  `committed_amount` as populated, but that is a codebase check, which this pass is forbidden.
+
