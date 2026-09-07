@@ -1300,6 +1300,7 @@ export type Database = {
           payment_method_on_file: boolean
           phone: string | null
           project_internal_sequence: number
+          qb_cdc_polled_at: string | null
           qb_connected_at: string | null
           qb_connection_state: string
           qb_income_item_id: string | null
@@ -1383,6 +1384,7 @@ export type Database = {
           payment_method_on_file?: boolean
           phone?: string | null
           project_internal_sequence?: number
+          qb_cdc_polled_at?: string | null
           qb_connected_at?: string | null
           qb_connection_state?: string
           qb_income_item_id?: string | null
@@ -1466,6 +1468,7 @@ export type Database = {
           payment_method_on_file?: boolean
           phone?: string | null
           project_internal_sequence?: number
+          qb_cdc_polled_at?: string | null
           qb_connected_at?: string | null
           qb_connection_state?: string
           qb_income_item_id?: string | null
@@ -9921,6 +9924,7 @@ export type Database = {
         Args: { p_company_id: string; p_payload: string; p_secret_id?: string }
         Returns: string
       }
+      qb_vault_scrub: { Args: { p_secret_id: string }; Returns: undefined }
       qb_webhook_verifier_get: {
         Args: { p_environment: string }
         Returns: string

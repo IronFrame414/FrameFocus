@@ -173,6 +173,13 @@ async function performDisconnect(
       // same realm be recognised as such. It is not a secret.
       qb_payments_enabled: false,
       qb_reauth_required_after: null,
+      // ⚠️ THE CDC CURSOR IS CONNECTION STATE, NOT A LINK [#2-7gqb, S104]. Left
+      // standing, a reconnect to a DIFFERENT QuickBooks company would treat the
+      // old realm's timestamp as "when we last looked at this one" and skip
+      // everything before it — the backstop would start life with a blind spot
+      // exactly as wide as the gap between the two connections. Nulling it makes
+      // the first poll after any reconnect a bounded first look-back.
+      qb_cdc_polled_at: null,
     })
     .eq('id', companyId);
 

@@ -13,6 +13,7 @@ import {
 } from './queue';
 import { notifyParked } from './park-notify';
 import { drainWebhookEvents } from './webhook-process';
+import { runCdcBackstop } from './cdc-backstop';
 import { getAccessToken } from './tokens';
 
 /**
@@ -75,6 +76,20 @@ export interface DrainOutcome {
    */
   webhooksProcessed: number;
   webhooksFailed: number;
+  /**
+   * The CDC backstop [#2-7gqb, S104].
+   *
+   * ⚠️ `cdcPolled: 0` IS NOT "NOTHING WAS WRONG" — it is "nothing was ASKED",
+   * because the hourly gate had not elapsed. The distinction is the same one
+   * `waiting` exists to make (S181): a drain must never report a check it did
+   * not perform as a check that passed.
+   *
+   * ⚠️ `cdcRecovered > 0` MEANS A NOTIFICATION WAS LOST. QuickBooks held a
+   * payment we had no record of. It is not a routine counter — it is the signal
+   * that the webhook path dropped something, and it belongs in front of a person.
+   */
+  cdcPolled: number;
+  cdcRecovered: number;
 }
 
 export async function runQbSync(admin: SupabaseClient): Promise<DrainOutcome> {
@@ -89,6 +104,8 @@ export async function runQbSync(admin: SupabaseClient): Promise<DrainOutcome> {
     waiting: 0,
     webhooksProcessed: 0,
     webhooksFailed: 0,
+    cdcPolled: 0,
+    cdcRecovered: 0,
   };
 
   // Only tenants that are actually connected. A `needs_reauth` company is
@@ -132,6 +149,21 @@ export async function runQbSync(admin: SupabaseClient): Promise<DrainOutcome> {
     // the `continue` below would have skipped them entirely — the same shape as
     // the dormancy gap in F7. Webhook work must not depend on push work
     // existing.
+    // ⚠️ THE BACKSTOP RUNS BEFORE THE INBOUND DRAIN, NOT AFTER [#2-7gqb, S104].
+    // Anything it recovers is written as an ordinary `qb_webhook_events` row,
+    // so running it first means a recovered payment is applied in THIS pass
+    // rather than waiting another five minutes for the next one. It is gated to
+    // hourly internally and costs one cheap DB read when it is not due.
+    //
+    // ⚠️ AND IT NEEDS A TOKEN, so it sits below the keep-alive and is skipped
+    // when there is none. A failed poll never advances its cursor, so skipping
+    // loses nothing.
+    if (conn) {
+      const cdc = await runCdcBackstop(admin, conn, companyId);
+      if (cdc.polled) outcome.cdcPolled += 1;
+      outcome.cdcRecovered += cdc.recovered;
+    }
+
     const inbound = await drainWebhookEvents(admin, companyId);
     outcome.webhooksProcessed += inbound.processed;
     outcome.webhooksFailed += inbound.failed;
