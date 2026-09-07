@@ -72,7 +72,20 @@ export interface CdcOutcome {
   seen: number;
   /** Payments we had no record of, now queued for the ordinary inbound path. */
   recovered: number;
+  /**
+   * A payment we identified as missing and then FAILED to queue [R4, S104c].
+   *
+   * ⚠️ THIS IS WHY THE CURSOR IS CONDITIONAL. Advancing past a window in which a
+   * recovery could not be written puts that payment outside every future
+   * `changedSince` and it is never offered again — the exact failure the
+   * migration header says a backstop must not have, one level below where the
+   * first version checked for it.
+   */
+  failedToQueue: number;
 }
+
+/** One payment's outcome, so the decision can be tested without a network. */
+export type RecoveryDecision = 'no-id' | 'already-mirrored' | 'already-queued' | 'recovered' | 'raced' | 'failed';
 
 export interface CdcResponse {
   CDCResponse?: Array<{
@@ -134,7 +147,7 @@ export async function runCdcBackstop(
   conn: QboConnection,
   companyId: string
 ): Promise<CdcOutcome> {
-  const outcome: CdcOutcome = { polled: false, seen: 0, recovered: 0 };
+  const outcome: CdcOutcome = { polled: false, seen: 0, recovered: 0, failedToQueue: 0 };
 
   const { data: company, error: readError } = await admin
     .from('companies')
@@ -179,69 +192,27 @@ export async function runCdcBackstop(
   outcome.seen = payments.length;
 
   for (const payment of payments) {
-    const qbId = typeof payment.Id === 'string' ? payment.Id : null;
-    if (!qbId) continue;
-
-    // ⚠️ ALREADY MIRRORED? Two questions, not one, and both are needed.
-    // A payment we already booked has a `client_payments` row; a payment whose
-    // notification is merely still QUEUED has an unprocessed event row. Asking
-    // only the first would re-queue everything the drain has not reached yet.
-    const { data: mirrored } = await admin
-      .from('client_payments')
-      .select('id')
-      .eq('company_id', companyId)
-      .eq('qb_payment_id', qbId)
-      // Scoped, not merely limited: `qb_payment_id` identifies at most one row
-      // per company, and the caller only asks whether one exists (CLAUDE.md, S165).
-      .limit(1);
-    if ((mirrored ?? []).length > 0) continue;
-
-    const { data: pending } = await admin
-      .from('qb_webhook_events')
-      .select('id')
-      .eq('company_id', companyId)
-      .eq('entity_name', 'Payment')
-      .eq('entity_id', qbId)
-      .is('processed_at', null)
-      // Existence probe only — nothing downstream depends on WHICH row.
-      .limit(1);
-    if ((pending ?? []).length > 0) continue;
-
-    const lastUpdated =
-      (payment.MetaData as { LastUpdatedTime?: string } | undefined)?.LastUpdatedTime ?? null;
-    const syntheticId = syntheticEventId(conn.realmId, qbId, lastUpdated);
-
-    const { error: insertError } = await admin.from('qb_webhook_events').insert({
-      company_id: companyId,
-      realm_id: conn.realmId,
-      intuit_event_id: syntheticId,
-      entity_name: 'Payment',
-      // ⚠️ 'Update', not 'Create'. `handleEntity` reads the entity fresh from
-      // QuickBooks either way, and claiming a Create we never saw would be a
-      // statement about history we cannot support.
-      operation: 'Update',
-      entity_id: qbId,
-      entity_last_updated: lastUpdated,
-    });
-
-    // 23505 — another poll (or the real webhook, arriving late) got there first.
-    // Expected, not an error: the unique index is doing its job.
-    if (insertError && insertError.code !== '23505') {
-      console.error(
-        `[qb-cdc] could not queue recovered Payment ${qbId} for company=${companyId}:`,
-        insertError.message
-      );
-      continue;
-    }
-    if (!insertError) {
-      outcome.recovered += 1;
-      console.log(
-        `[qb-cdc] RECOVERED Payment ${qbId} for company=${companyId} — QuickBooks had it and we did not.`
-      );
-    }
+    const decision = await reconcileOnePayment(admin, conn, companyId, payment);
+    if (decision === 'recovered') outcome.recovered += 1;
+    if (decision === 'failed') outcome.failedToQueue += 1;
   }
 
-  // ⚠️ ADVANCED ONLY NOW, AFTER A SUCCESSFUL READ. See the throw path above.
+  // ⚠️ THE CURSOR MOVES ONLY IF THE WHOLE WINDOW WAS HANDLED [R4, S104c].
+  // _Superseded: it advanced unconditionally after a successful poll._ That was
+  // right about a failed POLL — the `catch` above returns before here — and
+  // wrong about a failed RECOVERY: a payment we identified as missing and could
+  // not queue fell outside every future `changedSince` and was never offered
+  // again. Holding the cursor costs one repeated metered read an hour; the
+  // unique index makes the re-read harmless.
+  if (outcome.failedToQueue > 0) {
+    console.error(
+      `[qb-cdc] holding the cursor for company=${companyId}: ${outcome.failedToQueue} ` +
+        `recovered payment(s) could not be queued and must be re-read next hour.`
+    );
+    outcome.polled = true;
+    return outcome;
+  }
+
   const { error: cursorError } = await admin
     .from('companies')
     .update({ qb_cdc_polled_at: new Date(now).toISOString() })
@@ -255,4 +226,87 @@ export async function runCdcBackstop(
 
   outcome.polled = true;
   return outcome;
+}
+
+/**
+ * Decide what one CDC payment means, and act on it.
+ *
+ * ⚠️ EXTRACTED SO IT CAN BE TESTED AT ALL [R5, ruled Josh, S104c]. Measured on
+ * the sandbox: a 90-day CDC query returns **0 Payments**, `qb_webhook_events` is
+ * empty and no `client_payments` row carries a `qb_payment_id`. So the live test
+ * ran **zero rows** through this logic while reporting a pass — which this
+ * project counts as a failing test, not a passing one. Every branch below is now
+ * exercised against real rows by `s104c-cdc-recovery.live.ts`.
+ *
+ * ⚠️ IT RETURNS A DECISION RATHER THAN A BOOLEAN, because the four non-failure
+ * outcomes are genuinely different and the caller must not collapse them:
+ * "already booked", "already queued", "newly recovered" and "someone beat us to
+ * it" all mean do-nothing, but only one of them is news.
+ */
+export async function reconcileOnePayment(
+  admin: SupabaseClient,
+  conn: QboConnection,
+  companyId: string,
+  payment: Record<string, unknown>
+): Promise<RecoveryDecision> {
+  const qbId = typeof payment.Id === 'string' ? payment.Id : null;
+  if (!qbId) return 'no-id';
+
+  // ⚠️ ALREADY MIRRORED? Two questions, not one, and both are needed.
+  // A payment we already booked has a `client_payments` row; a payment whose
+  // notification is merely still QUEUED has an unprocessed event row. Asking
+  // only the first would re-queue everything the drain has not reached yet.
+  const { data: mirrored } = await admin
+    .from('client_payments')
+    .select('id')
+    .eq('company_id', companyId)
+    .eq('qb_payment_id', qbId)
+    // Scoped, not merely limited: `qb_payment_id` identifies at most one row
+    // per company, and the caller only asks whether one exists (CLAUDE.md, S165).
+    .limit(1);
+  if ((mirrored ?? []).length > 0) return 'already-mirrored';
+
+  const { data: pending } = await admin
+    .from('qb_webhook_events')
+    .select('id')
+    .eq('company_id', companyId)
+    .eq('entity_name', 'Payment')
+    .eq('entity_id', qbId)
+    .is('processed_at', null)
+    // Existence probe only — nothing downstream depends on WHICH row.
+    .limit(1);
+  if ((pending ?? []).length > 0) return 'already-queued';
+
+  const lastUpdated =
+    (payment.MetaData as { LastUpdatedTime?: string } | undefined)?.LastUpdatedTime ?? null;
+
+  const { error: insertError } = await admin.from('qb_webhook_events').insert({
+    company_id: companyId,
+    realm_id: conn.realmId,
+    intuit_event_id: syntheticEventId(conn.realmId, qbId, lastUpdated),
+    entity_name: 'Payment',
+    // ⚠️ 'Update', not 'Create'. `handleEntity` reads the entity fresh from
+    // QuickBooks either way, and claiming a Create we never saw would be a
+    // statement about history we cannot support.
+    operation: 'Update',
+    entity_id: qbId,
+    entity_last_updated: lastUpdated,
+  });
+
+  // 23505 — another poll (or the real webhook, arriving late) got there first.
+  // Expected, not an error: the unique index is doing its job.
+  if (insertError?.code === '23505') return 'raced';
+
+  if (insertError) {
+    console.error(
+      `[qb-cdc] could not queue recovered Payment ${qbId} for company=${companyId}:`,
+      insertError.message
+    );
+    return 'failed';
+  }
+
+  console.log(
+    `[qb-cdc] RECOVERED Payment ${qbId} for company=${companyId} — QuickBooks had it and we did not.`
+  );
+  return 'recovered';
 }
