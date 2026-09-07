@@ -32,6 +32,13 @@ export function SiteFooter() {
           <Link href="/pricing" className="hover:text-brand-900">
             Pricing
           </Link>
+          {/* /contact is PUBLIC and must stay reachable without a session — it
+              is the page an Intuit reviewer looks for. The raw mailto below is
+              kept as well: it is one fewer click, and it is the address /terms
+              and /privacy already publish. */}
+          <Link href="/contact" className="hover:text-brand-900">
+            Contact
+          </Link>
           <Link href="/terms" className="hover:text-brand-900">
             Terms
           </Link>
