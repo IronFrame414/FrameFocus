@@ -79,8 +79,45 @@ Complete as of Session 40. All polish items closed. Module 4 build is unblocked.
 > Provisional ids per the S136 rule. Tag `7gqb`. Convert to real numbers from main's file at merge.
 > All three were found while building 7G and are **owed work with a known fix**, not deferred
 > decisions — `#3-7gqb` was the one exception (owed work blocked on a ruling) and is now **CLOSED [S182]**.
+>
+> ⚠️ **ALL THREE ARE NOW CLOSED. `#1-7gqb` and `#2-7gqb` were built at S104**; see each entry's
+> banner. Nothing in this block is owed. The provisional ids still need converting to real numbers
+> from main's file when the branch lands, per the S136 rule — a closed entry keeps its id.
 
-#### `#1-7gqb` — there is nowhere to persist a QuickBooks **Vendor** id
+#### `#1-7gqb` — ✅ **CLOSED [S104]** — there is somewhere now: `qb_vendor_map`
+
+> ### ✅ CLOSED [S104] — `20261520000000` + `20261530000000`
+>
+> **`qb_vendor_map`**, keyed on `(company_id, realm_id, normalised supplier string)`.
+> `resolveOrCreateVendor()` now goes cheapest-first: `ctx.vendorCache` (free, one drain) →
+> `qb_vendor_map` (a DB read, **free against Intuit's quota**) → the Vendor query (**metered**) →
+> create, with steps 3 and 4 writing back to step 2.
+>
+> **Keyed on the STRING and not on `subcontractors.id`, which is the one design call worth
+> recording.** The entry offers "and/or"; a column on `subcontractors` would only help when an
+> expense names a subcontractor, and **it never does** — an expense carries `sub_contract_id` and a
+> free-text `supplier` and no subcontractor FK at all. The string is what the connector actually
+> resolves, for a sub and for a hardware store alike, so keying on it covers both cases with one
+> mechanism instead of covering one case with two.
+>
+> **Both named costs are gone, and the second one measured.** `s104-vendor-map.live.ts` case 2
+> builds a FRESH drain context (empty in-memory cache) and asserts `qb_read_budget` does not move:
+> **97 → 97**. The rename hazard goes with it — QuickBooks resolves ids, not names.
+>
+> ⚠️ **Realm-scoped by column AND by query, which is why `qb_vendor_map.qb_vendor_id` is in
+> `QB_LINK_EXEMPT` rather than `QB_LINK_RESETS`.** A mapping written under one QuickBooks company
+> can never be READ under another. That is strictly stronger than clearing on disconnect, because
+> clearing depends on a list being maintained — and the three columns `s187`'s census exists to catch
+> were missed exactly that way.
+>
+> ⚠️ **`20261530000000` fixes `20261520000000` in the same session, and it is M-K's defect repeated
+> in the repository that already documented it.** The partial unique index (`WHERE is_deleted =
+> false`) cannot back `ON CONFLICT`, so every upsert failed — and the write-back is deliberately
+> non-fatal, so it logged and carried on while the map stayed empty and every push still worked.
+> **The live test found it; the code read fine.**
+
+_Original entry, kept rather than deleted:_
+
 
 **What.** `expenses.supplier` is FREE TEXT and `subcontractors` carries **no `qb_vendor_id`** column
 (checked against the live schema at S180). Contacts, projects, invoices, payments, refunds and
@@ -99,7 +136,40 @@ renamed in QuickBooks silently becomes a *second* vendor on the next push.
 string for non-sub vendors), write it back on create, and check it first — the same shape
 `contacts.qb_customer_id` already uses.
 
-#### `#2-7gqb` — a webhook whose follow-up processing fails is visible only in logs
+#### `#2-7gqb` — ✅ **CLOSED [S104]** — the CDC backstop is built
+
+> ### ✅ CLOSED [S104] — `20261510000000` + `lib/quickbooks/cdc-backstop.ts`
+>
+> ⚠️ **HALF OF THIS WAS ALREADY CLOSED WHEN S104 OPENED IT, AND THE ENTRY DID NOT KNOW.** M-N
+> (`20261470000000`) added `processed_at` / `process_attempts` / `process_error`, so a **transient**
+> post-200 failure is already re-driven by the next drain. What remained was the data-integrity half:
+> a row that **exhausts** `MAX_WEBHOOK_ATTEMPTS`, and a notification Intuit **never delivered at
+> all**. Both are the same shape — QuickBooks knows something we do not, and nothing asks it.
+>
+> **Built:** `companies.qb_cdc_polled_at` (cursor and hourly gate in one column); an hourly
+> `GET /cdc?entities=Payment&changedSince=…`; anything unmirrored is written into
+> `qb_webhook_events` so `drainWebhookEvents()` applies it.
+>
+> ⚠️ **IT DOES NOT APPLY PAYMENTS ITSELF.** A second application path would be a second definition
+> of what a payment MEANS — CLAUDE.md's PARITY ruling, whose own words are that *"a second
+> implementation that 'does the same thing' is the divergence, written in a form that looks like
+> agreement."*
+>
+> **Folded into the existing 5-minute `/api/cron/qb-sync`, not given a 14th cron entry** —
+> `vercel.json` is not read by `next build`, and S103 lost a deploy to a malformed one with eleven
+> migrations already on production. The cursor advances **only** after a successful read: a cursor
+> moved past a window we failed to read would manufacture the gap the backstop exists to close.
+>
+> ⚠️ **NOT PROVEN END TO END, and that is stated rather than implied.** The sandbox holds **zero
+> Payments** — a 90-day CDC query returns `HTTP 200` with `CDCResponse: [{ QueryResponse: [{}] }]`.
+> So the live test proves the call is well-formed and Intuit answers it, and **nothing** about
+> recovery. The parser was exported and unit-tested against populated fixtures instead, including
+> the trap that will bite later: Intuit returns one `QueryResponse` block **per entity**, so
+> `QueryResponse[0].Payment` silently reads the wrong block the day a second entity joins the query.
+> **No payment has actually been recovered.**
+
+_Original entry, kept rather than deleted:_
+
 
 **What.** `/api/quickbooks/webhook` writes the `qb_webhook_events` row **before** processing, because
 that row's documented meaning is *received* and it protects a **metered** CorePlus read. So a failure
