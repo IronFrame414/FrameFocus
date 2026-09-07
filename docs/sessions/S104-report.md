@@ -406,3 +406,154 @@ would leave the closure record without the thing it closes. Where the newer half
 - **`#107`** (Committed column dead) I left OPEN for the same reason: CLAUDE.md now describes
   `committed_amount` as populated, but that is a codebase check, which this pass is forbidden.
 
+---
+
+### Item 4 — sales tax authority
+
+#### What the invoice writer sends on the tax path, field by field (read from `entities.ts`)
+
+| field | value sent | where |
+| --- | --- | --- |
+| `Line[].SalesItemLineDetail.TaxCodeRef` | **`{ value: 'NON' }` on every sales line** | `buildInvoiceLines()` :476, :486 |
+| `Line[]` retainage description line | `DetailType: 'DescriptionOnly'`, no tax field | :481-489 |
+| `Line[]` retainage discount line | `DetailType: 'DiscountLineDetail'`, `PercentBased: false`, **no `TaxCodeRef`** | :492-497 |
+| `TxnTaxDetail` | **never sent** | — |
+| `GlobalTaxCalculation` | **never sent** | — |
+| `ApplyTaxAfterDiscount` | **never sent** | — |
+| `CustomerRef` | the client's Customer id | :592 |
+
+**So the ruling's mechanism is already 90% built, and it was built at S187 as F12** — the
+`NON_TAXABLE` constant with a long header that states exactly the ruling: *"THE INVOICE STATES ITS
+OWN TAX POSITION. IT DOES NOT INHERIT ONE. … WHICH SIDE IS AUTHORITATIVE, settled: **ours**."*
+
+#### 🟢 The ruling IS achievable, and the reason is stronger than "we send a total"
+
+The prompt's concern — *"sending a total is not by itself an instruction to accept that total"* — is
+correct, and `TaxCodeRef: 'NON'` is the instruction that IS one. It is not a request to accept our
+arithmetic; it tells QuickBooks each line is out of scope for tax, so its own computation resolves
+to zero and `TotalAmt` collapses to the sum of the lines. **This is the supported way to make QBO
+not calculate.** Nothing here requires QuickBooks to defer to a number we assert.
+
+#### 🔴 FINDING 4-A — nothing verifies the total that came back. This is the actual gap.
+
+`handleInvoiceCreate` declares `TotalAmt?: number` in the response type at `entities.ts:628` and
+**never reads it.** Same for `handleInvoiceUpdate`, `handlePurchaseCreate` and
+`handleExpensePaymentCreate`. The connector therefore has **no detection** for the exact risk the
+item names: an invoice showing one total to the client and another in the books.
+
+The writer already refuses when OUR OWN two numbers disagree — the lines-vs-`billed_total` foot check
+at `:568-582`, which returns terminal with both figures. **The same discipline is simply not applied
+to the third number, the one QuickBooks reports back**, and that is the one the books actually use.
+
+#### 🟠 FINDING 4-B — the expense/Purchase path sends NO tax field at all
+
+`buildPurchaseBody()` (`:1355-1388`) sends `AccountBasedExpenseLineDetail` with `AccountRef`,
+optional `CustomerRef` and `BillableStatus`. **No `TaxCodeRef`, no `TxnTaxDetail`,
+no `GlobalTaxCalculation`.** So the Purchase path is in exactly the position the invoice path was in
+BEFORE F12: it works today because of QuickBooks' default, and the default is a function of company
+tax setup rather than of anything we state. `NON` on a purchase line is the symmetric fix.
+
+#### The platform computes NO sales tax today — measured, and it matters for reading the ruling
+
+```sql
+SELECT column_name FROM information_schema.columns
+WHERE table_schema='public' AND table_name IN ('invoices','invoice_lines','expenses')
+  AND column_name ILIKE '%tax%';
+-- 0 rows
+```
+
+`companies.default_tax_rate` exists but flows into **estimates only**. So "EZ Contractor Binder
+computes sales tax" is today **"EZ Contractor Binder computes a tax of zero and says so explicitly."**
+The ruling's enforcement half is buildable now; its computation half has no invoice-side model yet.
+Recorded because a future reader will otherwise assume a tax engine exists.
+
+#### ❌ NOT MEASURED — "read it back from the API"
+
+The prompt requires reading QuickBooks' stored totals from the API rather than from our record.
+**I could not do this and did not fake it.** The sandbox access token expired **~9.6 hours ago**
+(`access_expires_at` read from the vault via `qb_vault_get`; the token itself was never printed).
+Getting a live read requires a **token refresh, which rotates the refresh token on the live
+connection** — and "Do not touch the live QuickBooks connection" is a standing constraint of this
+session. Carried to Phase 2 as a question. `scratchpad/qbo-readback.mjs` is written and will produce
+the full field-by-field readback for invoices 145/146, purchases 175/151/156/155, `/preferences`
+(`TaxPrefs`) and `/companyinfo` the moment a refresh is authorised.
+
+**The best evidence available without that call is S187's recorded measurement**, and it is
+second-hand rather than mine: INV-3675, *"$3000 both sides, `TxnTaxDetail: {TotalTax: 0}`"*, on a
+company with *"`TaxPrefs.UsingSalesTax: true`"*. That is one invoice at one moment, which is exactly
+why F12 was written — **and it is not a substitute for the check FINDING 4-A asks for.**
+
+---
+
+### Item 9 — deferred 7G findings
+
+#### F5 — a wrong `minorversion` is silently accepted
+
+The audit measured it: `/companyinfo` at minorversion **75, 76, 80, 85, 90, 99 and 200 all returned
+HTTP 200 with valid data.** Intuit does not fault on an unknown minor version, so there is no
+server-side signal to test against and the audit concluded *"no code fix available."*
+
+**That conclusion is right about Intuit and wrong about what is defensible locally.** The failure
+mode the pin exists to prevent is *a typo in `QBO_MINOR_VERSION`*, and a typo is entirely catchable
+on our side of the wire. What is buildable: a **validated constant** — the value is a bare integer
+string within a known-supported range, carrying its own verification date, asserted by a unit test
+so a typo fails CI rather than silently serving another version's response shape. That converts an
+un-noticeable production defect into a red test. It does not, and cannot, tell us Intuit's current
+maximum.
+
+#### F6 — the discovery document
+
+Per instruction: **the three hardcoded URLs are NOT re-litigated.** They were verified against the
+live document and have not drifted. The hardening is to make a future drift *detectable* rather than
+to change today's values. `QBO_AUTHORIZE_URL`, `QBO_TOKEN_URL`, `QBO_REVOKE_URL` (`config.ts:52-54`)
+are the three.
+
+#### F8 — `qb_reauth_required_after` is displayed and nothing acts on it
+
+Traced end to end. Written at `callback/route.ts:174` (`REAUTH_CEILING_MS`, five years), cleared at
+`disconnect/route.ts:175`, read into `lib/services/quickbooks.ts:71` as `reauthRequiredAfter`,
+rendered on the accounting panel. **Zero other references** — no cron, no notification, no query.
+The notification mechanism it needs already exists and is already wired for QuickBooks:
+`notify()` type **`qb_sync_blocked`** (`lib/notify/notify.ts:109`), category `account`
+(`lib/notify/categories.ts:37`), allowlisted in the DB by
+`20261410000000_qb_sync_blocked_notification.sql`, emitted today only by
+`lib/quickbooks/park-notify.ts:65`. So F8 is a caller, not a mechanism.
+
+#### `#2-7gqb` — the CDC backstop. **Weighted first among the five, per the prompt.**
+
+**Partly addressed already, and the entry does not know it.** `20261470000000_qb_webhook_deferred_processing`
+added `processed_at`, `process_attempts`, `process_error` to `qb_webhook_events`, and
+`lib/quickbooks/webhook-process.ts` retries unprocessed rows on each drain up to
+`MAX_WEBHOOK_ATTEMPTS`. So a *transient* post-200 failure is now re-driven.
+
+**What is still uncovered, and it is the data-integrity half:**
+
+1. a row that **exhausts** `MAX_WEBHOOK_ATTEMPTS` — it stops being retried and is visible only in
+   `process_error`;
+2. a notification **Intuit never delivered at all** — no row exists, so no retry loop can ever see
+   it. The webhook being the only inbound channel is precisely why this cannot be self-healing.
+
+Both are the same shape: *QuickBooks knows something we do not, and nothing asks it.* That is what a
+CDC poll answers.
+
+**Design note for Phase 3:** `vercel.json` already carries **13 crons** and context104 §4 records
+that a malformed `vercel.json` *"failed the deploy with eleven migrations already on production and
+no local test that could have caught it."* So the backstop should fold into the **existing**
+`/api/cron/qb-sync` route (already `*/5 * * * *`), self-gated to the hourly cadence ruled at S143 —
+**no `vercel.json` change, no fourteenth cron.** `qb_read_budget` already meters `qboRead()` and
+exists to keep exactly this affordable.
+
+#### `#1-7gqb` — a real vendor-id column
+
+Measured against the live schema: `subcontractors` has **no `qb_vendor_id`** column, and
+`expenses.supplier` is free text. `resolveOrCreateVendor()` (`entities.ts:176-215`) issues a
+**metered** `qboQuery` per distinct supplier per drain, memoised only in `ctx.vendorCache` (one
+drain's lifetime). The two costs the entry names are both real: a metered read per supplier per
+drain, and **a supplier renamed inside QuickBooks silently becomes a second Vendor on the next
+push** — because the lookup key is the display name, which is the thing that changed.
+
+The fix has an existing shape to copy exactly: `contacts.qb_customer_id`. The one genuine design
+question is **non-sub vendors** — `expenses.supplier` is free text with no row to write an id back
+to — which is why the entry itself offers "and/or a `qb_vendor_map` table keyed on the supplier
+string". Carried to Phase 2.
+
