@@ -608,3 +608,79 @@ Two caveats recorded rather than glossed:
    releases its dependant. Left as-is deliberately: `pushed` is a fact about QuickBooks, and soft-
    deleting the bookkeeping row does not un-push it.
 
+---
+
+### Step 3.1–3.4 — what was built (Items 2, 3, 4, `#2-7gqb`)
+
+| commit | item | what shipped |
+| --- | --- | --- |
+| `8e6b…` | 2 | `lib/quickbooks/reconcile.ts`; all nine writers now check `{ error }` via `recordLink()`; `[FF:<id>]` marker + `adoptExisting*()` idempotency shipped **in the same commit**, per Josh |
+| `8a9e1b1` | 2 | `20261500000000` — back-fill 7 rows, VALIDATE the constraint; `s104-qb-link-integrity.test.ts`; `s151` comments amended |
+| `c850203` | 3 | `claimDue()` propagates a terminal dependency; `s104-queue-dependency-propagation.live.ts` (4 cases) |
+| `44c3613` | 4 | `totalMismatch()` on 4 handlers; `TaxCodeRef: NON` extended to both expense paths; `s104-qb-total-authority.test.ts` |
+| `6f596bd` | 9 `#2-7gqb` | `20261510000000` + `cdc-backstop.ts`, folded into the 5-minute drain, hourly-gated; parser exported and unit-tested |
+
+#### 🔴 INCIDENT — the token refresh nearly severed the live connection
+
+Recorded in full because it is the precise risk the standing constraint names, and
+**I caused it**. Josh authorised the refresh; the first attempt rotated the token at Intuit and then
+**failed to write it back**:
+
+```
+⚠️ VAULT WRITE-BACK FAILED — CONNECTION AT RISK:
+   Could not find the function public.qb_vault_put(p_blob, p_secret_id) in the schema cache
+```
+
+`qb_vault_put` takes `(p_company_id, p_payload, p_secret_id)`. I called it with `(p_secret_id,
+p_blob)` — invented from `qb_vault_get`'s shape rather than read from `pg_proc`. **Between the
+rotation and the recovery, the vault held a refresh token Intuit had just replaced.**
+
+Recovered on the second attempt (Intuit had not invalidated the prior refresh token), and the vault
+round-trip was read back: **MATCHES**. The connection is `connected` and working — every subsequent
+QuickBooks read in this session used it.
+
+**The lesson, which generalises past this session:** a refresh rotates *before* it can persist, so
+any script that refreshes is one failed write away from severing a live connection. The app's own
+`tokens.ts` gets this right; a hand-rolled script beside it does not inherit that. **Read the
+function signature from `pg_proc`, never from a sibling function's shape.**
+
+#### Measured readback — Item 4's required evidence, from the API
+
+| object | QuickBooks | ours | agree? |
+| --- | --- | --- | --- |
+| Invoice 145 (INV-3675) | `TotalAmt 3000`, `TxnTaxDetail {TotalTax: 0}`, both lines `NON` | 3000.00 | ✅ |
+| Invoice 146 (INV-3676) | `TotalAmt 0`, `PrivateNote "Voided"` | 291.44 | ✅ **voided both sides** — a void zeroes the lines, so a naive total check would fail every void. The void path is deliberately exempt and a test pins that. |
+| Purchase 175 | 124652 | 124652.00 | ✅ |
+| Purchase 151 | 421.88 | 421.88 | ✅ |
+| Purchase 155 | 1.24 | 1.24 | ✅ |
+| Purchase 156 | 1000 | 1000.00 | ✅ |
+| Purchase 152 | **`Object Not Found … made inactive`** | — | **gone from QuickBooks; no orphan to reconcile** |
+| `TaxPrefs` | `UsingSalesTax: true`, `TaxGroupCodeRef 2`, `Country US` | — | — |
+
+**No discrepancy exists today.** But every Purchase came back `taxCode=NON` **although we sent no
+tax field** — so the agreement was Intuit's default on a sales-tax company, which is exactly the
+borrowed default F12's own header calls the bug. That is now stated explicitly on both expense paths.
+
+#### 🟡 Correction to my own FINDING 3-A
+
+I reported a "second forever-wait door" — a dependency row that is simply gone — reading
+`depends_on_id` as a bare uuid. **`pg_constraint` says otherwise:**
+
+```
+depends_on_id uuid REFERENCES qb_sync_queue(id) ON DELETE SET NULL
+```
+
+It cannot dangle. Deleting a dependency **NULLs the child's link and RELEASES it** — the opposite of
+stranding. The test asserting my wrong belief went red and is inverted rather than deleted. There is
+no second door; there is a silent *release*, which is now pinned by a test and documented where the
+code is. **Reading led to the wrong answer; the test caught it before it reached this report.**
+
+#### 🟡 What the CDC backstop does NOT prove
+
+The sandbox holds **zero Payments** — a 90-day CDC query returns `HTTP 200` with
+`CDCResponse: [{ QueryResponse: [{}] }]`. So the live test proves the call is well-formed and Intuit
+answers it, and nothing about recovery. **No payment has actually been recovered end to end.** The
+parser was exported and unit-tested against populated fixtures instead, including the trap that will
+bite later: Intuit returns one `QueryResponse` block **per entity**, so `QueryResponse[0].Payment`
+silently reads the wrong block the day a second entity joins the query.
+
