@@ -28,22 +28,22 @@ Two MCP servers are standard for this repo:
 
 ## Technology Stack
 
-| Layer           | Technology                                                         | Notes                                                           |
-| --------------- | ------------------------------------------------------------------ | --------------------------------------------------------------- |
-| Web Frontend    | Next.js 14 + React + TypeScript + Tailwind CSS + shadcn/ui         | Office users (estimators, PMs, owners)                          |
-| Mobile Frontend | **PWA (the Next.js web app, installed to the home screen)**         | Field crew (techs, foremen) — **RULED [S97, 2026-08-03]**       |
-| Shared Logic    | TypeScript packages in monorepo                                    | Types, validation, business logic shared across web + mobile    |
-| Backend / DB    | Supabase (PostgreSQL + Auth + Storage + Realtime + Edge Functions) | Multi-tenant with RLS                                           |
-| AI              | OpenAI API (GPT-4o vision + text) + Supabase pgvector              | Estimating, photo auto-tagging, reporting, summaries, marketing |
-| Payments        | Stripe Billing + Stripe Connect                                    | Subscriptions + contractor-to-client payments                   |
-| Accounting      | QuickBooks Online API (OAuth 2.0)                                  | Sync only — FrameFocus runs operations, QB runs the books       |
-| Web Hosting     | Vercel                                                             | Auto-deploy from main branch                                    |
-| ~~Mobile Builds~~ | ~~Expo EAS~~ — **SUPERSEDED [S97]**                              | No app-store build pipeline. See the PWA ruling below.          |
-| CI/CD           | GitHub Actions                                                     | Lint, test, build verification                                  |
-| Monorepo        | Turborepo                                                          | Multi-package management                                        |
-| Email           | Resend                                                             | Transactional emails                                            |
-| E-Signatures    | DocuSign API or BoldSign                                           | Proposals, change orders, lien releases                         |
-| Doc Generation  | React-PDF or Puppeteer                                             | PDF estimates, invoices, reports                                |
+| Layer             | Technology                                                         | Notes                                                           |
+| ----------------- | ------------------------------------------------------------------ | --------------------------------------------------------------- |
+| Web Frontend      | Next.js 14 + React + TypeScript + Tailwind CSS + shadcn/ui         | Office users (estimators, PMs, owners)                          |
+| Mobile Frontend   | **PWA (the Next.js web app, installed to the home screen)**        | Field crew (techs, foremen) — **RULED [S97, 2026-08-03]**       |
+| Shared Logic      | TypeScript packages in monorepo                                    | Types, validation, business logic shared across web + mobile    |
+| Backend / DB      | Supabase (PostgreSQL + Auth + Storage + Realtime + Edge Functions) | Multi-tenant with RLS                                           |
+| AI                | OpenAI API (GPT-4o vision + text) + Supabase pgvector              | Estimating, photo auto-tagging, reporting, summaries, marketing |
+| Payments          | Stripe Billing + Stripe Connect                                    | Subscriptions + contractor-to-client payments                   |
+| Accounting        | QuickBooks Online API (OAuth 2.0)                                  | Sync only — FrameFocus runs operations, QB runs the books       |
+| Web Hosting       | Vercel                                                             | Auto-deploy from main branch                                    |
+| ~~Mobile Builds~~ | ~~Expo EAS~~ — **SUPERSEDED [S97]**                                | No app-store build pipeline. See the PWA ruling below.          |
+| CI/CD             | GitHub Actions                                                     | Lint, test, build verification                                  |
+| Monorepo          | Turborepo                                                          | Multi-package management                                        |
+| Email             | Resend                                                             | Transactional emails                                            |
+| E-Signatures      | DocuSign API or BoldSign                                           | Proposals, change orders, lien releases                         |
+| Doc Generation    | React-PDF or Puppeteer                                             | PDF estimates, invoices, reports                                |
 
 **Language:** TypeScript everywhere — web, mobile, backend, shared.
 
@@ -236,13 +236,19 @@ restart takes.
 rules were written for different situations and the contradiction is deliberate rather than an
 oversight:
 
-| | attended | unattended |
-| --- | --- | --- |
-| who commits | **Josh**, path-scoped by concern | **CC**, path-scoped, after every discrete step |
-| why | he is watching the diffs and owns the history | nobody is watching, and the box eats work |
-| pushing | **never CC's**, in both | **never CC's**, in both |
+|             | attended                                      | unattended                                                    |
+| ----------- | --------------------------------------------- | ------------------------------------------------------------- |
+| who commits | **Josh**, path-scoped by concern              | **CC**, path-scoped, after every discrete step                |
+| why         | he is watching the diffs and owns the history | nobody is watching, and the box eats work                     |
+| pushing     | **never CC's**                                | **CC pushes the feature branch to origin after every commit** |
 
-**What does NOT change:** CC never pushes, in either mode; commits stay path-scoped rather than
+**⚠️ WHY THE PUSH RULE CHANGED [S105, Josh].** A twelfth Codespace restart destroyed 11 unpushed
+commits — the S105 spec, three list screens, burst capture, and the TECH_DEBT classification.
+Committing step by step is not enough: a local branch dies with the box. Pushing a FEATURE BRANCH
+to origin is not a merge and risks nothing — `main` is protected by the merge rule, not by the
+push rule.
+
+**What does NOT change:** CC never pushes to `main`; commits stay path-scoped rather than
 `git add -A` over an unrelated working tree; and merging to `main` remains Josh's call.
 
 **And the reason a step is small rather than tidy.** "One finding" means the fix, its tests and its
@@ -252,7 +258,7 @@ unit is what would still be worth having if the next step never ran.
 ### Reading the exit status of a command — **MANDATORY [moved from TECH_DEBT #137, S122]**
 
 **A status is only evidence if it belongs to the process being judged.** Five instances in two
-sessions (S106–S107) all had one root cause: the status read belonged to a *different* process than
+sessions (S106–S107) all had one root cause: the status read belonged to a _different_ process than
 the one under test. A build that failed lint was reported clean and **committed on that basis**; two
 Playwright runs reported `0` while 89 and 91 tests had actually failed.
 
@@ -260,9 +266,9 @@ Playwright runs reported `0` while 89 and 91 tests had actually failed.
    which is always `0`. Redirect to a file and inspect that instead:
    `cmd > log 2>&1; echo $?` — **immediately**, before anything else runs. If a pipe is unavoidable,
    `set -o pipefail` first, or read `${PIPESTATUS[0]}` rather than `$?`.
-2. **Print the real code into the output and read *that line*.** Not a wrapper's status, not a
+2. **Print the real code into the output and read _that line_.** Not a wrapper's status, not a
    summary. `cmd; echo "exit: $?"` is itself the trap — the compound command's status is the
-   **`echo`'s**, so the shell *and* any task-notification summary report `0` over a run that exited
+   **`echo`'s**, so the shell _and_ any task-notification summary report `0` over a run that exited
    `1`. Print the code and read the printed line.
 3. **Corroborate with an independent signal.** A `✘` count, a test tally, a connection-error count.
    A status can be masked; a tally cannot.
@@ -286,7 +292,7 @@ it just overturned.**
 `subcontractor` and `client`, because the open policy was leaking every client's home address to
 subs. It inverted the probes **it had written** and stopped there.
 `s121-contact-addresses-floor.live.ts` had a describe block titled **"contact_addresses SELECT is
-NOT floored"**, written at S121 to protect the *old* rule, asserting that crew, foreman **and
+NOT floored"**, written at S121 to protect the _old_ rule, asserting that crew, foreman **and
 subcontractor** could all read an address.
 
 **Only the subcontractor case went red.** Crew and foreman still read company-wide by design, so
@@ -310,8 +316,8 @@ opposite of a shipped ruling.** It sat that way through two audit passes.
   reason `TECH_DEBT.md` entries are closed rather than removed — the repo lost one to deletion at
   `53c7353`.)
 
-**A closely related trap, from the same session.** `s145-contracts` asserted a *column default* by
-reading a row anyone can toggle, and `s140-lien-releases` asserted that a *supported action* could
+**A closely related trap, from the same session.** `s145-contracts` asserted a _column default_ by
+reading a row anyone can toggle, and `s140-lien-releases` asserted that a _supported action_ could
 never happen. Both describe the freshly-seeded world and then test it forever against live, shared,
 mutable data. **If an assertion's name says "default", "none" or "never", check that it is reading
 the schema and not a row.**
@@ -326,16 +332,16 @@ class; it has recurred roughly eight or nine times across the campaign (`s143-vo
 
 **Every `.limit(1)` is one of three things. Decide which before you leave it:**
 
-1. **Ordering fixes it** — the caller wants *a* deterministic row and any stable one will do (the
+1. **Ordering fixes it** — the caller wants _a_ deterministic row and any stable one will do (the
    latest, the oldest, the highest `sort_order`). Add `.order('<col>', …)`. Reference:
    `invoices-client.ts:202`/`:292` (append after the last line), which document exactly this.
 2. **Ordering does NOT fix it** — the caller depends on the row having a property the query never
-   filtered for. `s143-void-authority` wanted *the PM's* assignment and took the first in the
+   filtered for. `s143-void-authority` wanted _the PM's_ assignment and took the first in the
    company; `s163` D3 wanted a segment the owner did **not** author; the S165 sweep found
-   `s143-qb-scaffolding` Q4 taking any company invoice when it needed one the PM could *see*.
+   `s143-qb-scaffolding` Q4 taking any company invoice when it needed one the PM could _see_.
    **Ordering would only make the wrong pick stable.** Scope the query with the `.eq`/`.in`/`.not`
    the dependency actually names. **This is the important category and the one that keeps
-   recurring** — the tell is that code *downstream of the fetch* asserts or relies on something
+   recurring** — the tell is that code _downstream of the fetch_ asserts or relies on something
    (a role, an author, an assignment, a status) the `select` did not constrain. A silent early-out
    (`if (!readable?.length) return`) on a wrong pick is not a pass; it is an untested run wearing a
    green tick.
@@ -347,7 +353,7 @@ class; it has recurred roughly eight or nine times across the campaign (`s143-vo
 **This is not test-only.** A service that takes an unordered first row (`reminders.ts`,
 `email-service.ts`'s owner fallback, existence probes in `client-portal.ts`) has the same defect
 with worse consequences. When sweeping, read `app/` and `lib/` too, not just `test/` and the
-fixtures. Comment lines that merely *mention* `.limit(1)` are not call sites — judge the query, not
+fixtures. Comment lines that merely _mention_ `.limit(1)` are not call sites — judge the query, not
 the grep hit.
 
 ## Generated Types Workflow
@@ -577,14 +583,14 @@ These users manage the FrameFocus platform itself. They are NOT tied to any comp
 
 Each subscribing company is an isolated tenant. Within that company, there are 6 roles with descending access levels. The Owner is always the billing contact.
 
-| Role            | DB Value          | Web Access                         | Mobile Access     | Key Permissions                                                                                                                                                                                                                                                                                                         |
-| --------------- | ----------------- | ---------------------------------- | ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Owner           | `owner`           | Full                               | Full              | All features, billing/subscription management, user invitations, approval authority on change orders/payments/AI content, company settings, QuickBooks connection — [SUPERSEDED for COs — Owner-final-approval gate removed; see module5-architecture.md §5.7c AMENDMENT (Session 55). Owner/Admin/PM all create+send.] |
-| Admin           | `admin`           | Full                               | Full              | Everything Owner can do EXCEPT items in the owner-only list below                                                                                                                                                                                                                                                       |
-| Project Manager | `project_manager` | Full (scoped to assigned projects) | Full              | Create/manage estimates, manage assigned projects, assign tasks, create change orders, **view job ACTUAL AND COMMITTED COSTS — NOT contract value, budgeted/sell amounts, or CO dollar amounts** (Financial Visibility Floor, added 2026-07-20; **"actual only" corrected to "actual and committed" [S140]** per money-rep P9 — `budgetColumnsFor()` has shipped `seesCommitted: true` for a PM since S97. **The same widening for FOREMAN is OVERTURNED [Josh, S150] — see the Floor below.**), manage client communication                                                    |
-| Foreman         | `foreman`         | Limited                            | Full              | Manage assigned field crews, daily logs, schedule crew tasks, review Crew Member submissions, punch lists, quality control                                                                                                                                                                                              |
-| Crew Member     | `crew_member`     | Minimal                            | Full              | Clock in/out with GPS, daily log entries, photo capture, task status updates, view assigned tasks and schedule                                                                                                                                                                                                          |
-| Client          | `client`          | Portal only — **see the note below** | No (future phase) | View project timeline, photo gallery, approve selections, sign documents, make payments, message PM, view AI weekly summaries                                                                                                                                                                                           |
+| Role            | DB Value          | Web Access                           | Mobile Access     | Key Permissions                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| --------------- | ----------------- | ------------------------------------ | ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Owner           | `owner`           | Full                                 | Full              | All features, billing/subscription management, user invitations, approval authority on change orders/payments/AI content, company settings, QuickBooks connection — [SUPERSEDED for COs — Owner-final-approval gate removed; see module5-architecture.md §5.7c AMENDMENT (Session 55). Owner/Admin/PM all create+send.]                                                                                                                                                                                                      |
+| Admin           | `admin`           | Full                                 | Full              | Everything Owner can do EXCEPT items in the owner-only list below                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| Project Manager | `project_manager` | Full (scoped to assigned projects)   | Full              | Create/manage estimates, manage assigned projects, assign tasks, create change orders, **view job ACTUAL AND COMMITTED COSTS — NOT contract value, budgeted/sell amounts, or CO dollar amounts** (Financial Visibility Floor, added 2026-07-20; **"actual only" corrected to "actual and committed" [S140]** per money-rep P9 — `budgetColumnsFor()` has shipped `seesCommitted: true` for a PM since S97. **The same widening for FOREMAN is OVERTURNED [Josh, S150] — see the Floor below.**), manage client communication |
+| Foreman         | `foreman`         | Limited                              | Full              | Manage assigned field crews, daily logs, schedule crew tasks, review Crew Member submissions, punch lists, quality control                                                                                                                                                                                                                                                                                                                                                                                                   |
+| Crew Member     | `crew_member`     | Minimal                              | Full              | Clock in/out with GPS, daily log entries, photo capture, task status updates, view assigned tasks and schedule                                                                                                                                                                                                                                                                                                                                                                                                               |
+| Client          | `client`          | Portal only — **see the note below** | No (future phase) | View project timeline, photo gallery, approve selections, sign documents, make payments, message PM, view AI weekly summaries                                                                                                                                                                                                                                                                                                                                                                                                |
 
 ### Roster Visibility Floor — **RULED [Josh, S131]**, and `DASHBOARD_ROLES` is now enforced
 
@@ -608,11 +614,11 @@ Two separate changes, because one is routing and one is data:
 - **Ruling B — the data.** `20260911000000_roster_visibility_floor.sql`. **A redirect protects no
   data**, since `/m`, every API route and any direct PostgREST call bypass routing entirely.
 
-| Role | Team roster (`profiles` **and** `company_members`) | `contacts` | `subcontractors` |
-| ---- | ---- | ---- | ---- |
-| `subcontractor` | Owner, Admin, PM **only** | **none** | **none** |
-| `client` | **none** | **none** | **none** |
-| the five `DASHBOARD_ROLES` | unchanged, company-wide | unchanged | unchanged |
+| Role                       | Team roster (`profiles` **and** `company_members`) | `contacts` | `subcontractors` |
+| -------------------------- | -------------------------------------------------- | ---------- | ---------------- |
+| `subcontractor`            | Owner, Admin, PM **only**                          | **none**   | **none**         |
+| `client`                   | **none**                                           | **none**   | **none**         |
+| the five `DASHBOARD_ROLES` | unchanged, company-wide                            | unchanged  | unchanged        |
 
 **Own row is always readable, for every role.** Not a softening of the ruling — a precondition for
 it. There are 94 direct `from('profiles')` reads keyed on `user_id = auth.uid()`, including both
@@ -688,12 +694,12 @@ redirected to.
 >
 > ### The floor as ruled
 >
-> | Role | Sees | `budgetColumnsFor()` |
-> | --- | --- | --- |
-> | Owner / Admin | everything | `full`, 7 columns |
-> | Project Manager | actual + committed | `committed`, 5 columns |
-> | **Foreman** | **actual only** | **`actual_only`, 3 columns, `seesCommitted: false`** |
-> | Crew | actual only | `none` — redirected off the screen entirely, i.e. stricter still |
+> | Role            | Sees               | `budgetColumnsFor()`                                             |
+> | --------------- | ------------------ | ---------------------------------------------------------------- |
+> | Owner / Admin   | everything         | `full`, 7 columns                                                |
+> | Project Manager | actual + committed | `committed`, 5 columns                                           |
+> | **Foreman**     | **actual only**    | **`actual_only`, 3 columns, `seesCommitted: false`**             |
+> | Crew            | actual only        | `none` — redirected off the screen entirely, i.e. stricter still |
 >
 > `ui-05` §7.1's per-role column counts (Owner/Admin 7, PM 5, Foreman 3),
 > `s97ct-budget-floor.live.ts`, and `money-representation.md` §7.3 all already assert this
@@ -710,7 +716,7 @@ redirected to.
 > §7.3, and with the code that had already shipped.
 >
 > **The lesson recorded there, because it is the one that generalises:** §7H.12 A.1 is what
-> *changed* this file at S140, on a citation nobody checked. An obliged amendment to
+> _changed_ this file at S140, on a citation nobody checked. An obliged amendment to
 > `CLAUDE.md` is only as good as the citation behind it.
 >
 > Document set as of S150 — **`CLAUDE.md`, `money-representation.md`, `7h1-spec.md`,
@@ -721,20 +727,21 @@ redirected to.
 - **Visible to all roles:** actual and committed cost (`project_budget_items.actual_amount` and `committed_amount`), and non-dollar facts — CO counts/statuses, project status, dates, punch counts, schedule. **This is deliberate, not an oversight:** the budgeted figure was split off onto `project_budget_amounts` precisely so actual and committed could stay on a row Foreman and Crew can still read. A role floor on `project_budget_items` itself would over-reach — `s97ct-roles.live.ts` **8b-ii** and `s97ct-budget-floor.live.ts` **7-foreman/7-crew_member** exist to fail loudly if anyone adds one.
 
   > **⚠️ This bullet is about the DATABASE, and it does NOT contradict the foreman ruling above.** `project_budget_items` deliberately has **no role floor**, so `committed_amount` is readable at the DB by every role and must stay that way — the two live tests named above fail loudly if anyone floors it. **A foreman not seeing committed cost is a UI gate, in `budgetColumnsFor()`, not a policy.** Read "visible to all roles" here as "not floored in RLS", never as "rendered for every role". [Clarified S150 alongside the `#1-m7cpl` ruling.]
+
 - ~~**Named carve-out [S97, 2026-08-01]**~~ — ⚠️ **OVERTURNED [Josh — the invoice floor, `2ff9966` + `20261038000000_invoice_payment_floor.sql`; recorded here at A20 close-out].** _Superseded text, quoted not rewritten:_ _"a **PM may see the amounts ON an invoice they can reach** (7D client invoicing) — derived lines, draws, discounts, credits, invoice totals and retainage."_ **The live rule:** a PM sees **only invoices they AUTHORED** — `invoices_select_visible` keys on `author_member_id = get_my_member_id()` (not `created_by`, NULL on most legacy rows) — and **Payments plus every AR aggregate (collected to date, aging, retainage held, total outstanding) are Owner/Admin**. Why it was overturned: Josh signed in as a PM and read the Payments tab; the premise "a PM who cannot see whether their invoice was paid cannot do the job" was rejected. Full banner: [`docs/specs/7d1-spec.md`](docs/specs/7d1-spec.md) §12a. The negative half of the old text (no contract value, budget/sell, CO dollars for a PM) survives a fortiori — the floor got narrower, not wider.
 - **Why:** this narrows the previous blanket "PM views job finances" grant (PM row above) to actual cost, and extends the same floor to foreman/crew. Foreman/crew are "Limited/Minimal" web roles; they had no business reason to see contract/margin figures, but nothing enforced it.
 - **Current enforcement status [corrected 2026-08-02, S97]:** the UI-refresh specs (ui-01 §11, applied across ui-02–ui-06) gate these figures at the UI layer, and **three of the four figure families are now DB-enforced as well**. The previous text here — "the DB-level floor is NOT yet in place" — is superseded. Verify against the cited migrations rather than trusting this prose:
 
-| Figure | Where it lives now | Enforcement |
-| ------ | ------------------ | ----------- |
-| Contract value | `project_financials.contract_value` (1:1 off `projects`) | **DB-enforced, Owner/Admin.** Table + `project_financials_{select,insert,update}_owner_admin`: `20260811000000_project_financials.sql`. Writer retargeted: `20260811010000_convert_estimate_project_financials.sql`. Old column dropped: `20260812000000_drop_projects_contract_value.sql`. |
-| Budgeted amount | `project_budget_amounts.budgeted_amount` (1:1 off `project_budget_items`) | **DB-enforced, Owner/Admin.** Table + `project_budget_amounts_{select,insert,update}_owner_admin` + backfill: `20260816000000_budget_amounts.sql`. Transitional sync trigger: `20260816010000_budget_amounts_sync.sql`. Old column dropped, sync trigger removed, all four SQL writers retargeted in one transaction: `20260817000000_drop_budgeted_amount.sql`. |
-| Labor/burden rates | `instrument_rates` | **DB-enforced, Owner/Admin SELECT floor.** `20260806000000_financial_rls_floor.sql` §1 replaces `instrument_rates_select_company` with `instrument_rates_select_owner_admin`. |
-| Change-order dollar amounts | `change_orders.net_delta` — still on the parent row, not split | **PARTLY DB-ENFORCED — corrected 2026-08-09 [S123] against the live policy.** _Superseded text, quoted not rewritten: "**UI-ONLY, and deliberately so.** `change_orders_select_visible` is `company_id = get_my_company_id() AND can_view_project(project_id)` — no role floor, no author scoping."_ **That is not what the policy says.** The live `change_orders_select_visible` is `company_id = get_my_company_id() AND can_view_project(project_id) AND (get_my_role() = ANY (ARRAY['owner','admin']) OR (get_my_role() = 'project_manager' AND created_by = auth.uid()))` — the S121 read floor, applied by `20260830000000_change_order_read_floor.sql` (which replaced the S89-era policy from `20260704215000_module5_5d_change_orders.sql` that the superseded text describes). So foreman, crew and subcontractor **cannot SELECT a change order at all**, and a PM sees **only the ones they authored**. What remains UI-only is narrow and is the deliberate part: a PM sees `net_delta` on their **own** COs, because they must be able to author them and see what they wrote. Rationale, residual risk and the open scoping question: **[TECH_DEBT.md #117](TECH_DEBT.md)**. |
+| Figure                      | Where it lives now                                                        | Enforcement                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| --------------------------- | ------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Contract value              | `project_financials.contract_value` (1:1 off `projects`)                  | **DB-enforced, Owner/Admin.** Table + `project_financials_{select,insert,update}_owner_admin`: `20260811000000_project_financials.sql`. Writer retargeted: `20260811010000_convert_estimate_project_financials.sql`. Old column dropped: `20260812000000_drop_projects_contract_value.sql`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| Budgeted amount             | `project_budget_amounts.budgeted_amount` (1:1 off `project_budget_items`) | **DB-enforced, Owner/Admin.** Table + `project_budget_amounts_{select,insert,update}_owner_admin` + backfill: `20260816000000_budget_amounts.sql`. Transitional sync trigger: `20260816010000_budget_amounts_sync.sql`. Old column dropped, sync trigger removed, all four SQL writers retargeted in one transaction: `20260817000000_drop_budgeted_amount.sql`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| Labor/burden rates          | `instrument_rates`                                                        | **DB-enforced, Owner/Admin SELECT floor.** `20260806000000_financial_rls_floor.sql` §1 replaces `instrument_rates_select_company` with `instrument_rates_select_owner_admin`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| Change-order dollar amounts | `change_orders.net_delta` — still on the parent row, not split            | **PARTLY DB-ENFORCED — corrected 2026-08-09 [S123] against the live policy.** _Superseded text, quoted not rewritten: "**UI-ONLY, and deliberately so.** `change_orders_select_visible` is `company_id = get_my_company_id() AND can_view_project(project_id)` — no role floor, no author scoping."_ **That is not what the policy says.** The live `change_orders_select_visible` is `company_id = get_my_company_id() AND can_view_project(project_id) AND (get_my_role() = ANY (ARRAY['owner','admin']) OR (get_my_role() = 'project_manager' AND created_by = auth.uid()))` — the S121 read floor, applied by `20260830000000_change_order_read_floor.sql` (which replaced the S89-era policy from `20260704215000_module5_5d_change_orders.sql` that the superseded text describes). So foreman, crew and subcontractor **cannot SELECT a change order at all**, and a PM sees **only the ones they authored**. What remains UI-only is narrow and is the deliberate part: a PM sees `net_delta` on their **own** COs, because they must be able to author them and see what they wrote. Rationale, residual risk and the open scoping question: **[TECH_DEBT.md #117](TECH_DEBT.md)**. |
 
-  Both split tables carry SELECT/INSERT/UPDATE for Owner/Admin and **no DELETE policy at all**, so DELETE is denied to every role. `can_view_project()` still has no role floor of its own — the gating comes from the side tables, which is why the columns were moved rather than the helper changed.
+Both split tables carry SELECT/INSERT/UPDATE for Owner/Admin and **no DELETE policy at all**, so DELETE is denied to every role. `can_view_project()` still has no role floor of its own — the gating comes from the side tables, which is why the columns were moved rather than the helper changed.
 
-  **Do not "finish" this by flooring `change_orders`** without reading #117 first — the obvious fix breaks CO authoring for PMs.
+**Do not "finish" this by flooring `change_orders`** without reading #117 first — the obvious fix breaks CO authoring for PMs.
 
 ### ⚠️ THE FLOOR GOVERNS STAFF. A CLIENT IS A COUNTERPARTY. — **RULED [Josh, S164]**
 
@@ -743,23 +750,23 @@ written to answer "which of my own people may see this", and it never contemplat
 the bill. Module 9 forced the question and it is ruled here.
 
 **A client sees MORE than a Project Manager on cost-plus and T&M, and LESS on lump sum.** Josh:
-*"client can see more than a PM except for lump sum contracts. During the interview I broke down what
-the client can see with each form of billing."*
+_"client can see more than a PM except for lump sum contracts. During the interview I broke down what
+the client can see with each form of billing."_
 
-| Instrument | The client sees | Note |
-| --- | --- | --- |
-| **Cost-plus** | budgeted, actual, **markup %**, **hourly rate**, line total with markup, category totals, project total to date, expected | `committed` is REMOVED — it derives from `purchase_orders` / `subcontractor_contracts`, which clients are excluded from |
-| **T&M** | what the company paid, the agreed **markup %**, the total billed — **the pre-markup figure IS shown beside the marked-up one** | one row per labor type, one row per material line |
-| **Lump sum** | the total billed, sectioned by bill; **no line-level price and no cost basis** | the only opaque instrument |
+| Instrument    | The client sees                                                                                                                | Note                                                                                                                    |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------- |
+| **Cost-plus** | budgeted, actual, **markup %**, **hourly rate**, line total with markup, category totals, project total to date, expected      | `committed` is REMOVED — it derives from `purchase_orders` / `subcontractor_contracts`, which clients are excluded from |
+| **T&M**       | what the company paid, the agreed **markup %**, the total billed — **the pre-markup figure IS shown beside the marked-up one** | one row per labor type, one row per material line                                                                       |
+| **Lump sum**  | the total billed, sectioned by bill; **no line-level price and no cost basis**                                                 | the only opaque instrument                                                                                              |
 
 **Why this is not a hole in the Floor.** The client pays against actuals on cost-plus and T&M, so
-the cost basis is *theirs*. On lump sum they agreed a price and the cost basis is not. The Floor's
+the cost basis is _theirs_. On lump sum they agreed a price and the cost basis is not. The Floor's
 own doctrine already says this: **sell derives per instrument, then aggregates.**
 
 > ### ⚠️ AND THE CONSEQUENCE THAT SHAPES THE BUILD
 >
-> **A lump-sum contract can carry a T&M change order.** Josh: *"that means sometimes the original
-> contract will be different from COs."* One project then renders **two visibility rules at once**,
+> **A lump-sum contract can carry a T&M change order.** Josh: _"that means sometimes the original
+> contract will be different from COs."_ One project then renders **two visibility rules at once**,
 > and **the CO's rule follows the CO, not the contract.**
 >
 > **Any derivation that assumes one visibility setting per project is wrong**, and it will be wrong
