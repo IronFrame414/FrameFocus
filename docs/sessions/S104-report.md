@@ -684,3 +684,88 @@ parser was exported and unit-tested against populated fixtures instead, includin
 bite later: Intuit returns one `QueryResponse` block **per entity**, so `QueryResponse[0].Payment`
 silently reads the wrong block the day a second entity joins the query.
 
+---
+
+### Step 3.5 — Item 9, the five deferred 7G findings
+
+| finding | status | what shipped |
+| --- | --- | --- |
+| `#2-7gqb` CDC backstop | **BUILT** | `20261510000000` + `cdc-backstop.ts`, in the 5-minute drain, hourly-gated |
+| `#1-7gqb` vendor id | **BUILT** | `20261520000000` + `20261530000000` + `qb_vendor_map` lookup in `resolveOrCreateVendor()` |
+| F8 reauth deadline | **BUILT** | `reauth-notify.ts`, warns Owner/Admin at 30 / 7 / 1 days from the same drain |
+| F5 minorversion | **HARDENED** | `QBO_MINOR_VERSION_PATTERN` + `s104-qb-minorversion.test.ts`, and a verification date beside the constant |
+| F6 discovery document | **HARDENED** | `QBO_DISCOVERY_EXPECTATIONS` + `s104-qb-discovery.live.ts`, fetching the live document |
+
+#### 🔴 A defect I wrote, that only the test found — F8's escalation ran backwards
+
+`WARN_AT_DAYS = [30, 7, 1]` with `find(d => daysLeft <= d)`, under a comment asserting *"the first
+threshold the deadline is inside decides the message."* **Descending order makes the first match the
+WIDEST**, so a deadline **one day out** matched 30. Every warning would have read "within 30 days"
+and the escalation would never have escalated. Now `[1, 7, 30]`, with the wrong version recorded in
+the file.
+
+The same red test exposed a second one: a body carrying the live day count makes every day's text
+unique, so dedupe-on-body would have delivered **30 notifications instead of 3**. The body is keyed
+on the threshold. (`tag` cannot serve — it goes to the push layer and is never stored on the row.)
+
+#### 🔴 Two more the full suite caught, neither of which reading would have found
+
+- **`brand-literals.test.ts` refused `cdc-backstop.ts`** — a `TECH_DEBT` sentence I quoted verbatim
+  carried the pre-rebrand product name into a comment. Paraphrased.
+- **`deletion-census.test.ts` refused `qb_vendor_map`** — a new per-tenant table that trial deletion
+  would have walked past, **leaving a company undeletable**. Added to the walk. This is the census
+  doing exactly the job it was built for, on the first new table since it was written.
+
+---
+
+## Verification — the printed exit line, and a corroborating tally
+
+| check | command | result |
+| --- | --- | --- |
+| Type-check | `npx tsc --noEmit -p apps/web/tsconfig.json` | **exit 0** |
+| **Production build** | `npx next build` (no `next dev` running — checked) | **exit 0**, all routes emitted |
+| Full unit suite | `npx vitest run` | **exit 0** — **81 files, 1108 tests passed** |
+| S104 live battery | 4 live files | **exit 0** — **11 tests passed** |
+
+Post-battery database state, measured rather than assumed:
+
+| | |
+| --- | --- |
+| `qb_sync_queue` | 6 rows — the original 6; **0** test residue |
+| `qb_vendor_map` | 0 rows — **0** probe residue |
+| `expense_payments` violating the check | **0** |
+| QuickBooks connection | **`connected`** |
+| migration ledger max | `20261530000000` |
+
+---
+
+## Owed / carried forward
+
+1. **⚠️ PRODUCTION MIGRATIONS ARE OWED AND UNPUSHED — Josh's call, attended, DB before code.**
+   Four new migrations, none on production: `20261500000000` (retainage back-fill + VALIDATE),
+   `20261510000000` (CDC cursor), `20261520000000` (`qb_vendor_map`), `20261530000000` (its upsert
+   key). **`20261500000000` changes existing financial rows** and should be read before it is run.
+2. **⚠️ The production migration ledger is UNVERIFIED.** Rebuild-test carried eight duplicate
+   MCP-written rows under wall-clock versions, plus a genuinely missing one. **Production was not
+   read — that is a stop rule and Josh took it.** If production has the same duplicates,
+   `supabase db push` will refuse there the way it refused here.
+3. **`TECH_DEBT.md` numbering.** `#1-7gqb` and `#2-7gqb` are closed in place; the provisional ids
+   still need converting to real numbers from **main's** file when this branch lands (S136 rule).
+4. **Sandbox Vendor 77 (`S104 Vendor Map Probe`) cannot be removed** — the accounting API has no
+   delete for a Vendor, only `Active: false`. Named distinctively so a reader can see what it is.
+5. **Item 8 moved nothing**, by instruction. The 71/14/101 split is a proposal awaiting Josh.
+6. **Nothing was pushed.** Branch `feature/s104-qb-hardening`, 12 commits, `main` untouched at
+   `51a6725`.
+
+## The one thing worth carrying past this session
+
+**Four separate defects this session were invisible to reading and visible only to running.** The
+`expense_payments` constraint (code read fine; the probe failed), the `depends_on_id` FK (I filed a
+finding that measurement disproved), the `qb_vendor_map` partial index (M-K's defect, repeated in
+the repo that documented it, swallowed by a deliberately non-fatal write), and F8's inverted
+threshold order (with a comment confidently asserting the opposite).
+
+**Three of the four were swallowed by an error path that was correct to be non-fatal.** That is the
+pattern: a write that must not break the caller will not tell you it failed, so the only thing that
+ever surfaces it is a test that reads the result back. The prompt said measurement beat reading both
+times it was tried in the previous campaign; it beat reading four times out of four here.
