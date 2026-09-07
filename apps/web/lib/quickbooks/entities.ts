@@ -3,6 +3,14 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { QB_DUPLICATE_NAME_CODE, QboApiError, qbQuoteLiteral, qboQuery, qboRead, qboWrite } from './client';
 import type { QboConnection } from './tokens';
 import type { QbQueueRow } from './queue';
+import {
+  adoptExistingByMarker,
+  adoptExistingInvoice,
+  priorAttemptReachedIntuit,
+  recordLink,
+  totalMismatch,
+  withMarker,
+} from './reconcile';
 
 /**
  * 7G — the entity mappers. Platform rows in, QuickBooks objects out.
@@ -29,6 +37,12 @@ export type HandlerResult =
   | { kind: 'terminal'; reason: string };
 
 export interface DrainContext {
+  /**
+   * Vendor-map writes that failed this drain [R7, S104c]. Non-fatal by design;
+   * counted so a persistent failure reaches the drain's response instead of
+   * living only in `console.error`.
+   */
+  vendorMapWriteFailures: number;
   admin: SupabaseClient;
   conn: QboConnection;
   companyId: string;
@@ -48,7 +62,14 @@ export function newDrainContext(
   conn: QboConnection,
   companyId: string
 ): DrainContext {
-  return { admin, conn, companyId, accountCache: new Map(), vendorCache: new Map() };
+  return {
+    admin,
+    conn,
+    companyId,
+    accountCache: new Map(),
+    vendorCache: new Map(),
+    vendorMapWriteFailures: 0,
+  };
 }
 
 /**
@@ -157,15 +178,35 @@ export async function resolveAccountId(
 /**
  * Resolve a supplier name to a QuickBooks Vendor, creating one if absent.
  *
- * ⚠️ THERE IS NOWHERE TO PERSIST A VENDOR ID, AND THAT IS A REAL GAP, NOT AN
+ * ⚠️ CLOSED [S104] — `#1-7gqb`. _Superseded, quoted rather than deleted:_
+ * _"THERE IS NOWHERE TO PERSIST A VENDOR ID, AND THAT IS A REAL GAP, NOT AN
  * OVERSIGHT HERE. `expenses.supplier` is FREE TEXT and `subcontractors` carries
- * NO `qb_vendor_id` column (checked against the live schema this run). So a
- * vendor cannot be modelled the way a customer is — there is no row to write
- * the id back to.
+ * NO `qb_vendor_id` column … the vendor is resolved by DisplayName on each bill
+ * push, memoised for the drain. That is one extra metered read per distinct
+ * supplier per drain, not per bill."_
  *
- * Consequence, stated plainly: the vendor is resolved by DisplayName on each
- * bill push, memoised for the drain. That is one extra metered read per distinct
- * supplier per drain, not per bill.
+ * There is somewhere now: `qb_vendor_map` (`20261520000000`), keyed on
+ * (company, realm, normalised supplier string). **Keyed on the STRING and not on
+ * `subcontractors.id`, because an expense carries `sub_contract_id` and a
+ * free-text `supplier` and no subcontractor FK at all** — the string is what
+ * this function actually resolves, for a sub and for a hardware store alike.
+ *
+ * ⚠️ THE LOOKUP ORDER IS CHEAPEST-FIRST, and that ordering is the fix:
+ *   1. `ctx.vendorCache`  — free, this drain only
+ *   2. `qb_vendor_map`    — a DB read, FREE against Intuit's quota
+ *   3. `select … from Vendor` — **METERED**
+ *   4. create
+ * Steps 3 and 4 write their result back to step 2, so a supplier costs one
+ * metered read ONCE rather than once per drain forever.
+ *
+ * ⚠️ AND IT CLOSES THE SECOND, WORSE COST: a supplier RENAMED inside QuickBooks
+ * used to become a SECOND Vendor on the next push, because the lookup key was
+ * the display name — the one thing that had changed. The stored id survives a
+ * rename; QuickBooks resolves ids, not names.
+ *
+ * ⚠️ THE MAP IS A CACHE OF A FACT, NOT A CLAIM ABOUT ONE. If the stored id no
+ * longer exists in QuickBooks the push fails loudly with Intuit's own error,
+ * which is the right failure. Nothing here fabricates a vendor.
  *
  * ⚠️ AND UNLIKE A CUSTOMER, A NAME COLLISION HERE IS NOT A CONFLICT TO ASK
  * ABOUT. Two clients called "Acme" are plausibly two different clients; a
@@ -180,6 +221,35 @@ export async function resolveOrCreateVendor(
   const key = displayName.trim();
   if (!key) return null;
   if (ctx.vendorCache.has(key)) return ctx.vendorCache.get(key)!;
+
+  // 2. The durable map. Scoped by realm as well as company: a mapping written
+  //    under one QuickBooks company must never be read under another, and
+  //    scoping makes that structurally impossible rather than dependent on a
+  //    disconnect reset list being maintained (see s187-qb-link-census).
+  const { data: mapped } = await ctx.admin
+    .from('qb_vendor_map')
+    .select('qb_vendor_id')
+    .eq('company_id', ctx.companyId)
+    .eq('realm_id', ctx.conn.realmId)
+    .eq('supplier_key', key.toLowerCase())
+    .eq('is_deleted', false)
+    // Scoped, not merely limited: the UNIQUE constraint
+    // `qb_vendor_map_company_realm_supplier_key` makes at most one row match
+    // this exact predicate (CLAUDE.md, S165).
+    //
+    // ⚠️ CORRECTED [R6, S104c] — this said `idx_qb_vendor_map_one_live`, which
+    // `20261530000000` DROPPED. The reasoning held (the plain UNIQUE is
+    // stricter than the partial index it replaced) but the citation was to an
+    // object that no longer exists, in a comment whose whole job is to justify
+    // a `.limit(1)`.
+    .limit(1)
+    .maybeSingle();
+
+  if (mapped?.qb_vendor_id) {
+    const cached = mapped.qb_vendor_id as string;
+    ctx.vendorCache.set(key, cached);
+    return cached;
+  }
 
   const found = (await qboQuery(
     ctx.admin,
@@ -208,6 +278,41 @@ export async function resolveOrCreateVendor(
       } else {
         throw err;
       }
+    }
+  }
+
+  // 5. Remember it, so the metered read above is paid once rather than once per
+  //    drain. `upsert` on `qb_vendor_map_company_realm_supplier_key` — the
+  //    plain UNIQUE constraint `20261530000000` put in place of the partial
+  //    index, which `ON CONFLICT` could not use. Two drains resolving the same
+  //    supplier in the same instant is a race we would rather absorb than fail.
+  //
+  //    ⚠️ THE WRITE IS NOT ALLOWED TO BREAK THE PUSH. This is a cache. If it
+  //    fails we have still resolved the vendor correctly and the expense should
+  //    still reach QuickBooks; the only cost is that the next drain pays the
+  //    metered read again. Logged, never thrown.
+  if (id) {
+    const { error: mapError } = await ctx.admin.from('qb_vendor_map').upsert(
+      {
+        company_id: ctx.companyId,
+        realm_id: ctx.conn.realmId,
+        supplier_name: key,
+        qb_vendor_id: id,
+      },
+      { onConflict: 'company_id,realm_id,supplier_key' }
+    );
+    if (mapError) {
+      // ⚠️ COUNTED, NOT ONLY LOGGED [R7, S104c]. This write is deliberately
+      // non-fatal — a cache failure must not stop an expense reaching
+      // QuickBooks — and that is exactly how the partial-index defect survived a
+      // whole session: every push worked, the map stayed empty, and the only
+      // evidence was a log line nobody reads. The counter surfaces a PERSISTENT
+      // failure in the drain's own response.
+      ctx.vendorMapWriteFailures += 1;
+      console.error(
+        `[qb-vendor] could not remember vendor ${id} for "${key}" company=${ctx.companyId}:`,
+        mapError.message
+      );
     }
   }
 
@@ -410,6 +515,23 @@ interface QbInvoiceLine {
  * bug, whether or not it has fired yet**: the books would silently disagree with
  * the document the client holds.
  *
+ * ⚠️ EXTENDED TO THE EXPENSE PATH AND MADE ENFORCEABLE [S104]. F12 stated the
+ * position on SALES lines only; `buildPurchaseBody` and the expense-payment
+ * Purchase sent no tax field at all and were inheriting the default this header
+ * warns about. Both now send `NON`. **And stating a position is not the same as
+ * checking it held** — `totalMismatch()` in `reconcile.ts` now compares what
+ * QuickBooks reports back in `TotalAmt` against our own figure on every create
+ * and on the invoice update, which is the half that makes the ruling
+ * enforceable rather than merely intended.
+ *
+ * ⚠️ MEASURED AGAINST THE SANDBOX AT S104, read from the API rather than from
+ * our record of what we sent: Invoice 145 `TotalAmt 3000`, ours 3000.00,
+ * `TxnTaxDetail {TotalTax: 0}`, both lines `NON`. Purchases 151/155/156/175 all
+ * agreed to the cent — **and all came back `taxCode=NON` although we sent no
+ * tax field**, which is precisely the borrowed default this header calls the
+ * bug. `TaxPrefs` on that company: `UsingSalesTax: true`, `TaxGroupCodeRef 2`,
+ * `Country US`.
+ *
  * ⚠️ `NON` IS US-SPECIFIC, and that is a deliberate, logged limit. Non-US
  * QuickBooks uses different codes and `GlobalTaxCalculation` instead. If a
  * non-US company ever connects, this ref is rejected by Intuit and the push
@@ -515,7 +637,9 @@ async function handleInvoiceCreate(ctx: DrainContext, row: QbQueueRow): Promise<
   const { data: invoice } = await ctx.admin
     .from('invoices')
     .select(
-      'id, project_id, invoice_number, title, issue_date, due_date, billed_total, retainage_withheld, status, qb_invoice_id'
+      // `qb_push_status` is read by `priorAttemptReachedIntuit` [R2, S104c] —
+      // without it the predicate sees `undefined` and the guard is a no-op.
+      'id, project_id, invoice_number, title, issue_date, due_date, billed_total, retainage_withheld, status, qb_invoice_id, qb_push_status'
     )
     .eq('id', row.entity_id)
     .eq('company_id', ctx.companyId)
@@ -621,6 +745,33 @@ async function handleInvoiceCreate(ctx: DrainContext, row: QbQueueRow): Promise<
   const dueDate = qbDate(invoice.due_date as string | null);
   if (dueDate) body.DueDate = dueDate;
 
+  // ⚠️ A RETRY MUST NOT CREATE A SECOND INVOICE [S104]. QuickBooks has no PUT;
+  // a second POST is a second document in the customer's books. If a previous
+  // attempt reached Intuit and failed only on the way back — which is exactly
+  // what `recordLink` now reports rather than swallowing — the invoice is
+  // already there under our own `DocNumber`. Adopt it instead of duplicating
+  // it. Costs one METERED read, and only on a retry.
+  if (priorAttemptReachedIntuit(row, invoice)) {
+    const existingId = await adoptExistingInvoice(
+      ctx,
+      invoice.invoice_number as string | null
+    );
+    if (existingId) {
+      const adopted = await recordLink(
+        ctx,
+        'invoices',
+        row.entity_id,
+        {
+          qb_invoice_id: existingId,
+          qb_push_status: 'pushed',
+          qb_synced_at: new Date().toISOString(),
+        },
+        `invoice ${existingId} (adopted from an earlier attempt)`
+      );
+      return adopted ?? { kind: 'pushed' };
+    }
+  }
+
   const created = (await qboWrite(ctx.conn, '/invoice', body)) as {
     Invoice?: {
       Id?: string;
@@ -635,6 +786,16 @@ async function handleInvoiceCreate(ctx: DrainContext, row: QbQueueRow): Promise<
   if (!qbInvoice?.Id) {
     return { kind: 'terminal', reason: 'QuickBooks accepted the invoice but returned no id.' };
   }
+
+  // ⚠️ THE RULING'S ENFORCEMENT POINT [Josh, S104]. Retainage is a
+  // DiscountLineDetail, so what QuickBooks should hold is the NET RECEIVABLE —
+  // the same figure `buildInvoiceLines` constructed.
+  const totalFault = totalMismatch(
+    money(Number(invoice.billed_total) - Number(invoice.retainage_withheld)),
+    qbInvoice.TotalAmt,
+    `invoice ${qbInvoice.Id}`
+  );
+  if (totalFault) return totalFault;
 
   // ⚠️ CORRECTION TO 7g2 §3.1, recorded in the build log: the accounting API
   // exposes NO "QuickBooks Payments is enabled" field on CompanyInfo or
@@ -663,17 +824,20 @@ async function handleInvoiceCreate(ctx: DrainContext, row: QbQueueRow): Promise<
   const payLink = qbInvoice.InvoiceLink ?? null;
   const paymentsEnabled = Boolean(payLink);
 
-  await ctx.admin
-    .from('invoices')
-    .update({
+  const linkFailure = await recordLink(
+    ctx,
+    'invoices',
+    row.entity_id,
+    {
       qb_invoice_id: qbInvoice.Id,
       // RULED [S103, Q4] — STORED, because it prints on a client-held document.
       qb_invoice_link: payLink,
       qb_push_status: 'pushed',
       qb_synced_at: new Date().toISOString(),
-    })
-    .eq('id', row.entity_id)
-    .eq('company_id', ctx.companyId);
+    },
+    `invoice ${qbInvoice.Id}`
+  );
+  if (linkFailure) return linkFailure;
 
   // ⚠️ ONLY EVER SET TRUE, NEVER BACK TO FALSE. A create response that carries
   // no link is not proof the realm lacks Payments — it is also what a transient
@@ -751,7 +915,7 @@ async function handleInvoiceUpdate(ctx: DrainContext, row: QbQueueRow): Promise<
   const existingInvoice =
     (await readEntity(ctx, 'invoice', invoice.qb_invoice_id as string)) ?? {};
 
-  await qboWrite(ctx.conn, '/invoice', {
+  const updated = (await qboWrite(ctx.conn, '/invoice', {
     ...existingInvoice,
     Id: invoice.qb_invoice_id,
     SyncToken: syncToken,
@@ -773,13 +937,26 @@ async function handleInvoiceUpdate(ctx: DrainContext, row: QbQueueRow): Promise<
     ...(invoice.invoice_number ? { DocNumber: invoice.invoice_number } : {}),
     ...(qbDate(invoice.issue_date as string | null) ? { TxnDate: qbDate(invoice.issue_date as string | null) } : {}),
     ...(qbDate(invoice.due_date as string | null) ? { DueDate: qbDate(invoice.due_date as string | null) } : {}),
-  });
+  })) as { Invoice?: { TotalAmt?: number } };
 
-  await ctx.admin
-    .from('invoices')
-    .update({ qb_synced_at: new Date().toISOString(), qb_push_status: 'pushed' })
-    .eq('id', row.entity_id)
-    .eq('company_id', ctx.companyId);
+  // ⚠️ AN AMENDMENT IS EXACTLY WHERE THE TOTALS CAN PART COMPANY [S104]. The
+  // create path is checked; an update replaces the whole `Line` array, so it
+  // recomputes from scratch and has the same failure available to it.
+  const totalFault = totalMismatch(
+    money(Number(invoice.billed_total) - Number(invoice.retainage_withheld)),
+    updated.Invoice?.TotalAmt,
+    `invoice ${invoice.qb_invoice_id}`
+  );
+  if (totalFault) return totalFault;
+
+  const linkFailure = await recordLink(
+    ctx,
+    'invoices',
+    row.entity_id,
+    { qb_synced_at: new Date().toISOString(), qb_push_status: 'pushed' },
+    `invoice ${invoice.qb_invoice_id}`
+  );
+  if (linkFailure) return linkFailure;
 
   return { kind: 'pushed' };
 }
@@ -844,11 +1021,14 @@ async function handleInvoiceVoid(ctx: DrainContext, row: QbQueueRow): Promise<Ha
     ...(invoice.qb_void_memo ? { PrivateNote: invoice.qb_void_memo } : {}),
   });
 
-  await ctx.admin
-    .from('invoices')
-    .update({ qb_synced_at: new Date().toISOString() })
-    .eq('id', row.entity_id)
-    .eq('company_id', ctx.companyId);
+  const linkFailure = await recordLink(
+    ctx,
+    'invoices',
+    row.entity_id,
+    { qb_synced_at: new Date().toISOString() },
+    `invoice ${invoice.qb_invoice_id} (voided)`
+  );
+  if (linkFailure) return linkFailure;
 
   return { kind: 'pushed' };
 }
@@ -871,6 +1051,8 @@ const GL_COLUMN_FOR_CATEGORY: Record<string, string> = {
 
 interface ExpenseRow {
   id: string;
+  /** Read by `priorAttemptReachedIntuit` [R2, S104c]. */
+  qb_push_status?: string | null;
   project_id: string;
   cost_category: string;
   supplier: string;
@@ -890,7 +1072,8 @@ async function loadExpense(ctx: DrainContext, id: string): Promise<ExpenseRow | 
   const { data } = await ctx.admin
     .from('expenses')
     .select(
-      'id, project_id, cost_category, supplier, amount, description, expense_date, due_date, status, is_deleted, sub_contract_id, qb_bill_id, qb_purchase_id, payment_account_id'
+      // `qb_push_status` [R2, S104c] — see the invoice select.
+      'id, project_id, cost_category, supplier, amount, description, expense_date, due_date, status, is_deleted, sub_contract_id, qb_bill_id, qb_purchase_id, payment_account_id, qb_push_status'
     )
     .eq('id', id)
     .eq('company_id', ctx.companyId)
@@ -1079,15 +1262,18 @@ async function handlePaymentCreate(ctx: DrainContext, row: QbQueueRow): Promise<
   const qbId = created.Payment?.Id;
   if (!qbId) return { kind: 'terminal', reason: 'QuickBooks accepted the payment but returned no id.' };
 
-  await ctx.admin
-    .from('client_payments')
-    .update({
+  const linkFailure = await recordLink(
+    ctx,
+    'client_payments',
+    row.entity_id,
+    {
       qb_payment_id: qbId,
       qb_push_status: 'pushed',
       qb_synced_at: new Date().toISOString(),
-    })
-    .eq('id', row.entity_id)
-    .eq('company_id', ctx.companyId);
+    },
+    `payment ${qbId}`
+  );
+  if (linkFailure) return linkFailure;
 
   return { kind: 'pushed' };
 }
@@ -1185,15 +1371,18 @@ async function handleRefundCreate(ctx: DrainContext, row: QbQueueRow): Promise<H
     return { kind: 'terminal', reason: `QuickBooks accepted the ${responseKey} but returned no id.` };
   }
 
-  await ctx.admin
-    .from('client_refunds')
-    .update({
+  const linkFailure = await recordLink(
+    ctx,
+    'client_refunds',
+    row.entity_id,
+    {
       qb_refund_id: qbId,
       qb_push_status: 'pushed',
       qb_synced_at: new Date().toISOString(),
-    })
-    .eq('id', row.entity_id)
-    .eq('company_id', ctx.companyId);
+    },
+    `${responseKey} ${qbId}`
+  );
+  if (linkFailure) return linkFailure;
 
   return { kind: 'pushed' };
 }
@@ -1357,7 +1546,17 @@ async function buildPurchaseBody(
   expense: ExpenseRow,
   settings: PurchaseSettings,
   accountId: string,
-  vendorId: string | null
+  vendorId: string | null,
+  /**
+   * The memo QuickBooks currently holds, on the UPDATE path only [R1, S104c].
+   *
+   * ⚠️ USED ONLY WHEN WE HAVE NO PROJECT NOTE OF OUR OWN. When a project note
+   * exists it wins, exactly as it did before the marker shipped — that part of
+   * the behaviour is unchanged. What this restores is the case where it does
+   * not: the field used to be OMITTED then, so the bookkeeper's memo survived
+   * the read-modify-write. Undefined on create, where there is nothing to keep.
+   */
+  existingNote?: string | null
 ): Promise<Record<string, unknown>> {
   const { customerRef, note } = await projectRefs(ctx, expense.project_id);
 
@@ -1370,7 +1569,17 @@ async function buildPurchaseBody(
     // entirely when the supplier could not be resolved — an EntityRef with a
     // value and no type is rejected, and a Purchase is legal without one.
     ...(vendorId ? { EntityRef: { value: vendorId, type: 'Vendor' } } : {}),
-    ...(note ? { PrivateNote: note } : {}),
+    // ⚠️ THE MARKER IS THE ONLY DURABLE LINK BACK TO OUR ROW [S104]. A Purchase
+    // has no natural key of ours — no DocNumber we set, no number a person
+    // would recognise — so without it an orphaned Purchase can never be matched
+    // to the expense that created it.
+    //
+    // ⚠️ AND IT NEVER DESTROYS A MEMO TO GET THERE [R1, S104c]. `PrivateNote` is
+    // the QuickBooks **Memo** field and a bookkeeper types in it. Our project
+    // note wins when we have one — unchanged — but when we do not, the memo
+    // QuickBooks already holds is carried through and the marker is appended.
+    // `withMarker()` is idempotent, so an amendment does not grow a tail of tags.
+    PrivateNote: withMarker(note ?? existingNote, expense.id),
     Line: [
       {
         DetailType: 'AccountBasedExpenseLineDetail',
@@ -1379,6 +1588,15 @@ async function buildPurchaseBody(
         AccountBasedExpenseLineDetail: {
           // The account it was spent ON.
           AccountRef: { value: accountId },
+          // ⚠️ THE EXPENSE PATH STATES ITS TAX POSITION TOO [S104]. F12 [S187]
+          // did this for sales lines and left the Purchase path inheriting
+          // QuickBooks' default. Measured at S104: Purchases 151/155/156/175
+          // all came back `taxCode=NON` — but WE never sent it, so that was
+          // Intuit's default on a company with `UsingSalesTax: true`, exactly
+          // the "relying on someone else's default for the total on a money
+          // document" that F12's own header calls the bug. Same `NON`, same
+          // US-only limitation, same deliberate loud failure off-US.
+          TaxCodeRef: NON_TAXABLE,
           ...(customerRef
             ? { CustomerRef: { value: customerRef }, BillableStatus: 'NotBillable' }
             : {}),
@@ -1411,26 +1629,63 @@ async function handlePurchaseCreate(ctx: DrainContext, row: QbQueueRow): Promise
   // Purchase is a record of spend and QuickBooks accepts one with no payee.
   const vendorId = await resolveOrCreateVendor(ctx, expense.supplier);
 
+  // ⚠️ A RETRY MUST NOT CREATE A SECOND PURCHASE [S104]. See the same guard on
+  // `handleInvoiceCreate`; here the key is the `[FF:<id>]` marker in
+  // `PrivateNote` rather than a DocNumber, because a Purchase carries no
+  // number of ours. Only on a retry, and only one METERED read.
+  if (priorAttemptReachedIntuit(row, expense)) {
+    const existingId = await adoptExistingByMarker(
+      ctx,
+      'Purchase',
+      expense.id,
+      qbDate(expense.expense_date)
+    );
+    if (existingId) {
+      const adopted = await recordLink(
+        ctx,
+        'expenses',
+        row.entity_id,
+        {
+          qb_purchase_id: existingId,
+          qb_push_status: 'pushed',
+          qb_synced_at: new Date().toISOString(),
+        },
+        `Purchase ${existingId} (adopted from an earlier attempt)`
+      );
+      return adopted ?? { kind: 'pushed' };
+    }
+  }
+
   const created = (await qboWrite(
     ctx.conn,
     '/purchase',
     await buildPurchaseBody(ctx, expense, settings.value, account.id, vendorId)
-  )) as { Purchase?: { Id?: string } };
+  )) as { Purchase?: { Id?: string; TotalAmt?: number } };
 
   const qbId = created.Purchase?.Id;
   if (!qbId) {
     return { kind: 'terminal', reason: 'QuickBooks accepted the expense but returned no id.' };
   }
 
-  await ctx.admin
-    .from('expenses')
-    .update({
+  const totalFault = totalMismatch(
+    money(Number(expense.amount)),
+    created.Purchase?.TotalAmt,
+    `Purchase ${qbId}`
+  );
+  if (totalFault) return totalFault;
+
+  const linkFailure = await recordLink(
+    ctx,
+    'expenses',
+    row.entity_id,
+    {
       qb_purchase_id: qbId,
       qb_push_status: 'pushed',
       qb_synced_at: new Date().toISOString(),
-    })
-    .eq('id', row.entity_id)
-    .eq('company_id', ctx.companyId);
+    },
+    `Purchase ${qbId}`
+  );
+  if (linkFailure) return linkFailure;
 
   return { kind: 'pushed' };
 }
@@ -1467,14 +1722,27 @@ async function handlePurchaseUpdate(ctx: DrainContext, row: QbQueueRow): Promise
     ...existingPurchase,
     Id: expense.qb_purchase_id,
     SyncToken: syncToken,
-    ...(await buildPurchaseBody(ctx, expense, settings.value, account.id, vendorId)),
+    ...(await buildPurchaseBody(
+      ctx,
+      expense,
+      settings.value,
+      account.id,
+      vendorId,
+      // R1 [S104c] — hand back the memo QuickBooks holds so a bookkeeper's text
+      // survives an amendment. `readEntity` fetched the whole object precisely
+      // so the update could merge rather than overwrite (F10).
+      (existingPurchase as { PrivateNote?: string }).PrivateNote ?? null
+    )),
   });
 
-  await ctx.admin
-    .from('expenses')
-    .update({ qb_synced_at: new Date().toISOString(), qb_push_status: 'pushed' })
-    .eq('id', row.entity_id)
-    .eq('company_id', ctx.companyId);
+  const linkFailure = await recordLink(
+    ctx,
+    'expenses',
+    row.entity_id,
+    { qb_synced_at: new Date().toISOString(), qb_push_status: 'pushed' },
+    `Purchase ${expense.qb_purchase_id}`
+  );
+  if (linkFailure) return linkFailure;
 
   return { kind: 'pushed' };
 }
@@ -1495,11 +1763,14 @@ async function handlePurchaseVoid(ctx: DrainContext, row: QbQueueRow): Promise<H
     SyncToken: syncToken,
   });
 
-  await ctx.admin
-    .from('expenses')
-    .update({ qb_synced_at: new Date().toISOString() })
-    .eq('id', row.entity_id)
-    .eq('company_id', ctx.companyId);
+  const linkFailure = await recordLink(
+    ctx,
+    'expenses',
+    row.entity_id,
+    { qb_synced_at: new Date().toISOString() },
+    `Purchase ${expense.qb_purchase_id} (deleted)`
+  );
+  if (linkFailure) return linkFailure;
 
   return { kind: 'pushed' };
 }
@@ -1527,7 +1798,8 @@ async function handleExpensePaymentCreate(
   const { data: payment } = await ctx.admin
     .from('expense_payments')
     .select(
-      'id, expense_id, amount, retainage_withheld, paid_date, is_deleted, qb_purchase_id, payment_account_id'
+      // `qb_push_status` [R2, S104c] — see the invoice select.
+      'id, expense_id, amount, retainage_withheld, paid_date, is_deleted, qb_purchase_id, payment_account_id, qb_push_status'
     )
     .eq('id', row.entity_id)
     .eq('company_id', ctx.companyId)
@@ -1565,12 +1837,41 @@ async function handleExpensePaymentCreate(
   const vendorId = await resolveOrCreateVendor(ctx, expense.supplier);
   const { customerRef, note } = await projectRefs(ctx, expense.project_id);
 
+  // ⚠️ THIS IS THE HANDLER THE S104 DEFECT WAS FOUND ON, so read the guard as
+  // load-bearing rather than defensive. `expense_payments` carries a NOT VALID
+  // check constraint that REJECTS any update to a legacy row (7 of 17 on
+  // rebuild-test), so the link write below genuinely fails — and until S104 it
+  // failed silently while the handler returned `pushed`. A Purchase then
+  // existed in QuickBooks with nothing pointing at it. See `reconcile.ts`.
+  if (priorAttemptReachedIntuit(row, payment as { qb_push_status?: string | null })) {
+    const existingId = await adoptExistingByMarker(
+      ctx,
+      'Purchase',
+      payment.id as string,
+      qbDate(payment.paid_date as string)
+    );
+    if (existingId) {
+      const adopted = await recordLink(
+        ctx,
+        'expense_payments',
+        row.entity_id,
+        {
+          qb_purchase_id: existingId,
+          qb_push_status: 'pushed',
+          qb_synced_at: new Date().toISOString(),
+        },
+        `Purchase ${existingId} (adopted from an earlier attempt)`
+      );
+      return adopted ?? { kind: 'pushed' };
+    }
+  }
+
   const created = (await qboWrite(ctx.conn, '/purchase', {
     AccountRef: { value: settings.value.accountId },
     PaymentType: settings.value.paymentType,
     TxnDate: qbDate(payment.paid_date as string),
     ...(vendorId ? { EntityRef: { value: vendorId, type: 'Vendor' } } : {}),
-    ...(note ? { PrivateNote: note } : {}),
+    PrivateNote: withMarker(note, payment.id as string),
     Line: [
       {
         DetailType: 'AccountBasedExpenseLineDetail',
@@ -1578,28 +1879,37 @@ async function handleExpensePaymentCreate(
         Description: expense.description ?? expense.supplier,
         AccountBasedExpenseLineDetail: {
           AccountRef: { value: account.id },
+          // Same ruling as `buildPurchaseBody` — see the note there [S104].
+          TaxCodeRef: NON_TAXABLE,
           ...(customerRef
             ? { CustomerRef: { value: customerRef }, BillableStatus: 'NotBillable' }
             : {}),
         },
       },
     ],
-  })) as { Purchase?: { Id?: string } };
+  })) as { Purchase?: { Id?: string; TotalAmt?: number } };
 
   const qbId = created.Purchase?.Id;
   if (!qbId) {
     return { kind: 'terminal', reason: 'QuickBooks accepted the payment but returned no id.' };
   }
 
-  await ctx.admin
-    .from('expense_payments')
-    .update({
+  // `net`, not `amount` — the withheld portion never left the company.
+  const totalFault = totalMismatch(net, created.Purchase?.TotalAmt, `Purchase ${qbId}`);
+  if (totalFault) return totalFault;
+
+  const linkFailure = await recordLink(
+    ctx,
+    'expense_payments',
+    row.entity_id,
+    {
       qb_purchase_id: qbId,
       qb_push_status: 'pushed',
       qb_synced_at: new Date().toISOString(),
-    })
-    .eq('id', row.entity_id)
-    .eq('company_id', ctx.companyId);
+    },
+    `Purchase ${qbId}`
+  );
+  if (linkFailure) return linkFailure;
 
   return { kind: 'pushed' };
 }

@@ -1300,6 +1300,7 @@ export type Database = {
           payment_method_on_file: boolean
           phone: string | null
           project_internal_sequence: number
+          qb_cdc_polled_at: string | null
           qb_connected_at: string | null
           qb_connection_state: string
           qb_income_item_id: string | null
@@ -1383,6 +1384,7 @@ export type Database = {
           payment_method_on_file?: boolean
           phone?: string | null
           project_internal_sequence?: number
+          qb_cdc_polled_at?: string | null
           qb_connected_at?: string | null
           qb_connection_state?: string
           qb_income_item_id?: string | null
@@ -1466,6 +1468,7 @@ export type Database = {
           payment_method_on_file?: boolean
           phone?: string | null
           project_internal_sequence?: number
+          qb_cdc_polled_at?: string | null
           qb_connected_at?: string | null
           qb_connection_state?: string
           qb_income_item_id?: string | null
@@ -7209,6 +7212,59 @@ export type Database = {
           },
         ]
       }
+      qb_vendor_map: {
+        Row: {
+          company_id: string
+          created_at: string | null
+          created_by: string | null
+          deleted_at: string | null
+          id: string
+          is_deleted: boolean | null
+          qb_vendor_id: string
+          realm_id: string
+          supplier_key: string | null
+          supplier_name: string
+          updated_at: string | null
+          updated_by: string | null
+        }
+        Insert: {
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          is_deleted?: boolean | null
+          qb_vendor_id: string
+          realm_id: string
+          supplier_key?: string | null
+          supplier_name: string
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Update: {
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          is_deleted?: boolean | null
+          qb_vendor_id?: string
+          realm_id?: string
+          supplier_key?: string | null
+          supplier_name?: string
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "qb_vendor_map_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       qb_webhook_events: {
         Row: {
           company_id: string | null
@@ -9921,6 +9977,7 @@ export type Database = {
         Args: { p_company_id: string; p_payload: string; p_secret_id?: string }
         Returns: string
       }
+      qb_vault_scrub: { Args: { p_secret_id: string }; Returns: undefined }
       qb_webhook_verifier_get: {
         Args: { p_environment: string }
         Returns: string

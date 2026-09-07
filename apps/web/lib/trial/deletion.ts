@@ -397,7 +397,13 @@ export const COMPANY_TABLES: string[] = [
   // QuickBooks scaffolding (20260929/20260930) — operational state, not a
   // record anyone must retain [Q4]. Queue rows self-reference with SET NULL;
   // all three otherwise hang off companies only.
-  'qb_sync_queue', 'qb_read_budget', 'qb_webhook_events',
+  // ⚠️ `qb_vendor_map` (20261520000000, #1-7gqb) JOINED THIS LIST BECAUSE THE
+  // CENSUS TEST REFUSED THE BUILD WITHOUT IT — which is exactly what
+  // `deletion-census.test.ts` is for. It hangs off `companies` only and is a
+  // cache of supplier-name -> QuickBooks Vendor id: operational state, not a
+  // record anyone must retain [Q4]. Nothing references it, so its position
+  // among the other QuickBooks tables is free.
+  'qb_sync_queue', 'qb_read_budget', 'qb_webhook_events', 'qb_vendor_map',
   // M-J (20261430000000) adds two more. ⚠️ THE ORDER IS A REAL CONSTRAINT, not
   // tidiness: `expenses.payment_account_id` references company_payment_accounts
   // with NO ACTION, so that table cannot go until `expenses` has (line 342,

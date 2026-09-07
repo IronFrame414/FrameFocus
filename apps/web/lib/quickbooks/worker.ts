@@ -13,6 +13,8 @@ import {
 } from './queue';
 import { notifyParked } from './park-notify';
 import { drainWebhookEvents } from './webhook-process';
+import { runCdcBackstop } from './cdc-backstop';
+import { notifyReauthDue } from './reauth-notify';
 import { getAccessToken } from './tokens';
 
 /**
@@ -75,6 +77,32 @@ export interface DrainOutcome {
    */
   webhooksProcessed: number;
   webhooksFailed: number;
+  /**
+   * The CDC backstop [#2-7gqb, S104].
+   *
+   * ⚠️ `cdcPolled: 0` IS NOT "NOTHING WAS WRONG" — it is "nothing was ASKED",
+   * because the hourly gate had not elapsed. The distinction is the same one
+   * `waiting` exists to make (S181): a drain must never report a check it did
+   * not perform as a check that passed.
+   *
+   * ⚠️ `cdcRecovered > 0` MEANS A NOTIFICATION WAS LOST. QuickBooks held a
+   * payment we had no record of. It is not a routine counter — it is the signal
+   * that the webhook path dropped something, and it belongs in front of a person.
+   */
+  cdcPolled: number;
+  cdcRecovered: number;
+  /** Reconnect-deadline warnings raised this pass [F8, S104]. */
+  reauthWarnings: number;
+  /**
+   * Vendor-map writes that failed [R7, S104c].
+   *
+   * ⚠️ NON-ZERO MEANS THE SUPPLIER CACHE IS NOT BEING WRITTEN, and the symptom
+   * is invisible from the outside: every push still succeeds, the map stays
+   * empty, and each drain silently pays a METERED read per distinct supplier
+   * again. That is exactly how the partial-index defect survived a whole
+   * session — the write is deliberately non-fatal, so nothing failed loudly.
+   */
+  vendorMapWriteFailures: number;
 }
 
 export async function runQbSync(admin: SupabaseClient): Promise<DrainOutcome> {
@@ -89,6 +117,10 @@ export async function runQbSync(admin: SupabaseClient): Promise<DrainOutcome> {
     waiting: 0,
     webhooksProcessed: 0,
     webhooksFailed: 0,
+    cdcPolled: 0,
+    cdcRecovered: 0,
+    reauthWarnings: 0,
+    vendorMapWriteFailures: 0,
   };
 
   // Only tenants that are actually connected. A `needs_reauth` company is
@@ -96,7 +128,7 @@ export async function runQbSync(admin: SupabaseClient): Promise<DrainOutcome> {
   // failed, because nothing is wrong with the records.
   const { data: companies, error } = await admin
     .from('companies')
-    .select('id, qb_realm_id, qb_connection_state')
+    .select('id, qb_realm_id, qb_connection_state, qb_reauth_required_after')
     .eq('qb_connection_state', 'connected');
 
   if (error) {
@@ -127,11 +159,43 @@ export async function runQbSync(admin: SupabaseClient): Promise<DrainOutcome> {
     // rather than waiting for an answer.
     const conn = await getAccessToken(admin, companyId);
 
+    // ⚠️ F8 — WARN BEFORE THE DEADLINE, NOT AFTER IT. `qb_reauth_required_after`
+    // was written, displayed, and acted on by nothing. It runs here and NOT on a
+    // new cron for the same reason the CDC backstop does: this loop already
+    // visits every connected company every five minutes, and `vercel.json` is
+    // not read by `next build` (S103 lost a deploy to a malformed one).
+    //
+    // ⚠️ IT DELIBERATELY DOES NOT DEPEND ON `conn`. The deadline is a calendar
+    // fact about the connection, not something QuickBooks is asked. A company
+    // whose token has ALREADY failed still needs the warning — arguably most of
+    // all — so this must not sit behind the token check below.
+    const reauth = await notifyReauthDue(
+      admin,
+      companyId,
+      (company.qb_reauth_required_after as string | null) ?? null
+    );
+    if (reauth.warned) outcome.reauthWarnings += 1;
+
     // ⚠️ INBOUND FIRST, AND BEFORE THE QUEUE-EMPTY EARLY-OUT [F1, M-N]. A
     // company with no OUTBOUND backlog still has inbound payments to apply, and
     // the `continue` below would have skipped them entirely — the same shape as
     // the dormancy gap in F7. Webhook work must not depend on push work
     // existing.
+    // ⚠️ THE BACKSTOP RUNS BEFORE THE INBOUND DRAIN, NOT AFTER [#2-7gqb, S104].
+    // Anything it recovers is written as an ordinary `qb_webhook_events` row,
+    // so running it first means a recovered payment is applied in THIS pass
+    // rather than waiting another five minutes for the next one. It is gated to
+    // hourly internally and costs one cheap DB read when it is not due.
+    //
+    // ⚠️ AND IT NEEDS A TOKEN, so it sits below the keep-alive and is skipped
+    // when there is none. A failed poll never advances its cursor, so skipping
+    // loses nothing.
+    if (conn) {
+      const cdc = await runCdcBackstop(admin, conn, companyId);
+      if (cdc.polled) outcome.cdcPolled += 1;
+      outcome.cdcRecovered += cdc.recovered;
+    }
+
     const inbound = await drainWebhookEvents(admin, companyId);
     outcome.webhooksProcessed += inbound.processed;
     outcome.webhooksFailed += inbound.failed;
@@ -245,6 +309,19 @@ export async function runQbSync(admin: SupabaseClient): Promise<DrainOutcome> {
       // everything has changed nothing for anyone waiting, so stop.
       if (outcome.pushed === pushedBefore || budget <= 0) break;
       rows = await claimDue(admin, companyId, budget);
+    }
+
+    // ⚠️ AGGREGATED AFTER THE WHOLE TENANT'S DRAIN [R7, S104c]. `ctx` lives for
+    // one company's drain, and `vendorMapWriteFailures` accumulates across every
+    // pass within it. Folding it in here rather than per row is what makes a
+    // PERSISTENT failure legible: one failure is noise, a count equal to the
+    // number of distinct suppliers is a broken cache.
+    outcome.vendorMapWriteFailures += ctx.vendorMapWriteFailures;
+    if (ctx.vendorMapWriteFailures > 0) {
+      console.error(
+        `[qb-worker] company=${companyId}: ${ctx.vendorMapWriteFailures} vendor-map write(s) ` +
+          `failed. Pushes still succeeded, but every drain will re-pay a metered read per supplier.`
+      );
     }
 
     if (passes > 1) {

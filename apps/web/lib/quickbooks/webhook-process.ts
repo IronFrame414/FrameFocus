@@ -21,8 +21,17 @@ import type { QbWebhookEntity } from '@/lib/quickbooks/webhook-verify';
  */
 
 /** How many times a single notification is retried before it is left alone.
- *  ⚠️ It is not parked or notified today — a failed inbound payment needs the
- *  CDC backstop (#2-7gqb), which is still unbuilt. Recorded, not invented. */
+ *
+ *  ⚠️ AMENDED [S104] — _superseded: "a failed inbound payment needs the CDC
+ *  backstop (#2-7gqb), which is still unbuilt."_ It is built:
+ *  `lib/quickbooks/cdc-backstop.ts`, folded into the same drain and gated
+ *  hourly. An exhausted row is no longer the end of the line — the backstop
+ *  asks QuickBooks what changed and re-offers anything we have no record of.
+ *
+ *  ⚠️ THE ROW ITSELF IS STILL NOT PARKED OR NOTIFIED, and that is unchanged. The
+ *  backstop repairs the DATA; it does not put the failure in front of a person.
+ *  A recovered payment logs `[qb-cdc] RECOVERED` and increments
+ *  `cdcRecovered` on the drain outcome, which is the signal to act on. */
 export const MAX_WEBHOOK_ATTEMPTS = 5;
 
 export interface WebhookDrainOutcome {

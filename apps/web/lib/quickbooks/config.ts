@@ -25,9 +25,39 @@ import 'server-only';
 // question is closed and the reasoning is recorded there.
 export const QBO_SCOPE = 'com.intuit.quickbooks.accounting';
 
-/** Intuit's API "minor version". Pinned, not floating: an unpinned minorversion
- *  silently changes response shapes under a working integration. */
+/**
+ * Intuit's API "minor version". Pinned, not floating: an unpinned minorversion
+ * silently changes response shapes under a working integration.
+ *
+ * ⚠️ F5 — **INTUIT ACCEPTS A WRONG VALUE SILENTLY, SO NOTHING ON THE WIRE CAN
+ * VALIDATE THIS.** Measured by the S187 audit: `/companyinfo` at minorversion
+ * **75, 76, 80, 85, 90, 99 and 200 all returned HTTP 200 with valid data.**
+ * Intuit does not fault on an unknown minor version — it serves *some* version's
+ * response shape, which is precisely the failure the pin exists to prevent.
+ *
+ * ⚠️ THE AUDIT CONCLUDED "no code fix available", AND THAT IS RIGHT ABOUT INTUIT
+ * AND WRONG ABOUT US [S104]. The failure mode worth defending against is a TYPO
+ * here, and a typo is entirely catchable on our side of the wire — it just
+ * cannot be caught by asking Intuit. `s104-qb-minorversion.test.ts` asserts the
+ * shape below, so `'7 5'`, `'v75'`, `'75.1'` or an empty string fail CI instead
+ * of silently serving a different version's response shape in production.
+ *
+ * ⚠️ WHAT NO TEST CAN TELL YOU: whether 75 is still a sensible pin. That is a
+ * MANUAL check against Intuit's minor-versions page at each release-note cycle,
+ * and the date below is the record of when it was last done. **Move the date
+ * when you check, not when you edit the file.**
+ *
+ * Last verified against Intuit's published minor-version list: 2026-09-06 (S103).
+ */
 export const QBO_MINOR_VERSION = '75';
+
+/**
+ * ⚠️ THE SHAPE A MINOR VERSION MUST HAVE, asserted in CI. Intuit's minor
+ * versions are bare ascending integers; anything else is a typo that Intuit will
+ * accept and quietly ignore. Exported so the test asserts the SAME rule the
+ * request uses, rather than a second copy of it that can drift.
+ */
+export const QBO_MINOR_VERSION_PATTERN = /^[1-9][0-9]{0,3}$/;
 
 export type QboEnvironment = 'sandbox' | 'production';
 
@@ -51,6 +81,35 @@ export function qboApiBase(env: QboEnvironment = qboEnvironment()): string {
 export const QBO_AUTHORIZE_URL = 'https://appcenter.intuit.com/connect/oauth2';
 export const QBO_TOKEN_URL = 'https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer';
 export const QBO_REVOKE_URL = 'https://developer.api.intuit.com/v2/oauth2/tokens/revoke';
+
+/**
+ * F6 — the OpenID discovery document, and what it is FOR here.
+ *
+ * ⚠️ THE THREE URLS ABOVE HAVE **NOT** DRIFTED. Verified against the live
+ * document at S187 and NOT re-litigated at S104 — that question is closed, and
+ * Josh's questionnaire answer of "no, we do not consume the discovery document"
+ * remains accurate. **This is hardening so a FUTURE drift is detectable. It is
+ * not a repair, and nothing below implies the values are wrong.**
+ *
+ * ⚠️ AND IT IS DELIBERATELY NOT WIRED INTO THE RUNTIME PATH. Fetching discovery
+ * before every OAuth call would make Intuit's availability a precondition for
+ * *starting* a connection, and would turn a network blip into "you cannot
+ * connect QuickBooks" — strictly worse than three constants that are correct.
+ * The document is a CHECK, run by a test, not a dependency.
+ *
+ * ⚠️ ONE DOCUMENT PER ENVIRONMENT, and the sandbox one exists but is NOT a
+ * different answer for these three fields — the OAuth endpoints are shared, as
+ * the comment above says. The production document is therefore the one to check.
+ */
+export const QBO_DISCOVERY_URL =
+  'https://developer.api.intuit.com/.well-known/openid_configuration';
+
+/** Discovery-document field -> the constant it must agree with. */
+export const QBO_DISCOVERY_EXPECTATIONS: Record<string, string> = {
+  authorization_endpoint: QBO_AUTHORIZE_URL,
+  token_endpoint: QBO_TOKEN_URL,
+  revocation_endpoint: QBO_REVOKE_URL,
+};
 
 /**
  * The registered redirect URI. ⚠️ REGISTERED WITH INTUIT AT EXACTLY THIS PATH
