@@ -153,6 +153,20 @@ export async function enqueue(
  * ⚠️ A ROW WHOSE DEPENDENCY HAS NOT BEEN `pushed` IS SKIPPED, NOT FAILED. An
  * invoice cannot go before its customer; the customer's row is still in this
  * same drain, and the invoice becomes claimable on the next pass.
+ *
+ * ⚠️ BUT A DEPENDENCY THAT WILL NEVER BE `pushed` IS PROPAGATED, NOT SKIPPED
+ * [RULED Josh, S104]. Before S104 `satisfied` admitted only `pushed`, and
+ * everything else was filtered out — so a dependant of a `failed_terminal` row
+ * sat at `status='queued'`, `attempts=0`, `last_error=NULL`,
+ * `next_attempt_at=NULL` **forever**, byte-identical to a row that had simply
+ * not had its turn yet. It never ran and never failed.
+ *
+ * That is the same reporting collapse `countWaiting()` exists to prevent
+ * (S181: a parked queue and an empty queue printed identically, and telling
+ * them apart cost a session that started from a false premise). The fix must
+ * therefore make a dead row LOOK dead — see `failBlockedDependant()` below, and note
+ * that `countWaiting()` does NOT count `failed_terminal`, so a terminated row
+ * leaves the live-work count in the same pass.
  */
 export async function claimDue(
   admin: SupabaseClient,
@@ -193,20 +207,126 @@ export async function claimDue(
   );
 
   const satisfied = new Set<string>();
+  /** dependency id -> why it can never be satisfied. Absent = still possible. */
+  const dead = new Map<string, string>();
+
   if (dependencyIds.length > 0) {
-    const { data: deps } = await admin
+    const { data: deps, error: depError } = await admin
       .from('qb_sync_queue')
-      .select('id, status')
+      .select('id, status, entity_type, operation, last_error')
       .eq('company_id', companyId)
       .in('id', dependencyIds);
-    for (const d of deps ?? []) {
-      if (d.status === 'pushed') satisfied.add(d.id as string);
+
+    // ⚠️ A FAILED DEPENDENCY QUERY MUST NOT LOOK LIKE "no dependency is dead".
+    // Treating an unknown as satisfiable is the safe direction (the dependant
+    // waits one more drain); treating it as DEAD would terminate live work on a
+    // transient read failure. So: bail, do not guess.
+    if (depError) {
+      console.error(
+        `[qb-queue] dependency resolution failed for company=${companyId}:`,
+        depError.message
+      );
+      return [];
     }
+
+    const seen = new Set<string>();
+    for (const d of deps ?? []) {
+      const id = d.id as string;
+      seen.add(id);
+      if (d.status === 'pushed') {
+        satisfied.add(id);
+      } else if (d.status === 'failed_terminal') {
+        dead.set(
+          id,
+          `its ${d.entity_type}:${d.operation} step failed permanently` +
+            (d.last_error ? ` — ${String(d.last_error).slice(0, 300)}` : '')
+        );
+      }
+    }
+
+    // ⚠️ A MISSING DEPENDENCY ROW — AND THE CORRECTION THAT MEASURING IT FORCED.
+    //
+    // I filed this as a second forever-wait door, on the reading that
+    // `depends_on_id` was a bare uuid with no foreign key. **That was wrong, and
+    // the test caught it before the claim reached the report.** The column is:
+    //
+    //     depends_on_id uuid REFERENCES qb_sync_queue(id) ON DELETE SET NULL
+    //
+    // so a dependency cannot dangle. Deleting it NULLs the child's
+    // `depends_on_id`, and the child becomes unconditionally claimable — the
+    // opposite of stranded. A bogus id cannot be inserted either. **This branch
+    // is therefore unreachable while that FK stands.**
+    //
+    // ⚠️ IT IS KEPT ANYWAY, AND NOT AS DECORATION. It is the guard for the day
+    // someone changes that FK. And the reachable behaviour is worth stating
+    // where it can be found: `ON DELETE SET NULL` silently PROMOTES a blocked
+    // dependant to runnable. That is survivable rather than dangerous — an
+    // invoice whose customer step was deleted finds `qb_customer_id` null and
+    // parks with "Waiting for this client to reach QuickBooks first" — but it is
+    // a release, not a block, and nobody should be surprised by it twice.
+    //
+    // ⚠️ AND IT IS SAFE TO CALL "MISSING" DEAD ONLY BECAUSE NOTHING DELETES QUEUE
+    // ROWS — verified at S104 across `lib/`, `app/`, every migration and all 13
+    // crons. `markPushed()` sets `status='pushed'` and the row STAYS, so
+    // "missing" can never mean "succeeded and was tidied away". **If a purge is
+    // ever added, this branch becomes wrong and will terminate work that should
+    // have run.**
+    for (const id of dependencyIds) {
+      if (!seen.has(id)) {
+        dead.set(id, 'the step it was waiting for no longer exists in the queue');
+      }
+    }
+  }
+
+  // ⚠️ TERMINATED IN THIS PASS, NOT LEFT FOR THE NEXT ONE. The whole defect was
+  // a row that stays claimable-looking forever; deferring the write would keep
+  // it that way for one more drain each time the list is truncated by `limit`.
+  const blocked = candidates.filter(
+    (r) => r.depends_on_id && dead.has(r.depends_on_id as string)
+  );
+  for (const r of blocked) {
+    await failBlockedDependant(admin, r.id as string, dead.get(r.depends_on_id as string)!);
   }
 
   return candidates
     .filter((r) => !r.depends_on_id || satisfied.has(r.depends_on_id as string))
     .slice(0, limit) as unknown as QbQueueRow[];
+}
+
+/**
+ * Mark a dependant terminal because its dependency can never be satisfied.
+ *
+ * ⚠️ `failed_terminal`, NOT A PARK, AND THAT WAS THE RULING [Josh, S104]:
+ * *"Option 2 keeps it in queued, which is the defect."* A park stays `queued`
+ * and waits on a person; this row is not waiting on anybody, it is dead. It has
+ * to leave the live-work bucket or `countWaiting()` keeps counting it as work
+ * in progress, which is the S181 collapse rebuilt one level down.
+ *
+ * ⚠️ `attempts` IS LEFT ALONE ON PURPOSE. Nothing about this row was attempted
+ * — incrementing it would claim a push happened that never did, and the
+ * Accounting screen renders these strings to a person.
+ *
+ * ⚠️ `last_error` NAMES THE CAUSE AND CARRIES THE DEPENDENCY'S OWN MESSAGE.
+ * "This never ran" is not actionable; "this never ran because its customer step
+ * failed permanently — Intuit said X" is.
+ */
+async function failBlockedDependant(
+  admin: SupabaseClient,
+  rowId: string,
+  because: string
+): Promise<void> {
+  const { error } = await admin
+    .from('qb_sync_queue')
+    .update({
+      status: 'failed_terminal',
+      last_error: `This step never ran: ${because}.`.slice(0, 1000),
+      next_attempt_at: null,
+    })
+    .eq('id', rowId);
+
+  if (error) {
+    console.error(`[qb-queue] could not terminate blocked dependant ${rowId}:`, error.message);
+  }
 }
 
 /**
