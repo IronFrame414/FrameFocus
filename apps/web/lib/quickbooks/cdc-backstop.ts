@@ -23,10 +23,14 @@ import type { QboConnection } from './tokens';
  *   2. a notification Intuit **never delivered** — no row exists, so nothing
  *      retries anything.
  *
- * ⚠️ THE MISSING RECORD IS OURS, NOT THEIRS. `#2-7gqb` says it plainly: *"The
- * payment is never lost in QuickBooks — it is the mirror in FrameFocus that is
- * missing."* So the repair is to ASK QuickBooks what changed and re-drive the
+ * ⚠️ THE MISSING RECORD IS OURS, NOT THEIRS. `#2-7gqb` says it plainly: the
+ * payment is never lost in QuickBooks — it is the mirror on THIS side that is
+ * missing. So the repair is to ASK QuickBooks what changed and re-drive the
  * ordinary path.
+ *
+ * (The entry's own sentence names the product; it is paraphrased here because
+ * `brand-literals.test.ts` forbids the literal outside `lib/brand.ts`, and that
+ * test caught this comment.)
  *
  * ----------------------------------------------------------------------------
  * ⚠️ IT DOES NOT APPLY PAYMENTS ITSELF, AND THAT IS THE DESIGN

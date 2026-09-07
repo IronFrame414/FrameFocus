@@ -14,6 +14,7 @@ import {
 import { notifyParked } from './park-notify';
 import { drainWebhookEvents } from './webhook-process';
 import { runCdcBackstop } from './cdc-backstop';
+import { notifyReauthDue } from './reauth-notify';
 import { getAccessToken } from './tokens';
 
 /**
@@ -90,6 +91,8 @@ export interface DrainOutcome {
    */
   cdcPolled: number;
   cdcRecovered: number;
+  /** Reconnect-deadline warnings raised this pass [F8, S104]. */
+  reauthWarnings: number;
 }
 
 export async function runQbSync(admin: SupabaseClient): Promise<DrainOutcome> {
@@ -106,6 +109,7 @@ export async function runQbSync(admin: SupabaseClient): Promise<DrainOutcome> {
     webhooksFailed: 0,
     cdcPolled: 0,
     cdcRecovered: 0,
+    reauthWarnings: 0,
   };
 
   // Only tenants that are actually connected. A `needs_reauth` company is
@@ -113,7 +117,7 @@ export async function runQbSync(admin: SupabaseClient): Promise<DrainOutcome> {
   // failed, because nothing is wrong with the records.
   const { data: companies, error } = await admin
     .from('companies')
-    .select('id, qb_realm_id, qb_connection_state')
+    .select('id, qb_realm_id, qb_connection_state, qb_reauth_required_after')
     .eq('qb_connection_state', 'connected');
 
   if (error) {
@@ -143,6 +147,23 @@ export async function runQbSync(admin: SupabaseClient): Promise<DrainOutcome> {
     // keep-alive is correct under EITHER reading, which is why it was written
     // rather than waiting for an answer.
     const conn = await getAccessToken(admin, companyId);
+
+    // ⚠️ F8 — WARN BEFORE THE DEADLINE, NOT AFTER IT. `qb_reauth_required_after`
+    // was written, displayed, and acted on by nothing. It runs here and NOT on a
+    // new cron for the same reason the CDC backstop does: this loop already
+    // visits every connected company every five minutes, and `vercel.json` is
+    // not read by `next build` (S103 lost a deploy to a malformed one).
+    //
+    // ⚠️ IT DELIBERATELY DOES NOT DEPEND ON `conn`. The deadline is a calendar
+    // fact about the connection, not something QuickBooks is asked. A company
+    // whose token has ALREADY failed still needs the warning — arguably most of
+    // all — so this must not sit behind the token check below.
+    const reauth = await notifyReauthDue(
+      admin,
+      companyId,
+      (company.qb_reauth_required_after as string | null) ?? null
+    );
+    if (reauth.warned) outcome.reauthWarnings += 1;
 
     // ⚠️ INBOUND FIRST, AND BEFORE THE QUEUE-EMPTY EARLY-OUT [F1, M-N]. A
     // company with no OUTBOUND backlog still has inbound payments to apply, and
