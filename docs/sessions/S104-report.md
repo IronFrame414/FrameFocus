@@ -1211,3 +1211,282 @@ push believe work is done that is not.
   though on production it moves no data.
 - **The CLI stays on rebuild-test throughout.** Task 3's link/re-link step describes something that
   cannot be done and should not be attempted.
+
+---
+
+# S104c — pre-merge code review
+
+> Read-only pass over `git diff main..feature/s104-qb-hardening` (28 files, +3843/−77).
+> CLI confirmed on `nmyphyhmfttxkdoposvf` (rebuild-test) throughout. Nothing changed in Phase 1.
+
+**Eleven findings. Two are behaviour regressions I introduced; three are gaps in my own testing.**
+
+| id | severity | area | one line |
+| --- | --- | --- | --- |
+| **R1** | 🔴 **HIGH** | 1 | `handlePurchaseUpdate` now **overwrites a bookkeeper's QuickBooks memo** when the expense has no project note |
+| **R2** | 🟠 MED | 1 | Adoption is gated on `row.attempts > 0`, which a **fresh** queue row after a terminal failure does not satisfy |
+| **R3** | 🟠 MED | 1 | Purchase adoption keys on `TxnDate` + marker; `expenses.expense_date` is **mutable**, so an edit defeats adoption |
+| **R4** | 🟠 MED | 5 | The CDC cursor advances even when an individual recovery **insert failed** — that payment is never re-offered |
+| **R5** | 🟠 MED | 5/7 | The CDC **recovery loop has zero test coverage**; the sandbox has 0 Payments, 0 webhook events, 0 linked payments |
+| **R6** | 🟡 LOW | 6 | Two comments in `entities.ts` name `idx_qb_vendor_map_one_live`, **dropped** by `20261530000000` |
+| **R7** | 🟡 LOW | 6 | A vendor-map upsert failure is visible **only** as `console.error` — the exact invisibility that hid the original defect |
+| **R8** | ⚪ INFO | 2 | Terminal failures raise **no notification**; only parks do |
+| **R9** | ⚪ INFO | 1 | Two overlapping drains can both claim one row; adoption cannot help (both have `attempts = 0`). Pre-existing |
+| **R10** | ⚪ INFO | 4 | The F8 test omits the `8` and `2` boundaries the brief names |
+| **R11** | ⚪ INFO | 3 | `claimDue`'s missing-dependency branch is unreachable while the FK stands, and untested |
+
+---
+
+## 1 · The idempotency markers
+
+### 🔴 R1 — a conditional spread became an unconditional assignment, and it clobbers customer data
+
+`git diff` on `entities.ts`, every `PrivateNote` line the branch touched:
+
+```
+REMOVED: -    ...(note ? { PrivateNote: note } : {}),      × 2
+ADDED:   +    PrivateNote: withMarker(note, expense.id),
+ADDED:   +    PrivateNote: withMarker(note, payment.id as string),
+```
+
+`buildPurchaseBody()` is used by **create AND update**. On the update path the object is built as
+`{ ...existingPurchase, ...buildPurchaseBody(...) }` — F10's read-modify-write, whose own header says:
+
+> *"a full update replaces the object, so anything we omit is DELETED — including fields the customer
+> set themselves in QuickBooks."*
+
+**Previously, when `note` was null, `PrivateNote` was OMITTED, so `existingPurchase`'s memo survived.
+`withMarker(null, id)` returns the bare marker, so it is now always present and always wins.** An
+expense with no project note therefore replaces whatever a bookkeeper typed in the QuickBooks Memo
+field with `[FF:9f30d966-…]`.
+
+⚠️ **This is the inverse of the bug F10 was written to prevent, introduced by the fix for a different
+one.** The `handleExpensePaymentCreate` site is safe — it is create-only, so there is no existing
+object to clobber.
+
+### 🟠 R2 — the adoption gate protects a retried row, not a re-queued entity
+
+All three adoption sites are gated identically (`entities.ts:722, 1587, 1786`):
+
+```ts
+if (row.attempts > 0) { … adopt … }
+```
+
+`attempts` lives on the **queue row**. A terminal failure sets that row `failed_terminal` — and
+`idx_qb_sync_queue_one_live_per_entity_op` only covers `queued`/`in_flight`/`failed_transient`, so a
+**new** row for the same `(entity, operation)` can be enqueued, with `attempts = 0`. Adoption then
+does not fire and a second object is created.
+
+**Reachability — measured against the live triggers, and it is narrower than it first looks:**
+
+| trigger | create arm fires when | reachable after a terminal orphan? |
+| --- | --- | --- |
+| `qb_enqueue_expense` | `status='approved' AND OLD.status IS DISTINCT FROM 'approved' AND qb_purchase_id IS NULL` | **only via un-approve → re-approve** |
+| `qb_enqueue_invoice` | `status='sent' AND OLD.status IS DISTINCT FROM 'sent'` | only via sent → draft → sent |
+| `qb_enqueue_expense_payment` | `AFTER INSERT` only | **no** — payments are immutable |
+
+So an ordinary edit re-enqueues nothing (both update arms require the `qb_*_id` that the orphan is
+missing). It takes a deliberate status round-trip — which is exactly what someone does when a sync
+has visibly failed.
+
+**The durable signal already exists and is not consulted.** `markRecordFailed()`
+(`worker.ts:341`, via `RECORD_TABLE_FOR_ENTITY`) sets `qb_push_status = 'failed'` **on the entity**
+on every terminal outcome. Gating on `row.attempts > 0 || <entity>.qb_push_status === 'failed'`
+closes it, and the two are complementary: `attempts` survives when the row is unwritable (a different
+table), `qb_push_status` survives when the queue row is replaced.
+
+### 🟠 R3 — adoption matches on the marker **plus `TxnDate`**, and one of those can move
+
+`adoptExistingByMarker()` cannot filter on the memo — `PrivateNote` is not a filterable field in
+Intuit's query language — so it filters `WHERE TxnDate = …` and scans the page for the marker.
+That makes `TxnDate` part of the key:
+
+| handler | key field | mutable between attempts? |
+| --- | --- | --- |
+| `handleInvoiceCreate` | `DocNumber` ← `invoices.invoice_number` | **no** — frozen by `enforce_invoice_immutability`, and drafts are refused |
+| `handleExpensePaymentCreate` | `paid_date` | **no** — frozen by `enforce_expense_payments_column_scope` |
+| `handlePurchaseCreate` | `expenses.expense_date` | ⚠️ **YES** — not in `enforce_expenses_column_scope`'s frozen list, and Owner/Admin bypass it entirely |
+
+**So editing an expense's date between the failed push and the retry sends the adoption query to the
+wrong day, it finds nothing, and a second Purchase is created.** The window is human-length, because
+a terminal failure does not auto-retry.
+
+### R9 / concurrency — pre-existing, not a regression
+
+`markInFlight` is a reclaim clock, not a lock (`queue.ts` says so; `STALE_IN_FLIGHT_MS` is 10 min
+against a 5-min cron). Two overlapping drains can both claim the same row, and **adoption does not
+help — both see `attempts = 0`.** `worker.ts`'s own header already records this residual window.
+Recorded so the review does not imply the markers closed it.
+
+### Marker collision — checked, and there is none
+
+`linkMarker()` embeds the row's UUID, and `adoptExistingByMarker` only ever queries the currently
+connected realm. Two companies cannot share a realm (`companies.qb_realm_id`), and a reconnect to a
+different realm finds nothing and correctly creates. The CDC id (`syntheticEventId`) is separately
+realm-scoped because `intuit_event_id` is globally unique.
+
+---
+
+## 2 · The nine writers — is the classification right?
+
+All nine route through `recordLink()`, which returns **`{ kind: 'terminal' }`** on any error;
+`worker.ts` maps that to `markFailed(retryable = false)` **plus** `markRecordFailed()`.
+
+**Terminal is the right call, and the reason is asymmetric risk, not the failure's nature.** The
+QuickBooks object already exists. Classifying transient would auto-retry every 5 minutes; each retry
+is a fresh `POST` and QuickBooks has no PUT. Adoption is the only thing standing between that and a
+duplicate — and R2/R3 show adoption is not unconditional. **Terminal is the direction whose worst
+case is delay; transient's worst case is a duplicate financial record.**
+
+The prompt's counter-concern — *"a transient failure classified terminal drops work silently"* — is
+half right and the half that is wrong matters:
+
+- **Not silent:** `markRecordFailed()` sets `qb_push_status = 'failed'` on the invoice / expense /
+  payment itself, which those screens read.
+- **But R8: not notified either.** Only `park` calls `notifyParked()`. A terminal orphan produces a
+  record-screen state and a log line, and nothing reaches a person who is not already looking.
+
+Every other classification in the branch is unchanged from `main` and was reviewed for consistency:
+"no id returned" → terminal (correct — Intuit accepted but told us nothing, a retry would duplicate);
+`totalMismatch` → terminal (correct — the object is wrong in the books and must not be re-pushed);
+missing income item / customer conflict / unmapped account → **park** (correct — a person must answer
+something, and the row stays `queued`).
+
+---
+
+## 3 · FINDING 3-A — what is actually in the tree
+
+**The test passes, and what it asserts is TRUE.** It is not an inverted shell asserting a false
+premise. `test/s104-queue-dependency-propagation.live.ts` case 2 now:
+
+1. creates a dependency and a dependant;
+2. **checks the delete's own error** (`expect(delError).toBeNull()` — "the delete failed, so this
+   test proves nothing");
+3. **re-reads `depends_on_id` and asserts it is NULL**, proving `ON DELETE SET NULL` fired before
+   drawing any conclusion from it;
+4. asserts the dependant is claimable and still `queued`.
+
+Verified against `pg_constraint`: `depends_on_id uuid REFERENCES qb_sync_queue(id) ON DELETE SET NULL`.
+The assertion matches the database.
+
+**R11:** the corresponding defensive branch in `claimDue` (`dead.set(id, '… no longer exists')`) is
+therefore **unreachable and untested**. It is kept deliberately, as the guard for a future FK change,
+and the code comment says so — but a reader skimming could take it for live behaviour.
+
+---
+
+## 4 · F8 — fixed, with two boundaries missing
+
+`WARN_AT_DAYS` is now `[1, 7, 30]` (ascending) and `find(d => daysLeft <= d)` returns the tightest
+match. Verified by the 7 passing cases.
+
+| boundary the brief names | asserted? |
+| --- | --- |
+| 31 → none | ✅ |
+| 30 → 30 | ✅ |
+| **8 → 30** | ❌ **missing** |
+| 7 → 7 | ✅ |
+| **2 → 7** | ❌ **missing** |
+| 1 → 1 | ✅ |
+| 0 (deadline == now) → none | ✅ |
+| negative | ✅ (−1 and −400) |
+
+**R10.** Also covered beyond the brief: `null`, five-years-out, a few-hours-out (`ceil` → 1), and an
+unparseable date.
+
+---
+
+## 5 · The CDC backstop
+
+| claim | verdict |
+| --- | --- |
+| hourly cadence enforced against `qb_cdc_polled_at`, not every 5 min | ✅ `cdc-backstop.ts:156` — returns before any network call when `now − lastPolled < CDC_INTERVAL_MS` |
+| cursor advances **only** on success | ✅ for a failed **poll** — the `catch` at `:169` returns at `:175`, before the update at `:247`. ⚠️ **R4 below for a partial failure** |
+| first poll bounded, not to the beginning of time | ✅ `CDC_FIRST_LOOKBACK_MS` = 7 days at `:159` |
+
+### 🟠 R4 — "only on success" is true of the poll and not of the recovery
+
+Inside the per-payment loop, an `insert` that fails with anything other than `23505` logs and
+`continue`s — **and the cursor is still advanced at the end of the function.** That payment falls
+outside every future `changedSince` window and is never re-offered. It is precisely the failure mode
+the migration header says a backstop must not have, one level below where I checked for it.
+
+### 🟠 R5 — the recovery loop is entirely untested, and the numbers say so
+
+Measured on the sandbox this pass:
+
+| | count |
+| --- | --- |
+| Payment objects returned by a 90-day CDC query | **0** |
+| `qb_webhook_events` rows | **0** |
+| `client_payments` with a `qb_payment_id` | **0** |
+
+So `s104-cdc-backstop.live.ts` proves the **call**, the **cadence gate** and the **cursor** — and
+runs **zero rows** through the `client_payments` check, the `qb_webhook_events` check, the insert, or
+the `23505` path. `s104-cdc-parser.test.ts` covers extraction from a populated fixture; **nothing
+covers the decision loop.** By this project's own rule that is a failing test, not a passing one, and
+I am naming it rather than letting "11 passed" stand for it.
+
+---
+
+## 6 · The vendor map
+
+**The upsert works against the plain constraint.** Verified live: the mapping row is written, and
+case 2 builds a fresh drain context and asserts `qb_read_budget` does not move — the metered read is
+paid once, not once per drain. Confirmed against `pg_indexes` / `pg_constraint`: only
+`qb_vendor_map_company_realm_supplier_key` (plain UNIQUE) exists; `idx_qb_vendor_map_one_live` is gone.
+
+- **R6** — but `entities.ts:222` still says *"`idx_qb_vendor_map_one_live` makes at most one live row
+  match this predicate"* and `:264` says *"`upsert` on the live-row index"*. **Both name an index that
+  `20261530000000` dropped**, in comments justifying why a `.limit(1)` is safe. The reasoning still
+  holds (the plain UNIQUE is stricter), but the citation is to a dead object.
+- **R7** — a failed upsert surfaces **only** as `console.error('[qb-vendor] …')`. Nothing counts it,
+  nothing shows it. That is the same invisibility that let the partial-index defect survive a whole
+  session, still in place around the fixed write.
+
+---
+
+## 7 · Build and test — printed exit lines, re-run this pass
+
+```
+no dev server running (required before next build)
+NEXT_BUILD_EXIT=0
+
+VITEST_UNIT_EXIT=0
+ Test Files  81 passed (81)
+      Tests  1108 passed (1108)
+failure-marked lines: 0
+
+VITEST_LIVE_EXIT=0
+ Test Files  4 passed (4)
+      Tests  11 passed (11)
+failure-marked lines: 0
+```
+
+Each is the exit status of the command itself, captured on the line after it, with an independent
+tally (`✘`/`×` line count) beside it.
+
+### Rows each live test actually exercised — the vacuity audit
+
+| file | rows exercised | vacuous? |
+| --- | --- | --- |
+| `s104-queue-dependency-propagation` | creates **8** queue rows (2 per case) and claims over the tenant's **6** live ones | **No** — every assertion touches rows it created |
+| `s104-vendor-map` | creates **1** mapping row; case 2 asserts the read-budget counter does not move | **No** |
+| `s104-qb-discovery` | fetches the live document, compares **3** endpoint fields | **No** — and it fails rather than skips if the fetch fails |
+| `s104-cdc-backstop` | cadence ✅, cursor ✅, budget ✅ — but **0** Payments, **0** webhook events | ⚠️ **PARTLY — see R5** |
+
+**Post-run state, measured:** queue 6 rows / **0** `S104-TEST` residue; `qb_vendor_map` 0 rows /
+**0** probe residue; connection `connected`.
+
+---
+
+## 8 · Left behind — clean
+
+| | |
+| --- | --- |
+| `apps/web/test/zz-s104-tmp-refresh.live.ts` | **gone** — and `git log --all` shows it was never committed |
+| untracked / ignored strays (`--untracked-files=all`) | **none** |
+| `scripts/live-sql.mjs` pin | `REQUIRED_REF = 'nmyphyhmfttxkdoposvf'` (rebuild-test), **unchanged by this branch** — `git diff main..HEAD -- scripts/` is empty |
+
+Scratchpad files live under `/tmp/claude-…/scratchpad` and are outside the repo; nothing from them is
+staged or tracked.
