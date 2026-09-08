@@ -150,3 +150,46 @@ RULED → the primary ASK.
 Next: Phase 2 — one ASK message.** Contradictions surfaced: agent B's "inferred" (→
 corrected to explicit); the Part-A "cosmetic" premise (ContractSection carries rates →
 ASK-A.3); the RULED "line-item total" vs per-row reality (→ the primary Part-B ASK).
+
+## Phase 2 — Josh's rulings (all Option 1) + follow-ups
+
+- **ASK-A.3 → carry the whole ContractSection minus the heading** (Part A stays cosmetic).
+- **ASK-B.0 → per-ROW total, back-solve markup** (both directions write markup_percent).
+- **ASK-C.1 → EDIT rights** (own draft) to upload; a sent estimate is a separate ruling.
+- **ASK-C.3 → sub uploads visible to the authoring PM** (+ owner/admin).
+- Moot/defaulted, confirmed in prose: ASK-A.1 (no box hides), ASK-A.2 (desktop-only, no
+  collapse), ASK-B.1 (override already explicit), ASK-B.2 (round — markup absorbs it),
+  ASK-C.2 (view-only estimate → files read-only, consistent with EDIT-to-upload).
+
+### Follow-up 1 (Part A) — RESOLVED by measurement
+Josh: confirm what the full-width Contract box looks like when the projected value/rates
+are absent. From `contract-section.tsx`: **fixed_price (any role)** → contract-type
+selector only; **cost-plus/T&M + PM (not owner/admin)** → type + a "rates are
+Owner/Admin only" note; **cost-plus/T&M + owner/admin** → type + rate fields +
+missing-rates warning + Projected value + notes. It is the FULL-WIDTH TOP box (above
+row 1), not part of a two-column row, so its variable height never disturbs the
+two-column rows below. No layout ASK remains.
+
+### Follow-up 2 (Part B) — `total_price_override` lifecycle — MEASURED, needs a ruling
+- **What writes it:** `updateEstimateLineItem(line.id, {total_price_override})` from the
+  LINE-ITEM TOTAL editor (`items-tab.tsx:735-745`), rendered on **every** line item, plus
+  the revert-to-null button (:754). Also the `applyLineOverride` service path
+  (estimate-items-client.ts:226).
+- **What reads it (load-bearing):** `recalculateEstimateTotals` (override wins),
+  `estimate-totals` (`total_price = override ?? computed`), **`estimate-line-billing.ts:52`
+  (`sell = total_price_override ?? total_price` — the AGREED SELL PRICE for invoicing)**,
+  `estimate-health.ts:88` (override_cost counted only for ROWLESS override lines),
+  `proposal-data.ts:263` (proposal render), `convert-to-project.tsx:193` + the convert
+  function's flat-priced budget path.
+- **Reachable in the UI today: YES** — the line-item total is already editable on every
+  line via `total_price_override` (flat; bypasses the rows).
+- **The drift, present today:** on a line WITH rows, a flat override decouples the line
+  total from the row markups → Estimate Health/margin diverge. This is exactly what
+  Josh's per-row ruling exists to prevent, and `total_price_override` still offers it.
+- **The reconciliation options** (→ ASK to Josh): rowless flat-priced lines genuinely
+  NEED a line-level total (`total_price_override` + `override_cost`), so it cannot simply
+  be deleted. The clean split is: line WITH rows → per-row totals editable, line total is
+  the READ-ONLY sum (no `total_price_override` offered); line WITHOUT rows → keep
+  `total_price_override` as today. That yields exactly one editable total per line.
+  ⚠️ Existing rowed lines that already carry an override would need a one-time decision
+  (revert to computed, or grandfather).
