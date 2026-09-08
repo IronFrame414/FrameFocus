@@ -293,3 +293,15 @@ override-clear (`total_price_override = NULL, override_cost = NULL`, one stateme
 the RPC's insert-row branch, before the row insert (so the rows-trigger sees a cleared parent).
 
 **These are the Part B build contract. Building Part A first (cosmetic), alone.**
+
+## Phase 3 — Part A BUILT (cosmetic), committed alone
+
+Reordered `details-tab.tsx` left column to the RULED layout: ContractSection full-width
+at top (its "Contract" heading + maxWidth removed in `contract-section.tsx`, all children
+— type + rates + projection — intact), Row 1 = Client | Proposal format (1fr 1fr grid),
+Row 2 = Pricing basis | (The Job over Whole-estimate discount, stacked). SigningActivity
+unchanged at the bottom; right rail / tab strip / sticky bar untouched. No query,
+permission, or migration change — cosmetic confirmed. tsc exit 0; `next build` exit 0
+(estimates route compiled). Committed path-scoped, pushing now.
+
+**PART A COMPLETE.** Parts B and C may now start (A is committed + pushed).
