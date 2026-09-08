@@ -277,3 +277,53 @@ require NO migration (UI, client-side capture wiring, and housekeeping
 respectively). If ASK-6.A defers item 6, this spec needs ZERO migrations. Either
 way, CC applies migrations to rebuild-test ONLY; no fifth attended production push
 originates from CC in Phase 3.
+
+### Step 7 — item T (TECH_DEBT classification) — measured, arithmetic reconciled
+
+**Current state (measured, top-level `- **#` entry lines):**
+- `TECH_DEBT.md` (OPEN): **186** entries
+- `TECH_DEBT_CLOSED.md`: **34** entries
+- `TECH_DEBT_IDEAS.md`: **3** entries
+- **Total = 223** ✓ (matches the spec's "Total conserved at 223")
+
+**⚠️ Reconciling the spec's "CLOSED 69, IDEAS 11, OPEN 106".** 69+11+106 = **186**,
+NOT 223 — so these are NOT final file totals. They are the **partition of the 186
+current OPEN entries**: 106 stay OPEN, 69 are classified CLOSED and moved, 11 are
+classified IDEAS (deferred decisions) and moved. Final file totals then become:
+- OPEN 106, CLOSED 34+69 = **103**, IDEAS 3+11 = **14** → **106+103+14 = 223 conserved.**
+
+This is the only reading that conserves 223 and matches OPEN's current 186. Recorded
+so Phase 3 counts against the right target (final OPEN must land at exactly 106).
+
+**⚠️ The per-entry classification was LOST and is NOT purely mechanical.** Only **38**
+of the 186 OPEN entries carry a headline closure marker (✅ / CLOSED / WON'T BUILD /
+NOT A DEFECT / RESOLVED / SUPERSEDED). Reaching 69 requires ~31 further closures
+judged from each entry's BODY (text saying the work shipped/was built/was ruled a
+non-defect). That judgment is the lost analysis. **Independent re-derivation may not
+reproduce exactly 69/11** — and the spec's own rule is "Count before and after; if
+any count is off by one, STOP." So Phase 3 for item T proceeds only if the
+re-derived partition lands on 106 OPEN / 69→closed / 11→ideas; any deviation is a
+STOP-and-report, not a silent adjustment.
+
+**Josh's preserved rulings all verified present:**
+- The 5 stay-OPEN entries (`#31`, `#54`, `#77`, `#150`, `#1-trial`) each exist as a
+  live OPEN entry. ✓
+- Accepted dual-file entries (`#110`, `#131`, `#151` split; `#8`/`#10`/`#12`/`#13`/`#50`
+  pre-existing in two files) mean the 223 has accepted, documented fuzz — hitting an
+  exact grand total tolerates these known duplications.
+- 6 pointer blockquotes to keep — Phase 3 execution detail.
+
+### Step 8 — the "four stale claims" (spec §"Four stale claims") — all verified
+
+1. *"Item 5 is the largest remaining UI gap / four of six conform"* — CORRECTED:
+   **five** conform (contacts is the fifth); the three to build stand.
+2. *"clock→job routing already works, verify it"* — CONFIRMED FALSE: it does not
+   exist; `projectInContext()` never reads the clock. Item 7 is new wiring.
+3. *"No image input sets `capture`"* — CONFIRMED FALSE: set at five sites.
+4. *"#118: there is NO offline queue"* — CONFIRMED FALSE: `offline-sync` exists and
+   capture uses it offline; the real gap is narrower (online-branch weak-signal
+   failure is not auto-queued) — and I refined PREV's "unhandled rejection" wording
+   (there is none; `uploadFile` returns structured errors).
+
+**Phase 1 measurement complete.** Next: fill the spec's FILL markers in place, then
+Phase 2 (one questions message: ASK-6.A, ASK-7.A/B/C, plus the production-count FYI).
