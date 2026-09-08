@@ -138,11 +138,43 @@ beforeAll(async () => {
   pmSessionId = (sess as { id: string }).id;
 });
 
+// S105b item 10 (FILL-10.2) — CLEANUP MUST BE INDEPENDENT AND ALWAYS ATTEMPTED.
+//
+// ⚠️ RESIDUAL EXPOSED WINDOW, STATED PLAINLY. These tests write
+// `qb_connection_state: 'disconnected'` to the two shared LIVE QA tenants inside
+// their `it` bodies and rely on THIS afterAll to put the snapshot back. A hard
+// process kill (OOM, a Codespace restart, `kill -9`) between a disconnect write
+// and this hook leaves that tenant `disconnected`. That window CANNOT be closed
+// by a per-test `afterEach` restore: S148-Q1's second `it` asserts against the
+// `qb_realm_id` its first `it` wrote, so restoring between `it`s would break the
+// file's own assertions. The fix is therefore (a) make every cleanup step
+// independent so one failure cannot strand the others, and (b) name the manual
+// repair: re-run this file (its afterAll restores both tenants), or reconnect the
+// tenant by hand. This mirrors s149's S188 lesson — a half-finished restore is
+// worse than none.
 afterAll(async () => {
-  await restore(companyA, priorA);
-  await restore(companyB, priorB);
-  for (const id of madeSecretIds) await admin.rpc('qb_vault_forget', { p_secret_id: id });
-  if (pmSessionId) await admin.from('time_clock_sessions').delete().eq('id', pmSessionId);
+  const steps: Array<[string, () => PromiseLike<unknown>]> = [
+    ['restore companyA', () => restore(companyA, priorA)],
+    ['restore companyB', () => restore(companyB, priorB)],
+    ...madeSecretIds.map(
+      (id) => [`vault_forget ${id}`, () => admin.rpc('qb_vault_forget', { p_secret_id: id })] as [string, () => PromiseLike<unknown>]
+    ),
+    ...(pmSessionId
+      ? [['delete PM session', () => admin.from('time_clock_sessions').delete().eq('id', pmSessionId)] as [string, () => PromiseLike<unknown>]]
+      : []),
+  ];
+  const failures: string[] = [];
+  for (const [label, run] of steps) {
+    try {
+      await run();
+    } catch (e) {
+      failures.push(`${label}: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+  if (failures.length > 0) {
+    // Surface, do NOT swallow — a stranded live tenant must be visible, not silent.
+    throw new Error(`S148 afterAll cleanup left work undone (repair by hand): ${failures.join('; ')}`);
+  }
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

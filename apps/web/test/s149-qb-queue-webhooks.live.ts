@@ -183,9 +183,24 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  if (madeQueue.length) await admin.from('qb_sync_queue').delete().in('id', madeQueue);
-  if (madeEvents.length) await admin.from('qb_webhook_events').delete().in('id', madeEvents);
-  if (madeBudget.length) await admin.from('qb_read_budget').delete().in('id', madeBudget);
+  // S105b item 10 (FILL-10.2) — independent deletes so one failure cannot skip
+  // the others. The connection-state restore for S149-E now lives in that test's
+  // own `finally`, not here; a hard process kill mid-`it` is the only residual
+  // window, repaired by re-running the file or reconnecting the tenant by hand.
+  const steps: Array<[string, () => PromiseLike<unknown>]> = [
+    ...(madeQueue.length ? [['qb_sync_queue', () => admin.from('qb_sync_queue').delete().in('id', madeQueue)] as [string, () => PromiseLike<unknown>]] : []),
+    ...(madeEvents.length ? [['qb_webhook_events', () => admin.from('qb_webhook_events').delete().in('id', madeEvents)] as [string, () => PromiseLike<unknown>]] : []),
+    ...(madeBudget.length ? [['qb_read_budget', () => admin.from('qb_read_budget').delete().in('id', madeBudget)] as [string, () => PromiseLike<unknown>]] : []),
+  ];
+  const failures: string[] = [];
+  for (const [label, run] of steps) {
+    try {
+      await run();
+    } catch (e) {
+      failures.push(`${label}: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+  if (failures.length > 0) throw new Error(`S149 afterAll cleanup left rows: ${failures.join('; ')}`);
 
   // ⚠️ THE THREE `update({ qb_*: null })` LINES THAT STOOD HERE ARE GONE
   // [S188]. Superseded text, quoted rather than deleted:
@@ -512,33 +527,48 @@ describe('S149-E — needs_reauth KEEPS QUEUEING [Josh, S148]', () => {
     expect(secretId.error, `qb_vault_put: ${secretId.error?.message}`).toBeNull();
     expect(secretId.data, 'no secret id came back').toBeTruthy();
 
-    const { error: stateError } = await admin.from('companies').update({
-      qb_realm_id: `${MARKER}-reauth-realm`,
-      qb_token_secret_id: secretId.data as unknown as string,
-      qb_connection_state: 'needs_reauth',
-    }).eq('id', companyA);
-    expect(
-      stateError,
-      'the company never reached needs_reauth, so everything below is vacuous'
-    ).toBeNull();
+    // ⚠️ S105b item 10 (FILL-10.2) — the restore now lives in a `finally`. Before
+    // this it ran as the last statements of the test body, so ANY assertion below
+    // that failed skipped it and left companyA stranded in `needs_reauth` on the
+    // shared live tenant — the exact exposed window FILL-10.2 names. Wrapping the
+    // mutation-through-assertions in `try` and the restore in `finally` closes the
+    // common case (a failed assertion); only a hard process kill can still strand
+    // it, and that is documented in this file's afterAll note.
+    try {
+      const { error: stateError } = await admin.from('companies').update({
+        qb_realm_id: `${MARKER}-reauth-realm`,
+        qb_token_secret_id: secretId.data as unknown as string,
+        qb_connection_state: 'needs_reauth',
+      }).eq('id', companyA);
+      expect(
+        stateError,
+        'the company never reached needs_reauth, so everything below is vacuous'
+      ).toBeNull();
 
-    // Existing work is untouched…
-    const { data: still } = await admin
-      .from('qb_sync_queue').select('status').eq('company_id', companyA).eq('status', 'queued');
-    expect((still ?? []).length, 'queued work vanished when the connection broke').toBeGreaterThan(0);
+      // Existing work is untouched…
+      const { data: still } = await admin
+        .from('qb_sync_queue').select('status').eq('company_id', companyA).eq('status', 'queued');
+      expect((still ?? []).length, 'queued work vanished when the connection broke').toBeGreaterThan(0);
 
-    // …and NEW work still enqueues.
-    const { error } = await enqueue({
-      entity_type: 'payment', entity_id: invoiceId, operation: 'create',
-      realm_id: `${MARKER}-reauth-realm`,
-    });
-    expect(error, 'a needs_reauth connection refused new work').toBeNull();
-
-    await admin.from('companies').update({
-      qb_connection_state: 'disconnected', qb_realm_id: null, qb_token_secret_id: null,
-    }).eq('id', companyA);
-    await admin.from('companies').update(prior).eq('id', companyA);
-    await admin.rpc('qb_vault_forget', { p_secret_id: secretId.data as unknown as string });
+      // …and NEW work still enqueues.
+      const { error } = await enqueue({
+        entity_type: 'payment', entity_id: invoiceId, operation: 'create',
+        realm_id: `${MARKER}-reauth-realm`,
+      });
+      expect(error, 'a needs_reauth connection refused new work').toBeNull();
+    } finally {
+      // disconnected-first then the snapshot (the shape CHECK refuses a partial
+      // restore); the scratch secret is forgotten last. Each independent so one
+      // failure cannot skip the rest.
+      try {
+        await admin.from('companies').update({
+          qb_connection_state: 'disconnected', qb_realm_id: null, qb_token_secret_id: null,
+        }).eq('id', companyA);
+        await admin.from('companies').update(prior).eq('id', companyA);
+      } finally {
+        await admin.rpc('qb_vault_forget', { p_secret_id: secretId.data as unknown as string });
+      }
+    }
   });
 });
 
