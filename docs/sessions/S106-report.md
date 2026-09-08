@@ -224,3 +224,49 @@ two-column rows below. No layout ASK remains.
 **Phase 2 COMPLETE.** All ASKs ruled; the one owed measurement (production override count)
 is blocked by the standing no-prod-read constraint and handed to Josh. Next: audit, then
 **Part A build (cosmetic, ships first and alone)**.
+
+## Phase 2b — DB invariant supersedes grandfather+flag [RULED Josh]
+
+Josh ran production: **0 rowed lines carry total_price_override on BOTH rebuild-test and
+production.** Nothing to exempt → the rule goes in VALID, unconditionally. Grandfather+flag
+SUPERSEDED. Rule: **a line item with rows cannot carry total_price_override.**
+
+**1. Expressibility — TRIGGERS, not a CHECK.** A CHECK is row-local and cannot subquery
+`estimate_line_rows`; Postgres forbids subqueries in CHECK. The cross-table invariant
+needs triggers (CLAUDE.md's cross-table pattern). TWO, one per direction, both SECURITY
+DEFINER (count/read regardless of RLS):
+- `estimate_line_items` BEFORE INSERT OR UPDATE: if `NEW.total_price_override IS NOT NULL
+  AND EXISTS(rows for NEW.id)` → RAISE. (INSERT is safe — a new line has no rows yet.)
+- `estimate_line_rows` BEFORE INSERT OR UPDATE OF line_item_id: if the target line has
+  `total_price_override IS NOT NULL` → RAISE.
+
+**2. Both directions covered.** Direction A (set override on a rowed line) = the items
+trigger. Direction B (add/reparent a row onto an overridden line) = the rows trigger. ✓
+
+**3. Errors + surface.** Items trigger: *"A line with itemized rows cannot carry a manual
+total — edit the row totals, or remove the rows first."* Rows trigger: *"Clear this line's
+manual total before adding itemized rows."* Both propagate as the write's error into the
+client `mutate()` → `setError` on the items screen. With Part B's UI (rowed line total is
+read-only; override editor only on rowless lines) the user rarely hits these — the triggers
+are the DB backstop.
+
+**4. Existing code paths.**
+- ⚠️ **`set_winning_bid` WOULD FAIL** (`20261220000000:125-137`): when a line has 0
+  subcontractor rows, awarding a bid **INSERTs a sub row**. If that line carries an
+  override (a flat-priced line the estimator sent to bid), the rows trigger blocks the
+  insert → award fails. **Required handling in the migration: `set_winning_bid` must CLEAR
+  `total_price_override` (and `override_cost`) on the line in its insert-row branch —
+  awarding a bid itemizes the line, so the flat total no longer applies.** This is a change
+  to a money function and is part of the rule's migration.
+- **`clone_estimate_line` SAFE** (baseline:205-218): inserts the line (override copied)
+  then rows. Post-rule no source line has both, so a clone never inserts rows onto an
+  override line. (It would fail only on a pre-existing violator; there are none.)
+- **`convert_estimate_to_project` SAFE**: reads lines/rows → project budget; never inserts
+  estimate rows nor sets an estimate override.
+- **Change orders (`apply_change_order_budget`) SAFE**: operate on CO/project-budget
+  tables, not `estimate_line_items`/`_rows`.
+
+**FILL-X.1 UPDATED:** S106 now DOES add a migration — the two invariant triggers + the
+`set_winning_bid` override-clear — and therefore an **attended production push** (Josh's).
+Applied to rebuild-test by CC; production by Josh. Part B (per-row back-solve UI) rides on
+top; the grandfather+flag UI is NOT built.
