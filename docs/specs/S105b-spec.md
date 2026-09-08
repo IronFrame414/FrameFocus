@@ -1,6 +1,9 @@
-# S105b — SPEC (skeleton)
+# S105b — SPEC
 
-**Status: INCOMPLETE. This is a scaffold, not a spec.**
+**Status: COMPLETE & AUDITED [S105b, Phases 1–2]. Phase 3 may build.** All FILL
+markers measured (two production-only reads PARTIAL with reasons), all PREV lines
+confirmed/corrected, all four ASKs ruled by Josh in Phase 2. See AUDIT RESULTS at
+the bottom. Original scaffold notes retained below unchanged.
 
 **RULED** = settled. Do not re-litigate.
 **FILL-n** = a hole CC measures and fills in place.
@@ -354,6 +357,34 @@ FILL-6.1 or the audit may add a better one:
 
 ⚠️ **Do not proceed past this ASK unattended.** It is stop rule 2.
 
+### ✅ RULED [Josh, S105b Phase 2] — OPTION 1, the three-arm CHECK
+
+**Item 6 builds the three-arm model.** Add `files.estimate_id UUID` (nullable, FK to
+`estimates(id)`), and a **hard, VALID** CHECK constraint:
+
+> exactly one of `project_id` / `estimate_id` is non-null, **OR** the row is
+> company-level — `category IN ('contracts','lien_releases')` with **both** null.
+
+**Beat:** option 2 ("at most one") — rejected because it re-permits the ownerless row
+the original ruling existed to forbid; and option 3 (defer) — unnecessary now that
+FILL-6.1/6A.5 proved the company-level arm is expressible by `category` and the 178
+rows are design, not a missing association.
+
+**Build constraints carried from RULED/measurement:**
+- VALID, never NOT VALID (S104's lesson). The CHECK must pass on all 326 existing
+  rows — it does, because every existing null/null row is `contracts`/`lien_releases`.
+- ⚠️ **Before Josh applies this to production**, production's null-project category
+  distribution must be confirmed to be ONLY `contracts`/`lien_releases` (FILL-6A.6).
+  CC applies to rebuild-test only; CC never pushes this migration to production.
+- `estimate_id` FK: `ON DELETE SET NULL` is wrong here (the file would become
+  ownerless and violate the CHECK). Use `ON DELETE CASCADE` OR block estimate delete
+  while files exist — decide at build from how estimates are deleted (soft-delete
+  today, so CASCADE is likely moot; confirm in Phase 3 before choosing).
+- Estimate-file INSERT for the sub-upload path uses the service role behind the
+  SECURITY DEFINER token RPC (stop rule 4 cleared), so it does not need a new
+  authenticated INSERT arm; but the CHECK still governs it. The 25 MB / mime cap stays
+  in the route, not the bucket.
+
 ---
 
 # ITEM 7 — burst photo capture
@@ -442,6 +473,32 @@ the time. This decides whether the feature is usable or merely faster.**
 
 **ASK-7.C** — If not clocked in and the user **dismisses** the end-of-batch
 picker, the photos exist with no `project_id`, which §7a forbids. What happens?
+
+## ✅ RULED [Josh, S105b Phase 2]
+
+- **ASK-7.A — APPROVED as ruled.** Add the open clock segment as a THIRD project
+  source. **Precedence: URL path `/m/p/{id}` > `?project=` > open clock segment >
+  null.** Stated in the spec and TESTED (a live test asserting each precedence rung,
+  including the clock-wins-over-null and URL-wins-over-clock cases). A clocked-in
+  field user's shot files silently (A-21b path). **What is lost / changes:** A-21's
+  ruled trigger — the null-prompt no longer fires for a clocked-in user; it fires only
+  when all three sources are null. The single-slot `PendingShot` becomes a LIST for
+  burst (per §2.5), and the §7a invariant (no INSERT without `project_id`) must hold
+  for EVERY shot in the list, not just the first. **Beat:** "keep A-21 prompt-always"
+  (rejected — a clocked-in user re-picking their job every batch is the friction burst
+  exists to remove).
+- **ASK-7.B — SURFACE & PROCEED.** Route burst shots through the existing
+  `offline-sync` queue (idempotent via `uploadFile`'s `id`), show **per-photo status**,
+  keep a failed shot HELD with a retry, and do **NOT** abort the rest — photos 1–3 and
+  5–7 proceed while photo 4 retries. Also close the measured gap: an **online-branch**
+  failure (weak signal, `navigator.onLine===true`) must now enqueue to offline-sync
+  rather than only surfacing an error for manual retry. **Beat:** block-the-batch and
+  drop-silently (the latter explicitly rejected by §2.5).
+- **ASK-7.C — KEEP HELD, NO INSERT.** On dismiss with pending shots and no clock, the
+  shots stay in the client-side hold in a visible **"needs a project"** state; nothing
+  is inserted until a job is chosen. Nothing lost, nothing §7a-illegal sent. **Beat:**
+  discard-on-dismiss (loses weak-signal jobsite photos) and mandatory-picker (a
+  usability trap when the user genuinely wants to defer).
 
 ---
 
@@ -627,3 +684,41 @@ Report the result of each line.
    is listed. The lost run found four; assume there are more.
 9. **Anything still unknown that the build will need.** If this list is not
    empty, the build is not ready.
+
+## ✅ AUDIT RESULTS [S105b] — PASS, build may start
+
+1. **Every FILL filled.** 24 FILL markers (0, 5.1–5.4, 6A.1–6A.6, 6.1–6.3, 7.1–7.7,
+   10.1–10.2, T, X.1–X.2). All filled by measurement except **FILL-6A.6 / FILL-6.3
+   (production counts)** and **FILL-10.1 (sandbox residue)**, each PARTIAL with a
+   one-line reason and neither blocking a Phase-3 build (see §Migrations and item 10).
+2. **Every PREV confirmed or corrected.** Anatomy path ✓; four-conform → **corrected
+   to five** (contacts); role sets differ ✓; no `#136` leak ✓; clock routing absent ✓;
+   five `capture` sites ✓; offline queue exists ✓; "unhandled rejection" **corrected**
+   (structured error, no throw); 178/326 counts ✓ (rebuild-test).
+3. **Every ASK ruled by Josh (Phase 2).** ASK-6.A → three-arm CHECK (beat "at most
+   one" / defer). ASK-7.A → approve clock source, precedence URL > ?project= > clock >
+   null (beat prompt-always). ASK-7.B → surface & proceed (beat block / drop). ASK-7.C
+   → keep held, no insert (beat discard / mandatory). ASK-5.A moot (per-table floors).
+4. **RULED-line contradictions:** ONE, non-blocking — RULED "four conform" vs measured
+   FIVE. The actionable ruling (build team/files/daily-logs; touch no conformer) is
+   unaffected, so item 5 builds. No other measurement contradicts a RULED line.
+5. **No cross-section contradiction.** Item 5 and item 6 use the SAME DB-RLS floor
+   mechanism (FILL-X.1). `PendingShot` treatment is consistent between FILL-7.2 (held
+   until a project exists) and ASK-7.C (held, no insert on dismiss).
+6. **Every interface/policy/migration named.** Six `files` policies quoted;
+   `estimates_select_authenticated`, `cost_catalog_select_manager`, `instrument_rates`
+   floor cited; the one migration (files.estimate_id + three-arm CHECK) specified.
+7. **Stop rules identified.** ASK-6.A and ASK-7.A both RESOLVED in Phase 2 → items 6
+   and 7 may build. Stop rule 4 (anon storage) cleared. Remaining live stop rules for
+   Phase 3: production DB (item 6 migration is rebuild-test only), item T count
+   divergence, destroying signed rows (never).
+8. **Contradicted handoff claims:** the four stale claims (§"Four stale claims") all
+   verified — plus two corrections found this pass: "four conform"→five, and PREV's
+   "unhandled rejection"→structured error.
+9. **Still unknown / build needs:** (a) production `files` category distribution —
+   needed only before a PRODUCTION apply of item 6's CHECK, which CC will not do;
+   (b) item T's per-entry closed/ideas partition must be re-derived to land exactly on
+   106/69/11 or STOP. Neither blocks starting Phase 3; both are gated in place.
+
+**Spec is COMPLETE and AUDITED. Phase 3 may begin.** Build order: 5 → 6 → 7 → 10 → T
+(spec order), committing and pushing after each discrete step.

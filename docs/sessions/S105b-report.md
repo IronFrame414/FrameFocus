@@ -327,3 +327,23 @@ STOP-and-report, not a silent adjustment.
 
 **Phase 1 measurement complete.** Next: fill the spec's FILL markers in place, then
 Phase 2 (one questions message: ASK-6.A, ASK-7.A/B/C, plus the production-count FYI).
+
+## Phase 2 — questions ruled
+
+Put all four ASKs to Josh in one AskUserQuestion call. He chose every recommended
+option:
+- **ASK-6.A → three-arm CHECK** (add `files.estimate_id`; VALID CHECK: exactly one of
+  project_id/estimate_id, OR company-level `category IN ('contracts','lien_releases')`
+  both null). Beat "at most one" and defer.
+- **ASK-7.A → approve clock source**, precedence URL > ?project= > clock > null;
+  changes A-21's trigger (clocked-in user files silently). Beat prompt-always.
+- **ASK-7.B → surface & proceed** (offline-sync queue, per-photo status, hold failed,
+  don't abort; also auto-queue online-branch weak-signal failures). Beat block / drop.
+- **ASK-7.C → keep held, no insert** ("needs a project" state on dismiss). Beat
+  discard / mandatory-picker.
+
+Spec updated with each RULED (+ the alternative it beat), AUDIT RESULTS completed
+(PASS), status banner flipped to COMPLETE & AUDITED. Committed and pushed.
+
+**Part 1 done. Beginning Part 2 (Phase 3, unattended): build order 5 → 6 → 7 → 10 → T,
+commit+push after each discrete step.**
