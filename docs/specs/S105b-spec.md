@@ -64,7 +64,10 @@ was worth more than the work it interrupted.
   Josh's Intuit credentials in a browser. A null `qb_realm_id` is not a defect.
 
 **FILL-0** — Confirm `main` is at `662b531` and the tree is clean. Report the tip
-if it moved.
+if it moved. **MEASURED [S105b]:** CONFIRMED — `main` = `662b531`, tree clean (only
+`docs/specs/S105b-spec.md` untracked at start). `origin/main` = `662b531`. Working on
+branch `feature/s105b`, pushed. Rebuild-test + local + production migration ledgers
+all = 215 rows, in sync.
 
 ---
 
@@ -135,6 +138,32 @@ class will recur. State the hook-placement rule the three screens must follow.
 
 **ASK-5.A** — None. Recorded as moot; see RULED above.
 
+## MEASURED [S105b] — full detail in `docs/sessions/S105b-report.md` Step 3
+
+- **FILL-5.1** — Anatomy CONFIRMED at `apps/web/components/list-screen/list-screen.tsx`
+  (`ListPageHeader`, `MetricStrip`, `AlertStrip`, `ListSearchInput`, `FilterChips`,
+  `Metric`; table not shared). ⚠️ **CORRECTED: FIVE conform, not four** — `contacts`
+  (14c) also wears it. The actionable rule (build the 3, touch none that conform) is
+  unaffected; the "six/four" bookkeeping is loose. Floors confirmed and role sets
+  DIFFER: estimates `estimates_select_authenticated` (PM own-only,
+  `created_by=auth.uid()`); cost catalog `cost_catalog_select_manager` (PM all,
+  foreman excluded). No `#136` leak on either.
+- **FILL-5.2** — team `/dashboard/team`
+  (`app/dashboard/team/team-page-client.tsx`, has `ListPageHeader` only); files
+  `/dashboard/projects/[id]/files` (`.../files/page.tsx`, bespoke, PROJECT-SCOPED);
+  daily logs `/dashboard/field-ops/[projectId]/daily-logs`
+  (`.../daily-logs/page.tsx`, bespoke, PROJECT-SCOPED). ⚠️ files & daily logs are
+  project-nested, not top-level nav lists.
+- **FILL-5.3** — NO money on files or daily logs (files: size/date/category/tags;
+  daily logs: date/author/hazard). Team's Burden / hr is the only money field, and
+  it is `instrument_rates`-floored (reflows to em-dashes for gated roles).
+- **FILL-5.4** — Hook rule: the team component is CURRENTLY compliant (all hooks
+  above the `if (loading)`/`if (error)` early returns). The lost run's 5 `next build`
+  errors were NEW `useMemo`s added AFTER those returns. **Rule: every hook — including
+  any new metric-deriving `useMemo` — goes above the first early return.** `tsc`
+  passes it; only `next build` catches it — run a production build before committing
+  item 5.
+
 ---
 
 # ITEM 6A — the `files` RLS audit
@@ -199,6 +228,37 @@ other.
 ⚠️ **These are signed artifacts. They are never destroyed.** Cleanup is not among
 the options, whatever the audit finds.
 
+## MEASURED [S105b] — full detail in `docs/sessions/S105b-report.md` Steps 1–2
+
+All policy text read from the live rebuild-test DB (`nmyphyhmfttxkdoposvf`).
+
+- **FILL-6A.1** — SELECT (`files_select_non_client`) has **NO company-wide arm for
+  non-owner/admin**. A `project_id IS NULL` row is readable **only by owner/admin**.
+  The 178 null-project rows are owner/admin-only. **Not a company-wide leak.**
+- **FILL-6A.2** — Contracts (and change_orders, invoices) are **excluded from the
+  non-owner/admin category arm entirely** — a gated role (PM/foreman/crew/sub)
+  **cannot SELECT a contract file at all.** The Floor holds on `files`. The gate is
+  in `qual`, so no `#136`-class payload leak.
+- **FILL-6A.3** — UPDATE (`files_update_non_client`) gates null-project rows the same
+  as SELECT: owner/admin-only for both read and write. **NOT the S104
+  readable-but-unwritable trap** (there, a role could read but not write; here read
+  and write are gated identically). Writer-error-check: every insert path checks its
+  error (see FILL-6A.5) — **no S104-class silent-ignore.**
+- **FILL-6A.4** — DELETE is owner/admin-only (`files_delete_owner_admin`); soft-delete
+  runs through UPDATE, likewise owner/admin-only for null-project rows. Coherent for
+  signed artifacts.
+- **FILL-6A.5** — ⚠️ **DESIGN, not a missing association.** Lien releases
+  (`api/lien-releases/generate/route.ts:267-285`) set `project_id: null` explicitly —
+  the release links to its invoice, which carries the project. Contracts
+  (`contracts-client.ts:263-279`, `proposal-service.ts:116-152`) likewise null by
+  design. **So ASK-6.A's answer is a third ownership arm, NOT a backfill.**
+- **FILL-6A.6** — ⚠️ **PENDING on production, no safe channel.** MCP is bound to
+  rebuild-test; the CLI link must not be repointed at production; no `.env.local`
+  exists; a hand-crafted credentialed prod connection is the forbidden probe class.
+  Rebuild-test counts below are authoritative for the build. **REQUIRED before any
+  production apply of item 6's CHECK:** confirm production's null-project categories
+  are ONLY `contracts`/`lien_releases`. CC will not push that migration to prod.
+
 ---
 
 # ITEM 6 — files tab + sub upload (`#5-estred`)
@@ -257,6 +317,25 @@ policy on `files`.
 **FILL-6.3** — Confirm the 178/326 counts on rebuild-test, and run the same count
 on **production**. The two databases differ; S104's retainage case had seven rows
 on rebuild-test and zero on production.
+
+## MEASURED [S105b] — full detail in `docs/sessions/S105b-report.md` Steps 1–2
+
+- **FILL-6.1** — ⚠️ **YES, expressible.** `files` has NO `estimate_id` column
+  (confirms the blocker). The company-level discriminator is **`category`**: the 178
+  null-project rows are **exactly** `contracts` (4) + `lien_releases` (174), and NO
+  other category ever has a null `project_id`. So a third ownership arm
+  `category IN ('contracts','lien_releases')` is clean. **This makes ASK-6.A option 1
+  (three-arm CHECK) the preferred, expressible fix.**
+- **FILL-6.2** — All six policies read (SELECT/UPDATE/DELETE/INSERT non-client +
+  INSERT/SELECT client). `files_insert_non_client` (verbatim, from
+  `20260822000000_m6m_subcontractor_photo_access.sql`): owner/admin may insert with
+  null `project_id`; every other role requires `project_id IS NOT NULL` plus a
+  category arm (invoices→PM-authored, or category NOT IN
+  (contracts,change_orders,invoices) with `can_view_project`). Full text in report
+  Step 1.
+- **FILL-6.3** — Rebuild-test counts CONFIRMED: 326 total, 178 null-project
+  (contracts 4 + lien_releases 174). **Production count PENDING** — same reason and
+  same required-before-apply gate as FILL-6A.6.
 
 ## ASK
 
@@ -320,6 +399,38 @@ the resulting state of photos 1–3, photo 4, photos 5–7, and what the user se
 
 **FILL-7.7** — The five `capture` sites (PREV). Confirm and name them.
 
+## MEASURED [S105b] — full detail in `docs/sessions/S105b-report.md` Step 4
+
+- **FILL-7.1** — `debt-split-ux-log.md` §2.5: burst NOT built; deferred. Ruled design:
+  replace the single slot with a LIST, accumulate without navigating, route burst
+  shots through the existing `offline-sync` queue (idempotent via `uploadFile` `id`),
+  per-photo status, keep failed shots held, don't drop, don't abort. **No RULED
+  contradiction.**
+- **FILL-7.2** — `PendingShot` `{file, projectId, takenAt}` at
+  `apps/web/app/m/capture-store.tsx:33-38`; `PendingShot | null`, single-slot,
+  overwritten by `hold()`. Single-slot because §7a/A-21c forbid a non-owner/admin
+  INSERT without `project_id`.
+- **FILL-7.3** — §7a at `docs/specs/M6M-mobile-pwa-spec.md:4073-4075`; RLS
+  `files_insert_non_client` requires `project_id IS NOT NULL` for every
+  non-owner/admin role.
+- **FILL-7.4** — A-21: prompt appears AFTER the shot when no project in context;
+  A-21b files silently with context; A-21c never submits without `project_id`. The
+  clock→job wiring adds a third project source, so a clocked-in field user files
+  silently (A-21b path) where today A-21's prompt would fire. That trigger change is
+  ASK-7.A.
+- **FILL-7.5** — Queue at `apps/web/app/m/offline-sync.tsx`; gate
+  `if (!navigator.onLine && offlineSync)` at `capture-screen.tsx:70`.
+  ⚠️ **PREV CORRECTED:** `uploadFile` returns a structured `{success:false}` and never
+  throws — **no unhandled rejection.** Real gap: weak signal → `navigator.onLine===true`
+  → ONLINE branch → `uploadFile` fails → error shown, shot HELD, manual retry only.
+  **An online-branch failure is not auto-queued.**
+- **FILL-7.6** — Burst doesn't exist, so no live multi-photo failure. Single-shot:
+  online fail → held for manual retry; offline → enqueued individually with backoff.
+  §2.5's ruled burst design is the target; ASK-7.B decides the UX.
+- **FILL-7.7** — Five `capture="environment"` sites CONFIRMED: `mobile-shell.tsx:553`,
+  `logs/new/log-form.tsx:359`, `punch/[itemId]/punch-actions.tsx:170`,
+  `safety/new/incident-form.tsx:328`, `deliveries/check-in/check-in-form.tsx:336`.
+
 ## ASK
 
 **ASK-7.A** — The two ruling changes. Each stated plainly: what was ruled, what
@@ -364,6 +475,31 @@ mid-test — a crash in that window severs the connection.** Read both, state th
 exposed window, propose a fix. If it cannot be fixed without losing what the test
 covers, say so.
 
+## MEASURED [S105b] — full detail in `docs/sessions/S105b-report.md` Step 5
+
+- **FILL-10.1** — ⚠️ **PARTIAL.** The sandbox residue lives in Intuit's SANDBOX tied
+  to the PRODUCTION connection, not in rebuild-test (whose `qb_vendor_map` /
+  `qb_webhook_events` / `qb_account_cache` are empty; `qb_sync_queue`=12,
+  `sync_conflicts`=204 are local test artifacts). A full inventory needs the QB API,
+  which touches the live connection — **forbidden this session.** Known from records:
+  Bills 147/149, Purchases 151/152/155/156, Vendor 77 (voidable, not deletable), plus
+  S104's additions. **Proposal: document, do NOT delete;** a future authorized session
+  reconciles against the sandbox.
+- **FILL-10.2** — `s148-qb-connection.live.ts` and `s149-qb-queue-webhooks.live.ts`
+  mutate the QB columns of two **shared live QA tenants** (`josh+test50@worthprop.com`,
+  `josh+qa-b-owner@worthprop.com`); they create no company. `restore()` sets
+  `qb_connection_state:'disconnected'` first, then re-applies the snapshot; individual
+  tests also write `disconnected` mid-run. **Exposed window:** first mutation →
+  `afterAll` restore; a crash there leaves the tenant `disconnected`/partial. s149
+  records a real S188 incident (nulled Karen Foster → Customer 62, duplicate-customer
+  risk, restored by hand). **Proposal:** wrap each mutating test's body so the
+  snapshot restore runs in a `finally`/per-test `afterEach` (not just `afterAll`), and
+  guard the `disconnected`-first write behind a try so a crash can't leave the tenant
+  severed — without changing what the tests assert. If a per-test restore can't cover
+  the webhook-processing assertions, say so and keep `afterAll` plus a documented
+  manual-repair note. **This is a test-hardening fix (no production DB, no migration)
+  — safe for Phase 3.**
+
 ---
 
 # ITEM T — the TECH_DEBT classification (redo)
@@ -395,6 +531,25 @@ accepted it.** Also pre-existing in both files before any pass: `#8`, `#10`,
 lost every entry, so it does not read as "this branch's debt vanished". **Josh
 ruled: keep them.**
 
+## MEASURED [S105b] — full detail in `docs/sessions/S105b-report.md` Step 7
+
+- **Current counts:** OPEN `TECH_DEBT.md` = **186**, CLOSED = **34**, IDEAS = **3**;
+  **total 223** ✓.
+- ⚠️ **"CLOSED 69, IDEAS 11, OPEN 106" is a PARTITION of the 186 OPEN entries**
+  (69+11+106 = 186), NOT final file totals. Final files become OPEN **106**, CLOSED
+  34+69 = **103**, IDEAS 3+11 = **14** → **223 conserved.** Phase 3 counts against
+  final OPEN = 106.
+- ⚠️ **Not purely mechanical.** Only **38** OPEN entries carry a headline closure
+  marker; reaching 69 needs ~31 body-judgment closures (the lost analysis). **If the
+  re-derived partition does not land on exactly 106 / 69 / 11, STOP and report** — do
+  not adjust to fit.
+- **Rulings verified present:** the 5 stay-OPEN (`#31`,`#54`,`#77`,`#150`,`#1-trial`)
+  all exist as live OPEN entries; the accepted dual-file entries
+  (`#110`/`#131`/`#151` split, `#8`/`#10`/`#12`/`#13`/`#50` pre-existing) mean the 223
+  carries documented, Josh-accepted duplication. 6 pointer blockquotes to keep.
+- **RENUMBER NOTHING; move verbatim; classify by ORDINAL.** This is heavy, error-prone
+  Phase 3 work — the biggest count risk in the session.
+
 ---
 
 # Cross-cutting
@@ -416,6 +571,25 @@ items 5 and 6 apply the same mechanism rather than two similar ones.
 **FILL-X.2** — Every migration this spec requires, with purpose. ⚠️ **If none,
 say none.** Item 6 is the only candidate and it is gated on ASK-6.A. Josh needs
 to know before the build whether a fifth attended production push is coming.
+
+## MEASURED [S105b] — full detail in `docs/sessions/S105b-report.md` Step 6
+
+- **FILL-X.1** — The floor's authority is per-table RLS SELECT keyed on
+  `get_my_role()`: `instrument_rates` (owner/admin), `project_financials_*_owner_admin`,
+  `project_budget_amounts_*_owner_admin`, `estimates_select_authenticated` (PM
+  own-only), `cost_catalog_select_manager` (PM all), and `files_select_non_client`'s
+  contract/CO/invoice exclusion. The UI companion is `budgetColumnsFor()`
+  (`apps/web/lib/services/invoices-shared.ts:472`) — a renderer helper, NOT the floor.
+  **Items 5 and 6 apply the SAME DB-RLS mechanism** (item 5 renders columns RLS
+  already gates; item 6's new arm is RLS + CHECK). No renderer-only gate introduced.
+- **FILL-X.2** — Exactly ONE migration candidate, **gated on ASK-6.A**: item 6's
+  `files.estimate_id` column + a three-arm CHECK
+  (`project_id XOR estimate_id`, OR company-level `category IN
+  ('contracts','lien_releases')` with both null). Items 5, 7, 10, T require NO
+  migration. **If ASK-6.A defers item 6, this spec needs ZERO migrations.** CC applies
+  migrations to rebuild-test ONLY; no fifth attended production push from CC in
+  Phase 3. **Production verification of the null-project category distribution is
+  required before Josh ever applies the CHECK to production.**
 
 ## Credentials
 
