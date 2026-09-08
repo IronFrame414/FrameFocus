@@ -386,3 +386,15 @@ Map complete (agent). Build plan, in value/safety order:
    route) landing on estimate files — largest/riskiest; assess after 1-4.
 Migrations applied via MCP execute_sql (bound to rebuild-test, verified) with the
 ledger row inserted by hand + object verified — NOT the CLI (which can reach prod).
+
+**Migration A applied (rebuild-test) — `20261540000000_files_estimate_id`.**
+Added `files.estimate_id` (FK → estimates, ON DELETE CASCADE), partial index, and
+`files_owner_arm_check` (three-arm CHECK, VALID). ⚠️ Company-level arm is
+`category IN ('contracts','lien_releases','compliance')` — compliance included after
+enumerating all null-project insert sites (payables-client uploads compliance with
+project_id null); omitting it would have been an S104-shape latent break. Applied
+via MCP execute_sql (rebuild-test, verified), objects confirmed (col/chk/idx/fk all
+present — object checked, not just ledger), ledger row hand-inserted (version
+20261540000000). would_violate=0 measured before the VALID add. `database.ts` patched
+surgically (estimate_id in Row/Insert/Update + FK relationship), not regenerated
+(avoids unrelated drift). tsc exit 0.
