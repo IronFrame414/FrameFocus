@@ -347,3 +347,13 @@ Spec updated with each RULED (+ the alternative it beat), AUDIT RESULTS complete
 
 **Part 1 done. Beginning Part 2 (Phase 3, unattended): build order 5 → 6 → 7 → 10 → T,
 commit+push after each discrete step.**
+
+## Phase 3 — build (unattended)
+
+⚠️ **Idle-timeout note:** I cannot set the Codespace idle timeout to 240 min — it is
+a VS Code/account setting with no CLI available here (`gh` not installed). Durability
+rests on commit+push after every discrete step, per the run rule. Josh should raise
+the timeout manually if he wants the box to survive a long unattended stretch.
+
+### Item 5 — retrofit team / files / daily-logs to the list-screen anatomy
+Starting. Reading the 14a reference + a conforming screen for the exact pattern.
