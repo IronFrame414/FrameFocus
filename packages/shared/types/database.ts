@@ -3276,6 +3276,7 @@ export type Database = {
           sort_order: number
           subcontractor_id: string | null
           total: number
+          total_override: number | null
           unit_cost: number | null
           unit_of_measure: string | null
           updated_at: string | null
@@ -3300,6 +3301,7 @@ export type Database = {
           sort_order: number
           subcontractor_id?: string | null
           total?: number
+          total_override?: number | null
           unit_cost?: number | null
           unit_of_measure?: string | null
           updated_at?: string | null
@@ -3324,6 +3326,7 @@ export type Database = {
           sort_order?: number
           subcontractor_id?: string | null
           total?: number
+          total_override?: number | null
           unit_cost?: number | null
           unit_of_measure?: string | null
           updated_at?: string | null

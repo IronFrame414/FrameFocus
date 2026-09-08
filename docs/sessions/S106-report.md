@@ -341,3 +341,19 @@ pass (round-trip both directions, guards, negative-markup, non-finite). tsc clea
 Remaining Part B UI (next): wire this into the items-tab row-total editor (write
 markup_percent); render the rowed line-item total READ-ONLY (= row sum); the award
 override-clear PROMPT (override-only case, both numbers, read-back fallback).
+
+## Phase 3 — Part B: total_override column (Option B), applied + verified
+
+`20261570000000_estimate_line_row_total_override`: `estimate_line_rows.total_override numeric`
+(nullable) + `estimate_line_rows_one_override_check` = `CHECK (total_override IS NULL OR
+markup_percent IS NULL)` — mutual exclusion (the single "edited" definition), NO ≥0 arm
+(negatives legal, RULED). Applied to rebuild-test via MCP; probe (rollback-safe):
+both-set=BLOCKED, negative-total-only=OK, add-markup-while-set=BLOCKED. Objects verified
+(col + chk); ledger row inserted. `database.ts` patched (Row/Insert/Update) — ⚠️ care:
+`change_order_line_rows` shares the row shape; the first surgical attempt hit it by an
+ambiguous match, reverted and redone against the `vendor_id`/`catalog_item_id`-bearing
+`estimate_line_rows` block. tsc clean. Attended prod apply owed (third push).
+
+Also committed: the inherited ≥0 on `total_price_override` dropped (UI validate removed,
+comment records the deliberate legality); QB tech-debt `#1-s106` filed (invoicing→QB must
+route a net-negative billed line through DiscountLineDetail; estimate side ruled legal).
