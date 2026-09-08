@@ -193,3 +193,34 @@ two-column rows below. No layout ASK remains.
   `total_price_override` as today. That yields exactly one editable total per line.
   ⚠️ Existing rowed lines that already carry an override would need a one-time decision
   (revert to computed, or grandfather).
+
+### Follow-up 2 — RULED + count
+
+- **Q1 RULED → split by line type.** Line WITH rows: per-row totals editable (back-solve
+  markup), line total READ-ONLY = sum of rows (no `total_price_override` offered). Line
+  WITHOUT rows: `total_price_override` unchanged.
+- **Q2 RULED → grandfather + flag, with an ACTIONABLE condition [Josh].** A rowed line
+  carrying a flat override must not silently persist as "total ≠ row sum" with no way
+  back. The flag MUST show **both the billed total AND the row sum**, and MUST offer a
+  deliberate **clear-the-override** action. "A flag you can see but not act on just
+  relocates the problem." Revert-on-migrate is OUT (silently changes the sell price on
+  already-sent estimates — S104 PrivateNote class).
+- **Count (Josh's pre-build ask):**
+  - **rebuild-test: 0 rowed line-items with an override — in fact 0 `total_price_override`
+    values total** (rowless or rowed). The drift has no subjects on rebuild-test and the
+    flat-priced-line path is unexercised there.
+  - **production: PENDING — CC has no safe production read channel** (MCP bound to
+    rebuild-test). Query for Josh to run on production:
+    ```sql
+    SELECT count(*) FILTER (WHERE e.status='sent') AS rowed_override_on_sent,
+           count(*) AS rowed_override_total
+    FROM estimate_line_items li JOIN estimates e ON e.id=li.estimate_id AND e.is_deleted=false
+    WHERE li.total_price_override IS NOT NULL
+      AND EXISTS (SELECT 1 FROM estimate_line_rows r WHERE r.line_item_id=li.id);
+    ```
+  The grandfather+flag path is still built (rebuild-test may not mirror production), but
+  its subject count on production is unknown until Josh runs the above.
+
+**Phase 2 COMPLETE.** All ASKs ruled; the one owed measurement (production override count)
+is blocked by the standing no-prod-read constraint and handed to Josh. Next: audit, then
+**Part A build (cosmetic, ships first and alone)**.
