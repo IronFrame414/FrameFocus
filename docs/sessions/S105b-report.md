@@ -571,3 +571,29 @@ production null-project category check before Josh applies it to prod.
 - Confirm the item-T per-entry classification (esp. the 3 dual-file entries) before
   the moves are applied.
 - Item 1 (connect a real company) and the production CHECK apply — attended, browser.
+
+### Item T — EXECUTED [RULED Josh, follow-up rulings]
+
+Josh ruled every collision and ordered the move. Final classification (count fell
+out, not targeted): **CLOSED 68 / IDEAS 9 / OPEN 109.**
+- Rulings applied to the prior proposal: #112 OPEN→CLOSED; #91 & #154 CLOSED→OPEN;
+  #1-estred & #113 IDEAS→OPEN (ruling B); #110/#131/#151 both halves stay OPEN in
+  ONE file ("both files" superseded); 5 forced-OPEN unchanged.
+- **Executed:** 68 entries moved to `TECH_DEBT_CLOSED.md`, 9 to `TECH_DEBT_IDEAS.md`,
+  109 stay in `TECH_DEBT.md`. RENUMBERED NOTHING; moved by ORDINAL.
+- **Counts conserve at 223:** OPEN 109 / CLOSED 34+68=102 / IDEAS 3+9=12.
+- **Verbatim proven byte-for-byte** against `git show HEAD:TECH_DEBT.md`: all 109
+  kept, all 68 moved-CLOSED, all 9 moved-IDEAS are exact-string matches (multiset
+  equality, 0 diffs).
+- ⚠️ **8 pointer blockquotes, not the spec's 6.** The "six" described the LOST run's
+  classification; Josh's ruled classification empties 8 branch sections
+  (deletion-sweep-analysis, deletion-cron-live, s167, 7i-stage1, s143, s147, s145,
+  m7-compliance — all moved entirely to CLOSED). A pointer was added to each per the
+  stated principle ("a pointer wherever a branch section loses all its entries, so it
+  does not read as vanished"). Flagged for Josh: 8 follows the principle; capping at
+  6 would leave 2 emptied sections reading as "debt vanished".
+
+The re-derivation proposal file (`S105b-techdebt-classification.md`) is retained as
+the audit trail of how the buckets were reached.
+
+**ITEM T COMPLETE.**
