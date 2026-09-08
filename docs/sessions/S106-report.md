@@ -408,3 +408,32 @@ production had NEITHER category among its null-project rows. **Lesson recorded: 
 allowed-set is inferred from one DB's rows can abort on another's. The S105b FILL-6A.6
 "confirm production's null-project categories before applying" step was exactly right and
 exactly what caught this — the confirmation simply hadn't been run until the apply.**
+
+## Phase 3 — Part C: service-role route + FILL-C.3 floor test
+
+**Route** `app/api/estimates/[id]/files/route.ts` — GET (list) + POST (upload). The session
+estimate read is the ONLY access control: read the estimate via the caller's session client
+(`estimates_select_authenticated`), null → 404; ONLY THEN the service-role client. GET =
+VIEW rights; POST = EDIT rights (owner/admin any draft, PM own draft — enforced in the
+route, mirroring `estimates_update_manager`). 25MB + {pdf,jpeg,png,heic} enforced in the
+route. Insert: `estimate_id` set, `project_id` NULL, category `other`; orphan-blob cleanup
+on insert failure. tsc clean.
+
+**FILL-C.3 — the floor, PROVEN by direct RLS simulation** (the vitest live harness needs
+`.env.local` credentials absent in this environment; I executed the exact policy via MCP
+with `SET ROLE authenticated` + JWT claims, rollback-safe):
+- PM on a non-authored estimate (`a9aaeffa…`) → **0 rows** (blocked) → route 404 → its files
+  unreachable.
+- OWNER on the same estimate → **1 row** (floor is not blanket-deny).
+- PM on their OWN estimate (seeded in a rolled-back txn) → **1 row** (positive arm).
+- Session-client file list under the PM → **0** (blocked) — exactly why the route uses
+  admin.
+- All **4 company-level contracts have `estimate_id NULL`** → the route's `estimate_id`-scoped
+  list can never surface them; no role reaches a company-level file through this route.
+- **Row counts exercised:** 29 non-PM-authored estimates (1 used), 4 company-level contracts,
+  0 PM-authored (1 seeded-and-rolled-back), 1 file on the seeded estimate. Nothing persisted
+  (probe_estimates_remaining = 0).
+
+The durable test `test/s106-estimate-files-route-floor.live.ts` (read-only, non-vacuous via
+the owner contrast) is committed for CI / an env with credentials; the MCP simulation above
+is the executed proof for now.
