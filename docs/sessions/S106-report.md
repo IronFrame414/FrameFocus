@@ -305,3 +305,25 @@ permission, or migration change — cosmetic confirmed. tsc exit 0; `next build`
 (estimates route compiled). Committed path-scoped, pushing now.
 
 **PART A COMPLETE.** Parts B and C may now start (A is committed + pushed).
+
+## Phase 3 — Part B migration APPLIED + verified (rebuild-test)
+
+`20261560000000_estimate_line_total_invariant`:
+- Self-guard DO block (abort if any rowed line already carries an override) — passed
+  (0 violators, matching Josh's prod/rebuild-test count).
+- Two SECURITY DEFINER triggers: `enforce_no_override_with_rows` (items BEFORE
+  INSERT/UPDATE) + `enforce_no_rows_on_override_line` (rows BEFORE INSERT/UPDATE OF
+  line_item_id).
+- `set_winning_bid` reproduced verbatim (from pg_get_functiondef) + ONE change: the
+  insert-row branch clears `total_price_override, override_cost` in one statement
+  BEFORE the row insert (so the rows trigger sees a cleared parent).
+- **Behavioral probe (rollback-safe, no data persisted):** A_rowed=BLOCKED,
+  A_rowless=OK, B_override=BLOCKED, B_rowed=OK — both directions enforced, both legal
+  cases pass. Objects verified (2 triggers; swb has the clear). Ledger row inserted
+  (20261560000000). No `database.ts` change (no new columns).
+- ⚠️ Attended production apply owed to Josh (with the S105b files migration).
+
+**Part B DB foundation COMPLETE.** Remaining Part B (frontend): per-ROW total editing
+that back-solves `markup_percent`; rowed-line total rendered READ-ONLY (= row sum); the
+override-clear award PROMPT (override-only case, both numbers, read-back fallback). Then
+Part C. These are the next build steps.
