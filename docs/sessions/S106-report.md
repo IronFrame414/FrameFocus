@@ -369,3 +369,24 @@ the skip fires before markup so it wins on every contract type. Test
 `s106-row-total-override.test.ts` (3 cases, **2 rows each — 1 edited + 1 inherited**):
 edited row verbatim (not recomputed), inherited row from default, a default change
 spares the edited row, a negative typed total honored. 3/3 pass; tsc clean.
+
+## Phase 3 — Part B: row-total editor UI (last piece before the award prompt)
+
+`items-tab.tsx`:
+- **Each row's total is now editable** (was read-only display). Typing a total →
+  `updateEstimateLineRow(row.id, { total_override: v, markup_percent: null })` — pins it and
+  clears markup (mutual exclusion); blank reverts. NO ≥0 (negatives legal).
+- **The markup cell** shows the DERIVED markup for a total-edited row
+  (`backsolveMarkupPercent(total_override, rowBase(row), mode)`) instead of the "inherit
+  default" placeholder; editing it switches back to margin-mode
+  (`{ markup_percent: v, total_override: null }`). New helpers `rowBase` / `derivedMarkup`.
+- **The line-item total is READ-ONLY for a rowed line** (= sum of rows); only a ROWLESS
+  flat-priced line keeps the editable `total_price_override` (the DB invariant already
+  forbids it on rowed lines).
+- `CreateLineRowInput`/`UpdateLineRowInput` gained `total_override`; the row SELECT/mapping
+  in `recalculateEstimateTotals` already carry it.
+tsc clean; 53 pricing tests pass (no regression); `next build` gating.
+
+**Part B status:** DB invariant + total_override column + skip + row-total editor all DONE.
+⚠️ **HELD for Josh: the award-clear PROMPT copy** (bidding-tab handleSetWinner — the
+override-only, both-numbers, read-back-fallback prompt from Phase 2c). Then Part C.

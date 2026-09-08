@@ -315,6 +315,7 @@ export type CreateLineRowInput = Pick<
   | 'name'
   | 'sort_order'
   | 'markup_percent'
+  | 'total_override'
   | 'apply_tax'
   | 'rate'
   | 'quantity'
