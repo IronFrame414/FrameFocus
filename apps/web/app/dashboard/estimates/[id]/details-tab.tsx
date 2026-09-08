@@ -265,6 +265,18 @@ export function DetailsTab({
           </div>
         )}
 
+        {/* S106 Part A [RULED Josh] — contract box FULL-WIDTH at the top (heading
+            deleted in contract-section.tsx), between the tab strip and Client. */}
+        <ContractSection
+          estimate={estimate}
+          canEditSettings={canEdit && (role === 'owner' || role === 'admin')}
+          canReadRates={role === 'owner' || role === 'admin'}
+          companyTimeZone={companyTimeZone}
+          reload={reload}
+        />
+
+        {/* ROW 1 — Client (L) | Proposal format (R) [S106 Part A] */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', alignItems: 'start' }}>
         {/* CLIENT */}
         <div style={card}>
           <div style={monoTitle}>CLIENT</div>
@@ -288,40 +300,6 @@ export function DetailsTab({
           <AlsoSendToField value={alsoSendTo} canEdit={canEdit} onChange={saveAlsoSendTo} />
         </div>
 
-        {/* THE JOB — estimator (read-only) + timing. Estimate name/number live in
-            the shell header; contract type + rates are in ContractSection below;
-            lead source lives on the contact (not duplicated here). */}
-        <div style={card}>
-          <div style={monoTitle}>THE JOB</div>
-          <div style={rowStyle}>
-            <span style={fieldLabel}>Estimator</span>
-            <span style={{ color: '#7b8699' }}>{estimatorName ?? '—'}</span>
-          </div>
-          <div style={rowStyle}>
-            <span style={fieldLabel}>Days until expiration</span>
-            <InlineNumber
-              value={estimate.expiration_days}
-              disabled={!canEdit}
-              validate={(v) =>
-                v == null || !Number.isInteger(v) || v < 1
-                  ? 'Enter a whole number of days (≥ 1)'
-                  : null
-              }
-              onSave={(v) => saveField({ expiration_days: v ?? undefined })}
-            />
-          </div>
-        </div>
-
-        {/* Contract type + negotiated rates + P11 projection (S-3).
-            Owner/Admin edit; PM sees read-only (§7.3). Its own card component. */}
-        <ContractSection
-          estimate={estimate}
-          canEditSettings={canEdit && (role === 'owner' || role === 'admin')}
-          canReadRates={role === 'owner' || role === 'admin'}
-          companyTimeZone={companyTimeZone}
-          reload={reload}
-        />
-
         {/* Proposal format — the one control (same as 9d/19a); writes proposal_pricing_level. */}
         <div style={cardAmber}>
           <div style={cardHeadRow}>
@@ -343,7 +321,11 @@ export function DetailsTab({
             }}
           />
         </div>
+        </div>
+        {/* end ROW 1 */}
 
+        {/* ROW 2 — Pricing basis (L) | The Job + Discount stacked (R) [S106 Part A] */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', alignItems: 'start' }}>
         {/* Pricing basis */}
         <div style={cardAmber}>
           <div style={cardHeadRow}>
@@ -418,6 +400,31 @@ export function DetailsTab({
           </div>
         </div>
 
+        {/* Right half of row 2 — The Job (top) then Whole-estimate discount (below),
+            stacked [S106 Part A]. */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        {/* THE JOB — estimator (read-only) + timing. */}
+        <div style={card}>
+          <div style={monoTitle}>THE JOB</div>
+          <div style={rowStyle}>
+            <span style={fieldLabel}>Estimator</span>
+            <span style={{ color: '#7b8699' }}>{estimatorName ?? '—'}</span>
+          </div>
+          <div style={rowStyle}>
+            <span style={fieldLabel}>Days until expiration</span>
+            <InlineNumber
+              value={estimate.expiration_days}
+              disabled={!canEdit}
+              validate={(v) =>
+                v == null || !Number.isInteger(v) || v < 1
+                  ? 'Enter a whole number of days (≥ 1)'
+                  : null
+              }
+              onSave={(v) => saveField({ expiration_days: v ?? undefined })}
+            />
+          </div>
+        </div>
+
         {/* Whole-estimate discount */}
         <div style={card}>
           <div style={monoTitle}>WHOLE-ESTIMATE DISCOUNT</div>
@@ -467,6 +474,10 @@ export function DetailsTab({
             </div>
           )}
         </div>
+        </div>
+        {/* end right half of row 2 */}
+        </div>
+        {/* end ROW 2 */}
 
         {/* Spec 2: signing activity / resend / signed PDF (Owner/Admin) */}
         {(role === 'owner' || role === 'admin') && (
