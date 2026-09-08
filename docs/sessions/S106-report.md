@@ -327,3 +327,17 @@ permission, or migration change — cosmetic confirmed. tsc exit 0; `next build`
 that back-solves `markup_percent`; rowed-line total rendered READ-ONLY (= row sum); the
 override-clear award PROMPT (override-only case, both numbers, read-back fallback). Then
 Part C. These are the next build steps.
+
+## Phase 3 — Part B frontend (piece 1): the shared inverse-pricing function
+
+Added `backsolveMarkupPercent(total, base, mode)` to
+`packages/shared/utils/estimate-totals.ts` — the EXACT inverse of `applyPricing`, so
+editing a row's total and editing its margin both drive `markup_percent` and agree by
+construction. Guards: null on base≤0, null on margin+total≤0; markup mode admits a
+negative markup (total<base), per FILL-B.8. Test `s106-backsolve-markup.test.ts`: 8/8
+pass (round-trip both directions, guards, negative-markup, non-finite). tsc clean.
+`base` = the row's cost basis + tax (what applyPricing receives); the caller computes it.
+
+Remaining Part B UI (next): wire this into the items-tab row-total editor (write
+markup_percent); render the rowed line-item total READ-ONLY (= row sum); the award
+override-clear PROMPT (override-only case, both numbers, read-back fallback).

@@ -68,6 +68,31 @@ export function applyPricing(
   return cost * (1 + p / 100);
 }
 
+// S106 Part B [RULED Josh] — the EXACT inverse of applyPricing. Editing a row's
+// TOTAL back-solves the markup that produces it, so total-editing and margin-editing
+// drive the SAME stored value (markup_percent) and agree by construction. `base` is
+// what applyPricing was called with — the row's cost basis PLUS its tax (see
+// rowLineTotal); the caller computes that, this function only inverts the pricing.
+//
+// Returns null when the total cannot be represented as a markup of the base:
+//  · base <= 0 — no cost to mark up (a $0-cost row can't back-solve a non-zero total)
+//  · margin mode with total <= 0 — degenerate (margin is profit/price; price ≤ 0 is
+//    not a margin). Markup mode admits total ≤ base (down to a −100% markup at $0),
+//    matching FILL-B.8's "negative markup is allowed".
+export function backsolveMarkupPercent(
+  total: number,
+  base: number,
+  mode: PricingMode
+): number | null {
+  if (!Number.isFinite(total) || !Number.isFinite(base)) return null;
+  if (base <= 0) return null;
+  if (mode === 'margin') {
+    if (total <= 0) return null;
+    return (1 - base / total) * 100;
+  }
+  return (total / base - 1) * 100;
+}
+
 export function applyDiscount(
   total: number,
   discountType: DiscountType | null | undefined,
