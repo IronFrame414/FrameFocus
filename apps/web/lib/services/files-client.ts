@@ -82,10 +82,21 @@ export async function uploadFile(
     project_id: string | null;
     category: AnyFileCategory;
     /**
+     * S105b item 6 — an ESTIMATE attachment. Set this with `project_id: null`;
+     * `files_owner_arm_check` demands exactly one of project_id/estimate_id, so
+     * passing both is a caller bug and is rejected below before touching storage.
+     * `convert_estimate_to_project()` re-points these to the project on
+     * conversion. Non-owner/admin roles still cannot land a project_id-NULL row
+     * through the browser client (RLS), so estimate uploads by a PM go through
+     * the server route, not this path.
+     */
+    estimate_id?: string | null;
+    /**
      * Second storage-path segment when `project_id` is null (e.g.
-     * `compliance/{member_id}`). Ignored when a project id is present.
-     * Storage RLS keys on segment ONE (the company id), so anything below it
-     * is free-form — see CLAUDE.md, storage-policy inline-subquery note.
+     * `compliance/{member_id}`, `estimates/{estimate_id}`). Ignored when a
+     * project id is present. Storage RLS keys on segment ONE (the company id),
+     * so anything below it is free-form — see CLAUDE.md, storage-policy
+     * inline-subquery note.
      */
     path_segment?: string;
     tags?: string[];
@@ -108,6 +119,13 @@ export async function uploadFile(
       success: false,
       error: `File too large. Max size is ${MAX_FILE_SIZE_BYTES / 1024 / 1024} MB.`,
     };
+  }
+
+  // S105b item 6 — the three-arm CHECK forbids a row owned by both a project and
+  // an estimate. Catch the caller bug here with a clear message instead of a raw
+  // constraint-violation string after the bytes are already uploaded.
+  if (options.estimate_id && options.project_id) {
+    return { success: false, error: 'A file cannot belong to both a project and an estimate.' };
   }
 
   // #94: HEIC → JPEG at upload. On conversion failure `upload` keeps the
@@ -182,6 +200,7 @@ export async function uploadFile(
   const row = {
     ...(options.id ? { id: options.id } : {}),
     project_id: options.project_id,
+    ...(options.estimate_id ? { estimate_id: options.estimate_id } : {}),
     category: options.category,
     file_name: upload.name,
     file_path: storagePath,
