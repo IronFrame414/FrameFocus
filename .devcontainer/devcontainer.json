@@ -3,13 +3,20 @@
   "image": "mcr.microsoft.com/devcontainers/typescript-node:20",
   "postCreateCommand": "npm install",
   "forwardPorts": [3000, 8081],
-  // ⚠️ PORT 3000 IS FORWARDED **PUBLIC**, AND OAUTH CANNOT WORK OTHERWISE.
+  // ⚠️ PORT 3000 DEFAULTS TO **PRIVATE** ON REBUILD, AND IS DELIBERATELY MADE
+  // PUBLIC BY HAND WHEN OAUTH IS BEING EXERCISED. TWO STATES, ON PURPOSE.
+  // [Changed from a public default at S105b item 10, RULED Josh.]
   //
-  // Codespaces forwards ports PRIVATE by default. A private port answers any
-  // request that does not carry a GitHub tunnel cookie with a 302 to
-  // `https://github.dev/pf-signin?...` -- the request never reaches the dev
-  // server at all, and nothing is logged, because nothing arrived.
+  // WHY PRIVATE IS THE DEFAULT. This dev server talks to rebuild-test, and a
+  // PUBLIC forwarded port is reachable by anyone who has the URL. A public
+  // default meant every rebuild silently came back internet-reachable — a state
+  // nobody re-consented to. Private-on-rebuild makes exposure an explicit,
+  // deliberate act rather than the resting state of a disposable box.
   //
+  // WHY IT MUST BE MADE PUBLIC FOR OAUTH. Codespaces forwards ports PRIVATE by
+  // default; a private port answers any request that does not carry a GitHub
+  // tunnel cookie with a 302 to `https://github.dev/pf-signin?...` -- the request
+  // never reaches the dev server, and nothing is logged, because nothing arrived.
   // That breaks the two 7G routes an outside party calls directly:
   //
   //   /api/quickbooks/callback  Intuit redirects the BROWSER here after
@@ -23,21 +30,19 @@
   //                             retries at 20/30/50 minutes, DISABLE THE
   //                             ENDPOINT.
   //
+  // So item 1 (connecting a real company) STILL needs a public port -- but as an
+  // explicit step, not a standing default.
+  //
   // ⚠️ THIS IS A DEVELOPMENT CONCERN ONLY. Production is Vercel on its own
   // domain with no tunnel in front of it, and is unaffected.
   //
-  // ⚠️ WHAT IT COSTS, STATED PLAINLY: a public forwarded port is reachable by
-  // anyone who has the URL, and this dev server talks to rebuild-test. That is
-  // a deliberate trade for being able to develop an integration whose whole
-  // point is that Intuit calls us. To opt out, set this back to "private" and
-  // accept that OAuth and webhooks cannot be exercised in a Codespace.
-  //
-  // ⚠️ THIS APPLIES AT CREATION/REBUILD. An ALREADY-RUNNING Codespace keeps
-  // whatever visibility it has -- change it in the VS Code PORTS panel
-  // (right-click 3000 -> Port Visibility -> Public), or with
-  // `gh codespace ports visibility 3000:public`.
+  // ⚠️ CHANGING THIS VALUE ONLY AFFECTS THE NEXT CREATE/REBUILD. An
+  // ALREADY-RUNNING Codespace keeps whatever visibility it has, so making it
+  // public for an OAuth session does NOT survive a rebuild (that is the point).
+  // Flip the LIVE port in the VS Code PORTS panel (right-click 3000 -> Port
+  // Visibility -> Public), or with `gh codespace ports visibility 3000:public`.
   "portsAttributes": {
-    "3000": { "label": "Next.js Web", "onAutoForward": "notify", "visibility": "public" },
+    "3000": { "label": "Next.js Web", "onAutoForward": "notify", "visibility": "private" },
     "8081": { "label": "Expo Mobile", "onAutoForward": "notify" }
   },
   "customizations": {
