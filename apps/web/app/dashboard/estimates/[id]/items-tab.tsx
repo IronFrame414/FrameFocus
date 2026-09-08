@@ -737,7 +737,12 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
                   disabled={!canEdit}
                   allowNull
                   format={() => fmtMoney(line.total_price)}
-                  validate={(v) => (v != null && v < 0 ? '≥ 0' : null)}
+                  // S106 [RULED Josh]: NO ≥0 validation — a negative typed total is
+                  // DELIBERATELY legal (a credit, allowance, or rebate carried as a
+                  // line). The old ≥0 was inherited from override_cost, where a cost
+                  // truly cannot be negative; that justification does not transfer to
+                  // a sell price. Aligned with the row-level total_override, which is
+                  // likewise unconstrained. Do NOT re-add a ≥0 check here.
                   onSave={(v) =>
                     mutate(() => updateEstimateLineItem(line.id, { total_price_override: v }), true)
                   }

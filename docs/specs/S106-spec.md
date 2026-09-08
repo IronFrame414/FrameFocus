@@ -70,6 +70,17 @@ on an overridden line). ⚠️ **`set_winning_bid` must clear the override in it
 branch** (awarding a bid itemizes the line) or the award fails; clone/convert/CO are safe.
 Full design + code-path analysis: `S106-report.md` Phase 2b. **No flag UI is built.**
 
+**Part B — NEGATIVE TOTALS ARE DELIBERATELY LEGAL ON BOTH [RULED Josh].** A negative
+typed total is a real estimate line — a credit, allowance, or rebate. So **neither** the
+row-level `total_override` NOR the line-level `total_price_override` carries a `≥ 0`
+constraint (UI, service, or DB). The old UI-only `≥ 0` on `total_price_override` was
+INHERITED from `override_cost` (where a cost genuinely cannot be negative) and had no
+ruling behind it; it is REMOVED. ⚠️ **Do not "restore" a ≥0 check on either — its absence
+is intentional.** Downstream verified safe: Estimate Health guards `price > 0` (null margin
+on non-positive), the proposal renders negatives, conversion stores a negative
+`contract_value` without crashing. The one downstream that needs work is the QuickBooks
+push — filed as tech debt (see `TECH_DEBT.md`), NOT fixed here.
+
 **Part C:** ASK-C.1 → **EDIT rights** (own draft) to upload; listing uses VIEW. ASK-C.2 →
 view-only estimate = files read-only. ASK-C.3 → sub uploads visible to the authoring PM
 (+ owner/admin). No `files` RLS change; service-role route with the session check as the

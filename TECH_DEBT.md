@@ -73,6 +73,21 @@ Complete as of Session 40. All polish items closed. Module 4 build is unblocked.
 > **#155 and #156 moved to [`TECH_DEBT_IDEAS.md`](TECH_DEBT_IDEAS.md)** — they are deferred
 > decisions, not owed work. Everything below is owed work with a known fix.
 
+### Branch-scoped, awaiting real numbers — `feature/s106` [S106]
+
+- **#1-s106 — the invoicing→QuickBooks mapping must handle a NET-NEGATIVE line, now that
+  one can originate upstream of invoicing.** S106 ruled a negative typed total legal on an
+  estimate line (`estimate_line_rows.total_override` / `estimate_line_items.total_price_override`
+  — a credit, allowance, or rebate). ⚠️ **The estimate side is RULED LEGAL and is NOT the
+  bug — do not add a ≥0 check there.** The QB connector deliberately avoids a negative
+  `SalesItemLineDetail.Amount`, routing discounts/retainage through `DiscountLineDetail`
+  instead (`entities.ts:571-578`, by explicit ruling). Before S106 a negative could only
+  arise inside invoicing (a discount); now a negative can flow from the estimate → contract
+  → invoice `billed_amount`. **Fix shape:** the invoice→QB line builder (`buildInvoiceLines`)
+  must route a net-negative billed line through `DiscountLineDetail` (or the correct QB
+  credit mechanism), not emit a negative sales line QuickBooks may reject. Not exercised
+  until a credit line is actually billed and pushed; filed so it is caught before that.
+
 ### Branch-scoped, awaiting real numbers — `feature/7g-quickbooks` [S180]
 
 > Provisional ids per the S136 rule. Tag `7gqb`. Convert to real numbers from main's file at merge.
