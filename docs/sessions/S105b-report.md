@@ -406,3 +406,51 @@ that re-points estimate files to the project (`SET project_id=…, estimate_id=N
 WHERE estimate_id=…`) right after the contract_documents re-point. Object verified:
 live body has exactly 1 `UPDATE files` that nulls estimate_id. Ledger row inserted
 (20261550000000). This makes "uploads carry to project files on conversion" real.
+
+**Three-arm CHECK verified behaviourally (rollback-safe probe, rebuild-test).**
+6 INSERT probes in a DO block, aborted at the end so nothing persisted (0 rows
+remain, confirmed):
+- arm1 (project_id, photos) = INSERTED ✓
+- arm2 (estimate_id, photos) = INSERTED ✓  ← estimate file with project_id NULL now legal
+- arm3 (both NULL, contracts) = INSERTED ✓
+- arm3 (both NULL, compliance) = INSERTED ✓  ← the compliance fix works; would have been BLOCKED without it
+- INVALID (both NULL, photos) = BLOCKED(check) ✓  ← ownerless-row hole closed
+- INVALID (both set) = BLOCKED(check) ✓
+
+**ITEM 6 — foundation COMPLETE and verified; UI RECORDED as remaining.**
+
+Delivered & verified this session:
+1. `files.estimate_id` + three-arm CHECK (Migration A) — objects + behaviour verified.
+2. Conversion re-points estimate files to the project (Migration B) — object verified.
+3. `uploadFile()` accepts `estimate_id`, with a both-set guard — tsc clean.
+
+⚠️ **DISCOVERED CONSTRAINT that gates the desktop UI — needs a Josh ruling (stop
+rule 2), so NOT built unattended.** The three-arm CHECK makes estimate files
+*legal*, but `files_insert_non_client` / `files_select_non_client` still require
+`project_id IS NOT NULL` for every non-owner/admin role. So a **PM (who can author
+estimates) cannot SELECT or INSERT estimate files via the browser client** — only
+owner/admin can. Enabling the desktop estimate "Files" tab for PMs needs EITHER:
+  (a) a service-role server route (`/api/estimates/[id]/files`) that validates
+      estimate visibility via the caller's session then reads/writes via admin — no
+      RLS change, no floor weakened; OR
+  (b) an RLS widening: a PM arm on files SELECT/INSERT scoped to `estimate_id ∈ their
+      visible estimates`. This TOUCHES the files floor and is **not settled in the
+      spec** → stop rule 2 / possibly stop rule 4. Not done.
+
+⚠️ **The sub anonymous upload (`/bid/[token]`) — the RULED core of `#5-estred` —
+NOT built unattended.** It is buildable without an RLS change (service role bypasses
+RLS) but it is a security-sensitive anonymous path (token-as-credential, storage
+write, 25MB + pdf/jpeg/png/heic cap in the route) that **cannot be verified
+end-to-end unattended** (no way to exercise an anonymous upload with a live token +
+browser here). Shipping it green-but-untested is the wrong trade.
+
+**Ready-to-build plan for the remaining UI (attended):**
+- Server route `app/api/estimates/[id]/files/route.ts`: GET lists files where
+  `estimate_id=[id]` (admin, after a user-client estimate read proves visibility);
+  POST validates 25MB + mime ∈ {pdf,jpeg,png,heic}, uploads to `project-files` at
+  `{company}/estimates/{id}/…`, inserts with `estimate_id`, `project_id:null`.
+- Enable the `files` tab in `estimate-builder.tsx` (drop `disabled:true`); build a
+  real `FilesTab` fed `estimateId`, list + upload via the route.
+- Sub path: extend `get_sub_bid_request` to expose the estimate, add a file input to
+  `bid-reply-client.tsx`, POST to an anonymous route keyed on the token (service role)
+  reusing the same cap + insert, `estimate_id` from the token's request row.
