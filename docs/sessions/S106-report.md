@@ -455,3 +455,22 @@ tsc clean; `next build` gating.
 
 **PART C COMPLETE** (pending the build). Only the award-clear PROMPT copy remains — HELD
 for Josh.
+
+## S106 — COMPLETE (except the held award prompt)
+
+| Part | Status |
+| ---- | ------ |
+| A — details layout | ✅ shipped (cosmetic, build-clean) |
+| B — editable line total | ✅ invariant migration + total_override column + computeRowPricing skip + row-total editor; negatives aligned legal; all on prod |
+| C — estimate files | ✅ service-role route (floor RLS-proven), Files tab, anonymous sub-upload route + bid input |
+| Award-clear prompt copy | ⏸ HELD for Josh (bidding-tab handleSetWinner) |
+
+Production: all four migrations applied and verified by Josh. Two tech-debt items filed:
+`#1-s106` (QB net-negative line) and `#2-s106` (three-arm CHECK narrower than files
+ownership). Note recorded: constraint allowed-set derived from rebuild-test data aborted on
+production's rows on the first apply.
+
+Untested by me (stated plainly): the estimate-files route's behaviour end-to-end (no live
+env here — the FILL-C.3 FLOOR is RLS-simulation-proven, but the route handler, storage
+upload, and sub-upload path are build/type-verified only, not exercised against a running
+server). The award prompt is unbuilt (held).
