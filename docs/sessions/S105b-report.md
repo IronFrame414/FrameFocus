@@ -454,3 +454,33 @@ browser here). Shipping it green-but-untested is the wrong trade.
 - Sub path: extend `get_sub_bid_request` to expose the estimate, add a file input to
   `bid-reply-client.tsx`, POST to an anonymous route keyed on the token (service role)
   reusing the same cap + insert, `estimate_id` from the token's request row.
+
+### Item 7 — burst capture
+
+Built the two self-contained, verifiable RULED pieces; deferred the full multi-shot
+burst UI (§2.5 already flagged it as a device-dependent rewrite of a tightly-ruled
+subsystem — unverifiable unattended).
+
+DONE & verified:
+1. **Clock→job as third project source (ASK-7.A).** `projectInContext` stays pure
+   (URL>query); new pure `resolveCaptureProjectId(contextId, clockId)` layers the
+   clock in (`contextId ?? clockId ?? null`); new client `getOpenClockProjectId()`
+   reads the open segment's project_id. `mobile-shell.onShot` now resolves
+   URL > ?project= > clock > null, consulting the clock only when there is no
+   context and only when online, with a 2s race so a dead-but-onLine network can't
+   stall the shutter. **7 unit tests (precedence chain) pass**, tsc + `next build`
+   clean.
+2. **Weak-signal online failure auto-queues (ASK-7.B gap).** `capture-screen.submit`
+   now falls back to the SAME idempotent offline queue when an online `uploadFile`
+   fails (the `navigator.onLine===true` but network-down case) instead of stranding
+   the shot behind a manual retry — closing the exact gap that corrected PREV.
+
+DEFERRED (recorded, RULED design captured in spec):
+- **Full multi-shot burst** — `PendingShot`→LIST, per-photo status UI, end-of-batch
+  picker, ASK-7.C dismiss ("keep held, no insert") handling. This is the ruled §2.5
+  rewrite that needs a real device to verify (camera, per-photo upload states, the
+  batch picker). The rulings (ASK-7.B surface-and-proceed, ASK-7.C keep-held) are
+  recorded in the spec as the build contract; the single-slot foundation now carries
+  the clock source and queue fallback that burst will build on.
+
+**ITEM 7 — clock source + weak-signal queue done; multi-shot burst UI deferred.**
