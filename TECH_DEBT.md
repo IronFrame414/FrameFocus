@@ -75,6 +75,21 @@ Complete as of Session 40. All polish items closed. Module 4 build is unblocked.
 
 ### Branch-scoped, awaiting real numbers — `feature/s106` [S106]
 
+- **#2-s106 — `files_owner_arm_check` (the three-arm CHECK) is NARROWER than the table's
+  actual ownership model.** It admits exactly `project_id` XOR `estimate_id`, OR a
+  company-level row of category `(contracts, lien_releases, compliance)`. But `files` has
+  SEVEN other ownership FKs the CHECK ignores: `daily_log_id`, `safety_incident_id`,
+  `delivery_item_id`, `delivery_id`, `expense_id`, `invoice_id`, `supersedes_id`. ⚠️ **A file
+  attached to an expense (or a delivery, safety incident, invoice, etc.) legitimately has no
+  project AND no estimate — and the CHECK would REJECT it** unless its category happens to be
+  in the company-level set. Production has no such rows today (a compliance/expense doc keyed
+  only on `expense_id` with a null project), which is why the migration passed; but the
+  constraint does not model those ownership arms. **Fix shape:** widen the CHECK to admit a
+  row owned by any of the recognised association FKs (a fourth arm: `project_id IS NULL AND
+  estimate_id IS NULL AND (daily_log_id IS NOT NULL OR expense_id IS NOT NULL OR …)`), or
+  scope the "exactly one of project/estimate" rule to the categories it actually governs.
+  Filed alongside #1-s106; do not fix in this branch. See `S106-report.md` production note.
+
 - **#1-s106 — the invoicing→QuickBooks mapping must handle a NET-NEGATIVE line, now that
   one can originate upstream of invoicing.** S106 ruled a negative typed total legal on an
   estimate line (`estimate_line_rows.total_override` / `estimate_line_items.total_price_override`

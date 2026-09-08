@@ -390,3 +390,21 @@ tsc clean; 53 pricing tests pass (no regression); `next build` gating.
 **Part B status:** DB invariant + total_override column + skip + row-total editor all DONE.
 ⚠️ **HELD for Josh: the award-clear PROMPT copy** (bidding-tab handleSetWinner — the
 override-only, both-numbers, read-back-fallback prompt from Phase 2c). Then Part C.
+
+## Production applies — DONE [Josh], with two findings
+
+All four migrations (20261540000000, 20261550000000, 20261560000000, 20261570000000)
+are on PRODUCTION — ledger rows AND objects both verified by Josh (estimate_id column,
+three-arm CHECK VALID, convert re-point in the body, both invariant triggers,
+set_winning_bid override-clear, total_override column, mutual-exclusion CHECK VALID).
+CLI back on rebuild-test.
+
+⚠️ **`20261540000000` FAILED on the first production attempt — a constraint derived from
+one database's rows, applied to another.** Production had TWO orphaned `files` rows (an
+invoice PDF and an April photo, every FK null, no project_id) — throwaway test rows, ruled
+DELETED by Josh, then the migration applied. The three-arm CHECK's company-level category
+list `(contracts, lien_releases, compliance)` was modeled ENTIRELY on rebuild-test's data;
+production had NEITHER category among its null-project rows. **Lesson recorded: a CHECK whose
+allowed-set is inferred from one DB's rows can abort on another's. The S105b FILL-6A.6
+"confirm production's null-project categories before applying" step was exactly right and
+exactly what caught this — the confirmation simply hadn't been run until the apply.**
