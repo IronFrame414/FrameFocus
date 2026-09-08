@@ -12,7 +12,13 @@ import {
 } from '@/lib/services/team';
 import { ROLE_LABELS, type CompanyRole } from '@framefocus/shared';
 import { useConfirm, useAlert } from '@/components/confirm/confirm-provider';
-import { ListPageHeader } from '@/components/list-screen/list-screen';
+import {
+  FilterChips,
+  ListPageHeader,
+  ListSearchInput,
+  MetricStrip,
+} from '@/components/list-screen/list-screen';
+import type { Metric } from '@/components/list-screen/list-screen';
 import { badgeStyle, cardStyle, color, font, microLabelStyle, primaryButtonStyle } from '@/lib/theme';
 
 export default function TeamPageClient({
@@ -46,6 +52,10 @@ export default function TeamPageClient({
   const [resendNote, setResendNote] = useState<Record<string, { ok: boolean; text: string }>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // 14-anatomy — search + role filter. Local state (the anatomy lets the caller
+  // own the filter contract; team has no URL-param status like Projects does).
+  const [search, setSearch] = useState('');
+  const [roleFilter, setRoleFilter] = useState('all');
 
   const canManageTeam = userRole === 'owner' || userRole === 'admin';
 
@@ -75,6 +85,55 @@ export default function TeamPageClient({
   useEffect(() => {
     void loadData();
   }, [loadData]);
+
+  // ⚠️ ALL derived hooks live ABOVE the loading/error early returns below
+  // [S105b, FILL-5.4]. The lost run put new useMemos AFTER the returns; tsc
+  // passed and `next build` failed on five of them. Every hook stays here.
+  const roleOptions = useMemo(() => {
+    const present = new Set<string>();
+    for (const m of members) present.add(m.role);
+    if (canManageTeam) for (const inv of invitations) present.add(inv.role);
+    const chips = [...present].map((r) => ({
+      value: r,
+      label: ROLE_LABELS[r as CompanyRole] || r,
+    }));
+    return [{ value: 'all', label: 'All' }, ...chips];
+  }, [members, invitations, canManageTeam]);
+
+  const filteredMembers = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return members.filter((m) => {
+      if (roleFilter !== 'all' && m.role !== roleFilter) return false;
+      if (!q) return true;
+      return `${m.first_name} ${m.last_name}`.toLowerCase().includes(q);
+    });
+  }, [members, roleFilter, search]);
+
+  const filteredInvitations = useMemo(() => {
+    if (!canManageTeam) return [];
+    const q = search.trim().toLowerCase();
+    return invitations.filter((inv) => {
+      if (roleFilter !== 'all' && inv.role !== roleFilter) return false;
+      if (!q) return true;
+      return inv.email.toLowerCase().includes(q);
+    });
+  }, [invitations, roleFilter, search, canManageTeam]);
+
+  // §8.5 metric strip — COUNTS ONLY. ⚠️ RULED [S105b]: NO burden card. Burden is
+  // instrument_rates-floored; a gated role would see $0 (a false figure) where
+  // the table column correctly reflows to em-dashes. A gated role must see less,
+  // not wrong. Hours are non-money and shown to all, so "active this week" is safe.
+  const activeThisWeek = useMemo(
+    () => members.filter((m) => (hours[m.id]?.paid ?? 0) > 0).length,
+    [members, hours]
+  );
+  const stripMetrics: Metric[] = [
+    { label: 'Members', value: members.length },
+    { label: 'Active this week', value: activeThisWeek, sub: 'clocked paid hours' },
+    ...(canManageTeam && invitations.length > 0
+      ? [{ label: 'Pending invites', value: invitations.length }]
+      : []),
+  ];
 
   // D4 — the link, retrievable again. `token` comes back on the row now
   // (getPendingInvitations); the policy always allowed it.
@@ -174,6 +233,7 @@ export default function TeamPageClient({
             : ''
         }`}
       >
+        <ListSearchInput value={search} onChange={setSearch} placeholder="Search team…" />
         {canManageTeam && (
           <a href="/dashboard/team/invite" style={primaryButtonStyle}>
             + Invite Team Member
@@ -181,6 +241,19 @@ export default function TeamPageClient({
         )}
       </ListPageHeader>
 
+      <MetricStrip metrics={stripMetrics} />
+
+      {roleOptions.length > 2 && (
+        <FilterChips options={roleOptions} selected={roleFilter} onSelect={setRoleFilter} />
+      )}
+
+      {filteredMembers.length === 0 && filteredInvitations.length === 0 ? (
+        <div style={{ ...cardStyle, padding: '48px', textAlign: 'center', color: color.muted }}>
+          No team members
+          {roleFilter !== 'all' ? ` with role "${ROLE_LABELS[roleFilter as CompanyRole] || roleFilter}"` : ''}
+          {search.trim() ? ` matching "${search.trim()}"` : ''}.
+        </div>
+      ) : (
       <div style={{ ...cardStyle, overflow: 'hidden' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
           <thead>
@@ -200,7 +273,7 @@ export default function TeamPageClient({
             </tr>
           </thead>
           <tbody>
-            {members.map((member) => {
+            {filteredMembers.map((member) => {
               const b = burden[member.id];
               const h = hours[member.id];
               return (
@@ -243,7 +316,7 @@ export default function TeamPageClient({
               );
             })}
             {canManageTeam &&
-              invitations.map((inv) => (
+              filteredInvitations.map((inv) => (
                 <tr key={inv.id} style={{ borderBottom: `1px solid ${color.rowDivider}` }}>
                   <td style={{ ...td, paddingLeft: '20px' }}>
                     <span style={{ fontWeight: 600, color: color.bodyAlt }}>{inv.email}</span>
@@ -347,6 +420,7 @@ export default function TeamPageClient({
           </tbody>
         </table>
       </div>
+      )}
     </div>
   );
 }

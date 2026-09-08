@@ -357,3 +357,10 @@ the timeout manually if he wants the box to survive a long unattended stretch.
 
 ### Item 5 — retrofit team / files / daily-logs to the list-screen anatomy
 Starting. Reading the 14a reference + a conforming screen for the exact pattern.
+
+**Team screen — DONE.** Added MetricStrip (Members / Active this week / Pending
+invites — COUNTS only, NO burden card per RULED), ListSearchInput (name/email),
+FilterChips (by role, shown only when >1 role present), empty state. All new hooks
+(roleOptions, filteredMembers, filteredInvitations, activeThisWeek) placed ABOVE the
+loading/error early returns (FILL-5.4). `tsc --noEmit` exit 0, 0 errors. `next build`
+verification deferred to after files + daily-logs (one run for all three).
