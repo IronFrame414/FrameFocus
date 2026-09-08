@@ -116,6 +116,11 @@ export interface RowPricingInput {
   // Shared
   markup_percent?: number | null;
   apply_tax?: boolean | null;
+  /** S106 — the row's AUTHORITATIVE typed sell total. When non-null it wins over
+   *  cost×markup (computeRowPricing returns it verbatim), so a hand-edited total is
+   *  never silently recomputed to a cent different. Mutually exclusive with
+   *  markup_percent (DB CHECK). Negatives legal (credit/allowance/rebate). */
+  total_override?: number | null;
 }
 
 export interface EstimateMarkupDefaults {
@@ -375,6 +380,14 @@ export function computeRowPricing(input: {
   flat_rate_labor?: boolean;
 }): RowPricing {
   const cost = computeRowCost(input.row);
+  // S106 [RULED Josh, Option B] — a hand-edited total is authoritative and is
+  // returned verbatim, NOT recomputed from cost×markup. This is the skip that keeps
+  // recalculateEstimateTotals (and, through the stored line/grand totals, Estimate
+  // Health, the proposal, and conversion) showing the TYPED figure. tax_amount is 0:
+  // the typed total is the all-in sell, so there is no separately-tracked tax to sum.
+  if (input.row.total_override != null) {
+    return { cost, tax_amount: 0, total: roundMoney(input.row.total_override) };
+  }
   if (input.row.row_type === 'labor' && input.flat_rate_labor) {
     return {
       cost,

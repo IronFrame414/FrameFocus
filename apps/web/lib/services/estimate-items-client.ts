@@ -705,7 +705,7 @@ export async function recalculateEstimateTotals(estimateId: string): Promise<Res
       ? await supabase
           .from('estimate_line_rows')
           .select(
-            'id, line_item_id, row_type, markup_percent, apply_tax, rate, quantity, unit_of_measure, unit_cost, amount'
+            'id, line_item_id, row_type, markup_percent, apply_tax, rate, quantity, unit_of_measure, unit_cost, amount, total_override'
           )
           .in('line_item_id', lineIds)
           .order('sort_order', { ascending: true })
@@ -747,6 +747,7 @@ export async function recalculateEstimateTotals(estimateId: string): Promise<Res
       amount: r.amount,
       markup_percent: r.markup_percent,
       apply_tax: r.apply_tax,
+      total_override: r.total_override,
     }));
 
     const lineTotals = computeLineTotalsFromRows({

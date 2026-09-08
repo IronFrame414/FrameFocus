@@ -357,3 +357,15 @@ ambiguous match, reverted and redone against the `vendor_id`/`catalog_item_id`-b
 Also committed: the inherited ≥0 on `total_price_override` dropped (UI validate removed,
 comment records the deliberate legality); QB tech-debt `#1-s106` filed (invoicing→QB must
 route a net-negative billed line through DiscountLineDetail; estimate side ruled legal).
+
+## Phase 3 — Part B: computeRowPricing skip + 2-row test
+
+`computeRowPricing` (estimate-totals.ts) now returns `roundMoney(row.total_override)`
+verbatim (tax_amount 0) when set, BEFORE the markup path — the single chokepoint, so
+recalculateEstimateTotals + Health + proposal + conversion all show the typed figure.
+`RowPricingInput` gained `total_override`; `recalculateEstimateTotals` row SELECT +
+mapping now carry it. `applyInstrumentRateOverrides` spreads `...r` so it survives, and
+the skip fires before markup so it wins on every contract type. Test
+`s106-row-total-override.test.ts` (3 cases, **2 rows each — 1 edited + 1 inherited**):
+edited row verbatim (not recomputed), inherited row from default, a default change
+spares the edited row, a negative typed total honored. 3/3 pass; tsc clean.
