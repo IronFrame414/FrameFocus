@@ -364,3 +364,25 @@ FilterChips (by role, shown only when >1 role present), empty state. All new hoo
 (roleOptions, filteredMembers, filteredInvitations, activeThisWeek) placed ABOVE the
 loading/error early returns (FILL-5.4). `tsc --noEmit` exit 0, 0 errors. `next build`
 verification deferred to after files + daily-logs (one run for all three).
+
+**Files + Daily-logs screens — DONE.** Extracted client `files-list.tsx` and
+`daily-logs-list.tsx` (the projects-list pattern): each owns search + a filter
+(category / hazard), renders MetricStrip (counts only — no money, FILL-5.3), an
+empty state, and a table/list card on theme tokens. Server pages slimmed to
+auth+fetch shells passing props. Daily-logs keeps its breadcrumb + FieldTabs nav.
+`next build` exit 0 (clean full route table, no hook-placement errors — FILL-5.4
+satisfied). Three screens committed as three commits, pushed.
+
+**ITEM 5 COMPLETE.** All three list screens conform; four/five conformers untouched.
+
+### Item 6 — files.estimate_id + three-arm CHECK + estimate/sub file uploads
+Map complete (agent). Build plan, in value/safety order:
+1. Migration A: `files.estimate_id` column + three-arm CHECK (rebuild-test only).
+2. `uploadFile()` gains `estimate_id` support.
+3. Migration B: `convert_estimate_to_project()` re-points estimate files to the
+   project (`SET project_id=…, estimate_id=NULL WHERE estimate_id=…`).
+4. Estimate "Files" tab (enable the disabled tab; list + upload via uploadFile).
+5. Sub upload on `/bid/[token]` (service role, 25MB + pdf/jpeg/png/heic cap in the
+   route) landing on estimate files — largest/riskiest; assess after 1-4.
+Migrations applied via MCP execute_sql (bound to rebuild-test, verified) with the
+ledger row inserted by hand + object verified — NOT the CLI (which can reach prod).
