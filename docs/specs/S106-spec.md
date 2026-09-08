@@ -43,6 +43,43 @@ base branch (verified).
 
 ---
 
+## ✅ PHASE 2 — RULINGS [Josh] and AUDIT
+
+**Part A:** ASK-A.3 → the full-width slot carries the WHOLE ContractSection minus the
+heading (stays cosmetic). A.1 moot (no card hides), A.2 leave-as-is (desktop-only). The
+full-width Contract box renders by role×type: fixed_price → type only; cost-plus/T&M+PM
+→ type + "rates Owner/Admin only" note; cost-plus/T&M+owner/admin → type + rates +
+projection. It's the full-width TOP box, so its variable height never disturbs the rows.
+
+**Part B:** ASK-B.0 → **per-ROW total, back-solve markup_percent** (both directions write
+the same column; no migration). ASK-B.1 moot (override explicit via null-ness). ASK-B.2 →
+round (markup absorbs the remainder). ASK-B.3 → Health stays row-derived (per-row
+back-solve keeps it consistent). ASK-B.4 → yes, an edited line is marked (see below).
+**Reconciliation (Josh follow-up):** on a line WITH rows the per-row totals are editable
+and the line total is READ-ONLY = row sum (no `total_price_override`); rowless flat lines
+keep `total_price_override`. Existing rowed lines with an override are **grandfathered +
+flagged**, and the flag must show BOTH the billed total AND the row sum and offer a
+deliberate CLEAR action (revert-on-migrate is OUT — silently changes a sent sell price).
+Override count: rebuild-test **0** (0 overrides at all); production PENDING (Josh runs it).
+
+**Part C:** ASK-C.1 → **EDIT rights** (own draft) to upload; listing uses VIEW. ASK-C.2 →
+view-only estimate = files read-only. ASK-C.3 → sub uploads visible to the authoring PM
+(+ owner/admin). No `files` RLS change; service-role route with the session check as the
+floor; 25MB + {pdf,jpeg,png,heic} enforced in the route.
+
+**AUDIT:** (1) all FILLs filled (C.3 test owed at build; C.7 prod-count PARTIAL by the
+no-prod-read constraint). (2) all ASKs ruled. (3) no measurement contradicts a RULED line
+— EXCEPT two surfaced-and-resolved: agent B's "inferred" (corrected to explicit), and the
+Part-A "cosmetic" premise (resolved — carry the whole section). (4) **Part A needs no
+query/permission/migration change → cosmetic, confirmed.** (5) FILL-B.1 answered
+(explicit) → ASK-B.1 moot. (6) both directions write markup_percent → consistent by
+construction. (7) FILL-B.5 sites all respect a set markup_percent. (8) Part C visibility
+test owed at build with row counts (FILL-C.3). (9) **no `files` RLS policy changed.**
+(10) Owed/unknown: production override count + production apply of `20261540000000` (both
+Josh's). **Audit PASSES for Part A now; Parts B/C ready after A ships.**
+
+---
+
 # PART A — the details page layout
 
 ⚠️ **STRICTLY COSMETIC. No data changes, no query changes, no permission changes.**
