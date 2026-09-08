@@ -57,10 +57,18 @@ round (markup absorbs the remainder). ASK-B.3 → Health stays row-derived (per-
 back-solve keeps it consistent). ASK-B.4 → yes, an edited line is marked (see below).
 **Reconciliation (Josh follow-up):** on a line WITH rows the per-row totals are editable
 and the line total is READ-ONLY = row sum (no `total_price_override`); rowless flat lines
-keep `total_price_override`. Existing rowed lines with an override are **grandfathered +
-flagged**, and the flag must show BOTH the billed total AND the row sum and offer a
-deliberate CLEAR action (revert-on-migrate is OUT — silently changes a sent sell price).
-Override count: rebuild-test **0** (0 overrides at all); production PENDING (Josh runs it).
+keep `total_price_override`.
+
+⚠️ **SUPERSEDED — grandfather+flag replaced by a DB invariant [Josh].** The earlier
+ruling (grandfather existing rowed-overrides, build an actionable flag) is withdrawn:
+Josh ran production and **0 rowed lines carry `total_price_override` on BOTH rebuild-test
+and production**, so there is nothing to exempt. The rule goes in VALID, unconditionally:
+**a line item with rows cannot carry `total_price_override`.** Not a CHECK (can't subquery
+`estimate_line_rows`) → **two SECURITY DEFINER triggers**: items BEFORE INSERT/UPDATE
+(refuse override when rows exist) + rows BEFORE INSERT/UPDATE OF line_item_id (refuse a row
+on an overridden line). ⚠️ **`set_winning_bid` must clear the override in its insert-row
+branch** (awarding a bid itemizes the line) or the award fails; clone/convert/CO are safe.
+Full design + code-path analysis: `S106-report.md` Phase 2b. **No flag UI is built.**
 
 **Part C:** ASK-C.1 → **EDIT rights** (own draft) to upload; listing uses VIEW. ASK-C.2 →
 view-only estimate = files read-only. ASK-C.3 → sub uploads visible to the authoring PM
@@ -234,9 +242,13 @@ existing route mime/25MB cap (uploadFile = 50MB, infers mime) → the 25MB +
 
 # Cross-cutting
 
-**FILL-X.1** — **NO new migration in S106.** Part B reuses `markup_percent` (explicit
-override); Part A cosmetic; Part C route-only. The only owed DB action is the ATTENDED
-production apply of S105b's `20261540000000` (FILL-C.7) — Josh's, not CC's.
+**FILL-X.1 — UPDATED: S106 DOES add ONE migration (Part B invariant).** ⚠️ Superseding
+the earlier "no migration": the `total_price_override`-vs-rows rule adds a migration (two
+SECURITY DEFINER triggers + a `set_winning_bid` override-clear) and therefore an **attended
+production push (Josh's).** CC applies to rebuild-test only. Part A stays cosmetic (no
+migration); Part C is route-only (no migration). Separately owed and attended: the
+production apply of S105b's `20261540000000` (FILL-C.7). So **two** attended production
+pushes are queued for Josh: the S105b files migration, and the S106 invariant.
 **FILL-X.2** — Coverage: `s174-option-sell.test.ts`, `s174-markup-snapshot.live.ts`,
 `money-representation.test.ts`. Part B's total→markup back-solve is NOT covered — a new
 unit test is owed (both directions → same row state; a default change spares an edited
