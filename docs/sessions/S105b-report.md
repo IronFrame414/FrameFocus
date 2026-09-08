@@ -484,3 +484,39 @@ DEFERRED (recorded, RULED design captured in spec):
   the clock source and queue fallback that burst will build on.
 
 **ITEM 7 — clock source + weak-signal queue done; multi-shot burst UI deferred.**
+
+### Item 10 — housekeeping
+
+**FILL-10.2 — QB live-test disconnect window. DONE (hardened; residual window
+documented).** Decision: a per-test `afterEach` restore is IMPOSSIBLE without
+breaking the files — S148-Q1's second `it` asserts against the `qb_realm_id` its
+first `it` wrote, so restoring between `it`s would fail the file's own assertions.
+So, per the spec's permitted fallback:
+- **s149 S149-E:** the inline restore moved into a `finally` — before this, any
+  failed assertion between the `needs_reauth` write and the restore skipped it and
+  stranded companyA broken on the shared live tenant. Now a failed assertion always
+  restores; only a hard process kill can strand it.
+- **s148 + s149 `afterAll`:** every cleanup step is now independent (one failure no
+  longer skips the others) and surfaces (throws a repair message) rather than
+  swallowing — a stranded live tenant must be visible.
+- **Residual window documented** in both files with the manual-repair steps
+  (re-run the file / reconnect by hand). tsc clean; **live tests NOT run** (they
+  touch the live QB connection — forbidden).
+
+**Devcontainer — DONE.** Port 3000 `visibility` flipped `public → private`, so a
+REBUILD comes up private (safe: the box talks to rebuild-test and a public port is
+internet-reachable). Comment amended to explain both states: private is the resting
+default; item 1's OAuth needs the LIVE port made public MANUALLY (VS Code PORTS
+panel / `gh`), which deliberately does NOT survive a rebuild. `gh` is not installed,
+so CC cannot and did not touch the live port — only Josh can.
+
+**FILL-10.1 — QB sandbox residue. DOCUMENTED (propose, do NOT delete).** The residue
+lives in Intuit's SANDBOX company tied to the PRODUCTION connection, not in
+rebuild-test (whose qb_* tables are empty/local). A full inventory needs the QB API,
+which touches the live connection — forbidden this session. Known from prior records:
+Bills 147/149, Purchases 151/152/155/156, Vendor 77 (voidable, not deletable), plus
+whatever S104 added. **Proposal:** a future authorized session reconciles these
+against the sandbox and voids the obsolete ones; CC deletes nothing and did not
+touch the connection. Recorded here and in spec FILL-10.1 as PARTIAL by necessity.
+
+**ITEM 10 COMPLETE** (within session constraints — sandbox inventory is external).
