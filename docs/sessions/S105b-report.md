@@ -520,3 +520,54 @@ against the sandbox and voids the obsolete ones; CC deletes nothing and did not
 touch the connection. Recorded here and in spec FILL-10.1 as PARTIAL by necessity.
 
 **ITEM 10 COMPLETE** (within session constraints — sandbox inventory is external).
+
+### Item T — reclassification: analysis done, EXECUTION STOPPED (spec's count/RULED guard)
+
+Re-derived the full 186-entry classification (agent, evidence per ordinal). It sums
+**exactly** to the target 69 CLOSED / 11 IDEAS / 106 OPEN with all 5 forced-OPEN
+respected. **No entries were moved.** Full proposal saved to
+`docs/sessions/S105b-techdebt-classification.md`.
+
+**Execution STOPPED — this is the spec's designed outcome, not a failure:**
+1. ⚠️ **Contradicts a RULED line.** ITEM T rules `#110`/`#131`/`#151` appear in BOTH
+   OPEN and CLOSED (the "(original)" half → CLOSED, the live half stays). The
+   re-derivation put both halves of all three in OPEN (ordinals 64/65, 91/92,
+   182/183). The spec's rule: *"If a measurement contradicts a RULED line, STOP and
+   report. Do not reconcile it yourself."* → STOP.
+2. ⚠️ **Totals fitted, not recovered.** The classifier moved three borderline entries
+   into IDEAS "to reach 11." Josh's original per-entry partition was LOST and is not
+   settled in the spec (only the totals + 5 forced-OPEN + 6 blockquotes are). Moving
+   80 entries on a fitted classification would misfile relative to Josh's actual
+   decisions — stop rule 2.
+
+The register files (`TECH_DEBT.md`, `_CLOSED`, `_IDEAS`) are **unchanged**. The
+proposal + the borderline calls a human must check are in the classification file;
+once Josh confirms the per-entry buckets (especially the three dual-file entries),
+the moves are mechanical.
+
+---
+
+## PHASE 3 SUMMARY — what shipped, what's recorded as remaining
+
+All six scope items handled; every commit pushed to `origin/feature/s105b`.
+
+| Item | Outcome |
+| ---- | ------- |
+| **5** list screens | ✅ DONE — team / files / daily-logs retrofit to the anatomy; `next build` clean; conformers untouched |
+| **6A** files RLS audit | ✅ DONE (Phase 1) — SELECT/UPDATE/DELETE read; contracts owner/admin-only; 178 null-project = design |
+| **6** estimate/sub files | ✅ FOUNDATION (migration A+B, uploadFile, CHECK verified by probe); ⚠️ UI + sub-upload RECORDED as remaining — PM desktop upload needs an RLS ruling (stop rule 2), sub anon path is unverifiable unattended |
+| **7** burst capture | ✅ clock→job source (7 tests) + weak-signal auto-queue DONE; ⚠️ multi-shot burst UI deferred (device-dependent, §2.5) |
+| **10** housekeeping | ✅ DONE — QB live-test cleanup hardened; devcontainer private-on-rebuild; sandbox residue documented (external, not deleted) |
+| **T** TECH_DEBT | ⚠️ analysis done (sums to 69/11/106); EXECUTION STOPPED — contradicts a RULED line + fitted totals; proposal saved for Josh |
+
+**Untested, stated plainly:** the estimate/sub file UI (not built), the multi-shot
+burst UI (not built), and the QB live tests (NOT run — they touch the live QB
+connection). Migrations applied to **rebuild-test only**; the item-6 CHECK needs a
+production null-project category check before Josh applies it to prod.
+
+**Needs Josh (blocks further autonomous progress):**
+- ASK: the files RLS model for PM estimate-file access (service-role route vs RLS
+  widening) — gates item 6's desktop UI.
+- Confirm the item-T per-entry classification (esp. the 3 dual-file entries) before
+  the moves are applied.
+- Item 1 (connect a real company) and the production CHECK apply — attended, browser.
