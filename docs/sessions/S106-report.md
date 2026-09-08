@@ -270,3 +270,26 @@ are the DB backstop.
 `set_winning_bid` override-clear — and therefore an **attended production push** (Josh's).
 Applied to rebuild-test by CC; production by Josh. Part B (per-row back-solve UI) rides on
 top; the grandfather+flag UI is NOT built.
+
+## Phase 2c — award-prompt conditions [RULED Josh], then Part A build
+
+**Award prompt today: NONE.** `bidding-tab.tsx handleSetWinner:97-105` calls `setWinningBid`
+directly — no confirm, no comparison. #113's "never silently replace my figure" lives in the
+DB as fill-only-when-empty (`set_winning_bid` keeps a non-zero cost), not a UI prompt. So the
+override-clear prompt is NEW, gated to the override-only case (awarding to a flat-priced line).
+
+**Condition 1 (no divergence):** the prompt computes the projected total with the SAME shared
+`applyPricing(bid, effectiveMarkupPercent(null, estimateDefaultMarkup('subcontractor')),
+pricing_mode)` + no tax that `set_winning_bid` (row: markup_percent NULL, apply_tax false) +
+`recalculateEstimateTotals` produce. An override line has ZERO rows (the invariant), so the
+awarded line ends with exactly one row = that total → agreement by construction.
+Belt-and-suspenders: after award+recompute, read back `total_price` and surface a notice if it
+differs from the prompted figure.
+
+**Condition 2 (Cancel = true no-op):** every mutation (winner, override clear, row insert,
+basis freeze) is inside the single `set_winning_bid` RPC/transaction; the prompt is outside,
+before the call. Cancel → RPC never invoked → nothing changes. No-op by construction. The
+override-clear (`total_price_override = NULL, override_cost = NULL`, one statement) runs INSIDE
+the RPC's insert-row branch, before the row insert (so the rows-trigger sees a cleared parent).
+
+**These are the Part B build contract. Building Part A first (cosmetic), alone.**
