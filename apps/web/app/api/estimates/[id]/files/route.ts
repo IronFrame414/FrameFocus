@@ -61,7 +61,19 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     });
     return NextResponse.json({ error: 'Could not list files' }, { status: 500 });
   }
-  return NextResponse.json({ files: files ?? [] });
+
+  // Signed URLs, admin-generated — the ordinary /api/files/signed-url route uses the
+  // SESSION client and is blocked on these project_id-NULL rows, same as the list. The
+  // route already proved the caller can see the estimate, so signing here is in-scope.
+  const withUrls = await Promise.all(
+    (files ?? []).map(async (f) => {
+      const { data: signed } = await admin.storage
+        .from(BUCKET)
+        .createSignedUrl(f.file_path, 300);
+      return { ...f, url: signed?.signedUrl ?? null };
+    })
+  );
+  return NextResponse.json({ files: withUrls });
 }
 
 // POST — upload a file to an estimate. EDIT rights (ASK-C.1): owner/admin any DRAFT, PM own

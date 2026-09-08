@@ -30,7 +30,8 @@ import { DetailsTab } from './details-tab';
 import { ConvertToProject } from './convert-to-project';
 import { ItemsTab } from './items-tab';
 import { BiddingTab } from './bidding-tab';
-import { CoverTab, FilesTab, NotesTab, ScopeTab, TermsTab } from './text-tabs';
+import { CoverTab, NotesTab, ScopeTab, TermsTab } from './text-tabs';
+import EstimateFilesTab from './estimate-files-tab';
 import { ReviewSendSheet } from './review-send-sheet';
 import { useConfirm } from '@/components/confirm/confirm-provider';
 import { color } from '@/lib/theme';
@@ -70,7 +71,7 @@ const TABS: Array<{ key: TabKey; label: string; disabled?: boolean }> = [
   { key: 'terms', label: 'Terms' },
   { key: 'scope', label: 'Scope of Work' },
   { key: 'bidding', label: 'Sub Bids' },
-  { key: 'files', label: 'Files', disabled: true },
+  { key: 'files', label: 'Files' },
   { key: 'cover', label: 'Proposal' },
   { key: 'notes', label: 'Notes' },
 ];
@@ -657,7 +658,7 @@ export function EstimateBuilder({
         {activeTab === 'terms' && <TermsTab {...tabProps} />}
         {activeTab === 'scope' && <ScopeTab {...tabProps} />}
         {activeTab === 'bidding' && <BiddingTab {...tabProps} />}
-        {activeTab === 'files' && <FilesTab />}
+        {activeTab === 'files' && <EstimateFilesTab estimateId={estimate.id} canEdit={canEdit} />}
         {activeTab === 'cover' && <CoverTab {...tabProps} />}
         {activeTab === 'notes' && <NotesTab {...tabProps} />}
       </div>

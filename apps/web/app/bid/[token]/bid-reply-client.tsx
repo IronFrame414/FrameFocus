@@ -72,6 +72,10 @@ export function BidReplyClient({ request }: { request: BidRequestView }) {
   const [holds, setHolds] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // S106 Part C — the sub can attach a file (plan, quote) to their bid; it lands on the
+  // estimate's files via the anonymous token route.
+  const [attaching, setAttaching] = useState(false);
+  const [attached, setAttached] = useState<string[]>([]);
 
   async function submit() {
     if (bid === '' || Number(bid) < 0) {
@@ -95,6 +99,33 @@ export function BidReplyClient({ request }: { request: BidRequestView }) {
       return;
     }
     setDone(true);
+  }
+
+  async function attachFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    if (file.size > 25 * 1024 * 1024) {
+      setError('File too large. Max size is 25 MB.');
+      return;
+    }
+    setAttaching(true);
+    setError(null);
+    try {
+      const form = new FormData();
+      form.append('file', file);
+      const res = await fetch(`/api/bid/${request.token}/files`, { method: 'POST', body: form });
+      const body = await res.json();
+      if (!res.ok) {
+        setError(body.error ?? 'Upload failed.');
+        return;
+      }
+      setAttached((prev) => [...prev, file.name]);
+    } catch {
+      setError('Upload failed.');
+    } finally {
+      setAttaching(false);
+    }
   }
 
   const header = (
@@ -203,6 +234,28 @@ export function BidReplyClient({ request }: { request: BidRequestView }) {
             onChange={(e) => setExclusions(e.target.value)}
             placeholder="Anything your bid does not include"
           />
+        </div>
+
+        {/* S106 Part C — attach a plan or quote; it lands on the estimate's files. */}
+        <div style={{ marginBottom: '0.75rem' }}>
+          <label style={{ display: 'block', fontSize: '0.8rem', color: '#6b7280', marginBottom: '0.35rem' }}>
+            Attach a file (optional — PDF or image, max 25 MB)
+          </label>
+          <input
+            type="file"
+            accept="application/pdf,image/jpeg,image/png,image/heic,image/heif"
+            disabled={attaching}
+            onChange={attachFile}
+            style={{ fontSize: '0.85rem' }}
+          />
+          {attaching && <p style={{ fontSize: '0.8rem', color: '#6b7280', margin: '0.25rem 0 0' }}>Uploading…</p>}
+          {attached.length > 0 && (
+            <ul style={{ margin: '0.35rem 0 0', paddingLeft: '1.1rem', fontSize: '0.8rem', color: '#1f8f4e' }}>
+              {attached.map((n, i) => (
+                <li key={i}>{n} — attached</li>
+              ))}
+            </ul>
+          )}
         </div>
 
         <button

@@ -437,3 +437,21 @@ with `SET ROLE authenticated` + JWT claims, rollback-safe):
 The durable test `test/s106-estimate-files-route-floor.live.ts` (read-only, non-vacuous via
 the owner contrast) is committed for CI / an env with credentials; the MCP simulation above
 is the executed proof for now.
+
+## Phase 3 — Part C UI: estimate Files tab + sub-upload path
+
+- **Route GET** now returns admin-generated signed URLs (the session signed-url route is
+  blocked on project_id-NULL rows), so the tab can view files.
+- **Estimate Files tab** (`estimate-files-tab.tsx`): lists via GET, uploads via POST
+  (25MB + pdf/jpeg/png/heic client-checked, route-enforced), view links. The disabled
+  `files` tab in `estimate-builder.tsx` is enabled and wired (`canEdit = draft`).
+- **Sub-upload** (`/api/bid/[token]/files`, anonymous — token is the credential): resolves
+  the token → estimate_sub_bid_requests → estimate_id (checks not-deleted, not-expired),
+  then admin uploads with estimate_id (lands on the estimate's files, carries to project on
+  conversion). Same 25MB/mime cap in the route. `bid-reply-client.tsx` gains an "Attach a
+  file" input.
+- One mechanism, two authorizers (session for the PM route; bid token for the sub route).
+tsc clean; `next build` gating.
+
+**PART C COMPLETE** (pending the build). Only the award-clear PROMPT copy remains — HELD
+for Josh.
