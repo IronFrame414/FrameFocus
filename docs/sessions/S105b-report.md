@@ -398,3 +398,11 @@ present — object checked, not just ledger), ledger row hand-inserted (version
 20261540000000). would_violate=0 measured before the VALID add. `database.ts` patched
 surgically (estimate_id in Row/Insert/Update + FK relationship), not regenerated
 (avoids unrelated drift). tsc exit 0.
+
+**Migration B applied (rebuild-test) — `20261550000000_convert_repoint_estimate_files`.**
+CREATE OR REPLACE of `convert_estimate_to_project()` reproducing the live body
+verbatim (captured from pg_get_functiondef, ground truth) + ONE added statement
+that re-points estimate files to the project (`SET project_id=…, estimate_id=NULL
+WHERE estimate_id=…`) right after the contract_documents re-point. Object verified:
+live body has exactly 1 `UPDATE files` that nulls estimate_id. Ledger row inserted
+(20261550000000). This makes "uploads carry to project files on conversion" real.
