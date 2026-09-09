@@ -176,3 +176,28 @@ with `Type '"sub-bid-upload"' is not assignable to type 'never'`. The marker had
 Tests: `s107-bidder-file-visibility.test.ts`, 6 cases including **both single-regression
 scenarios** (tag missing → `created_by` catches it; `created_by` present → the tag catches it).
 `VITEST_EXIT: 0`, 6/6. `TSC_EXIT: 0`.
+
+### B3a · The email_type migration — DONE, and FILL-X.1 was WRONG
+
+⚠️ **The spec said "widen `email_logs_email_type_check`". That constraint does not exist.**
+I had written FILL-X.1 from the migration *files*, where `20260711140000` is the last of several
+that drop and re-add it with a widened `ARRAY[...]`. The live object says otherwise:
+
+```
+email_logs_email_type_fkey  f  FOREIGN KEY (email_type)
+                               REFERENCES email_types(email_type) ON DELETE RESTRICT
+```
+
+No check on `email_type` at all — the enumeration moved into an **`email_types` lookup table**
+(26 rows). So a new type is an **INSERT**, not a constraint rewrite. **Fourth figure this session
+that was true of the files and false of the database.**
+
+`supabase/migrations/20261580000000_email_type_sub_bid_request.sql` — idempotent
+`INSERT ... ON CONFLICT DO NOTHING`. Widening only; invalidates no existing row, so the
+`20261540000000` trap cannot apply.
+
+- CLI link verified **before** pushing: `nmyphyhmfttxkdoposvf` `linked: true`, production
+  `jwkcknyuyvcwcdeskrmz` `linked: false`.
+- `DB_PUSH_EXIT: 0`.
+- ⚠️ **Verified on the OBJECT, not the ledger:** `select email_type from email_types where
+  email_type='sub_bid_request'` → returns the row.
