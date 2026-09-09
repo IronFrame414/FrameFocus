@@ -364,3 +364,49 @@ recorded answer, still blocked on a reproducible seed.
 ⚠️ One process note: while probing the one-open-session constraint during the read-only
 diagnosis I inserted a `time_clock_sessions` row on rebuild-test. That was a write in a
 read-only task. It was caught, deleted, and the member verified back to 0 open sessions.
+
+### Full local suite after items 1-3 — and what it exposed
+
+```
+7 failed | 2 flaky | 8 skipped | 522 passed (49.7m)
+FULL_E2E_PRINTED_EXIT: 1
+```
+
+> The task notification again said "exit code 0"; the printed line said **1**. Third time this
+> session. "29 did not run" is benign — unused `retry #2` slots for tests that passed earlier.
+
+**All three fixes hold at suite scale**, which is the thing the isolated runs could not show:
+
+|                                        |                          |
+| -------------------------------------- | ------------------------ |
+| `m-capture` D-34 (was 36s of timeouts) | ✓ **8.9s**               |
+| `desktop-settings-billing:34`          | ✓ **7.2s**               |
+| `desktop-estimate-send` (3 tests)      | ✓ **8.8s / 4.6s / 6.2s** |
+
+None of CI's five persistent failures remain. The seven that did fail are **different specs**,
+and four of them timed out at **exactly 30.0s** — the old budget, since this run's config was
+loaded before the item-4 raise.
+
+### ⚠️ AND THE ACTUAL DRIVER OF THE TIMEOUT COHORT: rebuild-test's AUTH IS SLOW
+
+Chasing those, `auth.setup.ts` began failing — the crew sign-in never leaves `/sign-in`.
+Measured directly against GoTrue:
+
+```
+attempt 1 -> ERROR 504 (empty body)   in 37,852ms
+attempt 2 -> OK, session minted       in 24,612ms
+/auth/v1/health -> 200  GoTrue v2.196.0
+```
+
+**Sign-in is taking 24-38 seconds where it should take under one.** Not a credential problem,
+not a 429: the health endpoint is fine and the second attempt succeeded. GoTrue on rebuild-test
+is degraded under load — this session drove ~500 browser sign-ins through it in 49.7 minutes,
+on top of the live suite's own, so the degradation is at least partly self-inflicted.
+
+**This reframes item 4 from a guess to a measurement.** Every spec in the anonymous Playwright
+project calls `signIn()` (88 call sites, more at runtime). If a single sign-in costs 24-38s
+against a 30s per-test budget, the test cannot pass no matter what it asserts — and _which_
+tests tip over depends on when auth happens to be slow. That is precisely the run-to-run
+variation that made this look like a chat problem for four merges.
+
+It also means the 60s raise addresses the real mechanism: 38s of auth fits in 60s, not in 30s.
