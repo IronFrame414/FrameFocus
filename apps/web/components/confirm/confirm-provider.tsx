@@ -173,6 +173,12 @@ function DialogOverlay({ pending, onSettle }: { pending: Pending; onSettle: (acc
             fontSize: '14px',
             lineHeight: 1.5,
             color: color.body,
+            // S106 — a `\n` in a message renders as a line break. HTML collapses
+            // newlines, so without this the award prompt's three lines run
+            // together into one paragraph. `pre-line` (not `pre-wrap`) still
+            // collapses runs of spaces and still wraps, so every existing
+            // single-line message is unaffected.
+            whiteSpace: 'pre-line',
           }}
         >
           {opts.message}
