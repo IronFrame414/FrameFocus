@@ -882,9 +882,39 @@ production push is coming.
 
 > **MEASURED — ONE migration is required, and it is small.**
 >
+> ## ⚠️ CORRECTED AT BUILD TIME — THIS FILL WAS WRONG, IN THE SPEC'S OWN CLASS OF ERROR
+>
+> _Superseded text, quoted rather than rewritten:_ _"widen
+> `email_logs_email_type_check`"._ **That constraint does not exist.** I wrote this
+> FILL from the migration FILES, where `20260711140000` is the last of several that
+> drop and re-add it with a widened `ARRAY[...]`. Measuring the live object:
+>
+> ```sql
+> select conname, contype, pg_get_constraintdef(oid)
+>   from pg_constraint where conrelid = 'public.email_logs'::regclass;
+> ```
+>
+> returns **no check on `email_type` at all** — it was replaced by
+> `email_logs_email_type_fkey FOREIGN KEY (email_type) REFERENCES
+> email_types(email_type) ON DELETE RESTRICT`. The enumeration moved into a
+> **lookup table** (26 rows), so a new type is a **row**.
+>
+> ⚠️ **The "ledger can lie — check the object" rule landing on the spec's own
+> migration plan**, and the fourth figure this session that was true of the files
+> and false of the database.
+>
 > | Migration | Purpose | Why unavoidable |
 > | --------- | ------- | --------------- |
-> | widen `email_logs_email_type_check` | admit a `sub_bid_request` type | Every `sendEmail` caller writes an `email_logs` row; the CHECK enumerates types and has **no bid value**, so the first send would fail the INSERT **after the mail had already gone**. |
+> | **`20261580000000_email_type_sub_bid_request.sql` — INSERT one row into `email_types`** | register `sub_bid_request` | Every `sendEmail` caller writes an `email_logs` row **after the mail has left**; without the row the FK rejects the insert and the send is delivered-but-unrecorded — the one failure ordering that cannot safely be retried. |
+>
+> Idempotent (`ON CONFLICT DO NOTHING`), widening only, invalidating no existing
+> row — so the `20261540000000` trap (a constraint derived from rebuild-test's
+> rows failing on production's) **cannot apply here.**
+>
+> **Applied to rebuild-test and VERIFIED ON THE OBJECT:** CLI link checked first
+> (`nmyphyhmfttxkdoposvf` `linked: true`, production `jwkcknyuyvcwcdeskrmz`
+> `linked: false`), `DB_PUSH_EXIT: 0`, then `select email_type from email_types
+> where email_type = 'sub_bid_request'` returns the row.
 >
 > **Possibly a second, and it is a design choice not a necessity:** if "a re-send
 > REUSES the token" must be *recorded*, `sent_at` is wrong for the job — it is
