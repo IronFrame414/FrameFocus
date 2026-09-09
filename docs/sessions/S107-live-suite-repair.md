@@ -190,3 +190,29 @@ retired by the file, nothing lost.
 
 **The backlog regrew during run 1**, 208 → 271 rows. That is the point: item 5(2) was a
 one-time unblock, and item 5(1) is what makes the regrowth stop mattering.
+
+### Run 2 — 123/123 ✅
+
+```
+Test Files  122 passed | 1 skipped (123)
+     Tests  1613 passed | 13 skipped (1626)
+  Duration  1221.71s
+LIVE2_EXIT_CODE_LINE: 0      FAIL lines in log: 0
+```
+
+The 1 skipped file is `s160-auth-email` — `RESEND_API_KEY` absent is the ruled state (item 7).
+The 13 skipped tests are its.
+
+> ⚠️ **The task notification again reported "exit code 0" for run 1, which had failed.** Both
+> runs were wrapped as `cmd > log 2>&1` followed by `echo "…: $?"`, so the process the
+> notification reports on is the **`echo`**. The printed line and the `FAIL` tally are the only
+> two things read here. Run 1: printed `1`, 2 FAILs. Run 2: printed `0`, 0 FAILs.
+
+## 5 — Gate checks
+
+| check           | printed exit | corroboration                                                                                |
+| --------------- | ------------ | -------------------------------------------------------------------------------------------- |
+| `tsc --noEmit`  | **0**        | no output                                                                                    |
+| `npm run lint`  | **0**        | 0 errors; 2 pre-existing warnings (`capture-screen.tsx`, `site-header.tsx` — untouched here) |
+| `npm run build` | **0**        | 0 `Failed to compile` / `Type error` lines; 3m13s                                            |
+| unit suite      | **0**        | 0 `FAIL` lines; 92 files / 1220 tests                                                        |
