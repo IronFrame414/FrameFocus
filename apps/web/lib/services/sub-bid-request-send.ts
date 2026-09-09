@@ -19,7 +19,9 @@
  * would put an attacker's origin in the subcontractor's inbox permanently.
  * So: configured value or nothing.
  */
-export function publicOrigin(env: NodeJS.ProcessEnv = process.env): string | null {
+export function publicOrigin(
+  env: Record<string, string | undefined> = process.env
+): string | null {
   const configured = env.NEXT_PUBLIC_APP_URL?.trim().replace(/\/+$/, '');
   if (!configured) return null;
   if (!/^https?:\/\//i.test(configured)) return null;

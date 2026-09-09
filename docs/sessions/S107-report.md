@@ -248,3 +248,43 @@ link. `TSC_EXIT: 0`.
 
 **This is the stopping point Josh named.** Everything up to the transport is built and tested;
 the send itself needs a live key that does not come back to this box.
+
+### B4 · link → upload → lands — LINK PROVEN, UPLOAD BLOCKED ON A CREDENTIAL
+
+**The live harness is written and type-checks** (`test/s107-bid-upload-e2e.live.ts`, 5 cases). It
+imports the **real** `POST`/`GET` from `app/api/bid/[token]/files/route.ts`, the way
+`s164-m9-client-writes.live.ts` drives the sign-co route.
+
+⚠️ **It cannot run on this box.** `SUPABASE_SERVICE_ROLE_KEY` is absent, and this Codespace's
+`SUPABASE_SECRET_KEY` (`sb_secret_…`, the right *form*) belongs to a **different project** —
+rebuild-test refuses it with **`Invalid API key`**. I did not go looking for another key.
+
+⚠️ **How that error surfaced is itself the session's recurring lesson.** My first fixture read did
+`const { data: seed } = …; if (!seed) throw new Error('no draft estimate on rebuild-test')` — and
+that is exactly what it reported, while MCP could see three. **A blocked read and an empty table
+both give `data: null`.** Capturing `error` turned a false "no rows" into the true
+`Invalid API key`. Same shape as `dig` reporting "no DNS records" when `dig` was simply absent.
+The harness now captures and names it.
+
+**LINK: PROVEN**, through the real `get_sub_bid_request` RPC via MCP (fixture created → resolved
+→ deleted; `requests_deleted=1, estimates_deleted=1, subs_deleted=1`):
+
+- **Exactly 23 keys** returned — the corrected count, confirmed against live output.
+- **Absent from the real response:** `grand_total`, `subtotal`, `total_price`, `markup_percent`,
+  `margin`.
+- **`allowance_amount: 5000` present**, as the Q2 amendment permits.
+- `status` came back **`viewed`** from a `sent` row — the RPC's view-stamp fires.
+
+⚠️ **This closes FILL-B.4's "blocked" wire check.** The page has no second data source — its whole
+payload is the RPC's return — so invoking the RPC *is* the wire check and needs no dev server.
+What is still unproven is that the RSC serialization adds nothing; `page.tsx` passes the object
+straight through, which is a six-line read, not a measurement.
+
+**UPLOAD → LANDS: NOT PROVEN HERE.** Needs a rebuild-test service key for the route's admin
+client. The harness runs the moment one is present:
+
+```
+cd apps/web && NEXT_PUBLIC_SUPABASE_URL=... NEXT_PUBLIC_SUPABASE_ANON_KEY=... \
+  SUPABASE_SERVICE_ROLE_KEY=<rebuild-test service key> \
+  npx vitest run --config test/live.vitest.config.ts s107-bid-upload-e2e
+```

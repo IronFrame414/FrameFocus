@@ -115,17 +115,17 @@ describe('⚠️ the origin guard — a dead link is refused BEFORE anything is 
 
 describe('publicOrigin — configured value or nothing, never a guess', () => {
   it('returns the configured origin, trailing slashes stripped', () => {
-    expect(publicOrigin({ NEXT_PUBLIC_APP_URL: 'https://a.example//' } as NodeJS.ProcessEnv)).toBe('https://a.example');
+    expect(publicOrigin({ NEXT_PUBLIC_APP_URL: 'https://a.example//' })).toBe('https://a.example');
   });
   it('returns null when unset or blank — the caller must refuse, not fall back', () => {
-    expect(publicOrigin({} as NodeJS.ProcessEnv)).toBeNull();
-    expect(publicOrigin({ NEXT_PUBLIC_APP_URL: '   ' } as NodeJS.ProcessEnv)).toBeNull();
+    expect(publicOrigin({})).toBeNull();
+    expect(publicOrigin({ NEXT_PUBLIC_APP_URL: '   ' })).toBeNull();
   });
   it('⚠️ rejects a non-absolute value — the exact shape that produces a dead link', () => {
     // This is what `window.location.origin` collapses to on a server: ''. And a
     // bare host without a scheme is not a usable href in an email client either.
-    expect(publicOrigin({ NEXT_PUBLIC_APP_URL: '' } as NodeJS.ProcessEnv)).toBeNull();
-    expect(publicOrigin({ NEXT_PUBLIC_APP_URL: 'frame-focus-eight.vercel.app' } as NodeJS.ProcessEnv)).toBeNull();
+    expect(publicOrigin({ NEXT_PUBLIC_APP_URL: '' })).toBeNull();
+    expect(publicOrigin({ NEXT_PUBLIC_APP_URL: 'frame-focus-eight.vercel.app' })).toBeNull();
   });
   it('builds an absolute reply URL', () => {
     expect(bidReplyUrlFor('https://a.example/', 'tok123')).toBe('https://a.example/bid/tok123');

@@ -611,9 +611,27 @@ network response for totals, margin, cost, or other subs' bids.**
 > payload carries no money.** Per this file's own instruction I am not reconciling
 > it. **→ ASK-B.4.**
 >
-> ⚠️ **The wire check the spec demands is BLOCKED**, and the static argument does
-> not replace it: rendering the page needs a dev server, which needs `.env.local`,
-> which this Codespace does not have. Recorded rather than skipped.
+> ### ✅ THE WIRE CHECK IS NO LONGER BLOCKED — done at build time, on the real RPC
+>
+> _Superseded: "the wire check the spec demands is BLOCKED … rendering the page
+> needs a dev server."_ **The page has no second source** — its entire payload is
+> whatever `get_sub_bid_request` returns — so invoking the RPC itself IS the wire
+> check, and it needs no server. Executed against rebuild-test with a real
+> fixture (created, resolved, deleted):
+>
+> - **Exactly 23 keys came back**, confirming the corrected count against live
+>   output rather than against the migration text.
+> - **Absent from the actual response:** `grand_total`, `subtotal`, `total_price`,
+>   `markup_percent`, `margin` — the no-money conclusion is now measured, not
+>   inferred.
+> - **`allowance_amount: 5000` present**, exactly as the Q2 amendment permits.
+> - The RPC's side effect fired: `status` came back **`viewed`** from a `sent`
+>   row, so the view-stamp works.
+>
+> ⚠️ **What remains unproven is the RSC serialization**, i.e. that the page adds
+> nothing of its own on the way out. `page.tsx` passes the RPC object straight to
+> `BidReplyClient` and adds no field, so this is a read of six lines rather than a
+> measurement — stated as such.
 
 **FILL-B.5** — Token→estimate resolution: how the token scopes to exactly one
 bid request, expiry, reuse, and ⚠️ **what a leaked or guessed token reaches.**
