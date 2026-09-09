@@ -234,6 +234,40 @@ beforeAll(async () => {
     .single();
   crewMemberId = member!.id;
 
+  // ⚠️ SWEEP THIS MEMBER'S OPEN SESSIONS BEFORE SEEDING ONE [S107].
+  //
+  // `idx_time_clock_sessions_one_open_per_member` allows exactly one open
+  // session per member — the database stating that a person cannot be clocked
+  // in twice, and the rule this file's §3j block is written around. The seed
+  // therefore collides with ANY open session already on the QA crew member,
+  // including one this file left behind when a previous run was interrupted
+  // before its afterAll: `madeSessions` lives in memory and dies with the run.
+  //
+  // Found in the S107 full-suite run, where §3j failed with
+  // "duplicate key value violates unique constraint
+  // idx_time_clock_sessions_one_open_per_member" while passing in isolation.
+  //
+  // Scoped hard: only OPEN (`clock_out IS NULL`) sessions, only for the crew
+  // member this file drives, only `status = 'pending'` — the exact shape
+  // `seedSession()` creates. A genuinely submitted or approved session is
+  // never touched. Segments go first; `time_segments` pins the session.
+  const { data: strays } = await admin
+    .from('time_clock_sessions')
+    .select('id')
+    .eq('member_id', crewMemberId)
+    .is('clock_out', null)
+    .eq('status', 'pending');
+  const strayIds = ((strays ?? []) as { id: string }[]).map((r) => r.id);
+  if (strayIds.length) {
+    const { error: segError } = await admin
+      .from('time_segments')
+      .delete()
+      .in('session_id', strayIds);
+    if (segError) throw new Error(`sweep stray segments: ${segError.message}`);
+    const { error: sesError } = await admin.from('time_clock_sessions').delete().in('id', strayIds);
+    if (sesError) throw new Error(`sweep stray sessions: ${sesError.message}`);
+  }
+
   const { data: projects } = await admin
     .from('projects')
     .select('id')
@@ -243,7 +277,6 @@ beforeAll(async () => {
   projectId = projects![0].id;
   altProjectId = projects![1].id;
 });
-
 
 /**
  * A run-window sweep, in ADDITION to the id list.
@@ -261,11 +294,7 @@ afterAll(async () => {
   if (madeNotifications.length) {
     await admin.from('notifications').delete().in('id', madeNotifications);
   }
-  await admin
-    .from('notifications')
-    .delete()
-    .in('type', MY_TYPES)
-    .gte('created_at', runStart);
+  await admin.from('notifications').delete().in('type', MY_TYPES).gte('created_at', runStart);
   if (madeSegments.length) await admin.from('time_segments').delete().in('id', madeSegments);
   if (madeSessions.length) {
     await admin.from('time_clock_sessions').delete().in('id', madeSessions);
