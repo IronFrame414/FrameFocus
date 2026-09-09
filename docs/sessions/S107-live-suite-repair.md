@@ -451,3 +451,65 @@ those failures will look exactly like the ones this session spent its length dia
 > headroom for a healthy-but-slow project; it does not survive a project in the recovery tail,
 > where a single sign-in took 206 seconds. Leave the database idle between full runs, and treat
 > a suite that goes red immediately after another full run as unproven rather than failed.
+
+---
+
+## 9 — ⛔ BLOCKED: rebuild-test cannot service the e2e suite
+
+The re-run of the seven under the 60s budget **could not classify them**, because the run
+degraded the database it was running against. This is a standing finding, not a step in the
+diagnosis.
+
+### Measured
+
+| moment                              | PostgREST `select id limit 1`              | auth sign-in              |
+| ----------------------------------- | ------------------------------------------ | ------------------------- |
+| project idle                        | **645 ms**                                 | **187 ms** median, 5/5 ok |
+| ~40 min into a `workers: 1` e2e run | **64,957 ms**                              | —                         |
+| immediately after                   | Management API SQL: **connection timeout** | —                         |
+
+My box was not the bottleneck at any point: load average **0.52 on 2 CPUs**, the Playwright
+runner at **2.2% CPU**, 4.3 GB memory free. The latency is entirely on the remote project.
+
+### What that means for the seven
+
+Under the 60s budget the camera specs failed at **exactly 1.0m** — they consumed the new
+budget rather than fitting inside it — and specs that had PASSED in the previous run
+(`m-details:96`, `:111`, `:140`, `:311`) began failing too. **A run whose failure set grows as
+the database slows is not measuring the code.** The only one that looks genuinely broken rather
+than starved is `m-capture:955`, which fails in **5.5 s** — fast, assertion-shaped, not a
+timeout. Everything else is unclassified.
+
+### Why this is not the same as the item-4 finding
+
+Item 4 addressed a project that is **healthy but slower than the budget**. This is a project
+that **stops serving** under the suite's own load: a 65-second trivial query and a refused
+connection are not survivable by any per-test timeout. Raising 60s to 120s would not fix it;
+it would only make each failure slower to arrive.
+
+### ⛔ What is blocked, and why I stopped rather than pushing
+
+- **The seven cannot be classified** until the project is idle enough to give a trustworthy run.
+- **CI cannot produce a genuine green.** A red run caused by a saturated database is
+  indistinguishable from a real failure — which is the exact confusion that made this campaign
+  take four merges to notice. Pushing now would manufacture more of it.
+- **The merge authorization was conditioned on a green CI run** ("When CI is green, MERGE").
+  That condition cannot currently be met, so the branch is **not merged**.
+
+Items 1-4 remain done and were each verified green **during a healthy window**, at full-suite
+scale:
+
+```
+m-capture D-34            8.9s   (was 36s of timeouts)
+desktop-settings-billing  7.2s
+desktop-estimate-send     8.8s / 4.6s / 6.2s
+none of CI's five persistent failures remain
+```
+
+### For a ruling
+
+The durable fix already recorded in `ci.yml` — **a database per shard** — is now doing double
+duty: it was the answer to the concurrency that forces `workers: 1`, and it is also the answer
+to this, because the load would no longer land on one shared instance. It is still blocked on a
+reproducible seed. The alternative is a larger compute tier for rebuild-test. Both are Josh's
+call; neither is a code change.
