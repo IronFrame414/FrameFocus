@@ -73,3 +73,58 @@ UPDATE qb_sync_queue SET is_deleted = false
 
 This is the cheap unblock only. Item 5(1) — scoping the four files to their own rows — is the
 fix that survives the next backlog, and follows in §3.
+
+---
+
+## 2 — Item 5(1): the four files scoped to their own rows
+
+The real fix, and it is proven under a restored backlog rather than against a quiet queue.
+
+**s104, s181 — backdated fixture rows.** `claimDue()` orders `created_at` ASC and takes
+`limit`, so a tenant with more eligible rows than the limit starves every NEW row: the test's
+own row sorts last and is never examined, and the propagation that runs INSIDE `claimDue`
+never runs on it. A fixed `2020-01-01` timestamp puts these files' rows at the front of the
+FIFO whatever else is queued. It also makes their NEGATIVE assertions (`not.toContain`)
+meaningful — a row that was never in the window satisfies those vacuously.
+
+**s187 — same, applied after the trigger.** Its row is created by the enqueue trigger, so it
+is backdated immediately after the approval and before any drain.
+
+**s123 — owns its contact.** Its `beforeAll` did
+`.eq('company_id', …).eq('is_deleted', false).limit(1).single()` with no `ORDER BY` — the
+unordered `.limit(1)` class `CLAUDE.md` documents. Heap order shifts whenever any contact in
+the tenant is updated, which other live files do constantly, so a different contact came back
+each run under a reminder whose address is asserted. **Ordering alone would only have made the
+wrong pick stable** (category 2 in the rule: the caller depends on a property the query never
+constrained), so it now creates its own marker contact via `upsertContact` and deletes it in
+teardown.
+
+### Proof, under a deliberately restored 102-row backlog
+
+| file                              | quiet queue | 102-row backlog                |
+| --------------------------------- | ----------- | ------------------------------ |
+| s104-queue-dependency-propagation | 4/4         | **4/4**                        |
+| s181-qb-park-wake                 | 4/4         | **4/4**                        |
+| s187-qb-drain-parked              | 4/4         | 3/4 — one line, see below      |
+| s123-reminders-loop               | 3/3         | n/a (does not touch the queue) |
+
+The backlog was restored by flipping the same 102 ids back, run, and re-retired. Total rows
+stayed 208 throughout.
+
+### ⚠️ One assertion cannot be scoped, and it is not a defect
+
+`s187` test 4's `expect(outcome.waiting).toBeGreaterThanOrEqual(1)`.
+
+`outcome.waiting` comes from `countWaiting()`, which the worker calls **only on the
+empty-claim path** (`queue.ts:343` — "Called ONLY on the empty-claim path, so the common case
+pays nothing"). If any row in the tenant is claimable the claim is not empty, `waiting` is
+never computed, and the field reads 0. Under the restored backlog `outcome.parked` stayed 0 —
+so the line above it IS backlog-proof — and this line alone went red.
+
+Backdating cannot help: the failure is about **other rows existing at all**, not about batch
+position. This is the drain's telemetry contract, not a property of the test, so it is
+documented at the call site with the query to run and the fix to apply (retire the residue,
+never raise the claim limit) rather than weakened.
+
+**This is exactly where the two halves of item 5 meet:** (1) makes three of the four files
+survive any backlog; (2) is what keeps the fourth green. Neither alone is sufficient.

@@ -90,6 +90,24 @@ describe('S187 F13 — a park is counted, and the drain says so', () => {
       .update({ status: 'approved' })
       .eq('id', refundId);
     if (approveError) throw new Error(`could not approve the refund: ${approveError.message}`);
+
+    // ⚠️ BACKDATE THE ROW THE TRIGGER JUST QUEUED, SO THE DRAIN REACHES IT.
+    //
+    // `claimDue()` orders by `created_at` ASC and takes `limit` rows, so a
+    // tenant with more eligible rows than the limit starves every NEW row —
+    // and the drain then never examines this one. Measured at S107: 102
+    // eligible against a limit of 25, and this file's three failures were all
+    // downstream of a row the drain never looked at (`last_error` came back
+    // null, which vitest reported as "toMatch() got object").
+    //
+    // The row is created by the enqueue trigger, so it cannot be backdated at
+    // insert the way s104's and s181's fixtures are; it is backdated here
+    // instead, immediately after the trigger has run and before any drain.
+    const { error: backdateError } = await admin
+      .from('qb_sync_queue')
+      .update({ created_at: '2020-01-01T00:00:00.000Z' })
+      .eq('entity_id', refundId);
+    if (backdateError) throw new Error(`could not backdate the queue row: ${backdateError.message}`);
   });
 
   afterAll(async () => {
@@ -143,6 +161,24 @@ describe('S187 F13 — a park is counted, and the drain says so', () => {
     // distinction `waiting` was added for at S181.
     const outcome = await runQbSync(admin);
     expect(outcome.parked).toBe(0);
+    // ⚠️ THIS ONE ASSERTION NEEDS A QUIET QUEUE, AND CANNOT BE SCOPED [S107].
+    //
+    // `outcome.waiting` comes from `countWaiting()`, which the worker calls
+    // ONLY on the EMPTY-CLAIM path (`queue.ts:343` — "so the common case pays
+    // nothing"). If ANY row in the tenant is claimable, the claim is not empty,
+    // `waiting` is never computed, and this reads 0.
+    //
+    // Proven at S107 by restoring a 102-row backlog: `parked` stayed 0 (so the
+    // line above is backlog-proof) and this line alone went red. Backdating
+    // this file's own row — which is what makes tests 1-3 backlog-proof —
+    // cannot help, because the failure is about OTHER rows existing at all.
+    //
+    // So if this line is red, look at the queue depth before the drain:
+    //   select count(*) from qb_sync_queue
+    //    where company_id = <this tenant> and is_deleted = false
+    //      and status in ('queued','failed_transient','in_flight');
+    // A non-zero count is the cause, and retiring that residue is the fix —
+    // not a change here, and not a bigger claim limit.
     expect(outcome.waiting).toBeGreaterThanOrEqual(1);
   });
 });

@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@framefocus/shared/types/database';
-import { admin, assertRebuildTest } from './live-session';
+import { admin, assertRebuildTest, upsertContact } from './live-session';
 import type { SendEmailParams } from '@/lib/services/email-service';
 import { runEstimateReminders } from '@/lib/notify/crons/estimate-reminders';
 
@@ -121,14 +121,27 @@ beforeAll(async () => {
   adminProfileId = profiles!.find((p) => p.email === ADMIN_EMAIL)!.id;
   companyId = profiles!.find((p) => p.email === OWNER)!.company_id;
 
-  const { data: contact } = await admin
-    .from('contacts')
-    .select('id')
-    .eq('company_id', companyId)
-    .eq('is_deleted', false)
-    .limit(1)
-    .single();
-  contactId = contact!.id;
+  // ⚠️ ITS OWN CONTACT, NOT WHICHEVER ONE THE TENANT HAPPENS TO HAVE FIRST.
+  //
+  // This was `.eq('company_id', …).eq('is_deleted', false).limit(1).single()`
+  // with no ORDER BY — the unordered `.limit(1)` class CLAUDE.md documents.
+  // It returns a heap-order row, and heap order shifts the moment ANY contact
+  // in the tenant is updated, which other live files do constantly. That is why
+  // this file passed alone and failed in a full run: a different contact each
+  // time, with a different email, under a reminder whose address is asserted.
+  //
+  // Ordering alone would only have made the wrong pick stable. The caller
+  // depends on the contact having a known email, which the query never
+  // constrained — category 2 in the rule. So it owns one.
+  contactId = (
+    await upsertContact({
+      company_id: companyId,
+      contact_type: 'client',
+      first_name: TAG,
+      last_name: 'Client',
+      email: `${TAG}@example.invalid`,
+    })
+  ).id;
 
   // An estimate on the LAST step of a [3,7,14] schedule: two reminders already
   // sent, sent_at far enough back that step three is due. isFinalReminderStep
@@ -204,6 +217,8 @@ afterAll(async () => {
   await admin.from('email_logs').delete().eq('estimate_id', estimateId);
   if (sessionId) await admin.from('signing_sessions').delete().eq('id', sessionId);
   if (estimateId) await admin.from('estimates').delete().eq('id', estimateId);
+  // Its own contact goes with it. Deleted last: the estimate references it.
+  if (contactId) await admin.from('contacts').delete().eq('id', contactId);
 });
 
 describe('§3f — the loop, end to end, with nothing sent', () => {
