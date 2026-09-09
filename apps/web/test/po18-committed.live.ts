@@ -7,13 +7,14 @@
 // Non-vacuous throughout: every step asserts exact figures read back via admin.
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { admin, assertRebuildTest, sessionFor } from './live-session';
+import { admin, assertRebuildTest, paymentAccountFor, sessionFor } from './live-session';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 const MARKER = 'PO18CMT';
 
 let owner: SupabaseClient;
 let companyId: string;
+let paymentAccountId: string;
 let projectId: string;
 let budgetA: string;
 let budgetB: string;
@@ -23,10 +24,7 @@ let crewMemberId: string;
 let crew: SupabaseClient;
 
 async function sweep() {
-  const { data: projects } = await admin
-    .from('projects')
-    .select('id')
-    .like('name', `${MARKER}%`);
+  const { data: projects } = await admin.from('projects').select('id').like('name', `${MARKER}%`);
   const pids = (projects ?? []).map((p) => p.id);
   if (pids.length === 0) return;
   const { data: pos } = await admin.from('purchase_orders').select('id').in('project_id', pids);
@@ -49,7 +47,10 @@ async function sweep() {
     await admin.from('expenses').delete().in('id', expIds);
   }
   if (poIds.length) await admin.from('purchase_orders').delete().in('id', poIds);
-  const { data: items } = await admin.from('project_budget_items').select('id').in('project_id', pids);
+  const { data: items } = await admin
+    .from('project_budget_items')
+    .select('id')
+    .in('project_id', pids);
   const bIds = (items ?? []).map((b) => b.id);
   if (bIds.length) {
     await admin.from('project_budget_amounts').delete().in('budget_item_id', bIds);
@@ -77,6 +78,8 @@ beforeAll(async () => {
     .eq('name', 'Sabal Point Construction')
     .single();
   companyId = company!.id;
+  // M-J: an expense cannot reach `approved` without a picked account.
+  paymentAccountId = await paymentAccountFor(companyId);
 
   const { data: crewMember } = await admin
     .from('company_members')
@@ -136,7 +139,12 @@ beforeAll(async () => {
   const mkBudget = async (code: string) => {
     const { data, error } = await admin
       .from('project_budget_items')
-      .insert({ company_id: companyId, project_id: projectId, cost_code: code, description: `${MARKER} ${code}` })
+      .insert({
+        company_id: companyId,
+        project_id: projectId,
+        cost_code: code,
+        description: `${MARKER} ${code}`,
+      })
       .select('id')
       .single();
     if (error) throw new Error(`budget ${code}: ${error.message}`);
@@ -253,12 +261,19 @@ describe('PO18 — committed lifecycle', () => {
     expect(refuse?.message).toMatch(/cost and a budget line/);
     await admin.from('purchase_order_items').update({ unit_cost: 25 }).eq('id', lineIds[1]);
 
-    const { error } = await owner.rpc('issue_po_lines', { p_po_id: poId, p_item_ids: [lineIds[1]] });
+    const { error } = await owner.rpc('issue_po_lines', {
+      p_po_id: poId,
+      p_item_ids: [lineIds[1]],
+    });
     expect(error?.message).toBeUndefined();
 
     const exp = await commitmentRow();
     expect(money(exp!.amount)).toBe(650); // 200+300+150
-    const { data: po } = await admin.from('purchase_orders').select('total_amount, po_number').eq('id', poId).single();
+    const { data: po } = await admin
+      .from('purchase_orders')
+      .select('total_amount, po_number')
+      .eq('id', poId)
+      .single();
     expect(money(po!.total_amount)).toBe(650);
     expect(po!.po_number).toBe('PO-9901-01'); // numbered once, not re-allocated
   });
@@ -292,6 +307,9 @@ describe('PO18 — committed lifecycle', () => {
         state: 'actual',
         source_po_id: poId, // the run link — NOT purchase_order_id
         author_member_id: crewMemberId,
+        // M-J (20261430000000): approving a non-payable expense for a company
+        // with a QuickBooks realm requires the account that paid for it.
+        payment_account_id: paymentAccountId,
       })
       .select('id')
       .single();
@@ -361,7 +379,11 @@ describe('PO18 — committed lifecycle', () => {
     exp = await commitmentRow();
     expect(exp!.closed_out_at).not.toBeNull(); // done — countsTowardCommitted drops it
 
-    const { data: po } = await admin.from('purchase_orders').select('status, closed_reason').eq('id', poId).single();
+    const { data: po } = await admin
+      .from('purchase_orders')
+      .select('status, closed_reason')
+      .eq('id', poId)
+      .single();
     expect(po!.status).toBe('closed'); // §4.5: no line outstanding
   });
 

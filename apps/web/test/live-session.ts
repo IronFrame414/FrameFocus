@@ -16,7 +16,14 @@
  */
 import { createClient as createSupabaseClient, type SupabaseClient } from '@supabase/supabase-js';
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  unlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { deleteCompanies, purgeCompaniesNamed } from '../test-support/company-purge';
@@ -162,6 +169,50 @@ export async function adoptSignupProfile(
 }
 
 /**
+ * The company's QuickBooks payment account — "which account paid for this".
+ *
+ * ⚠️ REQUIRED SINCE 2026-09-06, and three harnesses went red the day it landed.
+ * `20261430000000_qb_account_selection.sql` (M-J) made accounts PICKED rather
+ * than typed [RULED Josh, S103], because a typo — `Cost of goods sold:
+ * Subcontractor expenses` for `Cost of Goods Sold:Subcontractor Expense` —
+ * parked an expense three times in one session. Two guards enforce it:
+ *
+ *   - `enforce_expense_payment_account()` refuses the transition INTO
+ *     `approved` unless `expenses.payment_account_id` is set;
+ *   - `record_expense_payment()` refuses a NULL `p_payment_account_id`.
+ *
+ * Both exempt a company with no `qb_realm_id`, and the expense guard also
+ * exempts a payable/commitment. The QA tenant HAS a realm, so harnesses that
+ * approve an expense or record a payment against it must pick an account.
+ *
+ * ⚠️ SCOPED AND ORDERED, per the `.limit(1)` rule. Scoped to the company
+ * because a fixed marker could otherwise match another tenant's row, and
+ * ordered so the choice is stable across runs rather than heap-order. It
+ * THROWS when there is nothing to pick: returning null here would resurface as
+ * "Choose which account paid for this expense" several frames away, which is
+ * precisely the failure that cost this cluster a session to read.
+ */
+export async function paymentAccountFor(companyId: string): Promise<string> {
+  const { data, error } = await admin
+    .from('company_payment_accounts')
+    .select('id, name')
+    .eq('company_id', companyId)
+    .eq('is_deleted', false)
+    .order('created_at', { ascending: true })
+    .limit(1);
+  if (error) throw new Error(`paymentAccountFor(${companyId}): ${error.message}`);
+  const row = (data ?? [])[0] as { id: string; name: string } | undefined;
+  if (!row) {
+    throw new Error(
+      `paymentAccountFor(${companyId}): no company_payment_accounts row. ` +
+        'Since M-J (20261430000000) an expense cannot be approved and a payment ' +
+        'cannot be recorded without one. Seed one for this tenant.'
+    );
+  }
+  return row.id;
+}
+
+/**
  * ============================================================================
  * TOKEN CACHE — why this exists, and what it is NOT
  * ============================================================================
@@ -289,14 +340,18 @@ export async function sessionFor(email: string): Promise<SupabaseClient> {
   // Fallback: identities that predate the seeded password (Josh's originals).
   const { data, error } = await admin.auth.admin.generateLink({ type: 'magiclink', email });
   if (error) {
-    throw new Error(`sessionFor(${email}): password failed (${pwErr.message}); link failed (${error.message})`);
+    throw new Error(
+      `sessionFor(${email}): password failed (${pwErr.message}); link failed (${error.message})`
+    );
   }
   const { error: vErr } = await client.auth.verifyOtp({
     token_hash: data.properties!.hashed_token,
     type: 'email',
   });
   if (vErr) {
-    throw new Error(`sessionFor(${email}): password failed (${pwErr.message}); verifyOtp failed (${vErr.message})`);
+    throw new Error(
+      `sessionFor(${email}): password failed (${pwErr.message}); verifyOtp failed (${vErr.message})`
+    );
   }
   const { data: sess } = await client.auth.getSession();
   if (sess.session?.access_token && sess.session.refresh_token && sess.session.expires_at) {
@@ -397,46 +452,46 @@ export async function disposeChangeOrders(ids: string[]): Promise<CoDisposal> {
   while (pending.length) {
     const deferred: typeof pending = [];
     for (const r of pending) {
-    if (r.signed_at !== null) {
-      const { error } = await admin
-        .from('change_orders')
-        .update({ is_deleted: true, deleted_at: new Date().toISOString() })
-        .eq('id', r.id)
-        .select('id');
-      if (error) {
-        throw new Error(
-          `disposeChangeOrders: ${r.co_number} is signed AND could not even be soft-deleted — ${error.message}`
-        );
-      }
-      out.retained.push(r.co_number);
-      continue;
-    }
-
-    if (r.status === 'signed') {
-      const { error } = await admin
-        .from('change_orders')
-        .update({ status: 'draft' })
-        .eq('id', r.id)
-        .select('id');
-      if (error) {
-        throw new Error(
-          `disposeChangeOrders: ${r.co_number} could not be unflagged to draft — ${error.message}`
-        );
-      }
-      out.unflagged += 1;
-    }
-
-    const { error } = await admin.from('change_orders').delete().eq('id', r.id);
-    if (error) {
-      // A row still superseded by something later in this batch — retry it on
-      // the next pass rather than failing the teardown on an ordering accident.
-      if (error.message.includes('change_orders_supersedes_fkey')) {
-        deferred.push(r);
+      if (r.signed_at !== null) {
+        const { error } = await admin
+          .from('change_orders')
+          .update({ is_deleted: true, deleted_at: new Date().toISOString() })
+          .eq('id', r.id)
+          .select('id');
+        if (error) {
+          throw new Error(
+            `disposeChangeOrders: ${r.co_number} is signed AND could not even be soft-deleted — ${error.message}`
+          );
+        }
+        out.retained.push(r.co_number);
         continue;
       }
-      throw new Error(`disposeChangeOrders: ${r.co_number} would not delete — ${error.message}`);
-    }
-    out.deleted += 1;
+
+      if (r.status === 'signed') {
+        const { error } = await admin
+          .from('change_orders')
+          .update({ status: 'draft' })
+          .eq('id', r.id)
+          .select('id');
+        if (error) {
+          throw new Error(
+            `disposeChangeOrders: ${r.co_number} could not be unflagged to draft — ${error.message}`
+          );
+        }
+        out.unflagged += 1;
+      }
+
+      const { error } = await admin.from('change_orders').delete().eq('id', r.id);
+      if (error) {
+        // A row still superseded by something later in this batch — retry it on
+        // the next pass rather than failing the teardown on an ordering accident.
+        if (error.message.includes('change_orders_supersedes_fkey')) {
+          deferred.push(r);
+          continue;
+        }
+        throw new Error(`disposeChangeOrders: ${r.co_number} would not delete — ${error.message}`);
+      }
+      out.deleted += 1;
     }
 
     if (deferred.length === pending.length) {
@@ -493,9 +548,7 @@ export async function sweepChangeOrders(coNumberPrefix: string): Promise<CoDispo
  * s97ct teardown already uses, so a call site stays one line and the failure
  * still reaches the errors array that now throws at the end of the teardown.
  */
-export async function disposeChangeOrdersError(
-  ids: string[]
-): Promise<{ message: string } | null> {
+export async function disposeChangeOrdersError(ids: string[]): Promise<{ message: string } | null> {
   try {
     await disposeChangeOrders(ids);
     return null;
