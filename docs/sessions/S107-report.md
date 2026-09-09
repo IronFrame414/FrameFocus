@@ -107,3 +107,33 @@ Re-measured through node's resolver against 8.8.8.8/1.1.1.1:
 `From:` slug, so ASK-B.3's check 4 is sharpened: **Josh reports which folder**, not just arrival.
 
 Read on rebuild-test (`nmyphyhmfttxkdoposvf`) only. Production (`jwkcknyuyvcwcdeskrmz`) untouched.
+
+## Phase 3 — Part B
+
+### B1 · Route-floor test — DONE, and proven load-bearing
+
+`apps/web/test/s107-estimate-files-route-order.test.ts` — 7 tests. Imports the **real** handlers
+from `app/api/estimates/[id]/files/route.ts` with `@/lib/supabase-server` and
+`@/lib/supabase-admin` mocked, and asserts on every denial path **both** the status **and that
+`getSupabaseAdmin` was never called**. The second assertion is the one that matters: a 404 still
+arrives if the privileged read already happened.
+
+Covered: GET RLS-denial → 404, GET unauthenticated → 401, POST RLS-denial → 404, POST no profile
+→ 403, POST PM-did-not-author → 403, POST non-draft → 403. Plus a **mirror** case (estimate
+visible → admin IS called) so the not-called assertions cannot pass vacuously.
+
+⚠️ **Proven load-bearing by sabotage rather than assumed.** Hoisting `getSupabaseAdmin()` above
+the session read in GET:
+
+```
+VITEST_EXIT_UNDER_SABOTAGE: 1
+AssertionError: the service-role client was reached on a DENIED estimate — the floor has been
+bypassed: expected "vi.fn()" to not be called at all, but actually been called 1 times
+Tests  1 failed | 6 passed (7)
+```
+
+Reverted; `git diff` against HEAD on the route is empty (byte-identical), and the suite is green
+again. **Audit item 11 is closed.**
+
+Verified: `TSC_EXIT: 0`, full suite **87 files / 1156 tests, all passing** (was 86/1149 — +1 file,
++7 tests, no regressions).
