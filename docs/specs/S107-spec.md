@@ -583,12 +583,18 @@ network response for totals, margin, cost, or other subs' bids.**
 >
 > **The payload is a fixed allow-list, which is the right shape.**
 > `get_sub_bid_request` returns a hand-built `jsonb_build_object`
-> (`20261240000000:55-79`) — **21 named keys and nothing else**. It is not
+> (`20261240000000:55-79`) — **23 named keys and nothing else** ⚠️ (*first written
+> as 21; corrected by counting the source in the audit re-verification*). It is not
 > `to_jsonb(row)`, so no column can leak by being added later. The page passes
 > exactly that object to `BidReplyClient`, so the RSC payload can contain only
 > those keys.
 >
-> **Absent, verified by enumerating all 21 keys:** estimate `grand_total` /
+> **Absent, verified by enumerating all 23 keys** — `token, status, reply_mode,
+> expires_at, is_expired, scope_text, message, allowance_amount, bids_due_date,
+> work_starts_date, site_visit_date, company_name, subcontractor_name,
+> line_item_name, estimate_name, estimate_number, submitted_at, reply_bid_amount,
+> reply_labor_amount, reply_material_amount, reply_scope_coverage_percent,
+> reply_exclusions, reply_holds_until` **—:** estimate `grand_total` /
 > `subtotal`, line `total_price`, any markup or margin, any cost, and **any other
 > subcontractor's bid**. `estimate_sub_bids` is never read by this RPC.
 >
@@ -625,7 +631,7 @@ bid request, expiry, reuse, and ⚠️ **what a leaked or guessed token reaches.
 >   past expiry and **404** for missing/deleted — no oracle.
 > - **Reuse:** the token is stable for the row's life, so the ruled "a re-send
 >   REUSES the token" is satisfied **by construction** — once a re-send exists.
-> - ⚠️ **What a leaked token reaches:** the 21 payload keys (including the
+> - ⚠️ **What a leaked token reaches:** the 23 payload keys (including the
 >   allowance), the ability to **upload a file onto that estimate**, and the
 >   ability to **submit a bid once**. It reaches **no other estimate, no other
 >   request, no other sub's bid, and no money beyond the allowance.** The upload
@@ -640,7 +646,9 @@ sole access control and service role bypasses RLS entirely.
 > ## ⚠️ MEASURED — THE GAP IS EXACT, AND THE EXISTING TEST NAMES IT ITSELF
 >
 > `s106-estimate-files-route-floor.live.ts` is a real test on real rows (29
-> estimates, 4 contracts) — but its own header says what it does **not** cover:
+> estimates, 4 contracts — ⚠️ *those two figures are recorded in a source COMMENT
+> as "currently" values, not asserted; the test asserts only `> 0`*) — but its own
+> header says what it does **not** cover:
 > _"The Next route handler can't be invoked with a real session in vitest, so the
 > floor is tested at the layer that enforces it."_ It exercises
 > **`estimates_select_authenticated`** (the RLS policy) and the `estimate_id`
@@ -677,23 +685,73 @@ history in this repo. State the sending domain, whether the sub's address is
 verified-domain-restricted, and **whether an email to an arbitrary external
 address will actually arrive.**
 
-> **MEASURED as far as this box allows; one half needs Josh's Resend dashboard.**
-> - **Sending domain: `ezcontractorbinder.com`** (`email-service.ts:54`), and the
->   from-address is **per-company**: `buildSenderAddress()` →
->   `"{company.name} <{company.slug}@ezcontractorbinder.com>"`. Auth mail falls
->   back to `no-reply@` on the same domain.
-> - **Restriction:** Resend limits sending to your own address only while **no**
->   domain is verified. A custom domain is configured and the diagnosis records
->   **423 real deliveries to external addresses**, so the domain is verified and an
->   arbitrary external recipient (`JSBishop14@gmail.com`) **will** be accepted.
->   ⚠️ **Not verifiable from here** — no Resend key, no dashboard access.
-> - ⚠️ **Reputation is a live concern, not hypothetical.** The same incident sent
->   **52 bounces to `example.invalid`** on this domain. Gmail weighs bounce rate, so
->   a first send to a Gmail address can land in **spam** rather than fail visibly.
->   **A `sent` row in `email_logs` is not evidence the sub saw it** — the
->   end-to-end test must be confirmed in the recipient's inbox, by Josh.
-> - **The `CRON_SECRET`-holding-a-Resend-key episode:** a separate historical
->   mix-up; neither variable is present in this environment, so nothing to unpick.
+> ## ⚠️ SETTLED [S107, re-measured on Josh's instruction]. THE DOMAIN IS FINE. MY EARLIER TEXT OVERSTATED THE RISK.
+>
+> _Superseded claim, quoted rather than rewritten:_ _"Gmail weighs bounce rate, so
+> a first send to a Gmail address can land in **spam** rather than fail visibly."_
+> **The causal link in that sentence is false** — see the bounces below. Corrected.
+>
+> ### Authentication — measured live via public resolvers (8.8.8.8 / 1.1.1.1)
+>
+> ⚠️ *`dig`, `nslookup` and `host` are all absent from this box; the first attempt
+> returned exit 127 and its empty output read as "no records exist". Re-run through
+> node's resolver. **A missing tool looks exactly like a missing DNS record.***
+>
+> | Record | Value | Verdict |
+> | ------ | ----- | ------- |
+> | **DKIM** `resend._domainkey.ezcontractorbinder.com` | `p=MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQDUMVPv/…` | ✅ present, **on the root domain — so it ALIGNS with the `From:` domain** |
+> | **SPF** `send.ezcontractorbinder.com` | `v=spf1 include:amazonses.com ~all` | ✅ present on the **envelope/bounce** domain |
+> | **MX** `send.ezcontractorbinder.com` | `feedback-smtp.us-east-1.amazonses.com` | ✅ Resend/SES feedback path wired |
+> | **SPF** `ezcontractorbinder.com` (root) | ⚠️ **none** — only a `google-site-verification` TXT | acceptable: DMARC passes on **DKIM** alignment, and relaxed SPF alignment holds via the shared org domain. A receiver doing a bare SPF check on the From domain gets `none`, not `fail`. |
+> | **DMARC** `_dmarc.ezcontractorbinder.com` | `v=DMARC1; p=none; rua=mailto:josh@worthprop.com` | ⚠️ `p=none` = monitoring only. The `rua` is **TECH_DEBT `#1-delsweep`**, already known and ruled; not blocking delivery. |
+> | **MX** root | none | expected — the domain sends, it does not receive. |
+>
+> **Conclusion: mail from this domain is DKIM-signed and DMARC-aligned. It will not
+> be rejected for authentication.**
+>
+> ### ⚠️ What the 52 bounces actually were — and why they do NOT damage Gmail reputation
+>
+> Measured on rebuild-test (`nmyphyhmfttxkdoposvf`; production is
+> `jwkcknyuyvcwcdeskrmz` and was **not** touched):
+>
+> - **All 52 went to ONE address: `qa-client-a@example.invalid`**, 2026-08-03 →
+>   2026-08-30. A single QA fixture address, repeated.
+> - ⚠️ **`.invalid` is an RFC 2606 reserved TLD that does not resolve.** SES's MX
+>   lookup returns NXDOMAIN and the message hard-bounces **inside the ESP**.
+>   **No third-party mail provider ever received, saw, or rejected them.**
+>   **Gmail's view of this domain is therefore completely unaffected by them.**
+> - ⚠️ **They are logged `sent` in `email_logs`, not `failed`** — the app recorded a
+>   successful handoff to Resend and never learned about the bounce. **So the
+>   application's own logs cannot tell you an address bounced.** This is precisely
+>   why check 1–2 of ASK-B.3's definition are insufficient alone.
+> - The 15 later `example.invalid` rows are `failed` and all date from **2026-08-31
+>   onward — i.e. the send gate refusing. That is the fix working**, not a residue.
+>
+> **Where the damage IS real: the ESP.** 52 hard bounces against 430 `sent` rows is
+> a **~12.1% bounce rate** over the period, above SES's 5% review and 10% pause
+> thresholds. ⚠️ **But an ESP restriction fails LOUDLY** — the send returns an
+> error and `email_logs` records `failed`. It is the visible failure mode, not the
+> silent one. Bounces stopped 2026-08-30.
+>
+> ### ⚠️ The decisive fact for the end-to-end test
+>
+> **`JSBishop14@gmail.com` — the exact ruled test recipient — has already received
+> 15 successful messages from this domain, most recently 2026-08-20.**
+>
+> So it is **not** a cold sender/recipient pair: Gmail has accepted mail on this
+> path three weeks ago. (7 `failed` rows to that address exist, all on the single
+> day 2026-07-19 — an outage or missing key, not a rejection.)
+>
+> **→ ANSWER TO "can the end-to-end test prove anything": YES.** The domain is
+> authenticated, its Gmail reputation is established rather than damaged, and the
+> recipient is a known-good path. The residual risk is **spam-foldering of a
+> per-company `From:` slug** (`{slug}@ezcontractorbinder.com`) that Gmail may not
+> have seen before — the domain and DKIM key are the same, and reputation is
+> largely domain-level, so this is low.
+>
+> ⚠️ **One sharpening of ASK-B.3's check 4: Josh must report WHICH FOLDER.**
+> "It arrived" and "it arrived in spam" are different results, and only one of them
+> means the feature works for a real subcontractor.
 
 ## ASK
 
@@ -748,7 +806,7 @@ fourth is Josh's eyes and cannot be delegated:**
 | 1 | `sendEmail` returns a non-null `messageId` | the send | A null id with no error means the gate refused; the send silently did nothing. |
 | 2 | An `email_logs` row exists, `status='sent'`, `resend_message_id` = that id | the send | Proves the **new `email_type` survived the widened CHECK** — the one thing that would fail AFTER the mail had gone. |
 | 3 | The link in the delivered body resolves to the request | ⚠️ **CC, WITHOUT SENDING** | `bidReplyUrl()` reads `window.location.origin` and is **browser-only**; a server sender that keeps it emits a link to nowhere. Unit-testable today. |
-| 4 | ⚠️ **The mail is in the inbox — and whether it landed in SPAM** | **Josh only** | 52 bounces to `example.invalid` on `ezcontractorbinder.com` mean Gmail may filter rather than reject. **A `sent` row is not evidence a human saw it.** |
+| 4 | ⚠️ **The mail arrived — and WHICH FOLDER it landed in** | **Josh only** | ⚠️ **`email_logs` records the 52 known bounces as `sent`** — the app never learns a bounce happened, so its own log can never establish delivery. "It arrived" and "it arrived in spam" are different results and only one means the feature works for a real sub. |
 
 ⚠️ **Check 4 is the one that cannot be inferred from anything CC observes.** If it
 is skipped, "the email works" is exactly the assumption this condition forbids.
@@ -967,8 +1025,8 @@ comparisons there are noise until re-synced.
 | 5 | ⚠️ FILL-A.8's failure table exists | ✅ Exists — **seven** modes (the five named, plus tray-at-capacity and TTL-warning, which the rulings created). Each row gives today's behaviour and what Josh sees after the build. ⚠️ **This row was first recorded ✅ before the table was written** — caught by re-checking rather than by trusting the audit. |
 | 6 | ⚠️ FILL-B.1 exact | ✅ Eight pieces classified. **Nothing is "shipped and tested."** Two are **NOT BUILT** (the email; the sub's file GET). |
 | 7 | ⚠️ FILL-B.0 answered AND email working before the e2e test | ✅ Answered. ⚠️ **Email will NOT be working in this environment, by ruling [Q1/B]** — the key does not come back here. **The real send is Josh's**, against the four-check definition above. CC's half (link → upload → lands) needs no email. |
-| 8 | ⚠️ FILL-B.7 answered | ✅ Domain `ezcontractorbinder.com`, verified (423 real external deliveries). ⚠️ **Spam is the live risk, not rejection** — check 4 covers it. |
-| 9 | ⚠️ Anonymous payload carries no money, checked on the wire | ⚠️ **PARTIAL, and honestly so.** Verified **statically and exhaustively** — the payload is a hand-built 21-key `jsonb_build_object`, not `to_jsonb(row)`, so it is enumerable and enumerated. **The wire check is blocked** (no `.env.local`). The one money key, `allowance_amount`, is now a ruled exception. |
+| 8 | ⚠️ FILL-B.7 answered | ✅ **SETTLED by measurement, and my first answer was wrong.** DKIM present and aligned; SPF on `send.`; DMARC `p=none`. The 52 bounces were **one non-resolving QA address** (`qa-client-a@example.invalid`) that **no mail provider ever saw**, so Gmail reputation is unaffected. **`JSBishop14@gmail.com` has received 15 messages from this domain, last on 2026-08-20.** Residual risk is spam-foldering only → check 4 sharpened to **"report which folder"**. |
+| 9 | ⚠️ Anonymous payload carries no money, checked on the wire | ⚠️ **PARTIAL, and honestly so.** Verified **statically and exhaustively** — the payload is a hand-built **23-key** `jsonb_build_object`, not `to_jsonb(row)`, so it is enumerable and enumerated. ⚠️ *This row first said 21; the miscount is recorded rather than silently fixed. The conclusion is unchanged — the two keys I had missed are `reply_exclusions` and `reply_holds_until`, neither of which is money.* **The wire check is blocked** (no `.env.local`). The one money key, `allowance_amount`, is now a ruled exception. |
 | 10 | ⚠️ FILL-X.0 lists every figure, confirmed or corrected | ✅ **7 figures: 3 confirmed, 3 corrected, 1 qualified.** The spec's assumption that at least one would be wrong held — three were. |
 | 11 | ⚠️ The route-floor test exists and FAILS on the reordering | ⛔ **NOT YET — it is Phase 3's first build item**, designed in FILL-B.6 (assert the admin spy was **never called** on a denied read). Ruled to be built this session, and it is. |
 | 12 | Anything still unknown the build will need | See below. |
