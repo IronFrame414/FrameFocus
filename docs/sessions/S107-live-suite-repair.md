@@ -216,3 +216,66 @@ The 13 skipped tests are its.
 | `npm run lint`  | **0**        | 0 errors; 2 pre-existing warnings (`capture-screen.tsx`, `site-header.tsx` — untouched here) |
 | `npm run build` | **0**        | 0 `Failed to compile` / `Type error` lines; 3m13s                                            |
 | unit suite      | **0**        | 0 `FAIL` lines; 92 files / 1220 tests                                                        |
+
+---
+
+## 6 — Merge and deploy
+
+Merged under **one-off authorization from Josh for these two branches only**. The standing rule
+in `CLAUDE.md` is unchanged — CC does not merge, Josh decides per merge — and `CLAUDE.md` was
+not edited.
+
+`feature/live-guard-key-verification` is an ancestor of `feature/live-suite-fixture-repair`, so
+one `--no-ff` merge brought both (15 commits).
+
+| step                             | result                                                                                                                            |
+| -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| tree clean, both branches pushed | ✅ `main` was at `bf8dd76`, both branches == origin                                                                               |
+| `git merge --no-ff`              | ✅ **no conflicts**                                                                                                               |
+| merged-main `next build`         | ✅ printed exit **0** — re-run with `--force` because the first was a `FULL TURBO` cache hit, which is not a build of merged main |
+| merged-main unit suite           | ✅ printed exit **0**, 92 files / 1220 tests                                                                                      |
+| `git push origin main`           | ✅ `bf8dd76..73b2319`                                                                                                             |
+| Vercel                           | ✅ new build live ~120s after push — chunk hash `1528-9b5e718c…` → `1528-fa8ee45d…`                                               |
+
+Post-deploy health: `/` 200, `/pricing` 200, `/contact` 200, `/privacy` 200, `/dashboard` 307,
+`/m` 307, `/portal` 307. **No 5xx.** (The 307s are the auth redirects working; there is no
+`/login` route in this app — a 404 there was my wrong guess, not a regression.)
+
+---
+
+## 7 — State at close
+
+**Passing.** Live suite **123/123** (122 passed, 1 skipped). Unit **92 files / 1220 tests**.
+`tsc` 0, `lint` 0 (2 pre-existing warnings, 0 errors), `build` 0. All read from printed exit
+lines and corroborated by independent tallies, never from a wrapper's status.
+
+**Not passing: nothing.**
+
+**Awaiting a ruling: nothing.** The one item that looked like it needed one — s187's
+`outcome.waiting` — turned out to be fixable, and was fixed rather than left as a documented
+excuse.
+
+**Owed to production: `20261580000000_email_type_sub_bid_request.sql`, and nothing else.**
+Production is current through `20261570000000` (§ Migrations in `STATE.md`, verified 2026-09-09).
+**This session added no migration** and changed no schema, no RLS policy and nothing under
+`supabase/`.
+
+### Left deliberately, for a future session
+
+- **102 `qb_sync_queue` rows are soft-deleted** on rebuild-test (reversal predicate in §1). The
+  104 `failed_terminal` rows were left live because the Accounting screen reports them.
+- **The queue regrows every full run** (208 → 271 during run 1). That is now cosmetic: the four
+  files that cared are scoped to their own rows and proven under backlog. If a future harness
+  asserts on `claimDue` output or the drain's counters, it must do the same — the pattern is
+  in `s187`'s `beforeAll` and `s104`'s `FIXTURE_CREATED_AT`.
+- **`TECH_DEBT #7-s106`** (the S106 award-prompt e2e never executed) is untouched. It needs
+  Playwright browsers, not credentials.
+
+### The one thing worth carrying forward
+
+Three defects this session were the same shape: **a discarded error or a wrong instrument made
+a failure wear the wrong name.** The S104 Purchase orphan, the live guard's null deref, and
+`download()` reporting a deleted object as present. In each case the fix was cheap once the
+real signal was read, and expensive to find while it was not. The corollary that bit twice
+more: **a task notification's "exit code 0" is the trailing `echo`'s**, and a `FULL TURBO`
+cache hit is not a build.
