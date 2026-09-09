@@ -158,7 +158,9 @@ async function sentInvoice(
 async function invoiceRow(id: string) {
   const { data } = await admin
     .from('invoices')
-    .select('id, invoice_number, status, billed_total, retainage_withheld, amount_receivable, is_final, is_deleted')
+    .select(
+      'id, invoice_number, status, billed_total, retainage_withheld, amount_receivable, is_final, is_deleted'
+    )
     .eq('id', id)
     .single();
   return data!;
@@ -167,9 +169,7 @@ async function invoiceRow(id: string) {
 beforeAll(async () => {
   // ── GATE ──────────────────────────────────────────────────────────────────
   if (!URL_.includes(REQUIRED_PROJECT_REF)) {
-    throw new Error(
-      `REFUSING TO RUN: linked project is not ${REQUIRED_PROJECT_REF}. URL=${URL_}`
-    );
+    throw new Error(`REFUSING TO RUN: linked project is not ${REQUIRED_PROJECT_REF}. URL=${URL_}`);
   }
 
   ownerClient = await sessionFor(OWNER_EMAIL);
@@ -271,12 +271,15 @@ beforeAll(async () => {
   // ── fixtures, as Owner, through the app's own defaults ────────────────────
   as(ownerClient);
 
-  const contact = await upsertContact({
-    contact_type: 'client',
-    first_name: MARKER,
-    last_name: 'Client',
-    email: `${MARKER.toLowerCase()}@example.invalid`,
-  }, ownerClient);
+  const contact = await upsertContact(
+    {
+      contact_type: 'client',
+      first_name: MARKER,
+      last_name: 'Client',
+      email: `${MARKER.toLowerCase()}@example.invalid`,
+    },
+    ownerClient
+  );
   contactId = contact.id;
 
   const { data: project, error: prErr } = await ownerClient
@@ -313,7 +316,11 @@ beforeAll(async () => {
   await sentInvoice('E', 500, null);
 
   // A DRAFT, deliberately never sent — the "cannot pay a draft" guard.
-  const draft = await createInvoice({ projectId, title: `${MARKER} F draft`, retainagePercent: null });
+  const draft = await createInvoice({
+    projectId,
+    title: `${MARKER} F draft`,
+    retainagePercent: null,
+  });
   if (!draft.success || !draft.id) throw new Error(`draft: ${draft.error}`);
   inv.F = draft.id;
   await addFixedLine({ invoiceId: draft.id, description: `${MARKER} F work`, amount: 750 });
@@ -571,9 +578,25 @@ describe('S97CT-7E — 7E1 payments, live', () => {
     expect(await getClientCreditBalance(contactId)).toBe(0);
   });
 
-  it('13d. §9 — a VOIDED invoice is never revived by the revert path', async () => {
+  // ⚠️ INVERTED AT S107, NOT DELETED. This test used to assert that a PAID
+  // invoice could be voided by a direct UPDATE, and that withdrawing the payment
+  // afterwards did not revive it. That was the rule until 2026-09-05, when
+  // `20261340000000_paid_invoice_void_refusal.sql` made a paid invoice
+  // unvoidable by ANYONE, Owner included — "issue a credit memo or a refund,
+  // never a void" [S103].
+  //
+  // The old assertions kept passing right up to the migration and then failed,
+  // and read as a broken void path. They were not: they were the previous rule,
+  // still being enforced by a test nobody had swept. Rewritten to the new rule,
+  // this becomes the regression guard for it — which is why it is inverted here
+  // rather than removed.
+  //
+  // §9's original scenario (voided + payment applied, then withdraw) is now
+  // UNREACHABLE BY CONSTRUCTION rather than merely handled, which is a stronger
+  // guarantee than the one this test used to make. Both halves are asserted
+  // below: the refusal, and the reachable ordering that replaces it.
+  it('13d. §9 — a PAID invoice cannot be voided, and a voided one is never revived', async () => {
     as(ownerClient);
-    // settle a fresh invoice, then void it, then withdraw the payment
     const r = await recordPayment({
       contactId,
       amount: 2200,
@@ -582,17 +605,56 @@ describe('S97CT-7E — 7E1 payments, live', () => {
     expect(r.success).toBe(true);
     expect((await invoiceRow(inv.D)).status).toBe('paid');
 
-    // void it directly — 7D's own path needs a reason and a member
+    // 1. THE GUARD. A direct UPDATE is the strongest form of the attempt — it
+    //    bypasses the service entirely — and the database refuses it anyway.
     const { error: voidErr } = await ownerClient
       .from('invoices')
-      .update({ status: 'voided', void_reason: `${MARKER} void`, voided_at: new Date().toISOString() })
+      .update({
+        status: 'voided',
+        void_reason: `${MARKER} void`,
+        voided_at: new Date().toISOString(),
+      })
       .eq('id', inv.D);
-    expect(voidErr).toBeNull();
-    expect((await invoiceRow(inv.D)).status).toBe('voided');
+    expect(voidErr, 'a paid invoice was voidable').not.toBeNull();
+    expect(voidErr!.code).toBe('P0001');
+    expect(voidErr!.message).toContain('cannot be voided');
+    // The refusal names the path the Owner is supposed to take instead.
+    expect(voidErr!.message).toMatch(/credit memo or a refund/i);
 
-    // withdrawing the payment must NOT resurrect it
-    expect((await voidPayment(r.id!, `${MARKER} — after void`)).success).toBe(true);
-    expect((await invoiceRow(inv.D)).status).toBe('voided');
+    // …and the refusal left the invoice exactly as it was.
+    expect((await invoiceRow(inv.D)).status).toBe('paid');
+    expect(await getInvoiceRemaining(inv.D)).toBe(0);
+
+    // 2. WITHDRAWING THE CASH IS NOT ENOUGH, and this is the half worth having.
+    //    `voidPayment` retires the payment AND its applications, so the invoice
+    //    reopens to `sent` — but inv.D still carries the 300 CREDIT applied back
+    //    in test 12, and the guard sums `client_payment_applications` without
+    //    caring which kind they are. So it stays unvoidable.
+    //
+    //    ⚠️ Proven here rather than reasoned about: the first rewrite of this
+    //    test assumed "withdraw the payment ⇒ now unpaid ⇒ voidable" and went
+    //    red. The invoice was never unpaid. A credit is a payment applied.
+    expect((await voidPayment(r.id!, `${MARKER} — withdraw`)).success).toBe(true);
+    expect((await invoiceRow(inv.D)).status).toBe('sent');
+    expect(await getInvoiceRemaining(inv.D)).toBe(2200); // 2500 less the 300 credit
+
+    const { error: voidErr2 } = await ownerClient
+      .from('invoices')
+      .update({
+        status: 'voided',
+        void_reason: `${MARKER} void`,
+        voided_at: new Date().toISOString(),
+      })
+      .eq('id', inv.D);
+    expect(voidErr2, 'a live CREDIT application no longer blocked the void').not.toBeNull();
+    expect(voidErr2!.message).toContain('cannot be voided');
+    expect((await invoiceRow(inv.D)).status).toBe('sent');
+
+    // 3. §9 ITSELF — the invoice never reached `voided`, so there is nothing for
+    //    the revert path to revive. Under this guard that state is unreachable
+    //    by construction, which is stronger than the handling this test used to
+    //    assert; it stays collectable work, and is still listed as such.
+    expect((await getOpenInvoices(projectId)).map((o) => o.id)).toContain(inv.D);
   });
 
   // ── immutability ──────────────────────────────────────────────────────────
@@ -753,7 +815,9 @@ describe('S97CT-7E — 7E1 payments, live', () => {
     // empty job: the Owner reads the payments this suite recorded.
     as(ownerClient);
     const ownerSees = await getProjectPayments(projectId);
-    expect(ownerSees.length, 'no payments exist — the PM probe would be vacuous').toBeGreaterThan(0);
+    expect(ownerSees.length, 'no payments exist — the PM probe would be vacuous').toBeGreaterThan(
+      0
+    );
 
     as(pmClient);
     const pmSees = await getProjectPayments(projectId);
@@ -869,17 +933,28 @@ afterAll(async () => {
   // 1. 7E rows first — they reference the invoices.
   check(
     'applications',
-    (await admin
-      .from('client_payment_applications')
-      .delete()
-      .in('invoice_id', invoiceIds.length ? invoiceIds : NONE)).error
+    (
+      await admin
+        .from('client_payment_applications')
+        .delete()
+        .in('invoice_id', invoiceIds.length ? invoiceIds : NONE)
+    ).error
   );
   if (contactId) {
-    check('payments', (await admin.from('client_payments').delete().eq('contact_id', contactId)).error);
-    check('refunds', (await admin.from('client_refunds').delete().eq('contact_id', contactId)).error);
+    check(
+      'payments',
+      (await admin.from('client_payments').delete().eq('contact_id', contactId)).error
+    );
+    check(
+      'refunds',
+      (await admin.from('client_refunds').delete().eq('contact_id', contactId)).error
+    );
   }
   if (projectId) {
-    check('releases', (await admin.from('retainage_releases').delete().eq('project_id', projectId)).error);
+    check(
+      'releases',
+      (await admin.from('retainage_releases').delete().eq('project_id', projectId)).error
+    );
   }
 
   // 2. Invoices. ORDER IS THE WHOLE TRAP — see the note at the top of this block.
@@ -914,9 +989,13 @@ afterAll(async () => {
       .eq('email', email)
       .maybeSingle();
     if (prof) {
-      check(`${email}-member`, (await admin.from('company_members').delete().eq('profile_id', prof.id)).error);
+      check(
+        `${email}-member`,
+        (await admin.from('company_members').delete().eq('profile_id', prof.id)).error
+      );
       check(`${email}-profile`, (await admin.from('profiles').delete().eq('id', prof.id)).error);
-      if (prof.user_id) check(`${email}-user`, (await admin.auth.admin.deleteUser(prof.user_id)).error);
+      if (prof.user_id)
+        check(`${email}-user`, (await admin.auth.admin.deleteUser(prof.user_id)).error);
     }
   }
   void adminUserId;
@@ -933,7 +1012,12 @@ afterAll(async () => {
   if (invoicesLeft === invoicesBefore && seqBefore != null) {
     check(
       'sequence-rewind',
-      (await admin.from('companies').update({ invoice_number_sequence: seqBefore }).eq('id', companyId)).error
+      (
+        await admin
+          .from('companies')
+          .update({ invoice_number_sequence: seqBefore })
+          .eq('id', companyId)
+      ).error
     );
   } else {
     errors.push(
@@ -966,6 +1050,12 @@ afterAll(async () => {
     .single();
 
   console.log('\n[S97CT-7E TEARDOWN] counts:', JSON.stringify(counts));
-  console.log('[S97CT-7E TEARDOWN] invoice_number_sequence:', seqNow?.invoice_number_sequence, '(was', seqBefore, ')');
+  console.log(
+    '[S97CT-7E TEARDOWN] invoice_number_sequence:',
+    seqNow?.invoice_number_sequence,
+    '(was',
+    seqBefore,
+    ')'
+  );
   console.log('[S97CT-7E TEARDOWN] errors:', errors.length ? JSON.stringify(errors) : 'NONE');
 }, 180_000);
