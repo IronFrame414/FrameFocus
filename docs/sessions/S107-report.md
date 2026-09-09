@@ -322,3 +322,40 @@ have satisfied the walk while asserting nothing.
 ⚠️ **This is the guard working exactly as designed**, and worth recording: the failure was not a
 flake or an unrelated regression, it was a new file failing a completeness invariant on its first
 run. `brand-email-footer.test.tsx`: 66 passing.
+
+## Phase 3 — Part A
+
+### A1 · The held-shot store + the batch rules — BUILT (pure logic proven)
+
+**`lib/offline/held-shots.ts`** — persistence in a **separate IndexedDB database**
+(`m6m-held-shots`), not a second object store in `m6m-offline`. Two reasons: bumping the queue
+DB's version would touch its live upgrade path for no benefit, and — the real one — **the
+separation is the statement that these are not queue entries.** A reader opening `m6m-offline`
+finds only things that can legally sync, so §7a and `capture-store.tsx:24-32`'s argument both
+stand: nothing project-less ever reaches the queue; a held shot is **adopted** into it only when a
+project is chosen.
+
+**The cleanup rule, as ruled** — TTL 7 days from `takenAt`; swept at store open and after every
+adoption; three exits (adoption, explicit discard, TTL sweep); ⚠️ **at capacity it REFUSES the new
+shot and never evicts an old one**; capacity 25, the same number as the batch cap; the held count
+is always on screen so nothing expires unseen.
+
+**`lib/offline/capture-batch.ts`** — the batch rules, **pure**, and in `lib/` not `app/m/` per
+debt-split §2.5 and the parity rule.
+
+⚠️ **One thing I got wrong and fixed rather than left:** the first `batchProgress` derived "added"
+from the tray with a `* 0` that made it always zero, and the derivation was incoherent anyway —
+a landed shot *leaves* the tray, so there is nothing left to infer it from. Replaced with an
+explicit `addedCount` on the batch. The summary has to read "6 added · 1 failed" **after six of
+seven have departed**, which a tray-derived count cannot do.
+
+Tests, **23 passing across two files**:
+- `s107-held-shots.test.ts` (10) — TTL boundary at *exactly* 7 days, live/expired **partition**
+  the input, the age warning stays non-negative on the last day, and ⚠️ **a test asserting the
+  capacity decision returns a refusal with no `evict` key** — the regression it guards is someone
+  "fixing" a full tray by dropping the oldest shot.
+- `s107-capture-batch.test.ts` (13) — one-project-per-batch **pins** (a mid-run clock change to
+  job-B leaves the batch on job-A), capacity refusal leaves the batch byte-identical, per-photo
+  status (photo 4 fails, 1–3 and 5–7 carry on), only the failed shot is retryable, and the
+  summary reports the **mix** — `1 added · 2 waiting to upload · 1 to go` — so "queued" can never
+  cover a landed shot.
