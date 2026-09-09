@@ -340,9 +340,25 @@ storage full. **A table.** This is the deliverable that replaces test coverage.
 > | **All fail** | one error line under the picker | Every row shows `Failed`, each with Retry, plus **one summary line: "0 of 7 added."** ⚠️ **No shot is cleared** — all 7 stay in the held store and survive a close. |
 > | **Signal drops mid-batch** | the shot is queued and the confirmation says so | Rows already sent stay `Added`; the rest turn **`Queued — will upload when you're back online`**, which is the existing offline-sync path (idempotent by `uploadFile`'s `id`, so a replay cannot double-insert). ⚠️ **The word "Queued" must appear per shot**, not once for the batch — a single banner over a mixed batch is the misreport this row exists to prevent. |
 > | **App backgrounded mid-batch** | ⛔ **every held shot is silently lost** (memory-only `useState`) | ⚠️ **The tray is still there on reopen**, restored from the held IndexedDB store, with each shot's status intact and a **"N photos waiting for a project"** indicator. **This is the row ASK-A.2 was ruled to fix**, and it is the single most important line in the table. |
-> | **Storage full** (IndexedDB quota) | ⛔ **the "Saving…" spinner stays up forever** — the rejection is unhandled (`idb-storage.ts`, zero try/catch), no error, nothing on screen, photo lost on navigation | The write is caught. The shot shows **`Couldn't save to this device — storage full`** with Retry, **the shot stays held**, and the spinner clears. ⚠️ **The old behaviour is invisible by construction and multi-shot makes it likely** — 10–15 photos is when a quota is actually reached. |
+> | **Storage full** (IndexedDB quota) | ⛔ **the "Saving…" spinner stays up forever** — the rejection is unhandled (`idb-storage.ts`, zero try/catch), no error, nothing on screen, photo lost on navigation | The write is caught at **both** sites (the hold and the queue write). The shot shows **`Couldn't save to this device — storage full. Free up space and retry.`** with Retry, **the shot stays held**, and the spinner clears. ⚠️ **The old behaviour is invisible by construction and multi-shot makes it likely** — 10–15 photos is when a quota is actually reached. |
 > | **Tray at capacity (25)** | N/A | The camera refuses the 26th with **"Tray full — file or discard these first."** ⚠️ **Never evicts an older shot** [RULED A.2 cleanup rule]. |
 > | **A shot nears its 7-day TTL** | N/A | An age warning on the row before the sweep can ever remove it. ⚠️ **Nothing expires that was not visible first.** |
+>
+> ### ✅ AS BUILT — what each row is, in the shipped code
+>
+> | Mode | Where it is implemented | The testid Josh can look for |
+> | ---- | ----------------------- | ---------------------------- |
+> | one fails / all fail | `sendOne` sets `failed` per shot; the loop continues | `m-capture-shot-failed`, `m-capture-retry` |
+> | signal drops | `queueForLater()` sets `queued` **per shot**; the summary reports the mix | `m-capture-shot-queued`, `m-capture-progress` |
+> | backgrounded | `HeldShotStore` rehydrates on mount; the tray is still there | `m-capture-tray` |
+> | storage full | both queue-write and hold-write wrapped; shot **stays** | `m-capture-shot-failed` |
+> | tray full | `canAdmit` refuses; banner above the tab bar | `m-capture-notice` |
+> | near TTL | `daysUntilExpiry` ≤ 2 renders an amber line | (inside `m-capture-tray`) |
+>
+> ⚠️ **Every one of these is UNTESTED as behaviour.** The rules beneath them have
+> 23 passing unit tests; **no test drives this screen**, because it needs a phone
+> and a camera. That is the ruled trade and this table is what replaces the
+> coverage.
 
 ## ASK
 
