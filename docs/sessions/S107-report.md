@@ -420,3 +420,19 @@ suite that did not run is not a suite that passed.
 - `get_sub_bid_request` — a real fixture created, resolved and deleted (**1 request, 1 estimate,
   1 subcontractor**, all removed). 23 keys, no money keys, `allowance_amount` present, status
   flipped `sent`→`viewed`.
+
+## Merge — one-off authorization for this branch only
+
+Standing rule unchanged: CC does not merge and does not push to `main`; Josh decides per merge.
+`CLAUDE.md` not edited.
+
+| Step | Result |
+| ---- | ------ |
+| tree clean + branch pushed | ✅ `09e6be8` local == `origin/feature/s107` |
+| `git merge --no-ff feature/s107` | ✅ `MERGE_EXIT: 0`, **`git ls-files -u` = 0** (no conflicts) |
+| unit suite on **merged main** | ✅ `VITEST_EXIT: 0` — **91 files / 1197 tests** |
+| `next build` on **merged main** | ✅ **`NEXT_BUILD_EXIT: 0`**, printed line read; error tally **0** |
+| push | ✅ `ca562dc..1749a13` |
+| Vercel | ✅ **deploy confirmed live** — bundle chunk `1528-04de1724de251476` → `1528-455ca515cabdd7b5`, against a baseline captured immediately *before* the push (the gap S106 could not close) |
+
+**Merge commit: `1749a13`.**
