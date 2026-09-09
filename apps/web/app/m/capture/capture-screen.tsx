@@ -127,7 +127,9 @@ export function CaptureScreen({ projects }: { projects: CaptureProjectChoice[] }
       // that did not persist the photo is the loss this screen exists to prevent.
       await capture.landed(shot.id);
     },
-    [capture, offlineSync, uploadFile]
+    // `uploadFile` is a module import, not reactive state — including it is a
+    // lint warning, not a correctness one.
+    [capture, offlineSync]
   );
 
   /** File the whole batch, SERIALLY. */

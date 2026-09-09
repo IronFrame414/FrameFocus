@@ -389,3 +389,34 @@ so "take another" is not a screen reload; and a **refusal banner directly above 
 because that is where the camera the user just tapped is.
 
 `TSC_EXIT: 0`. Full suite **91 files / 1197 tests**, all passing.
+
+### Verification sweep — branch
+
+| Check | Result |
+| ----- | ------ |
+| `tsc --noEmit` | **`TSC_EXIT: 0`** |
+| `next lint` | **`LINT_EXIT: 0`**, 0 error lines (pre-existing `<img>` warning in `site-header.tsx` only) |
+| `next build` | **`NEXT_BUILD_EXIT: 0`**, printed line read; independent tally of `✘`/`Failed to compile`/`Type error:` = **0** |
+| unit suite | **`VITEST_EXIT: 0` — 91 files / 1197 tests** (from 86/1149 at session start: **+5 files, +48 tests**) |
+| live harnesses | ⛔ **NONE COULD RUN — see below** |
+
+⚠️ **One lint warning was mine and is fixed**: `uploadFile` in a `useCallback` dep array
+(a module import, not reactive state). The first build was killed mid-compile after that edit —
+by PID, excluding `$$`, never `pkill -f` — and re-run clean.
+
+### ⛔ Live tests: none ran. Row counts unobtainable.
+
+`SUPABASE_SERVICE_ROLE_KEY` is absent and this box's `SUPABASE_SECRET_KEY` belongs to a different
+project. **This is pre-existing, not something S107 introduced** — proven by running the *existing*
+`s106-estimate-files-route-floor.live.ts`, which fails identically
+(`TypeError: Cannot read properties of null (reading 'company_id')` — a null deref from a
+discarded error, the same shape yet again).
+
+**Row counts exercised: ZERO, for every live harness.** Stated rather than omitted, because a
+suite that did not run is not a suite that passed.
+
+**What WAS exercised against the real rebuild-test database**, through the Supabase MCP:
+- the `email_types` INSERT — verified on the object (1 row).
+- `get_sub_bid_request` — a real fixture created, resolved and deleted (**1 request, 1 estimate,
+  1 subcontractor**, all removed). 23 keys, no money keys, `allowance_amount` present, status
+  flipped `sent`→`viewed`.
