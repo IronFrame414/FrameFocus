@@ -314,6 +314,11 @@ function MobileShellInner({
    * never the route underneath (A-C34).
    */
   const [chatOpen, setChatOpen] = useState(false);
+  /** ⚠️ S107 — a REFUSED shot must be seen, not logged. The tray refuses at
+   *  capacity rather than evicting an older photo, and the tab-bar camera is a
+   *  place a user can hit that limit while looking at a completely different
+   *  screen. Cleared on the next successful hold. */
+  const [captureNotice, setCaptureNotice] = useState<string | null>(null);
   const declared = useMobileHeader();
   const capture = useCaptureStore();
 
@@ -327,11 +332,15 @@ function MobileShellInner({
    */
   const onShot = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0];
+      // ⚠️ S107 — ALL of them, not `[0]`. The library input carries `multiple`
+      // (a camera-capture input still returns one per shutter, which is why
+      // ASK-A.4 ruled manual re-tap rather than auto-reopen), so a native burst
+      // taken in the phone's own camera app arrives here as N files at once.
+      const files = Array.from(e.target.files ?? []);
       // Allows re-picking the same file twice; without it the second change
       // event never fires.
       e.target.value = '';
-      if (!file || !capture) return;
+      if (files.length === 0 || !capture) return;
 
       const search = new URLSearchParams(
         typeof window === 'undefined' ? '' : window.location.search
@@ -352,8 +361,25 @@ function MobileShellInner({
         ]);
       }
 
-      capture.hold(file, resolveCaptureProjectId(contextId, clockId));
-      router.push('/m/capture');
+      // ⚠️ ONE PROJECT PER BATCH [RULED]. The resolution is offered once; the
+      // store PINS it (`resolveBatchProject`), so a second tap while a batch is
+      // open — even after clocking into a different job — cannot move the
+      // photos already held to another project.
+      const resolved = resolveCaptureProjectId(contextId, clockId);
+      setCaptureNotice(null);
+      for (const file of files) {
+        const held = await capture.hold(file, resolved);
+        // ⚠️ At capacity the store REFUSES rather than evicting. Surface it and
+        // stop, so the user is not silently down a photo.
+        if (!held.ok) {
+          setCaptureNotice(held.reason ?? 'That photo could not be held.');
+          break;
+        }
+      }
+
+      // Already on the tray? Adding must not re-navigate — that is what turns
+      // "take another" into a jarring reload of the screen you are looking at.
+      if (pathname !== '/m/capture') router.push('/m/capture');
     },
     [capture, pathname, router]
   );
@@ -537,6 +563,18 @@ function MobileShellInner({
           the guarantee is layout, not z-index. A stacking-order fix would work
           until someone added a transform or a new overlay; this cannot regress
           without moving the markup. */}
+      {/* ⚠️ The refusal banner. It sits directly above the tab bar because that
+          is where the camera the user just tapped lives — a message elsewhere on
+          the screen would be missed at the moment it matters. */}
+      {captureNotice && (
+        <p
+          data-testid="m-capture-notice"
+          className="shrink-0 border-t border-m6m-border bg-[#fff5e6] px-[14px] py-[10px] text-[13px] font-bold text-[#b45309]"
+          onClick={() => setCaptureNotice(null)}
+        >
+          {captureNotice}
+        </p>
+      )}
       <nav
         data-testid="m-tabbar"
         aria-label="Primary"
@@ -588,6 +626,12 @@ function MobileShellInner({
             <input
               type="file"
               accept="image/*"
+              // ⚠️ S107 [RULED A.4 → C]. The ONLY route to a true native burst:
+              // the user shoots 10-15 in the phone's own camera app and selects
+              // them here in one go. `multiple` is useless on the CAPTURE input
+              // beside it — a camera-capture session returns one photo — which
+              // is why the camera stays one-per-tap.
+              multiple
               data-testid="m-camera-library-input"
               className="hidden"
               onChange={onShot}

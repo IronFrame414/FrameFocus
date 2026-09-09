@@ -359,3 +359,33 @@ Tests, **23 passing across two files**:
   status (photo 4 fails, 1–3 and 5–7 carry on), only the failed shot is retryable, and the
   summary reports the **mix** — `1 added · 2 waiting to upload · 1 to go` — so "queued" can never
   cover a landed shot.
+
+### A2 · The tray, the shell, and the weak-signal visibility fix — BUILT
+
+**`app/m/capture-store.tsx`** rewritten: the single-slot `PendingShot` becomes a persisted batch.
+The superseded design is quoted in the file, and ⚠️ **its argument is explicitly NOT overturned** —
+§7a still forbids a project-less INSERT, nothing project-less ever reaches the sync queue, and a
+held shot is adopted into it only when a project exists. What changed is the cost of honouring
+that: one lost retake versus fifteen.
+
+**`app/m/capture/capture-screen.tsx`** rewritten as the tray. Every row of the failure table is
+readable on the phone: per-shot status, per-shot Retry (never a whole-batch retry), per-shot
+discard, an always-visible progress line, and an **age warning at ≤2 days** so nothing expires
+unseen. Uploads run **strictly serially** — `await` per shot in a `for` loop — because a HEIC
+frame decodes to ~48 MB of bitmap on the main thread.
+
+**⚠️ The weak-signal visibility fix, which is not where the spec said it was.** The
+`!navigator.onLine` path was already correct (S105b). The real defect was the **queue write**:
+`idb-storage.ts` has no `try` anywhere, so a quota failure escaped as an unhandled rejection —
+spinner up forever, nothing on screen, photo lost on navigation. Both queue-write sites are now
+wrapped, a quota error is distinguished by message, and ⚠️ **the shot STAYS held** rather than
+being cleared. `capture.landed()` — the only path that removes a shot — runs *only* after the
+upload or the queue write actually succeeded.
+
+**`app/m/mobile-shell.tsx`**: reads **all** files rather than `[0]`; `multiple` on the **library**
+input only (the ruled route to a true native burst — a camera-capture session returns one photo,
+which is why the camera stays one-per-tap); does **not** re-navigate when already on `/m/capture`,
+so "take another" is not a screen reload; and a **refusal banner directly above the tab bar**,
+because that is where the camera the user just tapped is.
+
+`TSC_EXIT: 0`. Full suite **91 files / 1197 tests**, all passing.
