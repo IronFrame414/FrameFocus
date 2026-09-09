@@ -201,3 +201,50 @@ that was true of the files and false of the database.**
 - `DB_PUSH_EXIT: 0`.
 - ⚠️ **Verified on the OBJECT, not the ledger:** `select email_type from email_types where
   email_type='sub_bid_request'` → returns the row.
+
+### B3b · The sender — BUILT. Stops exactly where a live key would be needed.
+
+Three files:
+- `lib/email/templates/sub-bid-request-email.tsx` — summary + link, per the ruling.
+- `lib/services/sub-bid-request-send.ts` — `publicOrigin()` and `bidReplyUrlFor()`.
+- `app/api/estimates/[id]/bid-requests/[requestId]/send/route.ts` — the POST.
+
+**The origin, established BEFORE writing the sender as instructed.** The var is
+`NEXT_PUBLIC_APP_URL` (25 call sites; `lib/app-origin.ts` is the canonical reader for
+*redirects*). ⚠️ **The established pattern in every existing sender is
+`process.env.NEXT_PUBLIC_APP_URL ?? ''` — which mails a dead relative link if unset.** I did not
+copy it. `publicOrigin()` returns the configured absolute origin **or null**, and the route
+**refuses to send at all** when null, before touching the admin client. An email cannot be
+unsent and the link is the sub's only way in.
+
+⚠️ **It deliberately does NOT fall back to request headers** the way `appOrigin()` does. Headers
+are caller-supplied; a forged `X-Forwarded-Host` would put an attacker's origin permanently in a
+subcontractor's inbox. Fine for a redirect the user is already following, wrong for a durable
+mailed link.
+
+**Other decisions worth recording:**
+- **`sendEmail` can throw** — `getResend()` throws when `RESEND_API_KEY` is unset, and two prior
+  sweeps (S150, S157) exist because bare calls let the throw escape *before* the log was written.
+  Wrapped in try/catch and folded into the same `error` variable, so a throw and a returned error
+  write the **same** `email_logs` row.
+- **A missing `subcontractors.email` refuses with 422** and a message naming the sub, rather than
+  failing deep inside Resend.
+- **`sent_at` now means "sent".** It was `DEFAULT now()` at INSERT and nothing ever updated it,
+  so it recorded "row created" (FILL-B.2). The route stamps it after a successful send.
+- **A re-send REUSES the token** — the route never regenerates it, so a link already in flight
+  cannot die mid-upload. Re-sending an already-`submitted`/`cancelled`/`declined` request is a
+  **409**; an expired one is **410**.
+- **The template omits the allowance**, even though Q2 ruled it a permanent exception *on the
+  page*. The page's exception rests on the token scoping disclosure to one sub; **an email has no
+  such scoping and cannot be revoked or expired.** Recorded in the template so a future session
+  treats adding it as a change to the ruling's reasoning, not a formatting tweak.
+- **`EmailType` gained `'sub_bid_request'`** with a comment pointing at the lookup-table
+  correction, so the next person does not go looking for a CHECK constraint.
+
+Tests: `s107-bid-request-send-order.test.ts`, **9 passing** — four floor cases (admin spy never
+called AND no mail), the origin guard (⚠️ asserts **nothing was emailed**, not merely a 500), and
+`publicOrigin` unit cases including the bare-host and empty-string shapes that produce a dead
+link. `TSC_EXIT: 0`.
+
+**This is the stopping point Josh named.** Everything up to the transport is built and tested;
+the send itself needs a live key that does not come back to this box.
