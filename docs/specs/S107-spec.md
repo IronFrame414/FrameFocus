@@ -326,6 +326,24 @@ uncomfortable.**
 photo fails, all fail, signal drops mid-batch, app backgrounded mid-batch,
 storage full. **A table.** This is the deliverable that replaces test coverage.
 
+> ## THE FAILURE TABLE — what is on the phone, for each mode
+>
+> ⚠️ **This is the contract for Part A, because nothing else checks it.** Each row
+> is written against the design as RULED (persisted held store, serial conversion,
+> per-shot status, cap 25). **"Nothing" in the right-hand column is a defect, not a
+> quiet success.** The BEFORE column is what happens today, so the field test can
+> tell a fix from a coincidence.
+>
+> | Mode | Today (single-slot) | ⚠️ After this build — what Josh SEES |
+> | ---- | ------------------- | ------------------------------------ |
+> | **One photo fails** (4 of 7) | N/A — one shot at a time | Shot 4 in the tray turns **`Failed`** with a **Retry** on that row. 1–3 and 5–7 finish and turn `Added`/`Queued`. **The batch is never blocked.** Tray header reads e.g. **"6 added · 1 failed".** |
+> | **All fail** | one error line under the picker | Every row shows `Failed`, each with Retry, plus **one summary line: "0 of 7 added."** ⚠️ **No shot is cleared** — all 7 stay in the held store and survive a close. |
+> | **Signal drops mid-batch** | the shot is queued and the confirmation says so | Rows already sent stay `Added`; the rest turn **`Queued — will upload when you're back online`**, which is the existing offline-sync path (idempotent by `uploadFile`'s `id`, so a replay cannot double-insert). ⚠️ **The word "Queued" must appear per shot**, not once for the batch — a single banner over a mixed batch is the misreport this row exists to prevent. |
+> | **App backgrounded mid-batch** | ⛔ **every held shot is silently lost** (memory-only `useState`) | ⚠️ **The tray is still there on reopen**, restored from the held IndexedDB store, with each shot's status intact and a **"N photos waiting for a project"** indicator. **This is the row ASK-A.2 was ruled to fix**, and it is the single most important line in the table. |
+> | **Storage full** (IndexedDB quota) | ⛔ **the "Saving…" spinner stays up forever** — the rejection is unhandled (`idb-storage.ts`, zero try/catch), no error, nothing on screen, photo lost on navigation | The write is caught. The shot shows **`Couldn't save to this device — storage full`** with Retry, **the shot stays held**, and the spinner clears. ⚠️ **The old behaviour is invisible by construction and multi-shot makes it likely** — 10–15 photos is when a quota is actually reached. |
+> | **Tray at capacity (25)** | N/A | The camera refuses the 26th with **"Tray full — file or discard these first."** ⚠️ **Never evicts an older shot** [RULED A.2 cleanup rule]. |
+> | **A shot nears its 7-day TTL** | N/A | An age warning on the row before the sweep can ever remove it. ⚠️ **Nothing expires that was not visible first.** |
+
 ## ASK
 
 **ASK-A.1 is RULED above** — approved, one project per batch. Not an open
@@ -405,6 +423,26 @@ is blocked in some Safari versions.
 - ⚠️ **The sub sees NO money** — scope, files, and their own bid form. Never
   totals, never margin. **The page is anonymous; anything it renders is public to
   whoever holds the link.**
+
+  > ### ⚠️ AMENDED [Josh, S107 Q2] — "NO money" means TOTALS, MARGIN and COST. Not every dollar figure.
+  >
+  > _Superseded reading, quoted rather than rewritten:_ the line above taken
+  > literally, i.e. **no dollar figure of any kind** on the anonymous page.
+  >
+  > **`allowance_amount` is an EXPLICIT, PERMANENT EXCEPTION.** It is carried in
+  > the token payload (`get_sub_bid_request`) and rendered as **"Allowance carried
+  > $X"** (`bid-reply-client.tsx:190`). Josh: _"The allowance is your own figure,
+  > deliberately disclosed, and telling a sub what you're carrying is normal."_
+  >
+  > ⚠️ **RECORDED SO A FUTURE SESSION DOES NOT STRIP IT AS A FLOOR VIOLATION.**
+  > An audit that greps the anonymous page for money **will** find this and it is
+  > **not** a defect. It beat: (B) remove it from payload and page, and (C) keep it
+  > but gate it behind a per-request opt-in with a warning.
+  >
+  > **What stays forbidden, unchanged:** estimate `grand_total`/`subtotal`, line
+  > `total_price`, markup, margin, any cost figure, and **any other
+  > subcontractor's bid**. FILL-B.4 verified all of those are absent from the
+  > 21-key payload.
 - **Token lifetime = the bid request's own expiry. A re-send REUSES the token**,
   so a link in flight never dies mid-upload.
 - **Sub uploads are visible to the authoring PM**, who needs them to evaluate the
@@ -678,6 +716,106 @@ find out what before undoing it.**
 
 ---
 
+# RULINGS — Phase 2 [Josh, S107]
+
+**All six answered. Each records the alternative it beat.**
+
+## ASK-B.3 → **RULED: Option B.** The live Resend key does NOT come back here.
+
+**Josh:** _"The 423-send incident happened because the key was present, and the
+diagnosis says this control has already failed twice on the same env hygiene. A
+restores the exact condition."_
+
+**Beat:** (A) restore the key for one supervised send then delete it — rejected
+because it recreates the incident's precondition and relies on the same env
+hygiene that has already failed twice; (C) stub the transport and send from
+production after merge; (D) restore the key permanently.
+
+**So the send is JOSH'S, from a machine that already has the key.** CC builds the
+sender, the template and the log row, and **CC still proves link → upload →
+lands**, which needs no email at all.
+
+### ⚠️ JOSH'S CONDITION — "the email works" must be VERIFIABLE FROM THE SEND, NOT ASSUMED
+
+_"CC still proves link → upload → lands, and defines 'the email works' as
+something you can verify from the send you make — not assumed."_
+
+**The email is proven only when ALL FOUR hold. Three are machine-checkable; the
+fourth is Josh's eyes and cannot be delegated:**
+
+| # | Check | Who | Why it is not redundant |
+| - | ----- | --- | ----------------------- |
+| 1 | `sendEmail` returns a non-null `messageId` | the send | A null id with no error means the gate refused; the send silently did nothing. |
+| 2 | An `email_logs` row exists, `status='sent'`, `resend_message_id` = that id | the send | Proves the **new `email_type` survived the widened CHECK** — the one thing that would fail AFTER the mail had gone. |
+| 3 | The link in the delivered body resolves to the request | ⚠️ **CC, WITHOUT SENDING** | `bidReplyUrl()` reads `window.location.origin` and is **browser-only**; a server sender that keeps it emits a link to nowhere. Unit-testable today. |
+| 4 | ⚠️ **The mail is in the inbox — and whether it landed in SPAM** | **Josh only** | 52 bounces to `example.invalid` on `ezcontractorbinder.com` mean Gmail may filter rather than reject. **A `sent` row is not evidence a human saw it.** |
+
+⚠️ **Check 4 is the one that cannot be inferred from anything CC observes.** If it
+is skipped, "the email works" is exactly the assumption this condition forbids.
+
+## ASK-B.4 → **RULED: Option A**, and the ruling is amended in place. See the Part B RULED list.
+
+## ASK-A.2 → **RULED: Option B.** Held shots PERSIST, in a store that is not the sync queue.
+
+**Josh:** _"It's the only one that honors 'nothing lost,' and CC is right that it
+keeps §7a intact because nothing project-less reaches the queue."_
+
+**Beat:** (A) a non-dismissible picker — _"traps the user in a modal on a
+jobsite"_; (C) accept the loss with a loud warning — _"unacceptable at 15 shots."_
+
+**The shape:** a held-shot store in IndexedDB, **explicitly outside the offline
+sync queue**, holding blobs in a `no project yet` state. When a project is chosen
+the shots are **adopted** — moved into the queue via `buildPhotoEntry` — and
+removed from the held store. Nothing project-less is ever queued, so §7a and the
+`capture-store.tsx:24-32` reasoning both stand: the queue still contains only
+entries that can legally insert.
+
+### ⚠️ JOSH'S CONDITION — THE CLEANUP RULE, stated before the build
+
+_"State the cleanup rule — how long an unadopted blob lives and what removes it.
+An orphan store with no eviction becomes its own problem."_
+
+| Rule | Value | Rationale |
+| ---- | ----- | --------- |
+| **TTL** | **7 days** from `takenAt` | Longer than any plausible "I'll file these Monday"; short enough that a forgotten batch cannot sit for a quarter. |
+| **Swept when** | app start, and after every successful adoption | No timer, no worker. The sweep runs where the store is already being opened. |
+| **Removed by** | (1) **adoption** — the normal path; (2) **explicit discard**; (3) **TTL sweep** | Three exits, all of them definite. |
+| **At capacity** | ⚠️ **REFUSE the new shot with a message. NEVER evict an old one.** | Evicting to make room is a silent photo loss, which is the exact failure the whole part exists to prevent. The user is told the tray is full and must file or discard. |
+| **Capacity** | **25 held shots** — the same number as ASK-A.3's batch cap | One number, not two. A full tray and a full batch are the same condition. |
+| **Visibility** | a persistent **"N photos waiting for a project"** indicator, and an age warning as a shot nears its TTL | ⚠️ **A silent store is the orphan problem.** Nothing may expire without having been visible first. |
+
+⚠️ **The TTL sweep is the only path that deletes a photo the user did not choose
+to lose. It is therefore the one that must never run without the count having
+been on screen beforehand.**
+
+## ASK-A.4 → **RULED: B plus C.** Manual re-tap with a visible tray, and library multi-select.
+
+**Josh:** _"a programmatic click on a file input is blocked in some Safari
+versions, and if A breaks in the field the feature is dead with no fallback. B
+always works."_
+
+**Beat:** (A) auto-reopen the camera after each shot — closest to the ruling's
+wording and the most fragile; a gesture-less `.click()` on a file input is
+blocked in some Safari versions, and there is no fallback when it is.
+
+**So:** the tab-bar camera stays one-shot-per-tap and **shots accumulate in a
+visible tray** instead of navigating away; **`multiple` is added to the LIBRARY
+input** (precedent: `selection-sheet.tsx:493`) so a true native burst taken in the
+phone's own camera app can be selected in one go.
+
+## ASK-A.3 → **RULED: A plus C at 25.** Serial conversion, cap as a backstop.
+
+**Josh:** _"48 MB of bitmap on the main thread per shot is the real constraint."_
+
+**Beat:** (B) concurrency 2–3 — rejected as the thing that actually OOMs the tab.
+
+**Concurrency is ONE.** Convert and upload strictly one at a time. The **cap of 25**
+is a backstop only: it exists so a runaway batch **fails with a message** instead
+of a memory reload that loses everything. It is the same 25 as the held-store
+capacity above.
+
+---
+
 # Cross-cutting
 
 **FILL-X.1** — Every migration this spec requires, with purpose. ⚠️ **If none,
@@ -815,3 +953,36 @@ comparisons there are noise until re-synced.
 11. ⚠️ **The route-floor test exists and FAILS if the admin client moves above
     the session read.** Ruled to be built this session, not filed.
 12. Anything still unknown that the build will need.
+
+---
+
+## AUDIT RESULT — run 2026-09-09, before any build
+
+| # | Item | Result |
+| - | ---- | ------ |
+| 1 | Every FILL filled | ✅ **20 of 20.** FILL-0, A.1–A.8 (8), B.0–B.7 (8), X.0–X.2 (3). Two carry a stated blocker rather than an answer: **FILL-B.4's wire check** (needs a dev server, needs `.env.local`, absent) and **FILL-0's "deployed"** (no `gh`, no Vercel CLI/token). Markers kept, reasons stated in one line each. |
+| 2 | Every ASK has a ruling + the alternative it beat | ✅ **6 of 6** — A.1 (pre-ruled, owed record now written), A.2, A.3, A.4, B.3, B.4. B.1/B.2 were pre-ruled in the scaffold. |
+| 3 | No measurement contradicts a RULED line | ⚠️ **One did, and it was reported not reconciled** — `allowance_amount` vs "the sub sees NO money". **Resolved by amendment [Q2]**, recorded as a permanent exception. |
+| 4 | ⚠️ FILL-A.6 answered; ASK-A.2 ruled before build | ✅ Answered (**they do NOT survive**), and **ASK-A.2 is RULED (B)** with the cleanup rule stated. **Stop rule 6 is cleared.** |
+| 5 | ⚠️ FILL-A.8's failure table exists | ✅ Exists — **seven** modes (the five named, plus tray-at-capacity and TTL-warning, which the rulings created). Each row gives today's behaviour and what Josh sees after the build. ⚠️ **This row was first recorded ✅ before the table was written** — caught by re-checking rather than by trusting the audit. |
+| 6 | ⚠️ FILL-B.1 exact | ✅ Eight pieces classified. **Nothing is "shipped and tested."** Two are **NOT BUILT** (the email; the sub's file GET). |
+| 7 | ⚠️ FILL-B.0 answered AND email working before the e2e test | ✅ Answered. ⚠️ **Email will NOT be working in this environment, by ruling [Q1/B]** — the key does not come back here. **The real send is Josh's**, against the four-check definition above. CC's half (link → upload → lands) needs no email. |
+| 8 | ⚠️ FILL-B.7 answered | ✅ Domain `ezcontractorbinder.com`, verified (423 real external deliveries). ⚠️ **Spam is the live risk, not rejection** — check 4 covers it. |
+| 9 | ⚠️ Anonymous payload carries no money, checked on the wire | ⚠️ **PARTIAL, and honestly so.** Verified **statically and exhaustively** — the payload is a hand-built 21-key `jsonb_build_object`, not `to_jsonb(row)`, so it is enumerable and enumerated. **The wire check is blocked** (no `.env.local`). The one money key, `allowance_amount`, is now a ruled exception. |
+| 10 | ⚠️ FILL-X.0 lists every figure, confirmed or corrected | ✅ **7 figures: 3 confirmed, 3 corrected, 1 qualified.** The spec's assumption that at least one would be wrong held — three were. |
+| 11 | ⚠️ The route-floor test exists and FAILS on the reordering | ⛔ **NOT YET — it is Phase 3's first build item**, designed in FILL-B.6 (assert the admin spy was **never called** on a denied read). Ruled to be built this session, and it is. |
+| 12 | Anything still unknown the build will need | See below. |
+
+### Still unknown, and named rather than discovered later
+
+1. ⚠️ **Whether the sub's email address exists to send to.** `subcontractors.email`
+   is nullable and the rebuild-test sub must be **created** with
+   `JSBishop14@gmail.com` [RULED B.1]. The sender must refuse a null address
+   loudly rather than throw.
+2. ⚠️ **The public origin for the emailed link.** `bidReplyUrl()` is browser-only.
+   The server sender needs a configured origin; which env var supplies it on
+   production is **not yet established** and is the first thing Phase 3 checks.
+3. **Whether iOS Safari fires `change` on a `multiple` library input for 15
+   files at once.** Unknowable here; it is field-test item 1.
+4. **IndexedDB quota on Josh's device.** The held store's 25-shot cap is a
+   product decision, not a measured device limit.

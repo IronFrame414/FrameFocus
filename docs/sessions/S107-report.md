@@ -48,3 +48,23 @@ Every FILL in `docs/specs/S107-spec.md` is filled in place by measurement. Headl
 - **FILL-X.0 — 3 figures confirmed, 3 corrected, 1 qualified.**
 
 Phase 2 questions go to Josh next. **Build is gated** on ASK-A.2 (stop rule 6) and ASK-B.3.
+
+### Phase 2 — six rulings recorded; spec audited and complete
+
+**Rulings [Josh]:** B.3 → **B** (the live Resend key does NOT return to this box; the real
+send is Josh's, against a four-check definition of "the email works"). B.4 → **A** (the
+allowance stays; "no money" amended to mean totals/margin/cost, exception recorded permanently).
+A.2 → **B** (held shots persist in an IndexedDB store outside the sync queue; cleanup rule
+stated: 7-day TTL, swept at app start and after adoption, refuse-at-capacity never evict,
+cap 25, always visible). A.4 → **B+C** (manual re-tap with a tray; `multiple` on the library
+input). A.3 → **A+C at 25** (serial conversion, cap as backstop).
+
+**Audit run. One self-correction worth recording:** audit row 5 was first written ✅ claiming
+FILL-A.8's failure table existed. **It did not** — the verification script matched adjacent
+text. Caught by re-checking the file directly rather than trusting the audit line. The table
+is now written (seven modes) and the audit row records the miss.
+
+**Audit result: 20/20 FILLs, 6/6 ASKs ruled, one measurement-vs-ruling conflict resolved by
+amendment.** Two items carry stated blockers rather than answers (FILL-B.4's wire check and
+FILL-0's deploy confirmation — both need env this box lacks). Audit item 11 (the route-floor
+test) is open by design: it is Phase 3's first build item.
