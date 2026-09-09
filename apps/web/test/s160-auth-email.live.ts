@@ -36,7 +36,10 @@ import { admin, assertRebuildTest } from './live-session';
 
 /** What the faked Resend returns. Mutated per test; see B4. */
 const state = vi.hoisted(() => ({
-  result: { data: { id: 'mock-resend-id' } as { id: string } | null, error: null as { message: string } | null },
+  result: {
+    data: { id: 'mock-resend-id' } as { id: string } | null,
+    error: null as { message: string } | null,
+  },
   calls: [] as Array<{ from: string; to: string[]; subject: string }>,
 }));
 
@@ -51,7 +54,11 @@ vi.mock('resend', () => ({
   },
 }));
 
-import { handleAuthEmail, invitedCompanyFor, type AuthEmailPayload } from '@/lib/services/auth-email';
+import {
+  handleAuthEmail,
+  invitedCompanyFor,
+  type AuthEmailPayload,
+} from '@/lib/services/auth-email';
 
 const OWNER = 'josh+test50@worthprop.com';
 const MARKER = 's160-auth';
@@ -92,7 +99,9 @@ function payloadFor(
 async function logsFor(recipient: string) {
   const { data } = await admin
     .from('email_logs')
-    .select('id, email_type, recipient_email, sender_email, subject, status, metadata, resend_message_id, company_id')
+    .select(
+      'id, email_type, recipient_email, sender_email, subject, status, metadata, resend_message_id, company_id'
+    )
     .eq('recipient_email', recipient)
     .like('email_type', 'auth_%')
     .order('created_at', { ascending: false });
@@ -102,23 +111,51 @@ async function logsFor(recipient: string) {
 
 async function sweep(): Promise<void> {
   const { data: prof } = await admin
-    .from('profiles').select('id, user_id').eq('email', INVITEE).maybeSingle();
+    .from('profiles')
+    .select('id, user_id')
+    .eq('email', INVITEE)
+    .maybeSingle();
   if (prof) {
     const p = prof as { id: string; user_id: string };
     const { data: member } = await admin
-      .from('company_members').select('id').eq('profile_id', p.id).maybeSingle();
+      .from('company_members')
+      .select('id')
+      .eq('profile_id', p.id)
+      .maybeSingle();
     if (member) {
-      must('sweep assignments', (await admin
-        .from('project_assignments').delete().eq('member_id', (member as { id: string }).id)).error);
-      must('sweep member', (await admin
-        .from('company_members').delete().eq('id', (member as { id: string }).id)).error);
+      must(
+        'sweep assignments',
+        (
+          await admin
+            .from('project_assignments')
+            .delete()
+            .eq('member_id', (member as { id: string }).id)
+        ).error
+      );
+      must(
+        'sweep member',
+        (
+          await admin
+            .from('company_members')
+            .delete()
+            .eq('id', (member as { id: string }).id)
+        ).error
+      );
     }
     must('sweep profile', (await admin.from('profiles').delete().eq('id', p.id)).error);
     await admin.auth.admin.deleteUser(p.user_id);
   }
   must('sweep invitations', (await admin.from('invitations').delete().eq('email', INVITEE)).error);
-  must('sweep logs', (await admin
-    .from('email_logs').delete().eq('recipient_email', INVITEE).like('email_type', 'auth_%')).error);
+  must(
+    'sweep logs',
+    (
+      await admin
+        .from('email_logs')
+        .delete()
+        .eq('recipient_email', INVITEE)
+        .like('email_type', 'auth_%')
+    ).error
+  );
 }
 
 // ⚠️ [Email §1, S157] OPEN THE GATE for this file — and ONLY this file's
@@ -135,20 +172,49 @@ const savedGate = {
   VERCEL_ENV: process.env.VERCEL_ENV,
 };
 
+/**
+ * ⚠️ ABSENT IS THE RULED STATE, SO THIS SKIPS RATHER THAN FAILS [S107].
+ *
+ * `RESEND_API_KEY` is deliberately not in `.env.local` on rebuild-test: the
+ * S107 ruling keeps it out so a live run cannot mail a real person. This file
+ * used to THROW in `beforeAll` when it was missing, which reported a correct,
+ * intended configuration as a broken suite — 13 tests red, every run, for a
+ * decision somebody made on purpose.
+ *
+ * A skip says "not exercised here"; a failure says "something is wrong". Only
+ * one of those is true, and the difference matters most in a 123-file run where
+ * a red file is the thing you go and read.
+ *
+ * ⚠️ AND IT REPORTS AS SKIPPED, NOT AS PASSED — the distinction a skip has to
+ * earn. The run says `Test Files 1 skipped (1) / Tests 13 skipped (13)`, so the
+ * 13 are visibly NOT being exercised rather than quietly counted as green.
+ * (Measured: vitest suppresses stdout from a fully-skipped file, so a
+ * console.log here would print nothing and was removed rather than left as a
+ * comment claiming otherwise.)
+ *
+ * Set RESEND_API_KEY to run these for real; `getResend()` throws before any
+ * mock is reached, so there is nothing to stub.
+ */
+const HAS_RESEND = Boolean(process.env.RESEND_API_KEY);
+const describeSend = describe.skipIf(!HAS_RESEND);
 beforeAll(async () => {
+  if (!HAS_RESEND) return;
   assertRebuildTest();
   process.env.EMAIL_SEND_ENABLED = 'true';
   delete process.env.VERCEL_ENV;
-  if (!process.env.RESEND_API_KEY) {
-    throw new Error('RESEND_API_KEY must be set — getResend() throws before the mock is reached');
-  }
 
   const { data: company } = await admin
-    .from('companies').select('id').eq('name', 'Sabal Point Construction').single();
+    .from('companies')
+    .select('id')
+    .eq('name', 'Sabal Point Construction')
+    .single();
   companyId = (company as { id: string }).id;
 
   const { data: ownerProf } = await admin
-    .from('profiles').select('user_id, company_id').eq('email', OWNER).single();
+    .from('profiles')
+    .select('user_id, company_id')
+    .eq('email', OWNER)
+    .single();
   ownerUserId = (ownerProf as { user_id: string }).user_id;
   ownerProfileCompany = (ownerProf as { company_id: string }).company_id;
 
@@ -187,13 +253,20 @@ beforeAll(async () => {
   inviteeUserId = created.user.id;
 
   const { data: prof } = await admin
-    .from('profiles').select('id, company_id').eq('email', INVITEE).maybeSingle();
-  if (!prof) throw new Error('the invited signup created no profile — is the auth.users trigger installed?');
-  expect((prof as { company_id: string }).company_id, 'the invited user landed in the wrong company')
-    .toBe(companyId);
+    .from('profiles')
+    .select('id, company_id')
+    .eq('email', INVITEE)
+    .maybeSingle();
+  if (!prof)
+    throw new Error('the invited signup created no profile — is the auth.users trigger installed?');
+  expect(
+    (prof as { company_id: string }).company_id,
+    'the invited user landed in the wrong company'
+  ).toBe(companyId);
 }, 240_000);
 
 afterAll(async () => {
+  if (!HAS_RESEND) return;
   if (madeLogIds.length) {
     must('teardown logs', (await admin.from('email_logs').delete().in('id', madeLogIds)).error);
   }
@@ -208,7 +281,7 @@ afterAll(async () => {
 // GROUP A — P3. An invited user is confirmed, and gets NO email.
 // ============================================================================
 
-describe('S160-A — P3: invited users do not confirm their email', () => {
+describeSend('S160-A — P3: invited users do not confirm their email', () => {
   it('A1 — the invitee starts UNCONFIRMED, so A2 is not vacuous', async () => {
     // ⚠️ `?? null`, because GoTrue's JS client OMITS the field when it is unset
     // rather than returning null. Without the coalesce this reads `undefined`
@@ -216,8 +289,10 @@ describe('S160-A — P3: invited users do not confirm their email', () => {
     // `undefined` too, i.e. on a user who was never confirmed. Both halves are
     // written against the value, not against its absence.
     const { data } = await admin.auth.admin.getUserById(inviteeUserId);
-    expect(data.user?.email_confirmed_at ?? null, 'the fixture was created already confirmed')
-      .toBeNull();
+    expect(
+      data.user?.email_confirmed_at ?? null,
+      'the fixture was created already confirmed'
+    ).toBeNull();
   });
 
   it('A2 — a signup hook for the invitee confirms them and sends NOTHING', async () => {
@@ -238,8 +313,10 @@ describe('S160-A — P3: invited users do not confirm their email', () => {
     const { data } = await admin.auth.admin.getUserById(inviteeUserId);
     const confirmedAt = data.user?.email_confirmed_at ?? null;
     expect(confirmedAt, 'the invited user was not confirmed').toBeTypeOf('string');
-    expect(Number.isNaN(Date.parse(confirmedAt as string)), 'email_confirmed_at is not a date')
-      .toBe(false);
+    expect(
+      Number.isNaN(Date.parse(confirmedAt as string)),
+      'email_confirmed_at is not a date'
+    ).toBe(false);
   });
 
   it('A3 — and NOTHING was logged, because nothing was sent', async () => {
@@ -253,12 +330,16 @@ describe('S160-A — P3: invited users do not confirm their email', () => {
 // GROUP B — P3's guard. Only a REAL invitation short-circuits.
 // ============================================================================
 
-describe('S160-B — the invited check cannot be forged', () => {
+describeSend('S160-B — the invited check cannot be forged', () => {
   it('B1 — no token at all resolves to nothing', async () => {
-    expect(await invitedCompanyFor(admin as never, { id: inviteeUserId, email: INVITEE })).toBeNull();
+    expect(
+      await invitedCompanyFor(admin as never, { id: inviteeUserId, email: INVITEE })
+    ).toBeNull();
     expect(
       await invitedCompanyFor(admin as never, {
-        id: inviteeUserId, email: INVITEE, user_metadata: {},
+        id: inviteeUserId,
+        email: INVITEE,
+        user_metadata: {},
       })
     ).toBeNull();
   });
@@ -266,7 +347,9 @@ describe('S160-B — the invited check cannot be forged', () => {
   it('B2 — an unknown token resolves to nothing', async () => {
     expect(
       await invitedCompanyFor(admin as never, {
-        id: inviteeUserId, email: INVITEE, user_metadata: { invitation_token: randomUUID() },
+        id: inviteeUserId,
+        email: INVITEE,
+        user_metadata: { invitation_token: randomUUID() },
       })
     ).toBeNull();
   });
@@ -288,7 +371,9 @@ describe('S160-B — the invited check cannot be forged', () => {
   it('B4 — and the real pair DOES resolve, so B1–B3 are not passing on a broken lookup', async () => {
     expect(
       await invitedCompanyFor(admin as never, {
-        id: inviteeUserId, email: INVITEE, user_metadata: { invitation_token: inviteeToken },
+        id: inviteeUserId,
+        email: INVITEE,
+        user_metadata: { invitation_token: inviteeToken },
       })
     ).toBe(companyId);
   });
@@ -298,7 +383,7 @@ describe('S160-B — the invited check cannot be forged', () => {
 // GROUP C — P1 + P2. A real send, and a row in email_logs.
 // ============================================================================
 
-describe('S160-C — P1/P2: the send goes out branded, and it is logged', () => {
+describeSend('S160-C — P1/P2: the send goes out branded, and it is logged', () => {
   it('C1 — a recovery hook sends over Resend and writes an auth_recovery row', async () => {
     state.calls.length = 0;
     state.result = { data: { id: 'mock-resend-id-c1' }, error: null };
@@ -379,7 +464,9 @@ describe('S160-C — P1/P2: the send goes out branded, and it is logged', () => 
     expect(state.calls[0].from).toContain(`@ezcontractorbinder.com`);
 
     const { data } = await admin
-      .from('email_logs').select('id').eq('recipient_email', 'orphan@example.invalid');
+      .from('email_logs')
+      .select('id')
+      .eq('recipient_email', 'orphan@example.invalid');
     expect(data ?? [], 'a row was logged with no company').toHaveLength(0);
   });
 
