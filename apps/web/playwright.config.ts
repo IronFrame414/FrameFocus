@@ -73,9 +73,25 @@ export default defineConfig({
   retries: process.env.CI ? 2 : 1,
   workers: process.env.CI ? 1 : undefined,
 
-  reporter: process.env.CI
-    ? [['github'], ['html', { open: 'never' }]]
-    : [['list']],
+  // PER-TEST TIMEOUT — 60s in CI, Playwright's 30s default locally.
+  //
+  // ⚠️ THE FULL REASONING, THE TWO CAVEATS AND THE DURABLE FIX ARE IN
+  // .github/workflows/ci.yml, above the `e2e:` job. Read that before touching
+  // this line. The short version, so the value is never changed blind:
+  //
+  //   * This is a TREADMILL, NOT A FIX. What grows is per-statement DB overhead
+  //     from accumulating RLS policies, not test count.
+  //   * It WEAKENS A REAL SIGNAL: a test that legitimately takes 45s now passes
+  //     silently instead of failing.
+  //   * The durable fix is A DATABASE PER SHARD, blocked on a reproducible seed.
+  //
+  // Measured at S107 under full-suite conditions: chat photo tests ran 23-24s
+  // LOCALLY against the 30s default — CI is slower still, which is why the
+  // budget was being exhausted there and not here. Costs nothing on a green
+  // run: a passing test never spends its budget.
+  timeout: (process.env.CI ? 60 : 30) * 1000,
+
+  reporter: process.env.CI ? [['github'], ['html', { open: 'never' }]] : [['list']],
 
   use: {
     baseURL: 'http://localhost:3000',
