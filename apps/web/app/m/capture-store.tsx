@@ -71,9 +71,9 @@ export function CaptureStoreProvider({ children }: { children: React.ReactNode }
  *   · `?project=` — M-7's context row switches with a query param (§4.7), and
  *     M-6 carries the same param from M-7's Daily-logs tile
  *
- * Returns null when neither is present, which is A-21's case: the tab bar on
- * Timeclock, Logs or a company-scoped screen. That null is what triggers the
- * prompt AFTER the shot.
+ * Returns null when neither is present. Before S105b that null went straight to
+ * A-21's prompt; now it is the input to `resolveCaptureProjectId`, which tries
+ * the open clock segment before falling back to the prompt.
  */
 export function projectInContext(pathname: string, search: URLSearchParams): string | null {
   const fromPath = /^\/m\/p\/([0-9a-f-]{36})(\/|$)/.exec(pathname);
@@ -81,4 +81,23 @@ export function projectInContext(pathname: string, search: URLSearchParams): str
 
   const fromQuery = search.get('project');
   return fromQuery && /^[0-9a-f-]{36}$/.test(fromQuery) ? fromQuery : null;
+}
+
+/**
+ * S105b item 7 (ASK-7.A, RULED [Josh]) — the clock is a THIRD project source.
+ *
+ * ⚠️ Precedence is fixed and TESTED: URL path > `?project=` > open clock segment
+ * > null. `projectInContext` already resolves URL-over-query into `contextId`;
+ * the clocked-in job is only consulted when there is no context, and null still
+ * means "ask after the shot" (A-21). This narrows A-21's trigger: a clocked-in
+ * field user's shot now files silently to their job (A-21b) instead of prompting.
+ *
+ * Pure on purpose — the caller does the async clock read and passes the result,
+ * so the precedence rule can be asserted exhaustively without a database.
+ */
+export function resolveCaptureProjectId(
+  contextId: string | null,
+  clockProjectId: string | null
+): string | null {
+  return contextId ?? clockProjectId ?? null;
 }

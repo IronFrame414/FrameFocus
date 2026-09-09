@@ -27,7 +27,13 @@ import { setSurfaceAndGo } from '@/lib/surface-client';
 import { MobileHeaderProvider, useMobileHeader } from './mobile-header';
 import { NotificationBell } from '@/components/notifications/notification-bell';
 import { OfflineSyncProvider, useOfflineSync } from './offline-sync';
-import { CaptureStoreProvider, projectInContext, useCaptureStore } from './capture-store';
+import {
+  CaptureStoreProvider,
+  projectInContext,
+  resolveCaptureProjectId,
+  useCaptureStore,
+} from './capture-store';
+import { getOpenClockProjectId } from '@/lib/services/time-tracking-client';
 import { MobileChatOverlay } from '@/components/chat/mobile-chat-overlay';
 
 // M6M §3 — THE MOBILE SHELL.
@@ -320,7 +326,7 @@ function MobileShellInner({
    * pathname is `/m/capture` and the context is gone.
    */
   const onShot = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
       // Allows re-picking the same file twice; without it the second change
       // event never fires.
@@ -330,7 +336,23 @@ function MobileShellInner({
       const search = new URLSearchParams(
         typeof window === 'undefined' ? '' : window.location.search
       );
-      capture.hold(file, projectInContext(pathname, search));
+      const contextId = projectInContext(pathname, search);
+
+      // S105b item 7 (ASK-7.A, RULED) — precedence URL > ?project= > open clock
+      // segment > null. The clocked-in job is consulted ONLY when there is no
+      // context, and only when online (offline the read cannot succeed and the
+      // A-21 prompt is the correct fallback). The ~2s cap keeps a dead-but-onLine
+      // network — the weak-signal case — from stalling the shutter: it resolves
+      // to null and the prompt appears, rather than hanging on the capture.
+      let clockId: string | null = null;
+      if (!contextId && typeof navigator !== 'undefined' && navigator.onLine) {
+        clockId = await Promise.race([
+          getOpenClockProjectId().catch(() => null),
+          new Promise<null>((resolve) => setTimeout(() => resolve(null), 2000)),
+        ]);
+      }
+
+      capture.hold(file, resolveCaptureProjectId(contextId, clockId));
       router.push('/m/capture');
     },
     [capture, pathname, router]

@@ -36,6 +36,11 @@ import {
 } from '@/lib/services/instrument-rates-client';
 import type { CostCatalogItem } from '@/lib/services/cost-catalog-client';
 import { materialUnitsOfMeasure } from '@framefocus/shared/validation/estimate-items';
+import {
+  backsolveMarkupPercent,
+  computeRowCost,
+  roundMoney,
+} from '@framefocus/shared/utils/estimate-totals';
 import { companyToday } from '@framefocus/shared/utils/dates';
 import { InlineNumber, InlineText } from '../inline-edit';
 import { UNIT_LABELS, fmtMoney, fmtPercent } from '../labels';
@@ -215,6 +220,29 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
     // [S170] allowance rides material's default (Q3) — same as resolveRowMarkupPercent.
     if (rowType === 'material' || rowType === 'allowance') return estimate.material_markup_percent;
     return estimate.subcontractor_markup_percent;
+  }
+
+  // S106 Part B — a row's pricing base (cost + tax), the value applyPricing/back-solve
+  // operate on. Same shape computeRowPricing uses, so a total typed here back-solves to
+  // exactly the markup the recompute would apply.
+  function rowBase(row: EstimateLineRow): number {
+    const cost = computeRowCost({
+      row_type: row.row_type as RowType,
+      rate: row.rate,
+      quantity: row.quantity,
+      unit_of_measure: row.unit_of_measure,
+      unit_cost: row.unit_cost,
+      amount: row.amount,
+    });
+    const taxable = row.row_type !== 'labor' && !!row.apply_tax;
+    return cost + (taxable ? roundMoney(cost * ((estimate.tax_rate ?? 0) / 100)) : 0);
+  }
+
+  // The markup shown for a TOTAL-edited row is derived from its pinned total (markup_percent
+  // is NULL by the mutual-exclusion CHECK). NULL base → no derivable markup.
+  function derivedMarkup(row: EstimateLineRow): number | null {
+    if (row.total_override == null) return null;
+    return backsolveMarkupPercent(row.total_override, rowBase(row), mode);
   }
 
   async function addCategory() {
@@ -532,7 +560,7 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
         <td style={{ padding: '0.25rem 0.5rem' }}>{rowQtyCell(row)}</td>
         <td style={{ padding: '0.25rem 0.5rem', textAlign: 'right', fontFamily: font.mono }}>
           <InlineNumber
-            value={row.markup_percent}
+            value={row.total_override != null ? derivedMarkup(row) : row.markup_percent}
             disabled={!canEdit}
             allowNull
             placeholder={`${estimateDefaultMarkup(row.row_type) ?? 0}`}
@@ -540,7 +568,14 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
               v == null ? `(${fmtPercent(estimateDefaultMarkup(row.row_type))})` : fmtPercent(v)
             }
             validate={percentValidator}
-            onSave={(v) => mutate(() => updateEstimateLineRow(row.id, { markup_percent: v }), true)}
+            // S106: editing the margin switches the row to margin-mode — clears the pinned
+            // total (mutual exclusion) so the two definitions of "edited" never disagree.
+            onSave={(v) =>
+              mutate(
+                () => updateEstimateLineRow(row.id, { markup_percent: v, total_override: null }),
+                true
+              )
+            }
           />
         </td>
         <td style={{ padding: '0.25rem 0.5rem', textAlign: 'center' }}>
@@ -564,7 +599,21 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
           )}
         </td>
         <td style={{ padding: '0.25rem 0.5rem', textAlign: 'right', fontSize: '0.8125rem', fontFamily: font.mono }}>
-          {fmtMoney(row.total)}
+          {/* S106 Part B — a row's total is editable: typing one pins it (total_override)
+              and back-solves/clears the markup. NO ≥0 validation — a negative is a credit /
+              allowance / rebate line. Clearing (blank) reverts to the computed total. */}
+          <InlineNumber
+            value={row.total_override}
+            disabled={!canEdit}
+            allowNull
+            format={() => fmtMoney(row.total)}
+            onSave={(v) =>
+              mutate(
+                () => updateEstimateLineRow(row.id, { total_override: v, markup_percent: null }),
+                true
+              )
+            }
+          />
         </td>
         <td style={{ padding: '0.25rem 0.5rem' }}>
           {canEdit && (
@@ -732,16 +781,29 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
                 TOTAL
               </span>
               <span style={{ ...monoNum, color: isUnpriced ? '#9aa4b8' : undefined }}>
-                <InlineNumber
-                  value={line.total_price_override}
-                  disabled={!canEdit}
-                  allowNull
-                  format={() => fmtMoney(line.total_price)}
-                  validate={(v) => (v != null && v < 0 ? '≥ 0' : null)}
-                  onSave={(v) =>
-                    mutate(() => updateEstimateLineItem(line.id, { total_price_override: v }), true)
-                  }
-                />
+                {/* S106 Part B — a line WITH rows shows a READ-ONLY total (= the sum of its
+                    row totals); its total is edited per-row now, and the DB invariant
+                    (20261560000000) forbids a flat total_price_override on a rowed line.
+                    Only a ROWLESS flat-priced line keeps the editable line total. */}
+                {lineRows.length > 0 ? (
+                  fmtMoney(line.total_price)
+                ) : (
+                  <InlineNumber
+                    value={line.total_price_override}
+                    disabled={!canEdit}
+                    allowNull
+                    format={() => fmtMoney(line.total_price)}
+                    // S106 [RULED Josh]: NO ≥0 validation — a negative typed total is
+                    // DELIBERATELY legal (a credit, allowance, or rebate carried as a
+                    // line). The old ≥0 was inherited from override_cost, where a cost
+                    // truly cannot be negative; that justification does not transfer to
+                    // a sell price. Aligned with the row-level total_override. Do NOT
+                    // re-add a ≥0 check here.
+                    onSave={(v) =>
+                      mutate(() => updateEstimateLineItem(line.id, { total_price_override: v }), true)
+                    }
+                  />
+                )}
               </span>
             </span>
             {hasOverride && (

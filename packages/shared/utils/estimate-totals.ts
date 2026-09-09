@@ -68,6 +68,31 @@ export function applyPricing(
   return cost * (1 + p / 100);
 }
 
+// S106 Part B [RULED Josh] — the EXACT inverse of applyPricing. Editing a row's
+// TOTAL back-solves the markup that produces it, so total-editing and margin-editing
+// drive the SAME stored value (markup_percent) and agree by construction. `base` is
+// what applyPricing was called with — the row's cost basis PLUS its tax (see
+// rowLineTotal); the caller computes that, this function only inverts the pricing.
+//
+// Returns null when the total cannot be represented as a markup of the base:
+//  · base <= 0 — no cost to mark up (a $0-cost row can't back-solve a non-zero total)
+//  · margin mode with total <= 0 — degenerate (margin is profit/price; price ≤ 0 is
+//    not a margin). Markup mode admits total ≤ base (down to a −100% markup at $0),
+//    matching FILL-B.8's "negative markup is allowed".
+export function backsolveMarkupPercent(
+  total: number,
+  base: number,
+  mode: PricingMode
+): number | null {
+  if (!Number.isFinite(total) || !Number.isFinite(base)) return null;
+  if (base <= 0) return null;
+  if (mode === 'margin') {
+    if (total <= 0) return null;
+    return (1 - base / total) * 100;
+  }
+  return (total / base - 1) * 100;
+}
+
 export function applyDiscount(
   total: number,
   discountType: DiscountType | null | undefined,
@@ -91,6 +116,11 @@ export interface RowPricingInput {
   // Shared
   markup_percent?: number | null;
   apply_tax?: boolean | null;
+  /** S106 — the row's AUTHORITATIVE typed sell total. When non-null it wins over
+   *  cost×markup (computeRowPricing returns it verbatim), so a hand-edited total is
+   *  never silently recomputed to a cent different. Mutually exclusive with
+   *  markup_percent (DB CHECK). Negatives legal (credit/allowance/rebate). */
+  total_override?: number | null;
 }
 
 export interface EstimateMarkupDefaults {
@@ -350,6 +380,14 @@ export function computeRowPricing(input: {
   flat_rate_labor?: boolean;
 }): RowPricing {
   const cost = computeRowCost(input.row);
+  // S106 [RULED Josh, Option B] — a hand-edited total is authoritative and is
+  // returned verbatim, NOT recomputed from cost×markup. This is the skip that keeps
+  // recalculateEstimateTotals (and, through the stored line/grand totals, Estimate
+  // Health, the proposal, and conversion) showing the TYPED figure. tax_amount is 0:
+  // the typed total is the all-in sell, so there is no separately-tracked tax to sum.
+  if (input.row.total_override != null) {
+    return { cost, tax_amount: 0, total: roundMoney(input.row.total_override) };
+  }
   if (input.row.row_type === 'labor' && input.flat_rate_labor) {
     return {
       cost,

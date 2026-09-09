@@ -64,10 +64,12 @@ export function CaptureScreen({ projects }: { projects: CaptureProjectChoice[] }
       setBusy(true);
       setError(null);
 
-      // OFFLINE — the queue (§5.2). Note this is the same `buildPhotoEntry`
-      // the daily log uses, so the replay goes through `uploadFile` and a HEIC
-      // capture still lands as JPEG (A-20d).
-      if (!navigator.onLine && offlineSync) {
+      // The queue path (§5.2), shared by the offline branch and the ASK-7.B
+      // weak-signal fallback below. Same `buildPhotoEntry` the daily log uses,
+      // so the replay goes through `uploadFile` and a HEIC capture still lands
+      // as JPEG (A-20d). Returns false when there is no queue to fall back to.
+      const queueForLater = async (): Promise<boolean> => {
+        if (!offlineSync) return false;
         await offlineSync.enqueue(
           buildPhotoEntry({
             entryId: crypto.randomUUID(),
@@ -81,7 +83,12 @@ export function CaptureScreen({ projects }: { projects: CaptureProjectChoice[] }
         capture?.clear();
         setBusy(false);
         setOutcome({ projectId, queued: true });
-        return;
+        return true;
+      };
+
+      // OFFLINE — the queue.
+      if (!navigator.onLine) {
+        if (await queueForLater()) return;
       }
 
       // ONLINE — straight through `uploadFile`, which owns the HEIC→JPEG
@@ -93,6 +100,12 @@ export function CaptureScreen({ projects }: { projects: CaptureProjectChoice[] }
       });
 
       if (!uploaded.success) {
+        // ASK-7.B [S105b, RULED] — a weak-signal failure (`navigator.onLine` was
+        // true, the network was not) must NOT strand the shot behind a manual
+        // retry. Fall back to the SAME idempotent queue, so it uploads when
+        // signal returns. Only if there is no queue at all do we surface the
+        // error for a manual retry.
+        if (await queueForLater()) return;
         setBusy(false);
         setError(uploaded.error ?? 'The photo could not be uploaded.');
         return;

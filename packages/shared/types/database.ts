@@ -3276,6 +3276,7 @@ export type Database = {
           sort_order: number
           subcontractor_id: string | null
           total: number
+          total_override: number | null
           unit_cost: number | null
           unit_of_measure: string | null
           updated_at: string | null
@@ -3300,6 +3301,7 @@ export type Database = {
           sort_order: number
           subcontractor_id?: string | null
           total?: number
+          total_override?: number | null
           unit_cost?: number | null
           unit_of_measure?: string | null
           updated_at?: string | null
@@ -3324,6 +3326,7 @@ export type Database = {
           sort_order?: number
           subcontractor_id?: string | null
           total?: number
+          total_override?: number | null
           unit_cost?: number | null
           unit_of_measure?: string | null
           updated_at?: string | null
@@ -4473,6 +4476,7 @@ export type Database = {
           deleted_at: string | null
           delivery_id: string | null
           delivery_item_id: string | null
+          estimate_id: string | null
           expense_id: string | null
           file_name: string
           file_path: string
@@ -4502,6 +4506,7 @@ export type Database = {
           deleted_at?: string | null
           delivery_id?: string | null
           delivery_item_id?: string | null
+          estimate_id?: string | null
           expense_id?: string | null
           file_name: string
           file_path: string
@@ -4531,6 +4536,7 @@ export type Database = {
           deleted_at?: string | null
           delivery_id?: string | null
           delivery_item_id?: string | null
+          estimate_id?: string | null
           expense_id?: string | null
           file_name?: string
           file_path?: string
@@ -4583,6 +4589,13 @@ export type Database = {
             columns: ["delivery_item_id"]
             isOneToOne: false
             referencedRelation: "delivery_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "files_estimate_id_fkey"
+            columns: ["estimate_id"]
+            isOneToOne: false
+            referencedRelation: "estimates"
             referencedColumns: ["id"]
           },
           {

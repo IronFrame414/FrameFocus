@@ -155,19 +155,10 @@ export function ContractSection({
   const fieldLabel: React.CSSProperties = { color: '#3f4a60', fontWeight: 500 };
 
   return (
-    <div style={{ marginBottom: '2rem', maxWidth: '560px' }}>
-      <div
-        style={{
-          fontSize: '1rem',
-          fontWeight: 600,
-          marginBottom: '0.75rem',
-          paddingBottom: '0.375rem',
-          borderBottom: '1px solid #e4e8ef',
-        }}
-      >
-        Contract
-      </div>
-
+    // S106 Part A [RULED Josh]: the "Contract" heading is DELETED and this box is
+    // laid out full-width by details-tab. maxWidth removed so it fills the width;
+    // all children (contract type + negotiated rates + projection) are unchanged.
+    <div>
       {error && (
         <div
           style={{

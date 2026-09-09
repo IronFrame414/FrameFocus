@@ -4,6 +4,7 @@ import { companyToday } from '@framefocus/shared/utils/dates';
 import { useEffect, useRef, useState } from 'react';
 import {
   createEstimateSubBid,
+  previewAwardedLineTotal,
   setWinningBid,
   softDeleteEstimateSubBid,
   updateEstimateSubBid,
@@ -26,7 +27,7 @@ import {
   type SubBidReplyMode,
 } from '@/lib/services/sub-bid-requests-client';
 import { fmtMoney } from '../labels';
-import { useConfirm } from '@/components/confirm/confirm-provider';
+import { useAlert, useConfirm } from '@/components/confirm/confirm-provider';
 import type { TabProps } from './estimate-builder';
 
 // 4D-rev Bidding tab — grouped by line item that carries a
@@ -49,6 +50,7 @@ export function BiddingTab({ data, canEdit, reload, companyTimeZone }: TabProps)
   const [requests, setRequests] = useState<SubBidRequestRow[]>([]);
   const [requestingFor, setRequestingFor] = useState<string | null>(null);
   const confirm = useConfirm();
+  const alert = useAlert();
 
   useEffect(() => {
     listSubcontractorOptions().then(setSubs);
@@ -94,14 +96,69 @@ export function BiddingTab({ data, canEdit, reload, companyTimeZone }: TabProps)
   const subName = (id: string | null) =>
     subs.find((s) => s.id === id)?.company_name ?? 'Unknown sub';
 
+  // S106 [RULED Josh] — awarding a bid ITEMIZES the line, and `set_winning_bid`
+  // CLEARS a manual line total when it inserts the winning row. Say so first.
+  //
+  // ⚠️ ORDERING IS THE FEATURE. Everything above the `confirm` is a READ:
+  // `previewAwardedLineTotal` only selects. So Cancel is a true no-op — no row
+  // inserted, no override cleared, no winner set — because the RPC that does all
+  // three is the first write on this path and it is below the early return.
+  //
+  // The prompt fires ONLY when the line carries a manual total. Every other
+  // award stays silent, as it always has.
   async function handleSetWinner(lineItemId: string, subBidId: string) {
     setError(null);
+
+    const line = lineItems.find((l) => l.id === lineItemId);
+    const manualTotal = line?.total_price_override ?? null;
+    let projectedTotal: number | null = null;
+
+    if (manualTotal != null) {
+      const preview = await previewAwardedLineTotal(lineItemId, subBidId);
+      if (!preview.success) {
+        setError(preview.error || 'Could not work out what awarding would do to this line');
+        return;
+      }
+      projectedTotal = preview.preview.projectedTotal;
+
+      const ok = await confirm({
+        title: 'Replace your manual total?',
+        message:
+          `Your total: ${fmtMoney(manualTotal)}\n` +
+          `After awarding: ${fmtMoney(projectedTotal)} (bid + markup)\n` +
+          'Awarding itemizes this line, so your manual total no longer applies.',
+        confirmLabel: 'Replace',
+        cancelLabel: 'Cancel',
+      });
+      if (!ok) return; // ← no write has happened yet, and none will.
+    }
+
     const result = await setWinningBid(lineItemId, subBidId);
     if (!result.success) {
       setError(result.error || 'Could not set the winning bid');
       return;
     }
     await reload();
+
+    // The prompt quoted a number. `setWinningBid` read the real one back off the
+    // line after the recalc. They are computed by the SAME shared pricing code,
+    // so they should agree — but a rate superseded or a line edited between the
+    // prompt and the click would not show up in any shared formula. If they
+    // differ, the estimator is told, rather than left with a figure they were
+    // shown at the moment they decided and which was never what they got.
+    if (
+      projectedTotal != null &&
+      result.lineTotal != null &&
+      Math.abs(result.lineTotal - projectedTotal) >= 0.005
+    ) {
+      await alert({
+        title: 'The awarded total is not what the prompt showed',
+        message:
+          `The prompt said this line would become ${fmtMoney(projectedTotal)}.\n` +
+          `It is now ${fmtMoney(result.lineTotal)}.\n` +
+          'The award went through. Check the line before you send this estimate.',
+      });
+    }
   }
 
   async function handleDeleteBid(subBidId: string) {

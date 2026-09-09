@@ -315,6 +315,7 @@ export type CreateLineRowInput = Pick<
   | 'name'
   | 'sort_order'
   | 'markup_percent'
+  | 'total_override'
   | 'apply_tax'
   | 'rate'
   | 'quantity'
@@ -574,15 +575,193 @@ export async function listAwardBases(subBidIds: string[]): Promise<AwardBasis[]>
 }
 
 /**
+ * S106 [RULED Josh] — the award prompt's two numbers.
+ *
+ * Awarding a bid ITEMIZES a line, and `set_winning_bid` clears
+ * `total_price_override` when it inserts the winning subcontractor row
+ * (20261560000000). The UI must say so BEFORE the RPC runs, which means it has
+ * to show the total the award will produce — $Y — while nothing has happened yet.
+ *
+ * ⚠️ THE DIVERGENCE THIS FUNCTION EXISTS TO AVOID: the prompt shows one number
+ * and the line gets another, on money, at the moment of a decision. Two things
+ * prevent that, and BOTH are needed:
+ *
+ *  1. THIS function shares the MECHANISM, not the intent (CLAUDE.md parity
+ *     doctrine). It builds the row `set_winning_bid` will write — byte-for-byte
+ *     the RPC's INSERT column list: markup_percent NULL, apply_tax false,
+ *     amount = bid_amount — and prices it through the SAME
+ *     `applyInstrumentRateOverrides` → `computeLineTotalsFromRows` that
+ *     `recalculateEstimateTotals` runs afterwards, off the SAME estimate
+ *     pricing context. There is no second pricing formula here to drift.
+ *  2. `setWinningBid` READS THE LINE TOTAL BACK after the recalc, and the
+ *     caller surfaces any difference. The shared mechanism makes divergence
+ *     rare; the read-back is what makes it impossible to hide — a rate can be
+ *     superseded, or another user can edit the line, between the prompt and
+ *     the click, and no amount of shared code sees that coming.
+ *
+ * It mirrors all three of the RPC's branches rather than only the one the
+ * prompt fires on, so the read-back comparison is meaningful on every award.
+ */
+export type AwardTotalPreview = {
+  /** $X — the line's manual total today. Null when it carries none (no prompt). */
+  manualTotal: number | null;
+  /** $Y — the line total the award will produce. */
+  projectedTotal: number;
+};
+
+export async function previewAwardedLineTotal(
+  lineItemId: string,
+  subBidId: string
+): Promise<{ success: true; preview: AwardTotalPreview } | { success: false; error: string }> {
+  const supabase = createClient();
+
+  const { data: line, error: lineError } = await supabase
+    .from('estimate_line_items')
+    .select('id, estimate_id, discount_type, discount_amount, total_price_override')
+    .eq('id', lineItemId)
+    .single();
+  if (lineError || !line) return { success: false, error: 'Line item not found' };
+
+  // Scoped to the line (not just the id): the projection is only correct for a
+  // bid that belongs to THIS line, which is also what the RPC insists on.
+  const { data: bid, error: bidError } = await supabase
+    .from('estimate_sub_bids')
+    .select('id, bid_amount, subcontractor_id')
+    .eq('id', subBidId)
+    .eq('line_item_id', lineItemId)
+    .eq('is_deleted', false)
+    .single();
+  if (bidError || !bid) return { success: false, error: 'Sub bid not found for this line item' };
+
+  const { data: estimate, error: estimateError } = await supabase
+    .from('estimates')
+    .select(
+      'id, pricing_mode, contract_type, tax_rate, subcontractor_markup_percent, material_markup_percent, labor_markup_percent'
+    )
+    .eq('id', line.estimate_id)
+    .single();
+  if (estimateError || !estimate) return { success: false, error: 'Estimate not found' };
+
+  const { data: rows, error: rowsError } = await supabase
+    .from('estimate_line_rows')
+    .select(
+      'id, row_type, markup_percent, apply_tax, rate, quantity, unit_of_measure, unit_cost, amount, total_override'
+    )
+    .eq('line_item_id', lineItemId)
+    .order('sort_order', { ascending: true });
+  if (rowsError) return { success: false, error: rowsError.message };
+
+  const existing: RowPricingInput[] = (rows ?? []).map((r) => ({
+    row_type: r.row_type as RowType,
+    rate: r.rate,
+    quantity: r.quantity,
+    unit_of_measure: r.unit_of_measure,
+    unit_cost: r.unit_cost,
+    amount: r.amount,
+    markup_percent: r.markup_percent,
+    apply_tax: r.apply_tax,
+    total_override: r.total_override,
+  }));
+
+  // The RPC's three branches (20261560000000), mirrored.
+  const subRowCount = existing.filter((r) => r.row_type === 'subcontractor').length;
+  if (subRowCount >= 2) {
+    return {
+      success: false,
+      error: `Line has ${subRowCount} subcontractor rows; winning-bid auto-management requires 0 or 1`,
+    };
+  }
+
+  let projectedRows: RowPricingInput[];
+  let projectedOverride: number | null;
+
+  if (subRowCount === 1) {
+    // Fill-only-when-empty (S95): an estimator-entered cost survives; an empty
+    // one is seeded from the bid. The override is NOT cleared on this branch —
+    // and the line-total invariant means a line with rows cannot carry one
+    // anyway, so this arm never prompts. Kept exact so the read-back agrees.
+    projectedRows = existing.map((r) =>
+      r.row_type === 'subcontractor'
+        ? { ...r, amount: Number(r.amount ?? 0) === 0 ? Number(bid.bid_amount) : r.amount }
+        : r
+    );
+    projectedOverride = line.total_price_override;
+  } else {
+    // The award ITEMIZES the line: the RPC clears total_price_override, then
+    // inserts the winning row. Column list copied from the RPC's INSERT.
+    projectedRows = [
+      ...existing,
+      {
+        row_type: 'subcontractor',
+        markup_percent: null,
+        apply_tax: false,
+        amount: Number(bid.bid_amount),
+        total_override: null,
+      },
+    ];
+    projectedOverride = null;
+  }
+
+  const contractType = (estimate.contract_type ?? 'fixed_price') as ContractType;
+  const rateCtx = await loadInstrumentPricingContext(
+    supabase,
+    { estimate_id: line.estimate_id },
+    contractType
+  );
+
+  let priced: RowPricingInput[];
+  try {
+    // Cost-plus/T&M override the row's markup with the instrument rate in force
+    // (P4). Skipping this would quote the estimate default and be wrong by the
+    // whole difference on every non-fixed instrument. A missing rate throws the
+    // same NoRateInForceError the award's own recalc would throw — report it
+    // instead of projecting a silent 0%.
+    priced = applyInstrumentRateOverrides(projectedRows, rateCtx);
+  } catch (e) {
+    if (e instanceof NoRateInForceError) return { success: false, error: e.message };
+    throw e;
+  }
+
+  const totals = computeLineTotalsFromRows({
+    rows: priced,
+    pricing_mode: estimate.pricing_mode as PricingMode,
+    tax_rate: estimate.tax_rate,
+    defaults: {
+      subcontractor_markup_percent: estimate.subcontractor_markup_percent,
+      material_markup_percent: estimate.material_markup_percent,
+      labor_markup_percent: estimate.labor_markup_percent,
+    },
+    discount_type: line.discount_type as DiscountType | null,
+    discount_amount: line.discount_amount,
+    total_price_override: projectedOverride,
+    flat_rate_labor: contractType !== 'fixed_price',
+  });
+
+  return {
+    success: true,
+    preview: {
+      manualTotal: line.total_price_override,
+      projectedTotal: totals.total_price,
+    },
+  };
+}
+
+/**
  * Atomic winner flip via the set_winning_bid RPC (Rev 2 §2.5): clears
  * any previous winner, marks the new one, and upserts a single
  * subcontractor row on the line (insert if none, update if one, error
  * if 2+). Totals are then recomputed here because a row changed.
+ *
+ * S106 [RULED Josh] — returns `lineTotal`, the line's total READ BACK after the
+ * recalc. This is the ground truth the award prompt's projected figure is
+ * checked against (see previewAwardedLineTotal): a shared formula makes the two
+ * agree, a read-back is what proves it. Best-effort — a failed read-back leaves
+ * `lineTotal` undefined and never fails an award that succeeded.
  */
 export async function setWinningBid(
   lineItemId: string,
   subBidId: string
-): Promise<Result> {
+): Promise<Result & { lineTotal?: number }> {
   const supabase = createClient();
 
   const { error } = await supabase.rpc('set_winning_bid', {
@@ -607,6 +786,17 @@ export async function setWinningBid(
     });
     const recalc = await recalculateEstimateTotals(line.estimate_id);
     if (!recalc.success) return recalc;
+
+    // The awarded line total as PERSISTED, after the row insert, the override
+    // clear and the reprice. Read after the recalc, never before it.
+    const { data: awarded } = await supabase
+      .from('estimate_line_items')
+      .select('total_price')
+      .eq('id', lineItemId)
+      .single();
+    if (awarded?.total_price != null) {
+      return { success: true, lineTotal: Number(awarded.total_price) };
+    }
   }
   return { success: true };
 }
@@ -705,7 +895,7 @@ export async function recalculateEstimateTotals(estimateId: string): Promise<Res
       ? await supabase
           .from('estimate_line_rows')
           .select(
-            'id, line_item_id, row_type, markup_percent, apply_tax, rate, quantity, unit_of_measure, unit_cost, amount'
+            'id, line_item_id, row_type, markup_percent, apply_tax, rate, quantity, unit_of_measure, unit_cost, amount, total_override'
           )
           .in('line_item_id', lineIds)
           .order('sort_order', { ascending: true })
@@ -747,6 +937,7 @@ export async function recalculateEstimateTotals(estimateId: string): Promise<Res
       amount: r.amount,
       markup_percent: r.markup_percent,
       apply_tax: r.apply_tax,
+      total_override: r.total_override,
     }));
 
     const lineTotals = computeLineTotalsFromRows({

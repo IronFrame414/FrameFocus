@@ -672,3 +672,33 @@ export async function getMyRecentProjectIds(): Promise<string[]> {
   }
   return ordered;
 }
+
+// ---------------------------------------------------------------------------
+// S105b item 7 (ASK-7.A, RULED [Josh]) — the clocked-in job as a capture source.
+//
+// Client-side read of the OPEN segment's project_id: the session that is not
+// clocked out, its one segment that has not ended. Returns null when the caller
+// is not clocked in, is on a break/segment with no project, or the read fails —
+// every one of which correctly falls through to A-21's prompt via
+// `resolveCaptureProjectId`. Kept deliberately small (no SESSION_SELECT join):
+// the capture path needs one id, not a session graph.
+// ---------------------------------------------------------------------------
+export async function getOpenClockProjectId(): Promise<string | null> {
+  const supabase = createClient();
+  const { data: myMemberId } = await supabase.rpc('get_my_member_id');
+  if (!myMemberId) return null;
+
+  const { data, error } = await supabase
+    .from('time_clock_sessions')
+    .select('id, time_segments(project_id, segment_end)')
+    .eq('member_id', myMemberId)
+    .is('clock_out', null)
+    .eq('is_deleted', false)
+    .maybeSingle();
+  if (error || !data) return null;
+
+  const segments = (data as { time_segments?: { project_id: string | null; segment_end: string | null }[] })
+    .time_segments;
+  const openSegment = (segments ?? []).find((s) => s.segment_end === null);
+  return openSegment?.project_id ?? null;
+}
