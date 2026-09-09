@@ -48,6 +48,8 @@ const COMPANY = '03bb903f-1084-4ab4-afb8-03192cb58d30';
 const CONTACT = '8c7c9a6d-287d-4b0e-9a0b-2769adfed704';
 
 let refundId: string | null = null;
+/** Rows retired for this file's duration and restored in afterAll. See beforeAll. */
+let quietedRowIds: string[] = [];
 
 async function queueRowFor(entityId: string) {
   const { data } = await admin
@@ -90,9 +92,81 @@ describe('S187 F13 — a park is counted, and the drain says so', () => {
       .update({ status: 'approved' })
       .eq('id', refundId);
     if (approveError) throw new Error(`could not approve the refund: ${approveError.message}`);
+
+    // ⚠️ BACKDATE THE ROW THE TRIGGER JUST QUEUED, SO THE DRAIN REACHES IT.
+    //
+    // `claimDue()` orders by `created_at` ASC and takes `limit` rows, so a
+    // tenant with more eligible rows than the limit starves every NEW row —
+    // and the drain then never examines this one. Measured at S107: 102
+    // eligible against a limit of 25, and this file's three failures were all
+    // downstream of a row the drain never looked at (`last_error` came back
+    // null, which vitest reported as "toMatch() got object").
+    //
+    // The row is created by the enqueue trigger, so it cannot be backdated at
+    // insert the way s104's and s181's fixtures are; it is backdated here
+    // instead, immediately after the trigger has run and before any drain.
+    const { error: backdateError } = await admin
+      .from('qb_sync_queue')
+      .update({ created_at: '2020-01-01T00:00:00.000Z' })
+      .eq('entity_id', refundId);
+    if (backdateError)
+      throw new Error(`could not backdate the queue row: ${backdateError.message}`);
+
+    // ⚠️ AND THE TENANT'S QUEUE IS QUIETED FOR THIS FILE'S DURATION [S107].
+    //
+    // Test 4 asserts `outcome.waiting`, and `countWaiting()` is called ONLY on
+    // the EMPTY-CLAIM path (`queue.ts:343` — "so the common case pays
+    // nothing"). If ANY other row in this tenant is claimable, the claim is not
+    // empty, `waiting` is never computed, and the assertion reads 0. Backdating
+    // cannot help: the problem is that other rows EXIST, not where this one
+    // sorts.
+    //
+    // Measured twice: against a restored 102-row backlog, and again in the S107
+    // full-suite run, where earlier files enqueue rows before this one runs.
+    // It passed in isolation both times — the worst shape available, because it
+    // reads as a broken drain counter.
+    //
+    // So the file makes its own precondition instead of inheriting one. Every
+    // OTHER claimable row is soft-deleted (`is_deleted`, which is exactly what
+    // `claimDue` and `countWaiting` filter on) and RESTORED in afterAll. This
+    // is reversible, it deletes nothing, and it cannot race: the live runner is
+    // `fileParallelism: false, sequence.concurrent: false`.
+    //
+    // ⚠️ NOT a bigger claim limit, and not this file's own row — retiring that
+    // would make the test vacuous.
+    const { data: others } = await admin
+      .from('qb_sync_queue')
+      .select('id, entity_id')
+      .eq('company_id', COMPANY)
+      .eq('is_deleted', false)
+      .in('status', ['queued', 'failed_transient', 'in_flight']);
+    quietedRowIds = ((others ?? []) as { id: string; entity_id: string }[])
+      .filter((r) => r.entity_id !== refundId)
+      .map((r) => r.id);
+    if (quietedRowIds.length) {
+      const { error: quietError } = await admin
+        .from('qb_sync_queue')
+        .update({ is_deleted: true })
+        .in('id', quietedRowIds);
+      if (quietError) throw new Error(`could not quiet the queue: ${quietError.message}`);
+    }
   });
 
   afterAll(async () => {
+    // Restore FIRST, and unconditionally — a row this file retired must come
+    // back even if the fixture never got created or a test threw.
+    if (quietedRowIds.length) {
+      const { error } = await admin
+        .from('qb_sync_queue')
+        .update({ is_deleted: false })
+        .in('id', quietedRowIds);
+      if (error) {
+        throw new Error(
+          `s187 left ${quietedRowIds.length} queue row(s) retired — restore failed: ${error.message}`
+        );
+      }
+      quietedRowIds = [];
+    }
     if (!refundId) return;
     await admin.from('qb_sync_queue').delete().eq('entity_id', refundId);
     await admin.from('client_refunds').delete().eq('id', refundId);
@@ -143,6 +217,11 @@ describe('S187 F13 — a park is counted, and the drain says so', () => {
     // distinction `waiting` was added for at S181.
     const outcome = await runQbSync(admin);
     expect(outcome.parked).toBe(0);
+    // ⚠️ THIS LINE NEEDS A QUIET QUEUE, AND beforeAll MAKES ONE. `waiting` is
+    // computed only on the empty-claim path, so any other claimable row in the
+    // tenant would leave it 0 — see the quieting block in beforeAll for why
+    // that is arranged there rather than assumed here. If this goes red, check
+    // that the restore in afterAll is still running before suspecting the drain.
     expect(outcome.waiting).toBeGreaterThanOrEqual(1);
   });
 });

@@ -44,6 +44,28 @@ const madeQueue: string[] = [];
 
 /** Park a row exactly as `parkAwaitingHuman()` does: still `queued`, with the
  *  five-minute re-check clock set. */
+
+// ============================================================================
+// ⚠️ FIXTURE ROWS ARE BACKDATED SO THE BATCH ALWAYS REACHES THEM [S107].
+// ============================================================================
+// `claimDue()` orders by `created_at` ASC and takes `limit` rows. A tenant with
+// more eligible rows than the limit therefore starves every NEW row: the test's
+// own row sorts last and is never examined, so the propagation that runs INSIDE
+// claimDue never runs on it.
+//
+// Measured at S107: 102 eligible rows against a limit of 25, and the claim came
+// back holding exactly 25 — none of them the test's. It read as a broken claim
+// query. It was a full queue.
+//
+// A fixed 2020 timestamp puts this file's rows at the FRONT of the FIFO
+// regardless of what else is queued, which is what makes these assertions
+// backlog-proof. It also makes the NEGATIVE assertions (`not.toContain`)
+// meaningful: a row that was never in the window would satisfy them vacuously.
+//
+// ⚠️ NOT a bigger `limit` — that restores green by making the batch larger than
+// the mess, and the next hundred rows silently re-break it.
+const FIXTURE_CREATED_AT = '2020-01-01T00:00:00.000Z';
+
 async function insertParkedRow(operation: string): Promise<string> {
   const entityId = randomUUID();
   const { data, error } = await admin
@@ -55,6 +77,7 @@ async function insertParkedRow(operation: string): Promise<string> {
       entity_id: entityId,
       operation,
       status: 'queued',
+      created_at: FIXTURE_CREATED_AT,
       last_error: 'S181 harness — standing in for a GL-account park.',
       next_attempt_at: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
     })

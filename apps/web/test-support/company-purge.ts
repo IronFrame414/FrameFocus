@@ -171,6 +171,75 @@ export async function deleteCompanies(admin: SupabaseClient, ids: string[]): Pro
 }
 
 /**
+ * Every table that pins a PROJECT with a NO ACTION / RESTRICT foreign key.
+ *
+ * ⚠️ ENUMERATED FROM THE LIVE CATALOGUE, NOT FROM MEMORY — the same discipline
+ * `COMPANY_CHILDREN` is under, and for the same reason: this is the list that
+ * goes stale, so it must go stale in one place. Regenerate with:
+ *
+ *   node scripts/live-sql.mjs "select string_agg(c.conrelid::regclass::text, ',' \
+ *     order by c.conrelid::regclass::text) from pg_constraint c where c.contype='f' \
+ *     and c.confrelid='public.projects'::regclass and c.confdeltype in ('a','r')"
+ *
+ * `change_orders` is deliberately ABSENT: since S168 a signed change order
+ * cannot be deleted by anyone, so it goes through `disposeChangeOrders()` and
+ * its soft-delete path instead. Callers must dispose of those FIRST.
+ */
+const PROJECT_CHILDREN = [
+  // Leaves first, then the rows those hang off.
+  'punch_list_items',
+  'punch_lists',
+  'time_segments',
+  'schedule_entries',
+  'project_assignments',
+  'project_contacts',
+  'inspections',
+  'safety_incidents',
+  'daily_logs',
+  'deliveries',
+  'tasks',
+  'phases',
+  'file_categories',
+  'files',
+  'selections',
+  'selection_areas',
+  'expenses',
+  'purchase_orders',
+  'subcontractor_contracts',
+  'retainage_releases',
+  'client_refunds',
+  'invoices',
+  'client_contracts',
+  'contract_documents',
+  'project_budget_items',
+  'sync_conflicts',
+  'estimates',
+] as const;
+
+/**
+ * Delete these projects and everything pinning them — and THROW if a parent
+ * survives, exactly as `deleteCompanies()` does.
+ *
+ * ⚠️ WHY A HARNESS NEEDS THIS AT ALL. Teardowns delete the ids THEY created,
+ * which is fine until a run is interrupted — and then its project outlives it
+ * and pins a contact that the next run REUSES by marker email. The next
+ * teardown then fails on `projects_contact_id_fkey`, leaves the same rows
+ * behind, and the failure perpetuates itself. Deleting a project by hand meant
+ * knowing all 28 of its children; now it does not.
+ *
+ * ⚠️ CHANGE ORDERS ARE NOT HANDLED HERE — see PROJECT_CHILDREN. Call
+ * `disposeProjectChangeOrdersError()` before this.
+ */
+export async function deleteProjects(admin: SupabaseClient, ids: string[]): Promise<void> {
+  if (ids.length === 0) return;
+
+  for (const table of PROJECT_CHILDREN) {
+    await deleteWithTimeoutRetry(table, () => admin.from(table).delete().in('project_id', ids));
+  }
+  await deleteWithTimeoutRetry('projects', () => admin.from('projects').delete().in('id', ids));
+}
+
+/**
  * Purge every company whose name starts with one of `prefixes`, and return how
  * many were removed.
  *

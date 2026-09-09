@@ -3,7 +3,10 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@framefocus/shared/types/database';
 import { admin, assertRebuildTest, sessionFor } from './live-session';
 import { pdfText } from './pdf-text';
-import { completeSelectionSignature, offerSelection } from '@/lib/services/selection-lifecycle-service';
+import {
+  completeSelectionSignature,
+  offerSelection,
+} from '@/lib/services/selection-lifecycle-service';
 import {
   generateSelectionSpecPdf,
   specSheetFileName,
@@ -121,7 +124,10 @@ async function sweep(): Promise<void> {
 
   if (pids.length) {
     // Storage first, and BY PATH, because a `files` delete leaves the blob.
-    const { data: fileRows } = await admin.from('files').select('id, file_path').in('project_id', pids);
+    const { data: fileRows } = await admin
+      .from('files')
+      .select('id, file_path')
+      .in('project_id', pids);
     const paths = (fileRows ?? []).map((f) => f.file_path);
     if (paths.length) await admin.storage.from(BUCKET).remove(paths);
     await admin.from('files').delete().in('project_id', pids);
@@ -145,16 +151,38 @@ async function sweep(): Promise<void> {
   const { data: sels } = await admin.from('selections').select('id').like('name', `${MARKER}%`);
   const sids = (sels ?? []).map((s) => s.id);
   if (sids.length) {
-    await admin.from('notifications').delete().in('source_id', sids).eq('source_table', 'selections');
+    await admin
+      .from('notifications')
+      .delete()
+      .in('source_id', sids)
+      .eq('source_table', 'selections');
     // The four signed_* stamps travel together by CHECK and the FK runs both
     // ways, so all four clear at once with the status they imply — the S175
     // stage-5 sweep found this the hard way.
-    must('unstamp', (await admin.from('selections').update({
-      status: 'draft', signed_session_id: null, signed_sell_amount: null,
-      signed_allowance_deduction: null, signed_variance: null, signed_at: null,
-    }).in('id', sids)).error);
-    must('sessions', (await admin.from('selection_signing_sessions').delete().in('selection_id', sids)).error);
-    const { data: opts } = await admin.from('selection_options').select('id').in('selection_id', sids);
+    must(
+      'unstamp',
+      (
+        await admin
+          .from('selections')
+          .update({
+            status: 'draft',
+            signed_session_id: null,
+            signed_sell_amount: null,
+            signed_allowance_deduction: null,
+            signed_variance: null,
+            signed_at: null,
+          })
+          .in('id', sids)
+      ).error
+    );
+    must(
+      'sessions',
+      (await admin.from('selection_signing_sessions').delete().in('selection_id', sids)).error
+    );
+    const { data: opts } = await admin
+      .from('selection_options')
+      .select('id')
+      .in('selection_id', sids);
     const oids = (opts ?? []).map((o) => o.id);
     if (oids.length) {
       await admin.from('selection_option_amounts').delete().in('option_id', oids);
@@ -168,11 +196,17 @@ async function sweep(): Promise<void> {
   await admin.from('selection_areas').delete().like('name', `${MARKER}%`);
 
   if (pids.length) {
-    const { data: items } = await admin.from('project_budget_items').select('id').in('project_id', pids);
+    const { data: items } = await admin
+      .from('project_budget_items')
+      .select('id')
+      .in('project_id', pids);
     const iids = (items ?? []).map((i) => i.id);
     if (iids.length) {
       await admin.from('project_budget_amounts').delete().in('budget_item_id', iids);
-      must('sweep budget items', (await admin.from('project_budget_items').delete().in('id', iids)).error);
+      must(
+        'sweep budget items',
+        (await admin.from('project_budget_items').delete().in('id', iids)).error
+      );
     }
     await admin.from('project_assignments').delete().in('project_id', pids);
     await admin.from('project_financials').delete().in('project_id', pids);
@@ -232,15 +266,22 @@ async function makeJob(label: string, contract: number) {
   must(`project ${label}`, pErr);
   must(
     `financials ${label}`,
-    (await admin.from('project_financials').insert({
-      company_id: companyId, project_id: proj!.id, contract_value: contract,
-    })).error
+    (
+      await admin.from('project_financials').insert({
+        company_id: companyId,
+        project_id: proj!.id,
+        contract_value: contract,
+      })
+    ).error
   );
   must(
     'counters',
-    (await admin.from('companies')
-      .update({ estimate_number_sequence: seq, project_internal_sequence: internal })
-      .eq('id', companyId)).error
+    (
+      await admin
+        .from('companies')
+        .update({ estimate_number_sequence: seq, project_internal_sequence: internal })
+        .eq('id', companyId)
+    ).error
   );
   return proj!.id;
 }
@@ -250,12 +291,21 @@ async function makeJob(label: string, contract: number) {
  *  anyway, and would prove nothing. */
 async function assign(email: string, pid: string) {
   const { data: prof } = await admin.from('profiles').select('id').eq('email', email).single();
-  const { data: member } = await admin.from('company_members').select('id').eq('profile_id', prof!.id).single();
+  const { data: member } = await admin
+    .from('company_members')
+    .select('id')
+    .eq('profile_id', prof!.id)
+    .single();
   must(
     `assign ${email}`,
-    (await admin.from('project_assignments').insert({
-      company_id: companyId, project_id: pid, member_id: member!.id, created_by: null,
-    })).error
+    (
+      await admin.from('project_assignments').insert({
+        company_id: companyId,
+        project_id: pid,
+        member_id: member!.id,
+        created_by: null,
+      })
+    ).error
   );
 }
 
@@ -298,10 +348,15 @@ async function makeSelection(
     if (!opts.client_supplied) {
       must(
         `amounts ${o.name}`,
-        (await admin.from('selection_option_amounts').insert({
-          company_id: companyId, option_id: opt!.id,
-          quantity: 1, unit_cost: o.unit_cost, markup_percent: 20,
-        })).error
+        (
+          await admin.from('selection_option_amounts').insert({
+            company_id: companyId,
+            option_id: opt!.id,
+            quantity: 1,
+            unit_cost: o.unit_cost,
+            markup_percent: 20,
+          })
+        ).error
       );
     }
   }
@@ -309,7 +364,10 @@ async function makeSelection(
   const released = await offerSelection(ownerC, id);
   if (!released.success) throw new Error(`release ${name}: ${released.error}`);
   if (!opts.sign) return id;
-  must('pick', (await admin.from('selection_options').update({ is_chosen: true }).eq('selection_id', id)).error);
+  must(
+    'pick',
+    (await admin.from('selection_options').update({ is_chosen: true }).eq('selection_id', id)).error
+  );
   const signed = await completeSelectionSignature(linkedC, id, {
     ...sig,
     caller: { kind: 'portal_session', profileId: linkedProfileId },
@@ -323,7 +381,11 @@ beforeAll(async () => {
   assertRebuildTest();
   await sweep();
 
-  const { data: co } = await admin.from('companies').select('id').eq('name', 'Sabal Point Construction').single();
+  const { data: co } = await admin
+    .from('companies')
+    .select('id')
+    .eq('name', 'Sabal Point Construction')
+    .single();
   companyId = co!.id;
   ownerC = (await sessionFor(OWNER)) as Client;
   pmC = (await sessionFor(PM)) as Client;
@@ -331,7 +393,11 @@ beforeAll(async () => {
   linkedC = (await sessionFor(LINKED)) as Client;
   state.client = ownerC;
 
-  const { data: linked } = await admin.from('profiles').select('id, contact_id').eq('email', LINKED).single();
+  const { data: linked } = await admin
+    .from('profiles')
+    .select('id, contact_id')
+    .eq('email', LINKED)
+    .single();
   if (!linked?.contact_id) throw new Error('LINKED client is unlinked — run the seed.');
   linkedProfileId = linked.id;
   linkedContactId = linked.contact_id;
@@ -344,8 +410,11 @@ beforeAll(async () => {
   const { data: item, error: bErr } = await admin
     .from('project_budget_items')
     .insert({
-      company_id: companyId, project_id: projectId, row_type: 'allowance',
-      description: `${MARKER} tile allowance`, created_by: null,
+      company_id: companyId,
+      project_id: projectId,
+      row_type: 'allowance',
+      description: `${MARKER} tile allowance`,
+      created_by: null,
     })
     .select('id')
     .single();
@@ -353,29 +422,57 @@ beforeAll(async () => {
   allowanceItemId = item!.id;
   must(
     'budget amount',
-    (await admin.from('project_budget_amounts').insert({
-      company_id: companyId, budget_item_id: allowanceItemId, budgeted_amount: 5000,
-    })).error
+    (
+      await admin.from('project_budget_amounts').insert({
+        company_id: companyId,
+        budget_item_id: allowanceItemId,
+        budgeted_amount: 5000,
+      })
+    ).error
   );
 
   const { data: area, error: aErr } = await admin
     .from('selection_areas')
-    .insert({ company_id: companyId, project_id: projectId, name: `${MARKER} Kitchen`, sort_order: 1 })
+    .insert({
+      company_id: companyId,
+      project_id: projectId,
+      name: `${MARKER} Kitchen`,
+      sort_order: 1,
+    })
     .select('id')
     .single();
   must('area', aErr);
 
-  approvedSelId = await makeSelection(projectId, 'countertop', area!.id, [
-    { name: 'calacatta quartz', spec_detail: '3cm eased edge', link_url: 'https://example.test/quartz', unit_cost: 6000 },
-  ], { sign: true });
+  approvedSelId = await makeSelection(
+    projectId,
+    'countertop',
+    area!.id,
+    [
+      {
+        name: 'calacatta quartz',
+        spec_detail: '3cm eased edge',
+        link_url: 'https://example.test/quartz',
+        unit_cost: 6000,
+      },
+    ],
+    { sign: true }
+  );
 
-  suppliedSelId = await makeSelection(projectId, 'cabinet pulls', area!.id, [
-    { name: 'their pulls', spec_detail: 'satin brass', unit_cost: 0 },
-  ], { client_supplied: true, sign: true });
+  suppliedSelId = await makeSelection(
+    projectId,
+    'cabinet pulls',
+    area!.id,
+    [{ name: 'their pulls', spec_detail: 'satin brass', unit_cost: 0 }],
+    { client_supplied: true, sign: true }
+  );
 
-  pendingSelId = await makeSelection(projectId, 'undecided grout', area!.id, [
-    { name: 'grey grout', unit_cost: 100 },
-  ], { release: true });
+  pendingSelId = await makeSelection(
+    projectId,
+    'undecided grout',
+    area!.id,
+    [{ name: 'grey grout', unit_cost: 100 }],
+    { release: true }
+  );
 
   draftSelId = await makeSelection(projectId, 'unstarted backsplash', area!.id, [
     { name: 'subway', unit_cost: 200 },
@@ -385,17 +482,44 @@ beforeAll(async () => {
 afterAll(async () => {
   await sweep();
   const left: Record<string, number | null> = {};
-  left.projects = (await admin.from('projects').select('id', { count: 'exact', head: true }).like('name', `${MARKER}%`)).count;
-  left.selections = (await admin.from('selections').select('id', { count: 'exact', head: true }).like('name', `${MARKER}%`)).count;
-  left.estimates = (await admin.from('estimates').select('id', { count: 'exact', head: true }).like('name', `${MARKER}%`)).count;
-  left.areas = (await admin.from('selection_areas').select('id', { count: 'exact', head: true }).like('name', `${MARKER}%`)).count;
-  left.budgetItems = (await admin.from('project_budget_items').select('id', { count: 'exact', head: true }).like('description', `${MARKER}%`)).count;
+  left.projects = (
+    await admin
+      .from('projects')
+      .select('id', { count: 'exact', head: true })
+      .like('name', `${MARKER}%`)
+  ).count;
+  left.selections = (
+    await admin
+      .from('selections')
+      .select('id', { count: 'exact', head: true })
+      .like('name', `${MARKER}%`)
+  ).count;
+  left.estimates = (
+    await admin
+      .from('estimates')
+      .select('id', { count: 'exact', head: true })
+      .like('name', `${MARKER}%`)
+  ).count;
+  left.areas = (
+    await admin
+      .from('selection_areas')
+      .select('id', { count: 'exact', head: true })
+      .like('name', `${MARKER}%`)
+  ).count;
+  left.budgetItems = (
+    await admin
+      .from('project_budget_items')
+      .select('id', { count: 'exact', head: true })
+      .like('description', `${MARKER}%`)
+  ).count;
   // Keyed the same way the sweep is — see its comment.
-  left.emailLogs = (await admin
-    .from('email_logs')
-    .select('id', { count: 'exact', head: true })
-    .eq('email_type', 'selection_specifications')
-    .in('metadata->>project_id', [projectId, emptyProjectId])).count;
+  left.emailLogs = (
+    await admin
+      .from('email_logs')
+      .select('id', { count: 'exact', head: true })
+      .eq('email_type', 'selection_specifications')
+      .in('metadata->>project_id', [projectId, emptyProjectId])
+  ).count;
   const residue = Object.entries(left).filter(([, n]) => (n ?? 0) > 0);
   if (residue.length) throw new Error(`[${MARKER}] residue: ${JSON.stringify(residue)}`);
 }, 300_000);
@@ -523,7 +647,10 @@ describe('S175-S6 B — WHAT IS ON IT: Q4.3, Q4.4 and §9.4, read off the real P
     // …and the money selection takes its date from the column, as before.
     const money = all.find((s) => s.id === approvedSelId)!;
     const { data: moneyRow } = await admin
-      .from('selections').select('signed_at').eq('id', approvedSelId).single();
+      .from('selections')
+      .select('signed_at')
+      .eq('id', approvedSelId)
+      .single();
     expect(moneyRow!.signed_at).toBeTruthy();
     expect(money.approvedAt).toBe(moneyRow!.signed_at);
   });
@@ -548,8 +675,34 @@ describe('S175-S6 C — Q4.1: a regeneration REPLACES, and takes the stale blob 
     // ⚠️ AND THE STALE OBJECT IS GONE FROM STORAGE. Deleting the row alone
     // leaves an orphan blob that nothing will ever clean up — invisible in
     // every listing and paid for forever.
-    const { data: orphan } = await admin.storage.from(BUCKET).download(stalePath);
-    expect(orphan, 'the stale blob survived the replace').toBeNull();
+    // ⚠️ DO NOT ASSERT ABSENCE WITH download() — IT READS THROUGH A CACHE.
+    //
+    // This assertion used to be `download(stalePath)` → `toBeNull()`, and it
+    // failed for three sessions while the code under test was correct the whole
+    // time. Measured here at S107, immediately after the replace:
+    //
+    //   createSignedUrl(stalePath) -> "Object not found"      (storage.objects)
+    //   list(folder)               -> [ the NEW object only ] (storage.objects)
+    //   download(stalePath)        -> 11844 bytes, "%PDF-1.3", error: none
+    //
+    // The object is genuinely deleted. Supabase serves downloads through an edge
+    // cache, so a freshly-removed key keeps returning its old bytes for a while
+    // with no error. `download()` therefore cannot prove absence — it can only
+    // prove presence. Both checks below read storage.objects, which is the
+    // source of truth and is what "the blob is gone" actually means.
+    const signed = await admin.storage.from(BUCKET).createSignedUrl(stalePath, 60);
+    expect(
+      signed.error?.message,
+      'the stale object still exists in storage.objects — the replace left an orphan'
+    ).toMatch(/not found/i);
+
+    const folder = stalePath.split('/').slice(0, -1).join('/');
+    const { data: objs } = await admin.storage.from(BUCKET).list(folder, { limit: 100 });
+    const staleName = stalePath.split('/').pop()!;
+    expect(
+      (objs ?? []).map((o) => o.name),
+      'the stale object is still listed in its folder'
+    ).not.toContain(staleName);
   });
 
   it('C2 — the replace is scoped to THIS project: another project keeps its own', async () => {
@@ -599,7 +752,9 @@ describe('S175-S6 D — Q4.2: client_visible, AND the portal reads it as a docum
     const shared = await getPortalSharedFiles(linkedC, projectId);
     expect(shared.map((f) => f.category)).toContain('selections');
     const photos = await getPortalPhotos(linkedC, projectId);
-    expect(photos.map((p) => p.id)).not.toContain(shared.find((f) => f.category === 'selections')!.id);
+    expect(photos.map((p) => p.id)).not.toContain(
+      shared.find((f) => f.category === 'selections')!.id
+    );
     for (const p of photos) expect(p.file_path).not.toMatch(/\.pdf$/);
   });
 
@@ -607,7 +762,10 @@ describe('S175-S6 D — Q4.2: client_visible, AND the portal reads it as a docum
     const shared = await getPortalSharedFiles(linkedC, projectId);
     const sheet = shared.find((f) => f.category === 'selections')!;
     const urls = await signPortalPaths(linkedC, [sheet.file_path], 60);
-    expect(urls.get(sheet.file_path), 'the client could not sign a URL for her own sheet').toBeTruthy();
+    expect(
+      urls.get(sheet.file_path),
+      'the client could not sign a URL for her own sheet'
+    ).toBeTruthy();
   });
 
   it('D5 — the FOREMAN can read the filed row too, and that is why it carries no money', async () => {
@@ -629,9 +787,14 @@ describe('S175-S6 D — Q4.2: client_visible, AND the portal reads it as a docum
     const { data, error } = await pmC
       .from('files')
       .insert({
-        company_id: companyId, project_id: projectId, category: 'selections',
-        file_name: `${MARKER}-pm-attempt.pdf`, file_path: `${companyId}/${projectId}/${MARKER}-pm-attempt.pdf`,
-        file_size: 1, mime_type: 'application/pdf', client_visible: true,
+        company_id: companyId,
+        project_id: projectId,
+        category: 'selections',
+        file_name: `${MARKER}-pm-attempt.pdf`,
+        file_path: `${companyId}/${projectId}/${MARKER}-pm-attempt.pdf`,
+        file_size: 1,
+        mime_type: 'application/pdf',
+        client_visible: true,
       })
       .select('id');
     expect(error, 'a PM inserted a client_visible file').not.toBeNull();
@@ -664,7 +827,11 @@ describe('S175-S6 E — an EMPTY sheet is refused, and nothing is written', () =
   });
 
   it('E3 — but `generate` still RENDERS the empty case, for a preview', async () => {
-    const rendered = await generateSelectionSpecPdf(ownerC, admin as unknown as Client, emptyProjectId);
+    const rendered = await generateSelectionSpecPdf(
+      ownerC,
+      admin as unknown as Client,
+      emptyProjectId
+    );
     expect(rendered).not.toBeNull();
     expect(pdfText(rendered!.buffer)).toContain('This sheet lists approved selections only.');
   });
@@ -679,7 +846,12 @@ describe('S175-S6 F — THE ROUTE: the button files AND mails, and the gate is t
     state.client = ownerC;
     const res = await SPEC_SHEET(req({ projectId }));
     const body = (await res.json()) as {
-      fileId?: string; selectionCount?: number; emailed?: boolean; emailError?: string | null; recipient?: string | null; error?: string;
+      fileId?: string;
+      selectionCount?: number;
+      emailed?: boolean;
+      emailError?: string | null;
+      recipient?: string | null;
+      error?: string;
     };
     expect(res.status, `route refused: ${body.error}`).toBe(200);
     expect(body.fileId).toBeTruthy();
@@ -700,7 +872,11 @@ describe('S175-S6 F — THE ROUTE: the button files AND mails, and the gate is t
       .order('created_at', { ascending: false })
       .limit(1);
     expect(logs, 'no email_logs row of type selection_specifications').toHaveLength(1);
-    const log = logs![0] as { email_type: string; recipient_email: string; metadata: Record<string, unknown> };
+    const log = logs![0] as {
+      email_type: string;
+      recipient_email: string;
+      metadata: Record<string, unknown>;
+    };
     expect(log.recipient_email).toBe('qa-client-a@example.invalid');
     expect(log.metadata.project_id).toBe(projectId);
     expect(log.metadata.selection_count).toBe(2);

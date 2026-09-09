@@ -110,7 +110,47 @@ claude mcp list
 
 ### Migrations
 
-## All 32 migration files live in `supabase/migrations/` with 14-digit timestamp format. `npx supabase migration list` shows all 32 in sync (Local + Remote; re-verified Session 48). Latest two: `20260611002451` (cost_catalog, 4B) and `20260611102749` (estimates module, 4C) — both applied to prod. Migration 006 was never created — intentional gap in the historical ordinal numbering. Source of truth is the file list on disk.
+Migration files live in `supabase/migrations/` with the 14-digit timestamp format required by the
+CLI. Migration 006 was never created — an intentional gap in the historical ordinal numbering. The
+source of truth for what EXISTS is the file list on disk; the source of truth for what is APPLIED is
+the record below.
+
+### ⚠️ PRODUCTION SYNC RECORD — current through `20261570000000` [verified 2026-09-09, S107]
+
+**Production (`jwkcknyuyvcwcdeskrmz`) is CURRENT through `20261570000000`.** Verified directly
+against production **twice in the same session**:
+
+1. **The ledger was fingerprinted before anything was pushed** — 211 rows through
+   `20261490000000`, with a matching **md5 over the ordered versions**, **no duplicates**, and
+   **no MCP-signature rows**.
+2. **Then `20261540000000`, `20261550000000`, `20261560000000` and `20261570000000` were pushed,
+   and every object was confirmed on production**, not inferred from the push exiting 0:
+   `files.estimate_id`; `files_owner_arm_check` **VALID**; `convert_estimate_to_project` carrying
+   the files re-point; **both** line-total invariant triggers; `set_winning_bid` clearing the
+   override; `estimate_line_rows.total_override`; and the mutual-exclusion **CHECK VALID**.
+
+**Owed to production: `20261580000000_email_type_sub_bid_request.sql` only** — the one migration in
+the repo newer than `20261570000000`.
+
+> #### ⚠️ THE STALE RECORD THIS REPLACES, AND THE INFERENCE IT INVITED
+>
+> _Superseded text, quoted rather than deleted:_ _"All 32 migration files live in
+> `supabase/migrations/` … `npx supabase migration list` shows all 32 in sync (Local + Remote;
+> re-verified Session 48). Latest two: `20260611002451` … and `20260611102749` … both applied to
+> prod."_
+>
+> That paragraph described **32** migrations and Session **48**. The repo now holds **220**. The
+> only other sync statement in this file was S98's (2026-08-04), and between them they left the
+> newest applied migration unstated for a year of work.
+>
+> **This is not a harmless staleness.** At S107 a session counted the 155 migrations added to the
+> repo since the S98 date and reported production as "155 migrations behind" — a conclusion drawn
+> from **this file** rather than from the database, because the stop rules (correctly) forbade
+> touching production to check. It was wrong: **STATE.md was stale, the database was not.**
+>
+> So the rule this record is written under: **a sync claim must name the newest applied version,
+> the date, and how it was verified.** A sync record without those three is an invitation to
+> re-derive it from file counts, and the derivation is always wrong in the alarming direction.
 
 ## Codebase State
 
@@ -262,10 +302,11 @@ docs/
 All env vars below are stored as **GitHub Codespace secrets** and auto-inject into the shell environment on Codespace start. `apps/web/.env.local` does NOT need to exist for the dev server to work. Verify with `printenv | grep -E "SUPABASE|STRIPE|OPENAI"` if uncertain. Vercel env vars must match these values exactly.
 
 ```
-# ⚠️ LIVE TEST HARNESSES RUN AGAINST REBUILD-TEST ONLY.
-# assertRebuildTest() refuses any URL without nmyphyhmfttxkdoposvf — but it
-# checks the URL only, never the key, and runs in beforeAll, AFTER createClient
-# at module load. A production key with a rebuild-test URL passes the guard.
+# ⚠️ LIVE TEST HARNESSES RUN AGAINST REBUILD-TEST ONLY, and this is now
+# ENFORCED rather than asserted. `test/live-guard.ts` verifies the KEY as well
+# as the URL, at module load, before any client is constructed, in every one of
+# the 123 harnesses. A production key with a rebuild-test URL is refused by
+# name. See "Restoring .env.local" below before pasting anything here.
 NEXT_PUBLIC_SUPABASE_URL=https://nmyphyhmfttxkdoposvf.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=(rebuild-test sb_publishable_ key)
 SUPABASE_SERVICE_ROLE_KEY=(rebuild-test eyJ... service role key)
@@ -293,6 +334,37 @@ enabled, `/api/auth/send-email` is inert and auth email still goes over the buil
 Exact steps: [`docs/specs/S160-auth-email-hook.md`](docs/specs/S160-auth-email-hook.md) §3.
 
 Vercel env vars must match `.env.local` exactly.
+
+### Restoring `.env.local` for the live harnesses — REBUILD-TEST ONLY
+
+`apps/web/.env.local` is gitignored and does **not** survive a Codespace rebuild. As of S107 it is
+absent and all three Supabase variables are unset, so **no `.live.ts` harness can run at all**.
+That is three separate gaps, not one — a service-role key on its own fixes nothing.
+
+| Variable                        | Value                                                        |
+| ------------------------------- | ------------------------------------------------------------ |
+| `NEXT_PUBLIC_SUPABASE_URL`      | `https://nmyphyhmfttxkdoposvf.supabase.co`                   |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | rebuild-test's **publishable / anon** key                    |
+| `SUPABASE_SERVICE_ROLE_KEY`     | rebuild-test's **service_role / secret** key — RLS-bypassing |
+
+All three come from **one place**: the Supabase dashboard → project **`nmyphyhmfttxkdoposvf`
+(framefocus-rebuild-test)** → Project Settings → API keys. Never from `jwkcknyuyvcwcdeskrmz`.
+
+**The variable NAME is `SUPABASE_SERVICE_ROLE_KEY`.** Nothing in this repo reads
+`SUPABASE_SECRET_KEY`, and renaming a key into that slot is exactly the move that would have gone
+live on production. Either key format works — a legacy `eyJ…` `service_role` JWT or a
+rebuild-test `sb_secret_…` — the guard handles both.
+
+⚠️ **Put it in `apps/web/.env.local`, NOT in an account-level GitHub Codespaces secret.**
+Account-level secrets override `.env.local` at the shell level and silently reappear on every
+rebuild. That trap has caused four incidents in this repo — including a `CRON_SECRET` that held a
+Resend API key and broke the sync drain, and the S107 production `sb_secret_` key above.
+
+**You cannot get this wrong quietly any more.** `test/live-guard.ts` refuses to let a harness load
+unless both the URL and the service-role key are proven to be rebuild-test's, and a mismatch names
+the project the key actually reaches — including "framefocus PRODUCTION — Josh's real books". A
+correct restore prints one line instead:
+`[live-guard] target nmyphyhmfttxkdoposvf — decoded from the key's own ref claim`.
 
 ---
 
@@ -514,7 +586,9 @@ rows shown, **109 assertions**:
 | `s115-co-recalc-rates.live.ts`        | #140/D-62 — PM-scoped client refused, privileged client prices, no rate returned | 7/7                                               |
 
 Session helper: `test/live-session.ts` (`sessionFor`, `admin`, `assertRebuildTest`) — copy that
-pattern for any new role check. The runner compiles JSX via `oxc`, so a harness can render a real
+pattern for any new role check. The production guard is `test/live-guard.ts`, wired into the live
+runner's `setupFiles`, so it protects a new harness whether or not that harness imports anything;
+`assertRebuildTest()` is now only a cheap re-assertion that it ran. The runner compiles JSX via `oxc`, so a harness can render a real
 client component to static markup and execute its gate rather than read it.
 
 ### Other test data

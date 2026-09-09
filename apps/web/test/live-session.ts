@@ -16,14 +16,26 @@
  */
 import { createClient as createSupabaseClient, type SupabaseClient } from '@supabase/supabase-js';
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  unlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { deleteCompanies, purgeCompaniesNamed } from '../test-support/company-purge';
+import {
+  deleteCompanies,
+  deleteProjects,
+  purgeCompaniesNamed,
+} from '../test-support/company-purge';
+import { REQUIRED_PROJECT_REF, describeRef, guardLiveTarget } from './live-guard';
 
-export { deleteCompanies, purgeCompaniesNamed };
+export { deleteCompanies, deleteProjects, purgeCompaniesNamed };
 
-export const REQUIRED_PROJECT_REF = 'nmyphyhmfttxkdoposvf'; // framefocus-rebuild-test
+export { REQUIRED_PROJECT_REF };
 
 /** Shared password for every seeded test identity. See STATE.md → Test Data. */
 export const TEST_PASSWORD = 'FrameFocusTest!2026';
@@ -32,13 +44,43 @@ export const URL_ = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 export const ANON = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 export const SERVICE = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
+// ============================================================================
+// ⚠️ THE GUARD RUNS HERE, AT MODULE LOAD, BEFORE ANY CLIENT IS CONSTRUCTED.
+// ============================================================================
+// This top-level await is the fix for the second of the guard's two old holes:
+// `assertRebuildTest()` ran in `beforeAll`, which is AFTER `createClient()`
+// below had already been handed a URL and a service-role key.
+//
+// It verifies the KEY, not just the URL — the first hole. A production
+// service-role key paired with a rebuild-test URL used to pass, and that
+// pairing was one `.env.local` restore away from real: a production
+// `sb_secret_…` key was live in an account-level Codespaces secret granted to
+// this repo, and STATE.md's env block documented the PRODUCTION url in the
+// very block TECH_DEBT #7-s106 tells you to restore `.env.local` from.
+//
+// Cheap when it can be: a legacy JWT key names its own project and is decoded
+// offline. Only an opaque `sb_secret_…` costs a network round-trip, memoised
+// per process and cached per (url, key) pair. See test/live-guard.ts.
+const LIVE_TARGET = await guardLiveTarget();
+
 /** Service-role client — fixtures, verification reads, and nothing else. */
 export const admin = createSupabaseClient(URL_, SERVICE, {
   auth: { autoRefreshToken: false, persistSession: false },
 });
 
-/** Refuse to touch anything but rebuild-test. Call this in every beforeAll. */
+/**
+ * Refuse to touch anything but rebuild-test. Called in 117 `beforeAll`s.
+ *
+ * ⚠️ THIS IS NO LONGER THE GUARD — it is a cheap re-assertion that the real one
+ * ran. The verification happens above, at module load, and cannot be skipped by
+ * a harness that forgets to call this. Kept sync, and kept exported, because
+ * every existing call site is `assertRebuildTest()` with no `await`: making it
+ * async would turn 117 real checks into 117 ignored promises.
+ */
 export function assertRebuildTest(): void {
+  if (LIVE_TARGET.ref !== REQUIRED_PROJECT_REF) {
+    throw new Error(`REFUSING TO RUN: verified project is ${describeRef(LIVE_TARGET.ref)}`);
+  }
   if (!URL_?.includes(REQUIRED_PROJECT_REF)) {
     throw new Error(`REFUSING TO RUN: linked project is not ${REQUIRED_PROJECT_REF}. URL=${URL_}`);
   }
@@ -128,6 +170,117 @@ export async function adoptSignupProfile(
   await admin.from('trial_emails').delete().eq('email', fields.email.toLowerCase());
 
   return { profileId, memberId };
+}
+
+/**
+ * The company's QuickBooks payment account — "which account paid for this".
+ *
+ * ⚠️ REQUIRED SINCE 2026-09-06, and three harnesses went red the day it landed.
+ * `20261430000000_qb_account_selection.sql` (M-J) made accounts PICKED rather
+ * than typed [RULED Josh, S103], because a typo — `Cost of goods sold:
+ * Subcontractor expenses` for `Cost of Goods Sold:Subcontractor Expense` —
+ * parked an expense three times in one session. Two guards enforce it:
+ *
+ *   - `enforce_expense_payment_account()` refuses the transition INTO
+ *     `approved` unless `expenses.payment_account_id` is set;
+ *   - `record_expense_payment()` refuses a NULL `p_payment_account_id`.
+ *
+ * Both exempt a company with no `qb_realm_id`, and the expense guard also
+ * exempts a payable/commitment. The QA tenant HAS a realm, so harnesses that
+ * approve an expense or record a payment against it must pick an account.
+ *
+ * ⚠️ SCOPED AND ORDERED, per the `.limit(1)` rule. Scoped to the company
+ * because a fixed marker could otherwise match another tenant's row, and
+ * ordered so the choice is stable across runs rather than heap-order. It
+ * THROWS when there is nothing to pick: returning null here would resurface as
+ * "Choose which account paid for this expense" several frames away, which is
+ * precisely the failure that cost this cluster a session to read.
+ */
+export async function paymentAccountFor(companyId: string): Promise<string> {
+  const { data, error } = await admin
+    .from('company_payment_accounts')
+    .select('id, name')
+    .eq('company_id', companyId)
+    .eq('is_deleted', false)
+    .order('created_at', { ascending: true })
+    .limit(1);
+  if (error) throw new Error(`paymentAccountFor(${companyId}): ${error.message}`);
+  const row = (data ?? [])[0] as { id: string; name: string } | undefined;
+  if (!row) {
+    throw new Error(
+      `paymentAccountFor(${companyId}): no company_payment_accounts row. ` +
+        'Since M-J (20261430000000) an expense cannot be approved and a payment ' +
+        'cannot be recorded without one. Seed one for this tenant.'
+    );
+  }
+  return row.id;
+}
+
+/**
+ * Every project whose name starts with `prefix`, disposed of — change orders
+ * first, then the 28 child tables, then the project.
+ *
+ * ⚠️ KEYED ON THE NAME, NOT ON IDS CAPTURED THIS RUN, for the reason
+ * `purgeCompaniesNamed()` gives: a run that DIED before capturing its ids
+ * cannot clean up by id, and its rows then outlive it forever. Following the
+ * contact (`dependentsOfContact`) catches residue that still pins the reused
+ * contact; this catches the rest — a leftover project whose contact_id was
+ * never set is invisible to every other handle.
+ *
+ * Call from `beforeAll` so a crashed run cannot poison the next one. A harness
+ * that only cleans up after itself cannot start from a dirty database, and a
+ * dirty database is the normal case.
+ */
+export async function sweepProjectsNamed(prefix: string): Promise<number> {
+  const { data, error } = await admin.from('projects').select('id').like('name', `${prefix}%`);
+  if (error) throw new Error(`sweepProjectsNamed(${prefix}): ${error.message}`);
+  const ids = ((data ?? []) as { id: string }[]).map((r) => r.id);
+  if (!ids.length) return 0;
+
+  for (const id of ids) {
+    const coError = await disposeProjectChangeOrdersError(id);
+    if (coError) throw new Error(`sweepProjectsNamed(${prefix}): ${coError.message}`);
+    await admin.from('project_financials').delete().eq('project_id', id);
+  }
+  await deleteProjects(admin, ids);
+  return ids.length;
+}
+
+/**
+ * Every project and estimate that still points at this run's contact — the
+ * run's own, PLUS anything an interrupted earlier run left behind.
+ *
+ * ⚠️ WHY THIS EXISTS. `upsertContact()` reuses a contact by its fixed marker
+ * email, deliberately (the `contacts_company_email_unique` index refuses a
+ * second insert). So the contact SURVIVES between runs, and any project or
+ * estimate a killed run left behind still references it. The teardown then
+ * deleted only the ids IT had created and hit
+ * `projects_contact_id_fkey` / `estimates_contact_id_fkey` on the contact —
+ * a green suite with a red teardown, self-perpetuating, because each failure
+ * leaves exactly the rows that break the next run.
+ *
+ * The contact is marker-scoped, so anything referencing it belongs to this
+ * harness and is safe to take. Same doctrine as `sweepChangeOrders()`: a
+ * harness that only cleans up after itself cannot start from a dirty database,
+ * and a dirty database is the normal case.
+ */
+export async function dependentsOfContact(
+  contactId: string,
+  known: (string | undefined)[] = []
+): Promise<{ projectIds: string[]; estimateIds: string[] }> {
+  const [{ data: projects }, { data: estimates }] = await Promise.all([
+    admin.from('projects').select('id').eq('contact_id', contactId),
+    admin.from('estimates').select('id').eq('contact_id', contactId),
+  ]);
+  const seed = known.filter((v): v is string => Boolean(v));
+  const ids = (rows: { id: string }[] | null) =>
+    Array.from(new Set([...seed, ...(rows ?? []).map((r) => r.id)]));
+  // `seed` is unioned into BOTH so a row whose contact_id was never set is
+  // still disposed of; the delete of an id that does not exist is a no-op.
+  return {
+    projectIds: ids(projects as { id: string }[] | null),
+    estimateIds: ids(estimates as { id: string }[] | null),
+  };
 }
 
 /**
@@ -258,14 +411,18 @@ export async function sessionFor(email: string): Promise<SupabaseClient> {
   // Fallback: identities that predate the seeded password (Josh's originals).
   const { data, error } = await admin.auth.admin.generateLink({ type: 'magiclink', email });
   if (error) {
-    throw new Error(`sessionFor(${email}): password failed (${pwErr.message}); link failed (${error.message})`);
+    throw new Error(
+      `sessionFor(${email}): password failed (${pwErr.message}); link failed (${error.message})`
+    );
   }
   const { error: vErr } = await client.auth.verifyOtp({
     token_hash: data.properties!.hashed_token,
     type: 'email',
   });
   if (vErr) {
-    throw new Error(`sessionFor(${email}): password failed (${pwErr.message}); verifyOtp failed (${vErr.message})`);
+    throw new Error(
+      `sessionFor(${email}): password failed (${pwErr.message}); verifyOtp failed (${vErr.message})`
+    );
   }
   const { data: sess } = await client.auth.getSession();
   if (sess.session?.access_token && sess.session.refresh_token && sess.session.expires_at) {
@@ -366,46 +523,46 @@ export async function disposeChangeOrders(ids: string[]): Promise<CoDisposal> {
   while (pending.length) {
     const deferred: typeof pending = [];
     for (const r of pending) {
-    if (r.signed_at !== null) {
-      const { error } = await admin
-        .from('change_orders')
-        .update({ is_deleted: true, deleted_at: new Date().toISOString() })
-        .eq('id', r.id)
-        .select('id');
-      if (error) {
-        throw new Error(
-          `disposeChangeOrders: ${r.co_number} is signed AND could not even be soft-deleted — ${error.message}`
-        );
-      }
-      out.retained.push(r.co_number);
-      continue;
-    }
-
-    if (r.status === 'signed') {
-      const { error } = await admin
-        .from('change_orders')
-        .update({ status: 'draft' })
-        .eq('id', r.id)
-        .select('id');
-      if (error) {
-        throw new Error(
-          `disposeChangeOrders: ${r.co_number} could not be unflagged to draft — ${error.message}`
-        );
-      }
-      out.unflagged += 1;
-    }
-
-    const { error } = await admin.from('change_orders').delete().eq('id', r.id);
-    if (error) {
-      // A row still superseded by something later in this batch — retry it on
-      // the next pass rather than failing the teardown on an ordering accident.
-      if (error.message.includes('change_orders_supersedes_fkey')) {
-        deferred.push(r);
+      if (r.signed_at !== null) {
+        const { error } = await admin
+          .from('change_orders')
+          .update({ is_deleted: true, deleted_at: new Date().toISOString() })
+          .eq('id', r.id)
+          .select('id');
+        if (error) {
+          throw new Error(
+            `disposeChangeOrders: ${r.co_number} is signed AND could not even be soft-deleted — ${error.message}`
+          );
+        }
+        out.retained.push(r.co_number);
         continue;
       }
-      throw new Error(`disposeChangeOrders: ${r.co_number} would not delete — ${error.message}`);
-    }
-    out.deleted += 1;
+
+      if (r.status === 'signed') {
+        const { error } = await admin
+          .from('change_orders')
+          .update({ status: 'draft' })
+          .eq('id', r.id)
+          .select('id');
+        if (error) {
+          throw new Error(
+            `disposeChangeOrders: ${r.co_number} could not be unflagged to draft — ${error.message}`
+          );
+        }
+        out.unflagged += 1;
+      }
+
+      const { error } = await admin.from('change_orders').delete().eq('id', r.id);
+      if (error) {
+        // A row still superseded by something later in this batch — retry it on
+        // the next pass rather than failing the teardown on an ordering accident.
+        if (error.message.includes('change_orders_supersedes_fkey')) {
+          deferred.push(r);
+          continue;
+        }
+        throw new Error(`disposeChangeOrders: ${r.co_number} would not delete — ${error.message}`);
+      }
+      out.deleted += 1;
     }
 
     if (deferred.length === pending.length) {
@@ -462,9 +619,7 @@ export async function sweepChangeOrders(coNumberPrefix: string): Promise<CoDispo
  * s97ct teardown already uses, so a call site stays one line and the failure
  * still reaches the errors array that now throws at the end of the teardown.
  */
-export async function disposeChangeOrdersError(
-  ids: string[]
-): Promise<{ message: string } | null> {
+export async function disposeChangeOrdersError(ids: string[]): Promise<{ message: string } | null> {
   try {
     await disposeChangeOrders(ids);
     return null;

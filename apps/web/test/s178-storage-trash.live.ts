@@ -52,7 +52,23 @@ async function seedFile(opts: {
     .from('files')
     .insert({
       company_id: opts.companyId,
-      category: 'other',
+      // ⚠️ `compliance`, NOT `other`, and it is an OWNERSHIP choice not a
+      // cosmetic one. `files_owner_arm_check` (20261540000000, 2026-09-08)
+      // gives a file three legal shapes: owned by a project, owned by an
+      // estimate, or owned by the COMPANY — and the company arm is only open
+      // to category IN ('contracts','lien_releases','compliance'). These
+      // fixtures are company-level by construction: their paths are
+      // `{companyId}/name` with no project segment, they exist to be summed by
+      // `company_storage_used_bytes()`, and the probe tenant has no project to
+      // belong to. `other` with both ids NULL is now simply not a thing a file
+      // can be, which is what the insert was asserting by accident.
+      //
+      // Giving them a project_id instead would have meant inventing a project
+      // for a company created with no users, and would contradict the paths
+      // the same function writes. Neither the measurement RPC nor
+      // `runTrashPurge()` filters on category, so this changes nothing these
+      // tests measure — verified against both before changing it.
+      category: 'compliance',
       file_name: opts.path.split('/').pop()!,
       file_path: opts.path,
       file_size: opts.size,
@@ -259,9 +275,7 @@ describe('the project archive — built for real, downloaded, OPENED', () => {
 
   afterAll(async () => {
     if (jobId) {
-      const { data: objs } = await admin.storage
-        .from('exports')
-        .list(`${probeCompanyId}/${jobId}`);
+      const { data: objs } = await admin.storage.from('exports').list(`${probeCompanyId}/${jobId}`);
       const paths = (objs ?? []).map((o) => `${probeCompanyId}/${jobId}/${o.name}`);
       if (paths.length) await admin.storage.from('exports').remove(paths);
       await admin.from('export_jobs').delete().eq('id', jobId);

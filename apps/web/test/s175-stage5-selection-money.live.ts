@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@framefocus/shared/types/database';
-import { admin, assertRebuildTest, sessionFor } from './live-session';
+import { admin, assertRebuildTest, paymentAccountFor, sessionFor } from './live-session';
 import {
   completeSelectionSignature,
   offerSelection,
@@ -16,7 +16,13 @@ import {
 import { getProfitabilityReport } from '@/lib/services/profitability';
 import { getAvailableCredits } from '@/lib/services/invoices';
 import { addAllowanceCredit, addFixedLine, reissueInvoice } from '@/lib/services/invoices-client';
-import { approveExpense, createExpense, listExpenseAllocations, listTaggableSelections, taggableFor } from '@/lib/services/expenses-client';
+import {
+  approveExpense,
+  createExpense,
+  listExpenseAllocations,
+  listTaggableSelections,
+  taggableFor,
+} from '@/lib/services/expenses-client';
 import { resolveSplit } from '@/components/expenses/budget-split-editor';
 import { effectiveBudget, getBudgetRollup } from '@/lib/services/budget';
 
@@ -72,6 +78,7 @@ type Client = SupabaseClient<Database>;
 let ownerC: Client;
 let linkedC: Client;
 let companyId: string;
+let paymentAccountId: string;
 let ownerMemberId: string;
 let linkedProfileId: string;
 let linkedContactId: string;
@@ -131,18 +138,40 @@ async function sweep(): Promise<void> {
   const { data: sels } = await admin.from('selections').select('id').like('name', `${MARKER}%`);
   const sids = (sels ?? []).map((s) => s.id);
   if (sids.length) {
-    await admin.from('notifications').delete().in('source_id', sids).eq('source_table', 'selections');
+    await admin
+      .from('notifications')
+      .delete()
+      .in('source_id', sids)
+      .eq('source_table', 'selections');
     // The FK runs BOTH ways (selections.signed_session_id → sessions →
     // selections), and the four signed_* stamps travel together by CHECK — so
     // all four are cleared at once, with the status they imply, before the
     // session rows can go. Nulling the session id alone fails that CHECK
     // silently and the sweep then dies on the selections delete.
-    must('unstamp', (await admin.from('selections').update({
-      status: 'draft', signed_session_id: null, signed_sell_amount: null,
-      signed_allowance_deduction: null, signed_variance: null, signed_at: null,
-    }).in('id', sids)).error);
-    must('sessions', (await admin.from('selection_signing_sessions').delete().in('selection_id', sids)).error);
-    const { data: opts } = await admin.from('selection_options').select('id').in('selection_id', sids);
+    must(
+      'unstamp',
+      (
+        await admin
+          .from('selections')
+          .update({
+            status: 'draft',
+            signed_session_id: null,
+            signed_sell_amount: null,
+            signed_allowance_deduction: null,
+            signed_variance: null,
+            signed_at: null,
+          })
+          .in('id', sids)
+      ).error
+    );
+    must(
+      'sessions',
+      (await admin.from('selection_signing_sessions').delete().in('selection_id', sids)).error
+    );
+    const { data: opts } = await admin
+      .from('selection_options')
+      .select('id')
+      .in('selection_id', sids);
     const oids = (opts ?? []).map((o) => o.id);
     if (oids.length) {
       await admin.from('selection_option_amounts').delete().in('option_id', oids);
@@ -155,11 +184,17 @@ async function sweep(): Promise<void> {
   }
   await admin.from('selection_areas').delete().like('name', `${MARKER}%`);
   if (pids.length) {
-    const { data: items } = await admin.from('project_budget_items').select('id').in('project_id', pids);
+    const { data: items } = await admin
+      .from('project_budget_items')
+      .select('id')
+      .in('project_id', pids);
     const iids = (items ?? []).map((i) => i.id);
     if (iids.length) {
       await admin.from('project_budget_amounts').delete().in('budget_item_id', iids);
-      must('sweep budget items', (await admin.from('project_budget_items').delete().in('id', iids)).error);
+      must(
+        'sweep budget items',
+        (await admin.from('project_budget_items').delete().in('id', iids)).error
+      );
     }
     await admin.from('project_financials').delete().in('project_id', pids);
     must('sweep projects', (await admin.from('projects').delete().in('id', pids)).error);
@@ -217,18 +252,22 @@ async function makeJob(kind: 'fixed_price' | 'cost_plus', label: string, contrac
   must(`project ${label}`, pErr);
   must(
     `financials ${label}`,
-    (await admin.from('project_financials').insert({
-      company_id: companyId,
-      project_id: proj!.id,
-      contract_value: contract,
-    })).error
+    (
+      await admin.from('project_financials').insert({
+        company_id: companyId,
+        project_id: proj!.id,
+        contract_value: contract,
+      })
+    ).error
   );
   must(
     'counters',
-    (await admin
-      .from('companies')
-      .update({ estimate_number_sequence: seq, project_internal_sequence: internal })
-      .eq('id', companyId)).error
+    (
+      await admin
+        .from('companies')
+        .update({ estimate_number_sequence: seq, project_internal_sequence: internal })
+        .eq('id', companyId)
+    ).error
   );
   return { estimateId: est!.id, projectId: proj!.id };
 }
@@ -236,17 +275,25 @@ async function makeJob(kind: 'fixed_price' | 'cost_plus', label: string, contrac
 async function makeBudgetLine(pid: string, rowType: string, desc: string, budgeted: number) {
   const { data: item, error } = await admin
     .from('project_budget_items')
-    .insert({ company_id: companyId, project_id: pid, row_type: rowType, description: `${MARKER} ${desc}`, created_by: null })
+    .insert({
+      company_id: companyId,
+      project_id: pid,
+      row_type: rowType,
+      description: `${MARKER} ${desc}`,
+      created_by: null,
+    })
     .select('id')
     .single();
   must(`budget line ${desc}`, error);
   must(
     `budget amount ${desc}`,
-    (await admin.from('project_budget_amounts').insert({
-      company_id: companyId,
-      budget_item_id: item!.id,
-      budgeted_amount: budgeted,
-    })).error
+    (
+      await admin.from('project_budget_amounts').insert({
+        company_id: companyId,
+        budget_item_id: item!.id,
+        budgeted_amount: budgeted,
+      })
+    ).error
   );
   return item!.id;
 }
@@ -277,20 +324,27 @@ async function makeSelection(
   for (const o of options) {
     const { data: opt, error: oErr } = await admin
       .from('selection_options')
-      .insert({ company_id: companyId, selection_id: id, name: `${MARKER} ${o.name}`, is_chosen: false })
+      .insert({
+        company_id: companyId,
+        selection_id: id,
+        name: `${MARKER} ${o.name}`,
+        is_chosen: false,
+      })
       .select('id')
       .single();
     must(`option ${o.name}`, oErr);
     if (!opts.client_supplied) {
       must(
         `amounts ${o.name}`,
-        (await admin.from('selection_option_amounts').insert({
-          company_id: companyId,
-          option_id: opt!.id,
-          quantity: o.quantity,
-          unit_cost: o.unit_cost,
-          markup_percent: o.markup_percent,
-        })).error
+        (
+          await admin.from('selection_option_amounts').insert({
+            company_id: companyId,
+            option_id: opt!.id,
+            quantity: o.quantity,
+            unit_cost: o.unit_cost,
+            markup_percent: o.markup_percent,
+          })
+        ).error
       );
     }
   }
@@ -298,7 +352,10 @@ async function makeSelection(
   if (!released.success) throw new Error(`release ${name}: ${released.error}`);
   if (!opts.sign) return { id, variance: null, sell: null };
   // The CLIENT picks (stage-7 stand-in), then signs.
-  must('pick', (await admin.from('selection_options').update({ is_chosen: true }).eq('selection_id', id)).error);
+  must(
+    'pick',
+    (await admin.from('selection_options').update({ is_chosen: true }).eq('selection_id', id)).error
+  );
   const signed = await completeSelectionSignature(linkedC, id, {
     ...sig,
     caller: { kind: 'portal_session', profileId: linkedProfileId },
@@ -335,7 +392,12 @@ async function makeInvoice(pid: string, title: string): Promise<string> {
 }
 
 const linesOn = async (invoiceId: string) =>
-  (await admin.from('invoice_lines').select('id, billed_amount, source_selection_id').eq('invoice_id', invoiceId)).data ?? [];
+  (
+    await admin
+      .from('invoice_lines')
+      .select('id, billed_amount, source_selection_id')
+      .eq('invoice_id', invoiceId)
+  ).data ?? [];
 
 /** A line written AS THE OWNER through RLS, exactly as addFixedLine writes it. */
 async function ownerLine(
@@ -361,16 +423,35 @@ beforeAll(async () => {
   assertRebuildTest();
   await sweep();
 
-  const { data: co } = await admin.from('companies').select('id').eq('name', 'Sabal Point Construction').single();
+  const { data: co } = await admin
+    .from('companies')
+    .select('id')
+    .eq('name', 'Sabal Point Construction')
+    .single();
   companyId = co!.id;
+  // M-J (20261430000000): a non-payable expense cannot reach `approved`
+  // without the account that paid for it. Picked, never typed [RULED S103].
+  paymentAccountId = await paymentAccountFor(companyId);
   ownerC = (await sessionFor(OWNER)) as Client;
   linkedC = (await sessionFor(LINKED)) as Client;
   state.client = ownerC;
 
-  const { data: ownerProfile } = await admin.from('profiles').select('id').eq('email', OWNER).single();
-  const { data: member } = await admin.from('company_members').select('id').eq('profile_id', ownerProfile!.id).single();
+  const { data: ownerProfile } = await admin
+    .from('profiles')
+    .select('id')
+    .eq('email', OWNER)
+    .single();
+  const { data: member } = await admin
+    .from('company_members')
+    .select('id')
+    .eq('profile_id', ownerProfile!.id)
+    .single();
   ownerMemberId = member!.id;
-  const { data: linked } = await admin.from('profiles').select('id, contact_id').eq('email', LINKED).single();
+  const { data: linked } = await admin
+    .from('profiles')
+    .select('id, contact_id')
+    .eq('email', LINKED)
+    .single();
   if (!linked?.contact_id) throw new Error('LINKED client is unlinked — run the seed.');
   linkedProfileId = linked.id;
   linkedContactId = linked.contact_id;
@@ -381,58 +462,115 @@ beforeAll(async () => {
   otherItemId = await makeBudgetLine(projectId, 'material', 'lumber', 2000);
 
   // Sell 6,300 against a 5,000 allowance at the company material default.
-  const main = await makeSelection(projectId, 'floor tile', allowanceItemId, [
-    { name: 'porcelain', quantity: 10, unit_cost: 500, markup_percent: 20 },
-    { name: 'trim', quantity: 1, unit_cost: 250, markup_percent: 20 },
-  ], { sign: true });
+  const main = await makeSelection(
+    projectId,
+    'floor tile',
+    allowanceItemId,
+    [
+      { name: 'porcelain', quantity: 10, unit_cost: 500, markup_percent: 20 },
+      { name: 'trim', quantity: 1, unit_cost: 250, markup_percent: 20 },
+    ],
+    { sign: true }
+  );
   selId = main.id;
   selVariance = main.variance!;
   selSell = main.sell!;
-  if (!(selVariance > 0)) throw new Error(`fixture: expected a positive variance, got ${selVariance}`);
+  if (!(selVariance > 0))
+    throw new Error(`fixture: expected a positive variance, got ${selVariance}`);
 
   // Variance EXACTLY 0.00: one option at the allowance's own cost, inheriting
   // the allowance's own markup (NULL = inherit the S174 snapshot).
-  const zero = await makeSelection(projectId, 'zero variance', allowanceItemId, [
-    { name: 'same tile', quantity: 1, unit_cost: 5000, markup_percent: null },
-  ], { sign: true });
+  const zero = await makeSelection(
+    projectId,
+    'zero variance',
+    allowanceItemId,
+    [{ name: 'same tile', quantity: 1, unit_cost: 5000, markup_percent: null }],
+    { sign: true }
+  );
   zeroSelId = zero.id;
   if (zero.variance !== 0) throw new Error(`fixture: expected variance 0, got ${zero.variance}`);
 
   // A credit: sold under the allowance.
-  const credit = await makeSelection(projectId, 'cheaper tile', allowanceItemId, [
-    { name: 'ceramic', quantity: 1, unit_cost: 1000, markup_percent: 20 },
-  ], { sign: true });
+  const credit = await makeSelection(
+    projectId,
+    'cheaper tile',
+    allowanceItemId,
+    [{ name: 'ceramic', quantity: 1, unit_cost: 1000, markup_percent: 20 }],
+    { sign: true }
+  );
   creditSelId = credit.id;
   creditVariance = credit.variance!;
   if (!(creditVariance < 0)) throw new Error(`fixture: expected a credit, got ${creditVariance}`);
 
-  pendingSelId = (await makeSelection(projectId, 'undecided grout', allowanceItemId, [
-    { name: 'grey', quantity: 1, unit_cost: 100, markup_percent: 0 },
-  ])).id;
+  pendingSelId = (
+    await makeSelection(projectId, 'undecided grout', allowanceItemId, [
+      { name: 'grey', quantity: 1, unit_cost: 100, markup_percent: 0 },
+    ])
+  ).id;
 
-  suppliedSelId = (await makeSelection(projectId, 'client mirror', allowanceItemId, [
-    { name: 'their mirror', quantity: 1, unit_cost: 0, markup_percent: 0 },
-  ], { client_supplied: true, sign: true })).id;
+  suppliedSelId = (
+    await makeSelection(
+      projectId,
+      'client mirror',
+      allowanceItemId,
+      [{ name: 'their mirror', quantity: 1, unit_cost: 0, markup_percent: 0 }],
+      { client_supplied: true, sign: true }
+    )
+  ).id;
 
   // ── the cost-plus control ──
-  ({ estimateId: cpEstimateId, projectId: cpProjectId } = await makeJob('cost_plus', 'cost-plus control', 1000));
+  ({ estimateId: cpEstimateId, projectId: cpProjectId } = await makeJob(
+    'cost_plus',
+    'cost-plus control',
+    1000
+  ));
   cpAllowanceItemId = await makeBudgetLine(cpProjectId, 'allowance', 'cp tile allowance', 1000);
-  const cp = await makeSelection(cpProjectId, 'cp floor tile', cpAllowanceItemId, [
-    { name: 'cp porcelain', quantity: 1, unit_cost: 2000, markup_percent: 20 },
-  ], { sign: true });
+  const cp = await makeSelection(
+    cpProjectId,
+    'cp floor tile',
+    cpAllowanceItemId,
+    [{ name: 'cp porcelain', quantity: 1, unit_cost: 2000, markup_percent: 20 }],
+    { sign: true }
+  );
   cpSelId = cp.id;
   cpVariance = cp.variance!;
-  if (!(cpVariance > 0)) throw new Error(`fixture: expected a positive cp variance, got ${cpVariance}`);
+  if (!(cpVariance > 0))
+    throw new Error(`fixture: expected a positive cp variance, got ${cpVariance}`);
 }, 300_000);
 
 afterAll(async () => {
   await sweep();
   const left: Record<string, number | null> = {};
-  left.projects = (await admin.from('projects').select('id', { count: 'exact', head: true }).like('name', `${MARKER}%`)).count;
-  left.selections = (await admin.from('selections').select('id', { count: 'exact', head: true }).like('name', `${MARKER}%`)).count;
-  left.estimates = (await admin.from('estimates').select('id', { count: 'exact', head: true }).like('name', `${MARKER}%`)).count;
-  left.budgetItems = (await admin.from('project_budget_items').select('id', { count: 'exact', head: true }).like('description', `${MARKER}%`)).count;
-  left.invoices = (await admin.from('invoices').select('id', { count: 'exact', head: true }).like('title', `${MARKER}%`)).count;
+  left.projects = (
+    await admin
+      .from('projects')
+      .select('id', { count: 'exact', head: true })
+      .like('name', `${MARKER}%`)
+  ).count;
+  left.selections = (
+    await admin
+      .from('selections')
+      .select('id', { count: 'exact', head: true })
+      .like('name', `${MARKER}%`)
+  ).count;
+  left.estimates = (
+    await admin
+      .from('estimates')
+      .select('id', { count: 'exact', head: true })
+      .like('name', `${MARKER}%`)
+  ).count;
+  left.budgetItems = (
+    await admin
+      .from('project_budget_items')
+      .select('id', { count: 'exact', head: true })
+      .like('description', `${MARKER}%`)
+  ).count;
+  left.invoices = (
+    await admin
+      .from('invoices')
+      .select('id', { count: 'exact', head: true })
+      .like('title', `${MARKER}%`)
+  ).count;
   const residue = Object.entries(left).filter(([, n]) => (n ?? 0) > 0);
   if (residue.length) throw new Error(`[${MARKER}] residue: ${JSON.stringify(residue)}`);
 }, 300_000);
@@ -440,7 +578,11 @@ afterAll(async () => {
 // ───────────────────────────────────────────────────────────────────────────
 describe('S175-S5 A — the DATABASE shape (Q3.4: ONE CHECK edit)', () => {
   it('A0 — the fixture is not vacuous: an approved selection with a signed variance exists', async () => {
-    const { data } = await admin.from('selections').select('status, signed_variance').eq('id', selId).single();
+    const { data } = await admin
+      .from('selections')
+      .select('status, signed_variance')
+      .eq('id', selId)
+      .single();
     expect(data!.status).toBe('approved');
     expect(Number(data!.signed_variance)).toBe(selVariance);
     expect(selSell).toBe(6300);
@@ -448,7 +590,11 @@ describe('S175-S5 A — the DATABASE shape (Q3.4: ONE CHECK edit)', () => {
 
   it('A1 — a line carrying BOTH the estimate and a selection is refused by the three-way CHECK, and the write did not land', async () => {
     const inv = await makeInvoice(projectId, 'A1');
-    const { error } = await ownerLine(inv, { billed_amount: 10, source_estimate_id: estimateId, source_selection_id: selId });
+    const { error } = await ownerLine(inv, {
+      billed_amount: 10,
+      source_estimate_id: estimateId,
+      source_selection_id: selId,
+    });
     expect(error, 'accepted an estimate+selection line').not.toBeNull();
     expect(error!.message).toMatch(/invoice_lines_one_instrument_check/);
     expect(await linesOn(inv)).toHaveLength(0); // RETURNING vs WRITE — re-read as service role
@@ -463,11 +609,17 @@ describe('S175-S5 A — the DATABASE shape (Q3.4: ONE CHECK edit)', () => {
       .limit(1)
       .maybeSingle();
     if (!anyCo) {
-      console.warn('[S175S5 A2] UNVERIFIED — no change order in the company to build the probe from');
+      console.warn(
+        '[S175S5 A2] UNVERIFIED — no change order in the company to build the probe from'
+      );
       return;
     }
     const inv = await makeInvoice(projectId, 'A2');
-    const { error } = await ownerLine(inv, { billed_amount: 10, source_change_order_id: anyCo.id, source_selection_id: selId });
+    const { error } = await ownerLine(inv, {
+      billed_amount: 10,
+      source_change_order_id: anyCo.id,
+      source_selection_id: selId,
+    });
     expect(error).not.toBeNull();
     expect(error!.message).toMatch(/invoice_lines_one_instrument_check/);
     expect(await linesOn(inv)).toHaveLength(0);
@@ -489,7 +641,11 @@ describe('S175-S5 A — the DATABASE shape (Q3.4: ONE CHECK edit)', () => {
       return;
     }
     const inv = await makeInvoice(projectId, 'A3');
-    const { error } = await ownerLine(inv, { billed_amount: 10, source_estimate_line_item_id: anyLineItem.id, source_selection_id: selId });
+    const { error } = await ownerLine(inv, {
+      billed_amount: 10,
+      source_estimate_line_item_id: anyLineItem.id,
+      source_selection_id: selId,
+    });
     expect(error).not.toBeNull();
     expect(error!.message).toMatch(/invoice_lines_estimate_line_shape_check/);
     expect(await linesOn(inv)).toHaveLength(0);
@@ -510,9 +666,15 @@ describe('S175-S5 B — the selection CEILING (Q3.3: a read does not constrain a
   it('B1 — the overage ESCAPES a fully-billed contract; the same amount against the ESTIMATE is refused', async () => {
     fullInvoice = await makeInvoice(projectId, 'B1 full contract');
     // Bill the whole $10,000 contract as a draw.
-    must('draw', (await ownerLine(fullInvoice, { billed_amount: 10000, source_estimate_id: estimateId })).error);
+    must(
+      'draw',
+      (await ownerLine(fullInvoice, { billed_amount: 10000, source_estimate_id: estimateId })).error
+    );
     // Another dollar against the estimate: refused with the CO wording.
-    const { error: refused } = await ownerLine(fullInvoice, { billed_amount: 1, source_estimate_id: estimateId });
+    const { error: refused } = await ownerLine(fullInvoice, {
+      billed_amount: 1,
+      source_estimate_id: estimateId,
+    });
     expect(refused).not.toBeNull();
     expect(refused!.message).toMatch(/Raise the scope with a change order/);
     // The selection's overage: accepted, because it bills the selection
@@ -530,7 +692,10 @@ describe('S175-S5 B — the selection CEILING (Q3.3: a read does not constrain a
 
   it('B2 — exceeding signed_variance is refused, naming the figures; nothing landed', async () => {
     const before = (await linesOn(fullInvoice)).length;
-    const { error } = await ownerLine(fullInvoice, { billed_amount: selVariance, source_selection_id: selId });
+    const { error } = await ownerLine(fullInvoice, {
+      billed_amount: selVariance,
+      source_selection_id: selId,
+    });
     expect(error).not.toBeNull();
     expect(error!.message).toMatch(/more than the selection's approved variance/);
     expect(error!.message).toContain(String(selVariance.toFixed(2)));
@@ -539,7 +704,10 @@ describe('S175-S5 B — the selection CEILING (Q3.3: a read does not constrain a
 
   it('B3 — billing EXACTLY the remainder is allowed (equality permitted, as the contract ceiling)', async () => {
     const remainder = r2(selVariance - r2(selVariance / 2));
-    const { error } = await ownerLine(fullInvoice, { billed_amount: remainder, source_selection_id: selId });
+    const { error } = await ownerLine(fullInvoice, {
+      billed_amount: remainder,
+      source_selection_id: selId,
+    });
     expect(error, error?.message).toBeNull();
     const billed = (await linesOn(fullInvoice))
       .filter((l) => l.source_selection_id === selId)
@@ -549,14 +717,39 @@ describe('S175-S5 B — the selection CEILING (Q3.3: a read does not constrain a
 
   it('B4 — a THIRD invoice cannot bill a cent more; VOIDING the first restores the headroom with no cleanup', async () => {
     const third = await makeInvoice(projectId, 'B4 third');
-    const { error: refused } = await ownerLine(third, { billed_amount: 0.01, source_selection_id: selId });
+    const { error: refused } = await ownerLine(third, {
+      billed_amount: 0.01,
+      source_selection_id: selId,
+    });
     expect(refused).not.toBeNull();
     // Send, then void the full invoice (a draft cannot be voided).
-    must('send', (await admin.from('invoices').update({ status: 'sent', sent_at: new Date().toISOString() }).eq('id', fullInvoice)).error);
-    must('void', (await admin.from('invoices').update({
-      status: 'voided', voided_at: new Date().toISOString(), voided_by: ownerMemberId, void_reason: `${MARKER} restore`,
-    }).eq('id', fullInvoice)).error);
-    const { error: ok } = await ownerLine(third, { billed_amount: selVariance, source_selection_id: selId });
+    must(
+      'send',
+      (
+        await admin
+          .from('invoices')
+          .update({ status: 'sent', sent_at: new Date().toISOString() })
+          .eq('id', fullInvoice)
+      ).error
+    );
+    must(
+      'void',
+      (
+        await admin
+          .from('invoices')
+          .update({
+            status: 'voided',
+            voided_at: new Date().toISOString(),
+            voided_by: ownerMemberId,
+            void_reason: `${MARKER} restore`,
+          })
+          .eq('id', fullInvoice)
+      ).error
+    );
+    const { error: ok } = await ownerLine(third, {
+      billed_amount: selVariance,
+      source_selection_id: selId,
+    });
     expect(ok, ok?.message).toBeNull();
     expect((await linesOn(third)).filter((l) => l.source_selection_id === selId)).toHaveLength(1);
   });
@@ -571,11 +764,17 @@ describe('S175-S5 B — the selection CEILING (Q3.3: a read does not constrain a
 
   it('B6 — variance EXACTLY 0.00 is a cap of ZERO, not a credit: a positive bill is refused, a credit line passes', async () => {
     const inv = await makeInvoice(projectId, 'B6');
-    const { error: refused } = await ownerLine(inv, { billed_amount: 0.01, source_selection_id: zeroSelId });
+    const { error: refused } = await ownerLine(inv, {
+      billed_amount: 0.01,
+      source_selection_id: zeroSelId,
+    });
     expect(refused, 'a zero-variance selection accepted a positive bill').not.toBeNull();
     expect(await linesOn(inv)).toHaveLength(0);
     const { error: ok } = await ownerLine(inv, {
-      billed_amount: -5, line_type: 'credit_allowance', source_selection_id: zeroSelId, derived_amount: -5,
+      billed_amount: -5,
+      line_type: 'credit_allowance',
+      source_selection_id: zeroSelId,
+      derived_amount: -5,
     });
     expect(ok, ok?.message).toBeNull();
   });
@@ -585,20 +784,30 @@ describe('S175-S5 B — the selection CEILING (Q3.3: a read does not constrain a
     const { data: invRow } = await admin.from('invoices').select('is_final').eq('id', inv).single();
     expect(invRow!.is_final).toBe(false);
     const { error } = await ownerLine(inv, {
-      billed_amount: creditVariance, derived_amount: creditVariance,
-      line_type: 'credit_allowance', source_selection_id: creditSelId,
+      billed_amount: creditVariance,
+      derived_amount: creditVariance,
+      line_type: 'credit_allowance',
+      source_selection_id: creditSelId,
     });
     expect(error, error?.message).toBeNull();
-    expect((await linesOn(inv)).filter((l) => l.source_selection_id === creditSelId)).toHaveLength(1);
+    expect((await linesOn(inv)).filter((l) => l.source_selection_id === creditSelId)).toHaveLength(
+      1
+    );
   });
 
   it('B8 — the ceiling is NOT gated on project type: it applies on the cost-plus control too', async () => {
     const inv = await makeInvoice(cpProjectId, 'B8 cost-plus');
-    const { error: refused } = await ownerLine(inv, { billed_amount: r2(cpVariance + 0.01), source_selection_id: cpSelId });
+    const { error: refused } = await ownerLine(inv, {
+      billed_amount: r2(cpVariance + 0.01),
+      source_selection_id: cpSelId,
+    });
     expect(refused).not.toBeNull();
     expect(refused!.message).toMatch(/approved variance/);
     expect(await linesOn(inv)).toHaveLength(0);
-    const { error: ok } = await ownerLine(inv, { billed_amount: cpVariance, source_selection_id: cpSelId });
+    const { error: ok } = await ownerLine(inv, {
+      billed_amount: cpVariance,
+      source_selection_id: cpSelId,
+    });
     expect(ok, ok?.message).toBeNull();
     // Cleared again so section E's as_incurred figure is about the derivation, not this probe.
     must('clear', (await admin.from('invoices').delete().eq('id', inv)).error);
@@ -611,9 +820,16 @@ describe('S175-S5 C — the COST side: ONE EXPENSE PER SELECTION has a shape, an
     const { data, error } = await admin
       .from('expenses')
       .insert({
-        company_id: companyId, project_id: pid, author_member_id: ownerMemberId,
-        supplier: `${MARKER} ${label}`, expense_date: '2026-08-01', amount,
-        cost_category: 'material', state: 'actual', status: 'pending',
+        company_id: companyId,
+        project_id: pid,
+        author_member_id: ownerMemberId,
+        supplier: `${MARKER} ${label}`,
+        expense_date: '2026-08-01',
+        amount,
+        cost_category: 'material',
+        state: 'actual',
+        status: 'pending',
+        payment_account_id: paymentAccountId,
       })
       .select('id')
       .single();
@@ -621,12 +837,20 @@ describe('S175-S5 C — the COST side: ONE EXPENSE PER SELECTION has a shape, an
     return data!.id;
   }
   const allocs = async (expenseId: string) =>
-    (await admin.from('expense_allocations').select('budget_item_id, amount, source_selection_id').eq('expense_id', expenseId)).data ?? [];
+    (
+      await admin
+        .from('expense_allocations')
+        .select('budget_item_id, amount, source_selection_id')
+        .eq('expense_id', expenseId)
+    ).data ?? [];
 
   it('C1 — a cost tagged with a selection, against ITS allowance line, is accepted', async () => {
     const e = await pendingExpense(projectId, 500, 'C1');
     const { error } = await ownerC.from('expense_allocations').insert({
-      expense_id: e, budget_item_id: allowanceItemId, amount: 500, source_selection_id: selId,
+      expense_id: e,
+      budget_item_id: allowanceItemId,
+      amount: 500,
+      source_selection_id: selId,
     });
     expect(error, error?.message).toBeNull();
     expect((await allocs(e))[0]?.source_selection_id).toBe(selId);
@@ -635,7 +859,10 @@ describe('S175-S5 C — the COST side: ONE EXPENSE PER SELECTION has a shape, an
   it('C2 — tagged against a DIFFERENT line than the one the selection draws on: refused, nothing landed', async () => {
     const e = await pendingExpense(projectId, 500, 'C2');
     const { error } = await ownerC.from('expense_allocations').insert({
-      expense_id: e, budget_item_id: otherItemId, amount: 500, source_selection_id: selId,
+      expense_id: e,
+      budget_item_id: otherItemId,
+      amount: 500,
+      source_selection_id: selId,
     });
     expect(error).not.toBeNull();
     expect(error!.message).toMatch(/draws on a different allowance line/);
@@ -645,7 +872,10 @@ describe('S175-S5 C — the COST side: ONE EXPENSE PER SELECTION has a shape, an
   it('C3 — a CLIENT-SUPPLIED selection carries no cost: refused', async () => {
     const e = await pendingExpense(projectId, 50, 'C3');
     const { error } = await ownerC.from('expense_allocations').insert({
-      expense_id: e, budget_item_id: allowanceItemId, amount: 50, source_selection_id: suppliedSelId,
+      expense_id: e,
+      budget_item_id: allowanceItemId,
+      amount: 50,
+      source_selection_id: suppliedSelId,
     });
     expect(error).not.toBeNull();
     expect(error!.message).toMatch(/client-supplied/);
@@ -655,19 +885,30 @@ describe('S175-S5 C — the COST side: ONE EXPENSE PER SELECTION has a shape, an
   it('C4 — a selection from ANOTHER project: refused', async () => {
     const e = await pendingExpense(projectId, 50, 'C4');
     const { error } = await ownerC.from('expense_allocations').insert({
-      expense_id: e, budget_item_id: allowanceItemId, amount: 50, source_selection_id: cpSelId,
+      expense_id: e,
+      budget_item_id: allowanceItemId,
+      amount: 50,
+      source_selection_id: cpSelId,
     });
     expect(error).not.toBeNull();
     expect(error!.message).toMatch(/different project/);
     expect(await allocs(e)).toHaveLength(0);
   });
 
-  it('C5 — approve_expense() CARRIES the tag through its delete-and-reinsert; omitted, the cost is the allowance\'s', async () => {
+  it("C5 — approve_expense() CARRIES the tag through its delete-and-reinsert; omitted, the cost is the allowance's", async () => {
     // Tagged at capture, approved WITH the key → survives.
     const e1 = await pendingExpense(projectId, 300, 'C5 tagged');
-    must('capture', (await ownerC.from('expense_allocations').insert({
-      expense_id: e1, budget_item_id: allowanceItemId, amount: 300, source_selection_id: selId,
-    })).error);
+    must(
+      'capture',
+      (
+        await ownerC.from('expense_allocations').insert({
+          expense_id: e1,
+          budget_item_id: allowanceItemId,
+          amount: 300,
+          source_selection_id: selId,
+        })
+      ).error
+    );
     const { error: a1 } = await ownerC.rpc('approve_expense', {
       p_expense_id: e1,
       p_allocations: [{ budget_item_id: allowanceItemId, amount: 300, source_selection_id: selId }],
@@ -676,7 +917,9 @@ describe('S175-S5 C — the COST side: ONE EXPENSE PER SELECTION has a shape, an
     const after1 = await allocs(e1);
     expect(after1).toHaveLength(1);
     expect(after1[0].source_selection_id).toBe(selId);
-    expect((await admin.from('expenses').select('status').eq('id', e1).single()).data!.status).toBe('approved');
+    expect((await admin.from('expenses').select('status').eq('id', e1).single()).data!.status).toBe(
+      'approved'
+    );
 
     // Approved WITHOUT the key → the allowance's own, by design (untagged).
     const e2 = await pendingExpense(projectId, 200, 'C5 untagged');
@@ -696,7 +939,9 @@ describe('S175-S5 C — the COST side: ONE EXPENSE PER SELECTION has a shape, an
     });
     expect(error).not.toBeNull();
     expect(error!.message).toMatch(/draws on a different allowance line/);
-    expect((await admin.from('expenses').select('status').eq('id', e).single()).data!.status).toBe('pending');
+    expect((await admin.from('expenses').select('status').eq('id', e).single()).data!.status).toBe(
+      'pending'
+    );
     expect(await allocs(e)).toHaveLength(0);
   });
 });
@@ -732,12 +977,19 @@ describe('S175-S5 D — CONTRACT VALUE: the third term, FIXED-PRICE ONLY, and th
 
   it('D4 — the portfolio sums the FIXED side only, and agrees with an independent service-role derivation', async () => {
     const { data: projs } = await admin
-      .from('projects').select('id, project_type')
-      .eq('company_id', companyId).eq('status', 'active').eq('is_deleted', false);
+      .from('projects')
+      .select('id, project_type')
+      .eq('company_id', companyId)
+      .eq('status', 'active')
+      .eq('is_deleted', false);
     const fixedIds = (projs ?? []).filter((p) => p.project_type === 'fixed_price').map((p) => p.id);
     const { data: sels } = await admin
-      .from('selections').select('signed_variance')
-      .in('project_id', fixedIds).eq('status', 'approved').eq('is_deleted', false).not('signed_variance', 'is', null);
+      .from('selections')
+      .select('signed_variance')
+      .in('project_id', fixedIds)
+      .eq('status', 'approved')
+      .eq('is_deleted', false)
+      .not('signed_variance', 'is', null);
     const independent = r2((sels ?? []).reduce((n, s) => n + Number(s.signed_variance), 0));
     const portfolio = await getPortfolioRevisedContract();
     expect(portfolio.selectionDeltaSum).toBe(independent);
@@ -748,9 +1000,13 @@ describe('S175-S5 D — CONTRACT VALUE: the third term, FIXED-PRICE ONLY, and th
 
   it('D5 — REVISION drops the term (acceptance #11): revise → in_discussion, stamps cleared, contract value falls by the old variance', async () => {
     const before = await getRevisedContract(projectId);
-    const extra = await makeSelection(projectId, 'revisable vanity', null, [
-      { name: 'vanity', quantity: 1, unit_cost: 800, markup_percent: 25 },
-    ], { sign: true });
+    const extra = await makeSelection(
+      projectId,
+      'revisable vanity',
+      null,
+      [{ name: 'vanity', quantity: 1, unit_cost: 800, markup_percent: 25 }],
+      { sign: true }
+    );
     expect(extra.variance).toBe(1000); // unlinked (Q8): variance = full sell
     const during = await getRevisedContract(projectId);
     expect(during.selectionDelta).toBe(r2(before.selectionDelta + 1000));
@@ -771,7 +1027,9 @@ describe('S175-S5 E — getSelectionBilling(): billed vs signed → remaining, p
     const main = b.selections.find((s) => s.selectionId === selId)!;
     const zero = b.selections.find((s) => s.selectionId === zeroSelId)!;
     const credit = b.selections.find((s) => s.selectionId === creditSelId)!;
-    expect(b.selections.map((s) => s.selectionId).sort()).toEqual([selId, zeroSelId, creditSelId].sort());
+    expect(b.selections.map((s) => s.selectionId).sort()).toEqual(
+      [selId, zeroSelId, creditSelId].sort()
+    );
     expect(main.kind).toBe('fixed_remaining');
     expect(main.billed).toBe(0); // B4's line sits on a DRAFT
     expect(main.remaining).toBe(selVariance);
@@ -788,9 +1046,21 @@ describe('S175-S5 E — getSelectionBilling(): billed vs signed → remaining, p
 
   it('E2 — SENDING the draft bills it: remaining falls to zero; excluding that invoice restores it for the builder', async () => {
     const { data: inv } = await admin
-      .from('invoices').select('id').eq('project_id', projectId).eq('title', `${MARKER} B4 third`).single();
+      .from('invoices')
+      .select('id')
+      .eq('project_id', projectId)
+      .eq('title', `${MARKER} B4 third`)
+      .single();
     thirdInvoice = inv!.id;
-    must('send', (await admin.from('invoices').update({ status: 'sent', sent_at: new Date().toISOString() }).eq('id', thirdInvoice)).error);
+    must(
+      'send',
+      (
+        await admin
+          .from('invoices')
+          .update({ status: 'sent', sent_at: new Date().toISOString() })
+          .eq('id', thirdInvoice)
+      ).error
+    );
     const b = await getSelectionBilling(projectId);
     const main = b.selections.find((s) => s.selectionId === selId)!;
     expect(main.billed).toBe(selVariance);
@@ -825,8 +1095,11 @@ describe('S175-S5 F — PROFITABILITY: the selection is a THIRD INSTRUMENT (spec
     // Sell = Σ signed_sell_amount over the job's approved fixed-parent
     // selections, read independently as the service role.
     const { data: sels } = await admin
-      .from('selections').select('signed_sell_amount')
-      .eq('project_id', projectId).eq('status', 'approved').not('signed_sell_amount', 'is', null);
+      .from('selections')
+      .select('signed_sell_amount')
+      .eq('project_id', projectId)
+      .eq('status', 'approved')
+      .not('signed_sell_amount', 'is', null);
     const expectedSell = r2((sels ?? []).reduce((n, x) => n + Number(x.signed_sell_amount), 0));
     expect(expectedSell).toBeGreaterThan(6300);
     expect(allowance!.sell).toBe(expectedSell);
@@ -858,25 +1131,50 @@ describe('S175-S5 H — BILLING through the REAL client functions (spec §7.1, �
   let h1Invoice: string;
 
   it('H1 — addFixedLine with sourceSelectionId bills the overage; the DB ceiling reaches the caller as its own message', async () => {
-    const v = await makeSelection(projectId, 'H vanity', null, [
-      { name: 'vanity H', quantity: 1, unit_cost: 800, markup_percent: 25 },
-    ], { sign: true });
+    const v = await makeSelection(
+      projectId,
+      'H vanity',
+      null,
+      [{ name: 'vanity H', quantity: 1, unit_cost: 800, markup_percent: 25 }],
+      { sign: true }
+    );
     vanitySel = v.id;
     expect(v.variance).toBe(1000);
     h1Invoice = await makeInvoice(projectId, 'H1 bill');
 
-    const first = await addFixedLine({ invoiceId: h1Invoice, description: 'Selection — H vanity', amount: 400, category: 'allowance', sourceSelectionId: vanitySel });
+    const first = await addFixedLine({
+      invoiceId: h1Invoice,
+      description: 'Selection — H vanity',
+      amount: 400,
+      category: 'allowance',
+      sourceSelectionId: vanitySel,
+    });
     expect(first.success, first.error).toBe(true);
-    const over = await addFixedLine({ invoiceId: h1Invoice, description: 'too much', amount: 601, category: 'allowance', sourceSelectionId: vanitySel });
+    const over = await addFixedLine({
+      invoiceId: h1Invoice,
+      description: 'too much',
+      amount: 601,
+      category: 'allowance',
+      sourceSelectionId: vanitySel,
+    });
     expect(over.success).toBe(false);
     expect(over.error).toMatch(/approved variance/);
-    const rest = await addFixedLine({ invoiceId: h1Invoice, description: 'the rest', amount: 600, category: 'allowance', sourceSelectionId: vanitySel });
+    const rest = await addFixedLine({
+      invoiceId: h1Invoice,
+      description: 'the rest',
+      amount: 600,
+      category: 'allowance',
+      sourceSelectionId: vanitySel,
+    });
     expect(rest.success, rest.error).toBe(true);
 
     const lines = (await linesOn(h1Invoice)).filter((l) => l.source_selection_id === vanitySel);
     expect(lines).toHaveLength(2);
     expect(r2(lines.reduce((n, l) => n + Number(l.billed_amount), 0))).toBe(1000);
-    const { data: full } = await admin.from('invoice_lines').select('category, line_type, source_estimate_id').eq('invoice_id', h1Invoice);
+    const { data: full } = await admin
+      .from('invoice_lines')
+      .select('category, line_type, source_estimate_id')
+      .eq('invoice_id', h1Invoice);
     for (const l of full ?? []) {
       expect(l.category).toBe('allowance');
       expect(l.line_type).toBe('fixed');
@@ -885,9 +1183,13 @@ describe('S175-S5 H — BILLING through the REAL client functions (spec §7.1, �
   });
 
   it('H2 — an under-allowance selection is an AVAILABLE credit; placing it on a NON-final invoice succeeds (is_final lifted), the unsourced one is still refused', async () => {
-    const under = await makeSelection(projectId, 'H cheaper vanity', allowanceItemId, [
-      { name: 'ceramic H', quantity: 1, unit_cost: 2000, markup_percent: 20 },
-    ], { sign: true });
+    const under = await makeSelection(
+      projectId,
+      'H cheaper vanity',
+      allowanceItemId,
+      [{ name: 'ceramic H', quantity: 1, unit_cost: 2000, markup_percent: 20 }],
+      { sign: true }
+    );
     expect(under.variance).toBeLessThan(0);
     const owed = Math.abs(under.variance!);
 
@@ -896,7 +1198,9 @@ describe('S175-S5 H — BILLING through the REAL client functions (spec §7.1, �
     expect(offered, 'the selection credit was not offered').toBeDefined();
     expect(offered!.amount).toBe(owed);
     // B7's credit is fully placed on a live draft, so it is NOT offered again.
-    expect(before.find((c) => c.kind === 'selection' && c.selectionId === creditSelId)).toBeUndefined();
+    expect(
+      before.find((c) => c.kind === 'selection' && c.selectionId === creditSelId)
+    ).toBeUndefined();
 
     const inv = await makeInvoice(projectId, 'H2 not final');
     const { data: row } = await admin.from('invoices').select('is_final').eq('id', inv).single();
@@ -922,10 +1226,29 @@ describe('S175-S5 H — BILLING through the REAL client functions (spec §7.1, �
   });
 
   it('H3 — reissueInvoice copies source_selection_id: the reissued lines still bill the selection, within the restored headroom', async () => {
-    must('send', (await admin.from('invoices').update({ status: 'sent', sent_at: new Date().toISOString() }).eq('id', h1Invoice)).error);
-    must('void', (await admin.from('invoices').update({
-      status: 'voided', voided_at: new Date().toISOString(), voided_by: ownerMemberId, void_reason: `${MARKER} reissue`,
-    }).eq('id', h1Invoice)).error);
+    must(
+      'send',
+      (
+        await admin
+          .from('invoices')
+          .update({ status: 'sent', sent_at: new Date().toISOString() })
+          .eq('id', h1Invoice)
+      ).error
+    );
+    must(
+      'void',
+      (
+        await admin
+          .from('invoices')
+          .update({
+            status: 'voided',
+            voided_at: new Date().toISOString(),
+            voided_by: ownerMemberId,
+            void_reason: `${MARKER} reissue`,
+          })
+          .eq('id', h1Invoice)
+      ).error
+    );
     const r = await reissueInvoice(h1Invoice);
     expect(r.success, r.error).toBe(true);
     invoiceIds.push(r.id!);
@@ -955,23 +1278,37 @@ describe('S175-S5 I — the COST tag through the REAL capture and review paths (
   });
 
   it('I2 — resolveSplit carries the tag, merges a repeated line, and REFUSES two selections on one line rather than picking one', async () => {
-    const ok = await resolveSplit(projectId, [
-      { key: 1, budget_item_id: allowanceItemId, amount: '100', source_selection_id: selId },
-      { key: 2, budget_item_id: allowanceItemId, amount: '50', source_selection_id: '' },
-    ], 150);
-    expect(ok.allocations).toEqual([{ budget_item_id: allowanceItemId, amount: 150, source_selection_id: selId }]);
-    const bad = await resolveSplit(projectId, [
-      { key: 1, budget_item_id: allowanceItemId, amount: '100', source_selection_id: selId },
-      { key: 2, budget_item_id: allowanceItemId, amount: '50', source_selection_id: zeroSelId },
-    ], 150);
+    const ok = await resolveSplit(
+      projectId,
+      [
+        { key: 1, budget_item_id: allowanceItemId, amount: '100', source_selection_id: selId },
+        { key: 2, budget_item_id: allowanceItemId, amount: '50', source_selection_id: '' },
+      ],
+      150
+    );
+    expect(ok.allocations).toEqual([
+      { budget_item_id: allowanceItemId, amount: 150, source_selection_id: selId },
+    ]);
+    const bad = await resolveSplit(
+      projectId,
+      [
+        { key: 1, budget_item_id: allowanceItemId, amount: '100', source_selection_id: selId },
+        { key: 2, budget_item_id: allowanceItemId, amount: '50', source_selection_id: zeroSelId },
+      ],
+      150
+    );
     expect(bad.allocations).toBeUndefined();
     expect(bad.error).toMatch(/one expense per selection/);
   });
 
-  it('I3 — createExpense writes the tag at capture; approveExpense (the reconcile) KEEPS it; the split editor\'s shape refusal reaches the caller', async () => {
+  it("I3 — createExpense writes the tag at capture; approveExpense (the reconcile) KEEPS it; the split editor's shape refusal reaches the caller", async () => {
     const created = await createExpense({
-      project_id: projectId, supplier: `${MARKER} I3 tile supplier`, expense_date: '2026-08-02', amount: 250,
+      project_id: projectId,
+      supplier: `${MARKER} I3 tile supplier`,
+      expense_date: '2026-08-02',
+      amount: 250,
       cost_category: 'material',
+      payment_account_id: paymentAccountId,
       allocations: [{ budget_item_id: allowanceItemId, amount: 250, source_selection_id: selId }],
     });
     expect(created.success, created.error).toBe(true);
@@ -980,9 +1317,14 @@ describe('S175-S5 I — the COST tag through the REAL capture and review paths (
     expect(captured[0].source_selection_id).toBe(selId);
 
     // Review: the popup re-submits what it seeded — the tag included.
-    const approved = await approveExpense(created.id!, captured.map((a) => ({
-      budget_item_id: a.budget_item_id, amount: a.amount, source_selection_id: a.source_selection_id,
-    })));
+    const approved = await approveExpense(
+      created.id!,
+      captured.map((a) => ({
+        budget_item_id: a.budget_item_id,
+        amount: a.amount,
+        source_selection_id: a.source_selection_id,
+      }))
+    );
     expect(approved.success, approved.error).toBe(true);
     const after = await listExpenseAllocations(created.id!);
     expect(after[0].source_selection_id).toBe(selId);
@@ -990,7 +1332,10 @@ describe('S175-S5 I — the COST tag through the REAL capture and review paths (
     // A tag the trigger refuses is reported, and the expense is saved
     // pending-unallocated for review to fix — the existing capture contract.
     const wrong = await createExpense({
-      project_id: projectId, supplier: `${MARKER} I3 wrong line`, expense_date: '2026-08-02', amount: 10,
+      project_id: projectId,
+      supplier: `${MARKER} I3 wrong line`,
+      expense_date: '2026-08-02',
+      amount: 10,
       cost_category: 'material',
       allocations: [{ budget_item_id: otherItemId, amount: 10, source_selection_id: selId }],
     });
@@ -1013,8 +1358,15 @@ describe('S175-S5 G — the BUDGET SUBCATEGORY (§5.4): derived in budget.ts, no
     const sub = allowance.selection_subcategory;
     expect(sub, 'no subcategory on the allowance line').not.toBeNull();
     // main 10×500 + 1×250 = 5,250 · zero 1×5,000 · credit 1×1,000 · H cheaper 1×2,000
-    const byName = Object.fromEntries(sub!.selections.map((x) => [x.name.replace(`${MARKER} `, ''), x.cost]));
-    expect(byName).toEqual({ 'floor tile': 5250, 'zero variance': 5000, 'cheaper tile': 1000, 'H cheaper vanity': 2000 });
+    const byName = Object.fromEntries(
+      sub!.selections.map((x) => [x.name.replace(`${MARKER} `, ''), x.cost])
+    );
+    expect(byName).toEqual({
+      'floor tile': 5250,
+      'zero variance': 5000,
+      'cheaper tile': 1000,
+      'H cheaper vanity': 2000,
+    });
     expect(sub!.selections.map((x) => x.id)).not.toContain(suppliedSelId);
     expect(sub!.selectionTotal).toBe(13250);
     expect(sub!.variance).toBe(8250);
@@ -1028,14 +1380,26 @@ describe('S175-S5 G — the BUDGET SUBCATEGORY (§5.4): derived in budget.ts, no
     expect(rollup.totalBudgeted).toBe(15250);
 
     // And NOTHING was written: the allowance row itself is unchanged.
-    const { data: stored } = await admin.from('project_budget_amounts').select('budgeted_amount').eq('budget_item_id', allowanceItemId).single();
+    const { data: stored } = await admin
+      .from('project_budget_amounts')
+      .select('budgeted_amount')
+      .eq('budget_item_id', allowanceItemId)
+      .single();
     expect(Number(stored!.budgeted_amount)).toBe(5000);
-    expect(await admin.from('project_budget_items').select('id', { count: 'exact', head: true }).eq('project_id', projectId).then((r) => r.count)).toBe(2);
+    expect(
+      await admin
+        .from('project_budget_items')
+        .select('id', { count: 'exact', head: true })
+        .eq('project_id', projectId)
+        .then((r) => r.count)
+    ).toBe(2);
   });
 
   it('G2 — the cost-plus control re-budgets its allowance the same way (the subcategory is about cost, not billing)', async () => {
     const rollup = await getBudgetRollup(cpProjectId);
-    const allowance = rollup.instruments.flatMap((i) => i.groups.flatMap((g) => g.items)).find((i) => i.id === cpAllowanceItemId)!;
+    const allowance = rollup.instruments
+      .flatMap((i) => i.groups.flatMap((g) => g.items))
+      .find((i) => i.id === cpAllowanceItemId)!;
     expect(allowance.selection_subcategory).toEqual({
       selections: [{ id: cpSelId, name: `${MARKER} cp floor tile`, cost: 2000 }],
       selectionTotal: 2000,

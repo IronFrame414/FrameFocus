@@ -198,9 +198,44 @@ export async function storeSelectionSpecPdf(
     return { fileId: null, buffer, data, error: `File insert failed: ${insertError.message}` };
   }
 
+  // ⚠️ THE REMOVE'S ERROR IS READ, NOT DISCARDED [S107].
+  //
+  // This loop used to be `await admin.storage.from(BUCKET).remove([...])` with
+  // no error check, and the row delete immediately after. That made a FAILED
+  // remove indistinguishable from a successful one: the `files` row vanished
+  // either way, so every listing agreed the sheet had been replaced while the
+  // old blob stayed in the bucket — invisible, and paid for forever.
+  //
+  // This is the third instance of the same pattern in this repo: the S104
+  // Purchase orphan, and the live guard's null deref that turned "Invalid API
+  // key" into "no rows". A discarded error does not make a failure quiet, it
+  // makes it wear the wrong name.
+  //
+  // The remove is NOT made fatal. The replace has already succeeded by this
+  // point — the new object is up and the new row is inserted — and failing the
+  // caller now would report a successful regeneration as an error. The orphan
+  // is logged with the path so it is recoverable, and the row delete still
+  // proceeds so the listing stays correct.
   for (const old of previous ?? []) {
-    await admin.storage.from(BUCKET).remove([old.file_path]);
-    await admin.from('files').delete().eq('id', old.id);
+    const { data: removed, error: removeError } = await admin.storage
+      .from(BUCKET)
+      .remove([old.file_path]);
+    // ⚠️ AN EMPTY `data` IS A FAILED REMOVE WITH NO ERROR. Supabase's remove()
+    // reports success for a key that matched nothing, so `error === null` is
+    // NOT evidence the object is gone — only a non-empty `data` is.
+    if (removeError || !removed?.length) {
+      console.error(
+        `[selection-spec-pdf] ORPHANED BLOB: remove() deleted ${removed?.length ?? 0} object(s) ` +
+          `for key "${old.file_path}" (bucket ${BUCKET}, files.id ${old.id}); ` +
+          `error=${removeError ? removeError.message : 'none'}`
+      );
+    }
+    const { error: rowError } = await admin.from('files').delete().eq('id', old.id);
+    if (rowError) {
+      console.error(
+        `[selection-spec-pdf] stale files row ${old.id} would not delete: ${rowError.message}`
+      );
+    }
   }
 
   return { fileId: fileRow.id, buffer, data, error: null };

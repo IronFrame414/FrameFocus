@@ -31,13 +31,14 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { admin, assertRebuildTest, sessionFor } from './live-session';
+import { admin, assertRebuildTest, paymentAccountFor, sessionFor } from './live-session';
 
 const MARKER = 'S151RATE';
 const OWNER_EMAIL = 'josh+test50@worthprop.com';
 
 let owner: SupabaseClient;
 let companyId: string;
+let paymentAccountId: string;
 let subMemberId: string;
 let contactId: string;
 let projectId: string;
@@ -79,10 +80,13 @@ async function stages(): Promise<{ id: string; stage_label: string; amount: numb
  * tie only makes the wrong answer a stable wrong answer. The fix is to stop
  * asking position to carry meaning it never had.
  */
-async function stageByLabel(n: 1 | 2): Promise<{ id: string; stage_label: string; amount: number }> {
+async function stageByLabel(
+  n: 1 | 2
+): Promise<{ id: string; stage_label: string; amount: number }> {
   const rows = await stages();
   const hit = rows.find((s) => s.stage_label.endsWith(`stage ${n}`));
-  if (!hit) throw new Error(`stage ${n} not found among: ${rows.map((r) => r.stage_label).join(', ')}`);
+  if (!hit)
+    throw new Error(`stage ${n} not found among: ${rows.map((r) => r.stage_label).join(', ')}`);
   return hit;
 }
 
@@ -119,62 +123,96 @@ beforeAll(async () => {
   await sweep('before');
 
   const { data: company } = await admin
-    .from('companies').select('id').eq('name', 'Sabal Point Construction').single();
+    .from('companies')
+    .select('id')
+    .eq('name', 'Sabal Point Construction')
+    .single();
   companyId = company!.id;
+  // M-L (20261450000000): record_expense_payment refuses a NULL account when
+  // the company has accounts to pick from and a QuickBooks realm.
+  paymentAccountId = await paymentAccountFor(companyId);
 
   // A subcontractor member to hang the contract on. `.limit(1)` is ORDERED —
   // the class context100 names three times, and which one we get must not be
   // heap order.
   const { data: sub } = await admin
-    .from('company_members').select('id')
-    .eq('company_id', companyId).eq('member_type', 'subcontractor')
-    .order('id', { ascending: true }).limit(1).single();
+    .from('company_members')
+    .select('id')
+    .eq('company_id', companyId)
+    .eq('member_type', 'subcontractor')
+    .order('id', { ascending: true })
+    .limit(1)
+    .single();
   subMemberId = sub!.id;
 
   const { data: contact, error: cErr } = await admin
     .from('contacts')
     .insert({
-      company_id: companyId, contact_type: 'client',
-      first_name: MARKER, last_name: 'Client',
+      company_id: companyId,
+      contact_type: 'client',
+      first_name: MARKER,
+      last_name: 'Client',
       email: `${MARKER.toLowerCase()}@example.invalid`,
     })
-    .select('id').single();
+    .select('id')
+    .single();
   must('contact', cErr);
   contactId = contact!.id;
 
   const { data: counters } = await admin
     .from('companies')
-    .select('estimate_number_sequence, project_internal_sequence').eq('id', companyId).single();
+    .select('estimate_number_sequence, project_internal_sequence')
+    .eq('id', companyId)
+    .single();
   const seq = counters!.estimate_number_sequence + 1;
   const internal = counters!.project_internal_sequence + 1;
 
   const { data: project, error: pErr } = await admin
     .from('projects')
     .insert({
-      company_id: companyId, name: `${MARKER} project`, contact_id: contactId,
+      company_id: companyId,
+      name: `${MARKER} project`,
+      contact_id: contactId,
       project_type: 'fixed_price',
       // Deliberately NULL: this harness sets the contract's retainage
       // explicitly, so the pass-through trigger (20260814000000) must stay out
       // of it. A project rate here would seed a shape we did not choose.
       retainage_percent: null,
-      project_number: `PRJ-${String(seq).padStart(3, '0')}`, project_internal_seq: internal,
+      project_number: `PRJ-${String(seq).padStart(3, '0')}`,
+      project_internal_seq: internal,
     })
-    .select('id').single();
+    .select('id')
+    .single();
   must('project', pErr);
   projectId = project!.id;
 
-  must('counters', (await admin.from('companies').update({
-    estimate_number_sequence: seq, project_internal_sequence: internal,
-  }).eq('id', companyId)).error);
+  must(
+    'counters',
+    (
+      await admin
+        .from('companies')
+        .update({
+          estimate_number_sequence: seq,
+          project_internal_sequence: internal,
+        })
+        .eq('id', companyId)
+    ).error
+  );
 
   const { data: contract, error: kErr } = await admin
     .from('subcontractor_contracts')
     .insert({
-      company_id: companyId, project_id: projectId, member_id: subMemberId,
-      scope_of_work: `${MARKER} scope`, contract_value: 20000, status: 'draft',
-      retainage_shape: 'percent_across', retainage_percent: 10,
+      company_id: companyId,
+      project_id: projectId,
+      member_id: subMemberId,
+      scope_of_work: `${MARKER} scope`,
+      contract_value: 20000,
+      status: 'draft',
+      retainage_shape: 'percent_across',
+      retainage_percent: 10,
     })
-    .select('id').single();
+    .select('id')
+    .single();
   must('sub contract', kErr);
   contractId = contract!.id;
 
@@ -198,10 +236,15 @@ beforeAll(async () => {
   expect(stageRows.length, 'fixture must create exactly two stages').toBe(2);
   for (const s of stageRows) {
     expenseIds.push(s.id);
-    must(`approve ${s.stage_label}`, (await admin
-      .from('expenses')
-      .update({ status: 'approved', approved_at: new Date().toISOString() })
-      .eq('id', s.id)).error);
+    must(
+      `approve ${s.stage_label}`,
+      (
+        await admin
+          .from('expenses')
+          .update({ status: 'approved', approved_at: new Date().toISOString() })
+          .eq('id', s.id)
+      ).error
+    );
   }
 }, 240_000);
 
@@ -224,45 +267,49 @@ async function sweep(label: string): Promise<void> {
     if (error) console.warn(`[${MARKER} sweep:${label}] ${what}: ${error.message}`);
   };
 
-  const { data: projects } = await admin
-    .from('projects').select('id').like('name', `${MARKER}%`);
+  const { data: projects } = await admin.from('projects').select('id').like('name', `${MARKER}%`);
   const projectIds = ((projects ?? []) as { id: string }[]).map((p) => p.id);
 
   if (projectIds.length) {
-    const { data: exps } = await admin
-      .from('expenses').select('id').in('project_id', projectIds);
+    const { data: exps } = await admin.from('expenses').select('id').in('project_id', projectIds);
     const expIds = ((exps ?? []) as { id: string }[]).map((e) => e.id);
     if (expIds.length) {
-      warn('expense_payments', (await admin
-        .from('expense_payments').delete().in('expense_id', expIds)).error);
-      warn('expense_allocations', (await admin
-        .from('expense_allocations').delete().in('expense_id', expIds)).error);
+      warn(
+        'expense_payments',
+        (await admin.from('expense_payments').delete().in('expense_id', expIds)).error
+      );
+      warn(
+        'expense_allocations',
+        (await admin.from('expense_allocations').delete().in('expense_id', expIds)).error
+      );
       warn('expenses', (await admin.from('expenses').delete().in('id', expIds)).error);
     }
-    warn('subcontractor_contracts', (await admin
-      .from('subcontractor_contracts').delete().in('project_id', projectIds)).error);
+    warn(
+      'subcontractor_contracts',
+      (await admin.from('subcontractor_contracts').delete().in('project_id', projectIds)).error
+    );
     // ⚠️ `project_assignments` is ON DELETE NO ACTION and a row appears for every
     // project, so it blocks the parent delete with a 23503. This is what leaked
     // seven projects before the sweep reported anything: the FK error WAS
     // returned, but console output from a vitest hook does not reach the run
     // log, so "no warning" read as "no error". Corroborate a teardown with a
     // row count, never with silence.
-    warn('project_assignments', (await admin
-      .from('project_assignments').delete().in('project_id', projectIds)).error);
-    const delProjects = await admin
-      .from('projects').delete().in('id', projectIds).select('id');
+    warn(
+      'project_assignments',
+      (await admin.from('project_assignments').delete().in('project_id', projectIds)).error
+    );
+    const delProjects = await admin.from('projects').delete().in('id', projectIds).select('id');
     warn('projects', delProjects.error);
     if (!delProjects.error && (delProjects.data ?? []).length !== projectIds.length) {
       console.warn(
         `[${MARKER} sweep:${label}] projects: asked to remove ${projectIds.length}, ` +
-        `removed ${(delProjects.data ?? []).length} — NO ERROR REPORTED. ` +
-        `A zero-row delete is reporting success.`
+          `removed ${(delProjects.data ?? []).length} — NO ERROR REPORTED. ` +
+          `A zero-row delete is reporting success.`
       );
     }
   }
 
-  const delContacts = await admin
-    .from('contacts').delete().eq('first_name', MARKER).select('id');
+  const delContacts = await admin.from('contacts').delete().eq('first_name', MARKER).select('id');
   warn('contacts', delContacts.error);
   if (!delContacts.error) {
     console.warn(`[${MARKER} sweep:${label}] contacts removed: ${(delContacts.data ?? []).length}`);
@@ -281,8 +328,10 @@ describe('S151-B1 — the applied rate is recorded and never restated', () => {
       .from('expense_payments')
       .select('retainage_percent_applied')
       .limit(1);
-    expect(error, 'retainage_percent_applied is missing — has 20261003000000 been pushed?')
-      .toBeNull();
+    expect(
+      error,
+      'retainage_percent_applied is missing — has 20261003000000 been pushed?'
+    ).toBeNull();
     expect(Array.isArray(data)).toBe(true);
   });
 
@@ -292,6 +341,7 @@ describe('S151-B1 — the applied rate is recorded and never restated', () => {
       p_expense_id: stage1.id,
       p_paid_date: '2026-08-19',
       p_amount: 10000,
+      p_payment_account_id: paymentAccountId,
     });
     must('payment 1', error);
 
@@ -311,16 +361,21 @@ describe('S151-B1 — the applied rate is recorded and never restated', () => {
     // WITHOUT one ("unpaid stages are replaced, not edited"). Sending every
     // stage with its id is refused outright, which is how this was found.
     const before = await stages();
-    must('revise', (await owner.rpc('revise_sub_contract_schedule', {
-      p_sub_contract_id: contractId,
-      p_stages: before.map((s) => {
-        const stage = { label: s.stage_label, amount: Number(s.amount) };
-        // Stage 1 is the one test 2 paid — BY LABEL, which is now guaranteed.
-        return s.stage_label.endsWith('stage 1') ? { id: s.id, ...stage } : stage;
-      }),
-      p_retainage_shape: 'percent_across',
-      p_retainage_percent: 5,
-    })).error);
+    must(
+      'revise',
+      (
+        await owner.rpc('revise_sub_contract_schedule', {
+          p_sub_contract_id: contractId,
+          p_stages: before.map((s) => {
+            const stage = { label: s.stage_label, amount: Number(s.amount) };
+            // Stage 1 is the one test 2 paid — BY LABEL, which is now guaranteed.
+            return s.stage_label.endsWith('stage 1') ? { id: s.id, ...stage } : stage;
+          }),
+          p_retainage_shape: 'percent_across',
+          p_retainage_percent: 5,
+        })
+      ).error
+    );
 
     expect((await stages()).length, 'revise must leave two stages').toBe(2);
     // Re-read by label: stage 2 is a NEW row after the replace, so the id
@@ -328,14 +383,22 @@ describe('S151-B1 — the applied rate is recorded and never restated', () => {
     const stage2 = await stageByLabel(2);
     expenseIds.push(stage2.id);
     // A replaced stage is born pending; record_expense_payment pays only approved.
-    must('approve the replacement stage 2', (await admin
-      .from('expenses').update({ status: 'approved' }).eq('id', stage2.id)).error);
+    must(
+      'approve the replacement stage 2',
+      (await admin.from('expenses').update({ status: 'approved' }).eq('id', stage2.id)).error
+    );
 
-    must('payment 2', (await owner.rpc('record_expense_payment', {
-      p_expense_id: stage2.id,
-      p_paid_date: '2026-08-20',
-      p_amount: 10000,
-    })).error);
+    must(
+      'payment 2',
+      (
+        await owner.rpc('record_expense_payment', {
+          p_expense_id: stage2.id,
+          p_paid_date: '2026-08-20',
+          p_amount: 10000,
+          p_payment_account_id: paymentAccountId,
+        })
+      ).error
+    );
 
     const rows = await payments();
     expect(rows.length).toBe(2);
@@ -351,8 +414,11 @@ describe('S151-B1 — the applied rate is recorded and never restated', () => {
     // neither 10% nor 5%. This is exactly the total the display must not
     // attribute to a single rate (Part A).
     const { data: accrual } = await admin
-      .from('expenses').select('amount')
-      .eq('sub_contract_id', contractId).eq('is_retainage', true).eq('is_deleted', false)
+      .from('expenses')
+      .select('amount')
+      .eq('sub_contract_id', contractId)
+      .eq('is_retainage', true)
+      .eq('is_deleted', false)
       .single();
     expect(Number(accrual!.amount)).toBe(1500);
   });
@@ -391,10 +457,14 @@ describe('S151-B1 — the applied rate is recorded and never restated', () => {
     // that already froze retainage_withheld, extended to the rate.
     const stageIds = (await stages()).map((s) => s.id);
     const { data: row } = await admin
-      .from('expense_payments').select('id')
-      .in('expense_id', stageIds).eq('is_deleted', false)
-      .order('created_at', { ascending: true }).order('id', { ascending: true })
-      .limit(1).single();
+      .from('expense_payments')
+      .select('id')
+      .in('expense_id', stageIds)
+      .eq('is_deleted', false)
+      .order('created_at', { ascending: true })
+      .order('id', { ascending: true })
+      .limit(1)
+      .single();
 
     const { error } = await owner
       .from('expense_payments')

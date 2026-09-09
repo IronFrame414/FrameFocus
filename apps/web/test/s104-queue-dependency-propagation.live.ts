@@ -31,6 +31,28 @@ const made: string[] = [];
 
 /** A queue row, created directly. `entity_id` is a throwaway uuid — nothing in
  *  `claimDue()` dereferences it, and the handlers are never reached here. */
+
+// ============================================================================
+// ⚠️ FIXTURE ROWS ARE BACKDATED SO THE BATCH ALWAYS REACHES THEM [S107].
+// ============================================================================
+// `claimDue()` orders by `created_at` ASC and takes `limit` rows. A tenant with
+// more eligible rows than the limit therefore starves every NEW row: the test's
+// own row sorts last and is never examined, so the propagation that runs INSIDE
+// claimDue never runs on it.
+//
+// Measured at S107: 102 eligible rows against a limit of 25, and the claim came
+// back holding exactly 25 — none of them the test's. It read as a broken claim
+// query. It was a full queue.
+//
+// A fixed 2020 timestamp puts this file's rows at the FRONT of the FIFO
+// regardless of what else is queued, which is what makes these assertions
+// backlog-proof. It also makes the NEGATIVE assertions (`not.toContain`)
+// meaningful: a row that was never in the window would satisfy them vacuously.
+//
+// ⚠️ NOT a bigger `limit` — that restores green by making the batch larger than
+// the mess, and the next hundred rows silently re-break it.
+const FIXTURE_CREATED_AT = '2020-01-01T00:00:00.000Z';
+
 async function makeRow(fields: Record<string, unknown>): Promise<string> {
   const { data, error } = await admin
     .from('qb_sync_queue')
@@ -39,6 +61,7 @@ async function makeRow(fields: Record<string, unknown>): Promise<string> {
       realm_id: 'S104-TEST',
       entity_id: crypto.randomUUID(),
       status: 'queued',
+      created_at: FIXTURE_CREATED_AT,
       ...fields,
     })
     .select('id')
