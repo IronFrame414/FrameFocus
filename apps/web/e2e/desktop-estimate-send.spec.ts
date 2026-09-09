@@ -39,10 +39,7 @@ async function sweep(): Promise<string[]> {
     );
     check('estimates', (await admin.from('estimates').delete().in('id', ids)).error);
   }
-  check(
-    'contacts',
-    (await admin.from('contacts').delete().like('first_name', `${MARKER}%`)).error
-  );
+  check('contacts', (await admin.from('contacts').delete().like('first_name', `${MARKER}%`)).error);
   return errors;
 }
 
@@ -91,16 +88,40 @@ test.afterAll(async () => {
 });
 
 test.describe('S173 — the builder offers a real Send, not just the status flip', () => {
-  test('Draft, owner: "Send to Client" is present and opens the send modal addressed to the contact', async ({
+  // ⚠️ REWRITTEN AT S107 — THE HEADER BUTTON IS GONE ON PURPOSE.
+  //
+  // This asserted `est-send`, the header "Send to Client" button, which
+  // `00eb9a6` REMOVED deliberately: "send lives in Review & Send" [S103].
+  // `est-send` is absent from the app, so the test had been asserting a
+  // deliberately deleted affordance and had been red in CI since #290
+  // (2026-09-05). The button is NOT restored.
+  //
+  // S173's claim survives the move intact — "the builder offers a real Send,
+  // not just the status flip" — because the real send is still reachable from
+  // the builder, one step deeper:
+  //
+  //   est-review-send  ->  Review & Send sheet  ->  "Send to client"
+  //                    ->  openSendModal()      ->  the Send Proposal modal
+  //
+  // So the same three things are asserted as before: a real send affordance
+  // exists for a draft, the status flip (`est-mark-sent`) is still a SEPARATE
+  // control, and the send is addressed to the contact. Only the path changed.
+  test('Draft, owner: the builder reaches a real Send, addressed to the contact', async ({
     page,
   }) => {
     await signIn(page, OWNER);
     await page.goto(`/dashboard/estimates/${estimateId}`);
-    // statusActionButton() renders in the header AND the Details status card,
-    // so the testid appears twice — assert on the first.
-    await expect(page.getByTestId('est-send').first()).toBeVisible();
+
+    // The real send affordance, and the status flip beside it — still two
+    // different controls, which is the half of S173 that the move could have
+    // quietly collapsed.
+    await expect(page.getByTestId('est-review-send').first()).toBeVisible();
     await expect(page.getByTestId('est-mark-sent').first()).toBeVisible();
-    await page.getByTestId('est-send').first().click();
+
+    await page.getByTestId('est-review-send').first().click();
+    // The sheet, then the send it hands off to.
+    await page.getByRole('button', { name: 'Send to client' }).click();
+
     await expect(page.getByRole('heading', { name: 'Send Proposal' })).toBeVisible();
     await expect(page.getByText(CONTACT_EMAIL)).toBeVisible();
     // Close without sending — delivery is the route's covered job, not this file's.
