@@ -21,7 +21,17 @@
  * RUN: cd apps/web && npx vitest run --config test/live.vitest.config.ts s97ct-remaining-to-bill
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { admin, assertRebuildTest, disposeChangeOrdersError, sweepChangeOrders, upsertContact } from './live-session';
+import {
+  admin,
+  assertRebuildTest,
+  deleteProjects,
+  dependentsOfContact,
+  disposeChangeOrdersError,
+  disposeProjectChangeOrdersError,
+  sweepChangeOrders,
+  sweepProjectsNamed,
+  upsertContact,
+} from './live-session';
 
 const MARKER = 'S97REMAIN';
 
@@ -52,7 +62,10 @@ const money = (n: number) => Math.round(n * 100) / 100;
  */
 async function remainingToBill(): Promise<number> {
   const { data: financials } = await admin
-    .from('project_financials').select('contract_value').eq('project_id', projectId).maybeSingle();
+    .from('project_financials')
+    .select('contract_value')
+    .eq('project_id', projectId)
+    .maybeSingle();
   const original = Number(financials!.contract_value);
 
   const { data: invoices } = await admin
@@ -110,34 +123,70 @@ async function invoice(title: string, type: 'standard' | 'deposit'): Promise<str
   const { data, error } = await admin
     .from('invoices')
     .insert({
-      company_id: companyId, project_id: projectId, author_member_id: ownerMemberId,
-      title: `${MARKER} ${title}`, invoice_type: type, presentation_level: 'lump_sum',
+      company_id: companyId,
+      project_id: projectId,
+      author_member_id: ownerMemberId,
+      title: `${MARKER} ${title}`,
+      invoice_type: type,
+      presentation_level: 'lump_sum',
     })
-    .select('id').single();
+    .select('id')
+    .single();
   must(`invoice ${title}`, error);
   return data!.id;
 }
 
 async function line(
-  invoiceId: string, description: string, amount: number,
+  invoiceId: string,
+  description: string,
+  amount: number,
   opts: { estimateId?: string; changeOrderId?: string } = {}
 ): Promise<void> {
-  must(`line ${description}`, (await admin.from('invoice_lines').insert({
-    company_id: companyId, invoice_id: invoiceId, line_type: 'fixed',
-    description, category: 'other', derived_amount: amount, billed_amount: amount,
-    source_estimate_id: opts.estimateId ?? null,
-    source_change_order_id: opts.changeOrderId ?? null,
-    sort_order: 0,
-  })).error);
-  must('totals', (await admin.from('invoices').update({
-    derived_total: amount, billed_total: amount, amount_receivable: amount,
-  }).eq('id', invoiceId)).error);
+  must(
+    `line ${description}`,
+    (
+      await admin.from('invoice_lines').insert({
+        company_id: companyId,
+        invoice_id: invoiceId,
+        line_type: 'fixed',
+        description,
+        category: 'other',
+        derived_amount: amount,
+        billed_amount: amount,
+        source_estimate_id: opts.estimateId ?? null,
+        source_change_order_id: opts.changeOrderId ?? null,
+        sort_order: 0,
+      })
+    ).error
+  );
+  must(
+    'totals',
+    (
+      await admin
+        .from('invoices')
+        .update({
+          derived_total: amount,
+          billed_total: amount,
+          amount_receivable: amount,
+        })
+        .eq('id', invoiceId)
+    ).error
+  );
 }
 
 async function send(invoiceId: string): Promise<void> {
-  must('send', (await admin.from('invoices').update({
-    status: 'sent', sent_at: new Date().toISOString(),
-  }).eq('id', invoiceId)).error);
+  must(
+    'send',
+    (
+      await admin
+        .from('invoices')
+        .update({
+          status: 'sent',
+          sent_at: new Date().toISOString(),
+        })
+        .eq('id', invoiceId)
+    ).error
+  );
 }
 
 beforeAll(async () => {
@@ -150,14 +199,28 @@ beforeAll(async () => {
   // property that was actually missing and the one a single green run cannot
   // demonstrate.
   await sweepChangeOrders(MARKER);
+  // ⚠️ AND THE PROJECTS, BY NAME. A run killed before it captured its ids
+  // leaves a project that no id- or contact-scoped cleanup can ever reach.
+  // This is what makes the suite runnable from a dirty database — the
+  // property a single green run does not demonstrate.
+  await sweepProjectsNamed(MARKER);
 
   const { data: company } = await admin
-    .from('companies').select('id').eq('name', 'Sabal Point Construction').single();
+    .from('companies')
+    .select('id')
+    .eq('name', 'Sabal Point Construction')
+    .single();
   companyId = company!.id;
   const { data: ownerProfile } = await admin
-    .from('profiles').select('id').eq('email', 'josh+test50@worthprop.com').single();
+    .from('profiles')
+    .select('id')
+    .eq('email', 'josh+test50@worthprop.com')
+    .single();
   const { data: member } = await admin
-    .from('company_members').select('id').eq('profile_id', ownerProfile!.id).single();
+    .from('company_members')
+    .select('id')
+    .eq('profile_id', ownerProfile!.id)
+    .single();
   ownerMemberId = member!.id;
 
   const contact = await upsertContact({
@@ -171,47 +234,80 @@ beforeAll(async () => {
 
   const { data: counters } = await admin
     .from('companies')
-    .select('estimate_number_sequence, project_internal_sequence').eq('id', companyId).single();
+    .select('estimate_number_sequence, project_internal_sequence')
+    .eq('id', companyId)
+    .single();
   const seq = counters!.estimate_number_sequence + 1;
   const internal = counters!.project_internal_sequence + 1;
 
   const { data: estimate, error: eErr } = await admin
     .from('estimates')
     .insert({
-      company_id: companyId, contact_id: contactId, name: `${MARKER} — contract`,
+      company_id: companyId,
+      contact_id: contactId,
+      name: `${MARKER} — contract`,
       estimate_number: `EST-${String(seq).padStart(4, '0')}`,
-      status: 'accepted', contract_type: 'fixed_price', created_by_role: 'owner',
+      status: 'accepted',
+      contract_type: 'fixed_price',
+      created_by_role: 'owner',
     })
-    .select('id').single();
+    .select('id')
+    .single();
   must('estimate', eErr);
   estimateId = estimate!.id;
 
   const { data: project, error: pErr } = await admin
     .from('projects')
     .insert({
-      company_id: companyId, name: `${MARKER} — remaining to bill`, contact_id: contactId,
-      project_type: 'fixed_price', source_estimate_id: estimateId,
-      project_number: `PRJ-${String(seq).padStart(3, '0')}`, project_internal_seq: internal,
+      company_id: companyId,
+      name: `${MARKER} — remaining to bill`,
+      contact_id: contactId,
+      project_type: 'fixed_price',
+      source_estimate_id: estimateId,
+      project_number: `PRJ-${String(seq).padStart(3, '0')}`,
+      project_internal_seq: internal,
     })
-    .select('id').single();
+    .select('id')
+    .single();
   must('project', pErr);
   projectId = project!.id;
 
-  must('financials', (await admin.from('project_financials').insert({
-    company_id: companyId, project_id: projectId, contract_value: 50000,
-  })).error);
-  must('counters', (await admin.from('companies').update({
-    estimate_number_sequence: seq, project_internal_sequence: internal,
-  }).eq('id', companyId)).error);
+  must(
+    'financials',
+    (
+      await admin.from('project_financials').insert({
+        company_id: companyId,
+        project_id: projectId,
+        contract_value: 50000,
+      })
+    ).error
+  );
+  must(
+    'counters',
+    (
+      await admin
+        .from('companies')
+        .update({
+          estimate_number_sequence: seq,
+          project_internal_sequence: internal,
+        })
+        .eq('id', companyId)
+    ).error
+  );
 
   const { data: co, error: coErr } = await admin
     .from('change_orders')
     .insert({
-      company_id: companyId, project_id: projectId, author_member_id: ownerMemberId,
-      co_number: `${MARKER}-TM`, title: 'T&M scope',
-      co_type: 'time_and_materials', status: 'signed',
+      company_id: companyId,
+      project_id: projectId,
+      author_member_id: ownerMemberId,
+      co_number: `${MARKER}-TM`,
+      title: 'T&M scope',
+      co_type: 'time_and_materials',
+      status: 'signed',
     })
-    .select('id').single();
+    .select('id')
+    .single();
   must('change order', coErr);
   coTmId = co!.id;
 }, 240_000);
@@ -237,10 +333,19 @@ describe('S97CT-REMAIN — 1/2. a sent deposit reduces remaining to bill', () =>
 
 describe('S97CT-REMAIN — 3. VOID restores it, with no cleanup step', () => {
   it('voiding the deposit returns the figure to $50,000', async () => {
-    must('void A', (await admin.from('invoices').update({
-      status: 'voided', voided_at: new Date().toISOString(),
-      void_reason: `${MARKER} test void`,
-    }).eq('id', depositAId)).error);
+    must(
+      'void A',
+      (
+        await admin
+          .from('invoices')
+          .update({
+            status: 'voided',
+            voided_at: new Date().toISOString(),
+            void_reason: `${MARKER} test void`,
+          })
+          .eq('id', depositAId)
+      ).error
+    );
 
     expect(await remainingToBill()).toBe(50000);
 
@@ -248,7 +353,8 @@ describe('S97CT-REMAIN — 3. VOID restores it, with no cleanup step', () => {
     // figure moved because the derivation stopped matching, which is the whole
     // reason it is derived and not stored.
     const { count } = await admin
-      .from('invoice_lines').select('id', { count: 'exact', head: true })
+      .from('invoice_lines')
+      .select('id', { count: 'exact', head: true })
       .eq('invoice_id', depositAId);
     expect(count).toBe(1);
   });
@@ -256,8 +362,7 @@ describe('S97CT-REMAIN — 3. VOID restores it, with no cleanup step', () => {
   it('and the void is PERMANENT — the system refuses to resurrect it', async () => {
     // Worth pinning: this is why the refund case below uses a SECOND deposit
     // rather than un-voiding the first. §9 via the immutability trigger.
-    const { error } = await admin
-      .from('invoices').update({ status: 'sent' }).eq('id', depositAId);
+    const { error } = await admin.from('invoices').update({ status: 'sent' }).eq('id', depositAId);
     expect(error).not.toBeNull();
     expect(error!.message).toContain('frozen forever');
   });
@@ -275,27 +380,45 @@ describe('S97CT-REMAIN — 4/5. REFUND restores it, and never twice', () => {
     const { data: payment, error: payErr } = await admin
       .from('client_payments')
       .insert({
-        company_id: companyId, contact_id: contactId,
-        payment_date: '2026-07-01', amount: 5000, method: 'check',
+        company_id: companyId,
+        contact_id: contactId,
+        payment_date: '2026-07-01',
+        amount: 5000,
+        method: 'check',
       })
-      .select('id').single();
+      .select('id')
+      .single();
     must('payment', payErr);
     paymentId = payment!.id;
 
-    must('application', (await admin.from('client_payment_applications').insert({
-      company_id: companyId, payment_id: paymentId,
-      invoice_id: depositBId, amount: 5000,
-    })).error);
+    must(
+      'application',
+      (
+        await admin.from('client_payment_applications').insert({
+          company_id: companyId,
+          payment_id: paymentId,
+          invoice_id: depositBId,
+          amount: 5000,
+        })
+      ).error
+    );
 
     const { data: refund, error: refErr } = await admin
       .from('client_refunds')
       .insert({
-        company_id: companyId, contact_id: contactId, project_id: projectId,
-        source_payment_id: paymentId, refund_date: '2026-07-15', amount: 5000,
-        method: 'check', reason: `${MARKER} project did not proceed`,
-        source: 'deposit', status: 'issued',
+        company_id: companyId,
+        contact_id: contactId,
+        project_id: projectId,
+        source_payment_id: paymentId,
+        refund_date: '2026-07-15',
+        amount: 5000,
+        method: 'check',
+        reason: `${MARKER} project did not proceed`,
+        source: 'deposit',
+        status: 'issued',
       })
-      .select('id').single();
+      .select('id')
+      .single();
     must('refund', refErr);
     refundId = refund!.id;
 
@@ -303,10 +426,19 @@ describe('S97CT-REMAIN — 4/5. REFUND restores it, and never twice', () => {
   });
 
   it('VOIDED **and** refunded is still $50,000 — never $55,000', async () => {
-    must('void B', (await admin.from('invoices').update({
-      status: 'voided', voided_at: new Date().toISOString(),
-      void_reason: `${MARKER} void after refund`,
-    }).eq('id', depositBId)).error);
+    must(
+      'void B',
+      (
+        await admin
+          .from('invoices')
+          .update({
+            status: 'voided',
+            voided_at: new Date().toISOString(),
+            void_reason: `${MARKER} void after refund`,
+          })
+          .eq('id', depositBId)
+      ).error
+    );
 
     // The void already removed the billing; the refund must NOT subtract again.
     // Scoping refunds through the payment's application to a STILL-ISSUED
@@ -360,9 +492,13 @@ afterAll(async () => {
     if (error) errors.push(`${label}: ${error.message}`);
   };
 
-  if (refundId) check('refund', (await admin.from('client_refunds').delete().eq('id', refundId)).error);
+  if (refundId)
+    check('refund', (await admin.from('client_refunds').delete().eq('id', refundId)).error);
   if (paymentId) {
-    check('applications', (await admin.from('client_payment_applications').delete().eq('payment_id', paymentId)).error);
+    check(
+      'applications',
+      (await admin.from('client_payment_applications').delete().eq('payment_id', paymentId)).error
+    );
     check('payment', (await admin.from('client_payments').delete().eq('id', paymentId)).error);
   }
   for (const id of [depositAId, depositBId, depositCId, tmDepositInvoiceId, draftInvoiceId]) {
@@ -377,16 +513,45 @@ afterAll(async () => {
     check('invoice', (await admin.from('invoices').delete().eq('id', id)).error);
   }
   if (coTmId) check('change order', await disposeChangeOrdersError([coTmId]));
-  if (projectId) {
-    check('financials', (await admin.from('project_financials').delete().eq('project_id', projectId)).error);
-    check('project', (await admin.from('projects').delete().eq('id', projectId)).error);
+  // Residue-aware: follow the CONTACT, not just this run's ids. The contact is
+  // reused across runs by design (upsertContact), so an interrupted run's
+  // project or estimate is what pins it. See `dependentsOfContact()`.
+  const dependents = contactId
+    ? await dependentsOfContact(contactId, [projectId, estimateId])
+    : {
+        projectIds: [projectId].filter(Boolean) as string[],
+        estimateIds: [estimateId].filter(Boolean) as string[],
+      };
+
+  for (const pid of dependents.projectIds) {
+    const { data: extra } = await admin.from('invoices').select('id').eq('project_id', pid);
+    for (const i of extra ?? [])
+      check('extra invoice', (await admin.from('invoices').delete().eq('id', i.id)).error);
+    check('residual change orders', await disposeProjectChangeOrdersError(pid));
+    check(
+      'financials',
+      (await admin.from('project_financials').delete().eq('project_id', pid)).error
+    );
+    // See the note in s97ct-estimate-lines' teardown: 28 tables pin a project.
+    try {
+      await deleteProjects(admin, [pid]);
+    } catch (e) {
+      check('project', { message: (e as Error).message });
+    }
   }
-  if (estimateId) check('estimate', (await admin.from('estimates').delete().eq('id', estimateId)).error);
-  if (contactId) check('contact', (await admin.from('contacts').delete().eq('id', contactId)).error);
+  for (const eid of dependents.estimateIds) {
+    check('estimate', (await admin.from('estimates').delete().eq('id', eid)).error);
+  }
+  if (contactId)
+    check('contact', (await admin.from('contacts').delete().eq('id', contactId)).error);
 
   const { count } = await admin
-    .from('projects').select('id', { count: 'exact', head: true }).like('name', `${MARKER}%`);
-  console.log(`\n[${MARKER} TEARDOWN] projects left: ${count}; errors: ${errors.length ? JSON.stringify(errors) : 'NONE'}`);
+    .from('projects')
+    .select('id', { count: 'exact', head: true })
+    .like('name', `${MARKER}%`);
+  console.log(
+    `\n[${MARKER} TEARDOWN] projects left: ${count}; errors: ${errors.length ? JSON.stringify(errors) : 'NONE'}`
+  );
   // ⚠️ [S168] THIS THROW IS THE POINT. The teardown has always collected
   // `errors` and only PRINTED them, so when the S168 delete boundary began
   // refusing this suite's signed change order the cleanup failed in silence,

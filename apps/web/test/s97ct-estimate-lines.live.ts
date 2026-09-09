@@ -20,7 +20,17 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { admin, assertRebuildTest, disposeChangeOrdersError, disposeProjectChangeOrdersError, sweepChangeOrders, upsertContact } from './live-session';
+import {
+  admin,
+  assertRebuildTest,
+  deleteProjects,
+  dependentsOfContact,
+  disposeChangeOrdersError,
+  disposeProjectChangeOrdersError,
+  sweepChangeOrders,
+  sweepProjectsNamed,
+  upsertContact,
+} from './live-session';
 import { loadEstimateLineBilling } from '@/lib/services/estimate-line-billing';
 import { presentInvoice, type PresentationLine } from '@framefocus/shared/utils/invoice-derivation';
 
@@ -48,17 +58,26 @@ const billing = () => loadEstimateLineBilling(admin as unknown as SupabaseClient
 /** §3 remaining-to-bill, in getContractBilling's shape. */
 async function remainingToBill(): Promise<number> {
   const { data: fin } = await admin
-    .from('project_financials').select('contract_value').eq('project_id', projectId).maybeSingle();
+    .from('project_financials')
+    .select('contract_value')
+    .eq('project_id', projectId)
+    .maybeSingle();
   const original = Number(fin!.contract_value);
   const { data: invoices } = await admin
-    .from('invoices').select('id, status').eq('project_id', projectId)
-    .eq('is_deleted', false).neq('status', 'voided');
+    .from('invoices')
+    .select('id, status')
+    .eq('project_id', projectId)
+    .eq('is_deleted', false)
+    .neq('status', 'voided');
   const issued = (invoices ?? [])
-    .filter((i) => i.status === 'sent' || i.status === 'paid').map((i) => i.id);
+    .filter((i) => i.status === 'sent' || i.status === 'paid')
+    .map((i) => i.id);
   if (issued.length === 0) return original;
   const { data: lines } = await admin
-    .from('invoice_lines').select('billed_amount')
-    .in('invoice_id', issued).eq('source_estimate_id', estimateId);
+    .from('invoice_lines')
+    .select('billed_amount')
+    .in('invoice_id', issued)
+    .eq('source_estimate_id', estimateId);
   return money(original - (lines ?? []).reduce((s, l) => s + Number(l.billed_amount), 0));
 }
 
@@ -66,10 +85,14 @@ async function invoice(title: string): Promise<string> {
   const { data, error } = await admin
     .from('invoices')
     .insert({
-      company_id: companyId, project_id: projectId, author_member_id: ownerMemberId,
-      title: `${MARKER} ${title}`, presentation_level: 'full_detail',
+      company_id: companyId,
+      project_id: projectId,
+      author_member_id: ownerMemberId,
+      title: `${MARKER} ${title}`,
+      presentation_level: 'full_detail',
     })
-    .select('id').single();
+    .select('id')
+    .single();
   must(`invoice ${title}`, error);
   invoiceIds.push(data!.id);
   return data!.id;
@@ -77,30 +100,58 @@ async function invoice(title: string): Promise<string> {
 
 /** A billed estimate line, exactly as billEstimateLines writes it. */
 async function billLine(
-  invoiceId: string, lineItemId: string, description: string,
-  category: string, amount: number, sortOrder = 0
+  invoiceId: string,
+  lineItemId: string,
+  description: string,
+  category: string,
+  amount: number,
+  sortOrder = 0
 ): Promise<{ message: string } | null> {
-  return (await admin.from('invoice_lines').insert({
-    company_id: companyId, invoice_id: invoiceId, line_type: 'fixed',
-    description, category, derived_amount: amount, billed_amount: amount,
-    source_estimate_id: estimateId, source_estimate_line_item_id: lineItemId,
-    sort_order: sortOrder,
-  })).error;
+  return (
+    await admin.from('invoice_lines').insert({
+      company_id: companyId,
+      invoice_id: invoiceId,
+      line_type: 'fixed',
+      description,
+      category,
+      derived_amount: amount,
+      billed_amount: amount,
+      source_estimate_id: estimateId,
+      source_estimate_line_item_id: lineItemId,
+      sort_order: sortOrder,
+    })
+  ).error;
 }
 
 /** A draw — contract instrument, no line item. */
 async function billDraw(invoiceId: string, label: string, amount: number, sortOrder = 100) {
-  return (await admin.from('invoice_lines').insert({
-    company_id: companyId, invoice_id: invoiceId, line_type: 'fixed',
-    description: label, derived_amount: amount, billed_amount: amount,
-    source_estimate_id: estimateId, sort_order: sortOrder,
-  })).error;
+  return (
+    await admin.from('invoice_lines').insert({
+      company_id: companyId,
+      invoice_id: invoiceId,
+      line_type: 'fixed',
+      description: label,
+      derived_amount: amount,
+      billed_amount: amount,
+      source_estimate_id: estimateId,
+      sort_order: sortOrder,
+    })
+  ).error;
 }
 
 const send = async (id: string) =>
-  must('send', (await admin.from('invoices').update({
-    status: 'sent', sent_at: new Date().toISOString(),
-  }).eq('id', id)).error);
+  must(
+    'send',
+    (
+      await admin
+        .from('invoices')
+        .update({
+          status: 'sent',
+          sent_at: new Date().toISOString(),
+        })
+        .eq('id', id)
+    ).error
+  );
 
 beforeAll(async () => {
   assertRebuildTest();
@@ -112,14 +163,28 @@ beforeAll(async () => {
   // property that was actually missing and the one a single green run cannot
   // demonstrate.
   await sweepChangeOrders(MARKER);
+  // ⚠️ AND THE PROJECTS, BY NAME. A run killed before it captured its ids
+  // leaves a project that no id- or contact-scoped cleanup can ever reach.
+  // This is what makes the suite runnable from a dirty database — the
+  // property a single green run does not demonstrate.
+  await sweepProjectsNamed(MARKER);
 
   const { data: company } = await admin
-    .from('companies').select('id').eq('name', 'Sabal Point Construction').single();
+    .from('companies')
+    .select('id')
+    .eq('name', 'Sabal Point Construction')
+    .single();
   companyId = company!.id;
   const { data: ownerProfile } = await admin
-    .from('profiles').select('id').eq('email', 'josh+test50@worthprop.com').single();
+    .from('profiles')
+    .select('id')
+    .eq('email', 'josh+test50@worthprop.com')
+    .single();
   const { data: member } = await admin
-    .from('company_members').select('id').eq('profile_id', ownerProfile!.id).single();
+    .from('company_members')
+    .select('id')
+    .eq('profile_id', ownerProfile!.id)
+    .single();
   ownerMemberId = member!.id;
 
   const contact = await upsertContact({
@@ -133,28 +198,44 @@ beforeAll(async () => {
 
   const { data: counters } = await admin
     .from('companies')
-    .select('estimate_number_sequence, project_internal_sequence').eq('id', companyId).single();
+    .select('estimate_number_sequence, project_internal_sequence')
+    .eq('id', companyId)
+    .single();
   let seq = counters!.estimate_number_sequence;
   let internal = counters!.project_internal_sequence;
 
   // ── the fixed-price contract: 3 line items totalling exactly 10,000 ──
-  seq += 1; internal += 1;
+  seq += 1;
+  internal += 1;
   const { data: estimate, error: eErr } = await admin
     .from('estimates')
     .insert({
-      company_id: companyId, contact_id: contactId, name: `${MARKER} — contract`,
+      company_id: companyId,
+      contact_id: contactId,
+      name: `${MARKER} — contract`,
       estimate_number: `EST-${String(seq).padStart(4, '0')}`,
-      status: 'accepted', contract_type: 'fixed_price', created_by_role: 'owner',
-      subtotal: 10000, grand_total: 10000, discount_total: 0,
+      status: 'accepted',
+      contract_type: 'fixed_price',
+      created_by_role: 'owner',
+      subtotal: 10000,
+      grand_total: 10000,
+      discount_total: 0,
     })
-    .select('id').single();
+    .select('id')
+    .single();
   must('estimate', eErr);
   estimateId = estimate!.id;
 
   const { data: category, error: catErr } = await admin
     .from('estimate_categories')
-    .insert({ company_id: companyId, estimate_id: estimateId, name: `${MARKER} Shell`, sort_order: 0 })
-    .select('id').single();
+    .insert({
+      company_id: companyId,
+      estimate_id: estimateId,
+      name: `${MARKER} Shell`,
+      sort_order: 0,
+    })
+    .select('id')
+    .single();
   must('category', catErr);
   categoryId = category!.id;
 
@@ -168,62 +249,116 @@ beforeAll(async () => {
     const { data: li, error: liErr } = await admin
       .from('estimate_line_items')
       .insert({
-        company_id: companyId, estimate_id: estimateId, category_id: categoryId,
-        name: `${MARKER} ${name}`, total_price: price, sort_order: order++,
+        company_id: companyId,
+        estimate_id: estimateId,
+        category_id: categoryId,
+        name: `${MARKER} ${name}`,
+        total_price: price,
+        sort_order: order++,
       })
-      .select('id').single();
+      .select('id')
+      .single();
     must(`line item ${key}`, liErr);
     item[key] = li!.id;
-    must(`row ${key}`, (await admin.from('estimate_line_rows').insert({
-      company_id: companyId, line_item_id: li!.id, row_type: rowType,
-      name: `${MARKER} ${name} row`, sort_order: 0, apply_tax: false, total: price,
-    })).error);
+    must(
+      `row ${key}`,
+      (
+        await admin.from('estimate_line_rows').insert({
+          company_id: companyId,
+          line_item_id: li!.id,
+          row_type: rowType,
+          name: `${MARKER} ${name} row`,
+          sort_order: 0,
+          apply_tax: false,
+          total: price,
+        })
+      ).error
+    );
   }
 
   const { data: project, error: pErr } = await admin
     .from('projects')
     .insert({
-      company_id: companyId, name: `${MARKER} — estimate lines`, contact_id: contactId,
-      project_type: 'fixed_price', source_estimate_id: estimateId,
-      project_number: `PRJ-${String(seq).padStart(3, '0')}`, project_internal_seq: internal,
+      company_id: companyId,
+      name: `${MARKER} — estimate lines`,
+      contact_id: contactId,
+      project_type: 'fixed_price',
+      source_estimate_id: estimateId,
+      project_number: `PRJ-${String(seq).padStart(3, '0')}`,
+      project_internal_seq: internal,
     })
-    .select('id').single();
+    .select('id')
+    .single();
   must('project', pErr);
   projectId = project!.id;
-  must('financials', (await admin.from('project_financials').insert({
-    company_id: companyId, project_id: projectId, contract_value: 10000,
-  })).error);
+  must(
+    'financials',
+    (
+      await admin.from('project_financials').insert({
+        company_id: companyId,
+        project_id: projectId,
+        contract_value: 10000,
+      })
+    ).error
+  );
 
   // ── the cost-plus control, for the P11 assertion ──
-  seq += 1; internal += 1;
+  seq += 1;
+  internal += 1;
   const { data: cpEstimate, error: cpEErr } = await admin
     .from('estimates')
     .insert({
-      company_id: companyId, contact_id: contactId, name: `${MARKER} — cost-plus`,
+      company_id: companyId,
+      contact_id: contactId,
+      name: `${MARKER} — cost-plus`,
       estimate_number: `EST-${String(seq).padStart(4, '0')}`,
-      status: 'accepted', contract_type: 'cost_plus', created_by_role: 'owner',
+      status: 'accepted',
+      contract_type: 'cost_plus',
+      created_by_role: 'owner',
     })
-    .select('id').single();
+    .select('id')
+    .single();
   must('cp estimate', cpEErr);
   cpEstimateId = cpEstimate!.id;
 
   const { data: cpProject, error: cpPErr } = await admin
     .from('projects')
     .insert({
-      company_id: companyId, name: `${MARKER} — cost-plus control`, contact_id: contactId,
-      project_type: 'cost_plus', source_estimate_id: cpEstimateId,
-      project_number: `PRJ-${String(seq).padStart(3, '0')}`, project_internal_seq: internal,
+      company_id: companyId,
+      name: `${MARKER} — cost-plus control`,
+      contact_id: contactId,
+      project_type: 'cost_plus',
+      source_estimate_id: cpEstimateId,
+      project_number: `PRJ-${String(seq).padStart(3, '0')}`,
+      project_internal_seq: internal,
     })
-    .select('id').single();
+    .select('id')
+    .single();
   must('cp project', cpPErr);
   cpProjectId = cpProject!.id;
-  must('cp financials', (await admin.from('project_financials').insert({
-    company_id: companyId, project_id: cpProjectId, contract_value: 1000,
-  })).error);
+  must(
+    'cp financials',
+    (
+      await admin.from('project_financials').insert({
+        company_id: companyId,
+        project_id: cpProjectId,
+        contract_value: 1000,
+      })
+    ).error
+  );
 
-  must('counters', (await admin.from('companies').update({
-    estimate_number_sequence: seq, project_internal_sequence: internal,
-  }).eq('id', companyId)).error);
+  must(
+    'counters',
+    (
+      await admin
+        .from('companies')
+        .update({
+          estimate_number_sequence: seq,
+          project_internal_sequence: internal,
+        })
+        .eq('id', companyId)
+    ).error
+  );
 }, 240_000);
 
 describe('S97CT-ESTLINES — 1. every line item is available, all selectable', () => {
@@ -268,7 +403,8 @@ describe('S97CT-ESTLINES — 2/3. partial billing, and deselecting', () => {
     const b = await billing();
     expect(b.lines.some((l) => l.name.includes('Framing'))).toBe(false); // fully billed
     const { data: lines } = await admin
-      .from('invoice_lines').select('billed_amount')
+      .from('invoice_lines')
+      .select('billed_amount')
       .eq('source_estimate_line_item_id', item.framing);
     expect(money((lines ?? []).reduce((s, l) => s + Number(l.billed_amount), 0))).toBe(5000);
   });
@@ -301,7 +437,9 @@ describe('S97CT-ESTLINES — 4. THE CONSTRAINT: draws and lines share one remain
 
     // Nothing was written, and the contract is not breached.
     const { count } = await admin
-      .from('invoice_lines').select('id', { count: 'exact', head: true }).eq('invoice_id', inv);
+      .from('invoice_lines')
+      .select('id', { count: 'exact', head: true })
+      .eq('invoice_id', inv);
     expect(count).toBe(0);
     expect(await remainingToBill()).toBe(2000);
   });
@@ -317,10 +455,19 @@ describe('S97CT-ESTLINES — 4. THE CONSTRAINT: draws and lines share one remain
 describe('S97CT-ESTLINES — 5. VOID restores per-line AND contract headroom', () => {
   it('voiding the roofing invoice returns both, with no cleanup step', async () => {
     const roofingInvoice = invoiceIds[invoiceIds.length - 1];
-    must('void', (await admin.from('invoices').update({
-      status: 'voided', voided_at: new Date().toISOString(),
-      void_reason: `${MARKER} test void`,
-    }).eq('id', roofingInvoice)).error);
+    must(
+      'void',
+      (
+        await admin
+          .from('invoices')
+          .update({
+            status: 'voided',
+            voided_at: new Date().toISOString(),
+            void_reason: `${MARKER} test void`,
+          })
+          .eq('id', roofingInvoice)
+      ).error
+    );
 
     // Per-line remaining is back…
     const b = await billing();
@@ -330,7 +477,8 @@ describe('S97CT-ESTLINES — 5. VOID restores per-line AND contract headroom', (
 
     // Nothing was deleted — the frozen line is retained (§9).
     const { count } = await admin
-      .from('invoice_lines').select('id', { count: 'exact', head: true })
+      .from('invoice_lines')
+      .select('id', { count: 'exact', head: true })
       .eq('invoice_id', roofingInvoice);
     expect(count).toBe(1);
   });
@@ -353,20 +501,32 @@ describe('S97CT-ESTLINES — 6/7. scope of the ceiling', () => {
     const { data: co, error } = await admin
       .from('change_orders')
       .insert({
-        company_id: companyId, project_id: projectId, author_member_id: ownerMemberId,
-        co_number: `${MARKER}-CO`, title: 'extra scope',
-        co_type: 'fixed_price', status: 'signed',
+        company_id: companyId,
+        project_id: projectId,
+        author_member_id: ownerMemberId,
+        co_number: `${MARKER}-CO`,
+        title: 'extra scope',
+        co_type: 'fixed_price',
+        status: 'signed',
       })
-      .select('id').single();
+      .select('id')
+      .single();
     must('change order', error);
 
     const inv = await invoice('CO billing');
-    const coErr = (await admin.from('invoice_lines').insert({
-      company_id: companyId, invoice_id: inv, line_type: 'fixed',
-      description: 'CO lump sum', category: 'other',
-      derived_amount: 9999, billed_amount: 9999,
-      source_change_order_id: co!.id, sort_order: 0,
-    })).error;
+    const coErr = (
+      await admin.from('invoice_lines').insert({
+        company_id: companyId,
+        invoice_id: inv,
+        line_type: 'fixed',
+        description: 'CO lump sum',
+        category: 'other',
+        derived_amount: 9999,
+        billed_amount: 9999,
+        source_change_order_id: co!.id,
+        sort_order: 0,
+      })
+    ).error;
     // The contract is fully billed, yet this passes: it is a different scope.
     expect(coErr).toBeNull();
     must('co cleanup', (await admin.from('invoices').delete().eq('id', inv)).error);
@@ -380,18 +540,29 @@ describe('S97CT-ESTLINES — 6/7. scope of the ceiling', () => {
     const { data: inv, error } = await admin
       .from('invoices')
       .insert({
-        company_id: companyId, project_id: cpProjectId, author_member_id: ownerMemberId,
-        title: `${MARKER} cost-plus`, presentation_level: 'lump_sum',
+        company_id: companyId,
+        project_id: cpProjectId,
+        author_member_id: ownerMemberId,
+        title: `${MARKER} cost-plus`,
+        presentation_level: 'lump_sum',
       })
-      .select('id').single();
+      .select('id')
+      .single();
     must('cp invoice', error);
 
-    const cpErr = (await admin.from('invoice_lines').insert({
-      company_id: companyId, invoice_id: inv!.id, line_type: 'fixed',
-      description: 'well past the projection', category: 'other',
-      derived_amount: 50000, billed_amount: 50000,
-      source_estimate_id: cpEstimateId, sort_order: 0,
-    })).error;
+    const cpErr = (
+      await admin.from('invoice_lines').insert({
+        company_id: companyId,
+        invoice_id: inv!.id,
+        line_type: 'fixed',
+        description: 'well past the projection',
+        category: 'other',
+        derived_amount: 50000,
+        billed_amount: 50000,
+        source_estimate_id: cpEstimateId,
+        sort_order: 0,
+      })
+    ).error;
     expect(cpErr).toBeNull();
     must('cp cleanup', (await admin.from('invoices').delete().eq('id', inv!.id)).error);
   });
@@ -453,30 +624,67 @@ afterAll(async () => {
   // Delete the INVOICE; its ON DELETE CASCADE takes the lines.
   // invoice_lines_parent_open refuses a direct line delete on a sent or voided
   // invoice (§8/§9) and early-returns during the cascade.
-  for (const id of invoiceIds) check('invoice', (await admin.from('invoices').delete().eq('id', id)).error);
-  for (const pid of [projectId, cpProjectId]) {
+  for (const id of invoiceIds)
+    check('invoice', (await admin.from('invoices').delete().eq('id', id)).error);
+  // Residue-aware: follow the CONTACT, not just this run's ids. See
+  // `dependentsOfContact()` — the contact is reused across runs by design, so
+  // an interrupted run's project is what pins it.
+  const dependents = contactId
+    ? await dependentsOfContact(contactId, [projectId, cpProjectId, estimateId, cpEstimateId])
+    : { projectIds: [projectId, cpProjectId].filter(Boolean) as string[], estimateIds: [] };
+
+  for (const pid of dependents.projectIds) {
     if (!pid) continue;
     const { data: invs } = await admin.from('invoices').select('id').eq('project_id', pid);
-    for (const i of invs ?? []) check('extra invoice', (await admin.from('invoices').delete().eq('id', i.id)).error);
+    for (const i of invs ?? [])
+      check('extra invoice', (await admin.from('invoices').delete().eq('id', i.id)).error);
     check('change orders', await disposeProjectChangeOrdersError(pid));
-    check('financials', (await admin.from('project_financials').delete().eq('project_id', pid)).error);
-    check('project', (await admin.from('projects').delete().eq('id', pid)).error);
-  }
-  for (const eid of [estimateId, cpEstimateId]) {
-    if (!eid) continue;
-    const { data: items } = await admin.from('estimate_line_items').select('id').eq('estimate_id', eid);
-    for (const li of items ?? []) {
-      check('rows', (await admin.from('estimate_line_rows').delete().eq('line_item_id', li.id)).error);
+    check(
+      'financials',
+      (await admin.from('project_financials').delete().eq('project_id', pid)).error
+    );
+    // ⚠️ `deleteProjects()` — 28 tables pin a project with a NO ACTION FK, and
+    // a residual run's project has rows in tables this file never created
+    // (assignments, schedule_entries). Enumerating them here would be the
+    // stale-in-two-places problem `COMPANY_CHILDREN` exists to avoid.
+    try {
+      await deleteProjects(admin, [pid]);
+    } catch (e) {
+      check('project', { message: (e as Error).message });
     }
-    check('line items', (await admin.from('estimate_line_items').delete().eq('estimate_id', eid)).error);
-    check('categories', (await admin.from('estimate_categories').delete().eq('estimate_id', eid)).error);
+  }
+  for (const eid of dependents.estimateIds) {
+    if (!eid) continue;
+    const { data: items } = await admin
+      .from('estimate_line_items')
+      .select('id')
+      .eq('estimate_id', eid);
+    for (const li of items ?? []) {
+      check(
+        'rows',
+        (await admin.from('estimate_line_rows').delete().eq('line_item_id', li.id)).error
+      );
+    }
+    check(
+      'line items',
+      (await admin.from('estimate_line_items').delete().eq('estimate_id', eid)).error
+    );
+    check(
+      'categories',
+      (await admin.from('estimate_categories').delete().eq('estimate_id', eid)).error
+    );
     check('estimate', (await admin.from('estimates').delete().eq('id', eid)).error);
   }
-  if (contactId) check('contact', (await admin.from('contacts').delete().eq('id', contactId)).error);
+  if (contactId)
+    check('contact', (await admin.from('contacts').delete().eq('id', contactId)).error);
 
   const { count } = await admin
-    .from('projects').select('id', { count: 'exact', head: true }).like('name', `${MARKER}%`);
-  console.log(`\n[${MARKER} TEARDOWN] projects left: ${count}; errors: ${errors.length ? JSON.stringify(errors) : 'NONE'}`);
+    .from('projects')
+    .select('id', { count: 'exact', head: true })
+    .like('name', `${MARKER}%`);
+  console.log(
+    `\n[${MARKER} TEARDOWN] projects left: ${count}; errors: ${errors.length ? JSON.stringify(errors) : 'NONE'}`
+  );
   // ⚠️ [S168] THIS THROW IS THE POINT. The teardown has always collected
   // `errors` and only PRINTED them, so when the S168 delete boundary began
   // refusing this suite's signed change order the cleanup failed in silence,

@@ -26,10 +26,14 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { deleteCompanies, purgeCompaniesNamed } from '../test-support/company-purge';
+import {
+  deleteCompanies,
+  deleteProjects,
+  purgeCompaniesNamed,
+} from '../test-support/company-purge';
 import { REQUIRED_PROJECT_REF, describeRef, guardLiveTarget } from './live-guard';
 
-export { deleteCompanies, purgeCompaniesNamed };
+export { deleteCompanies, deleteProjects, purgeCompaniesNamed };
 
 export { REQUIRED_PROJECT_REF };
 
@@ -210,6 +214,73 @@ export async function paymentAccountFor(companyId: string): Promise<string> {
     );
   }
   return row.id;
+}
+
+/**
+ * Every project whose name starts with `prefix`, disposed of — change orders
+ * first, then the 28 child tables, then the project.
+ *
+ * ⚠️ KEYED ON THE NAME, NOT ON IDS CAPTURED THIS RUN, for the reason
+ * `purgeCompaniesNamed()` gives: a run that DIED before capturing its ids
+ * cannot clean up by id, and its rows then outlive it forever. Following the
+ * contact (`dependentsOfContact`) catches residue that still pins the reused
+ * contact; this catches the rest — a leftover project whose contact_id was
+ * never set is invisible to every other handle.
+ *
+ * Call from `beforeAll` so a crashed run cannot poison the next one. A harness
+ * that only cleans up after itself cannot start from a dirty database, and a
+ * dirty database is the normal case.
+ */
+export async function sweepProjectsNamed(prefix: string): Promise<number> {
+  const { data, error } = await admin.from('projects').select('id').like('name', `${prefix}%`);
+  if (error) throw new Error(`sweepProjectsNamed(${prefix}): ${error.message}`);
+  const ids = ((data ?? []) as { id: string }[]).map((r) => r.id);
+  if (!ids.length) return 0;
+
+  for (const id of ids) {
+    const coError = await disposeProjectChangeOrdersError(id);
+    if (coError) throw new Error(`sweepProjectsNamed(${prefix}): ${coError.message}`);
+    await admin.from('project_financials').delete().eq('project_id', id);
+  }
+  await deleteProjects(admin, ids);
+  return ids.length;
+}
+
+/**
+ * Every project and estimate that still points at this run's contact — the
+ * run's own, PLUS anything an interrupted earlier run left behind.
+ *
+ * ⚠️ WHY THIS EXISTS. `upsertContact()` reuses a contact by its fixed marker
+ * email, deliberately (the `contacts_company_email_unique` index refuses a
+ * second insert). So the contact SURVIVES between runs, and any project or
+ * estimate a killed run left behind still references it. The teardown then
+ * deleted only the ids IT had created and hit
+ * `projects_contact_id_fkey` / `estimates_contact_id_fkey` on the contact —
+ * a green suite with a red teardown, self-perpetuating, because each failure
+ * leaves exactly the rows that break the next run.
+ *
+ * The contact is marker-scoped, so anything referencing it belongs to this
+ * harness and is safe to take. Same doctrine as `sweepChangeOrders()`: a
+ * harness that only cleans up after itself cannot start from a dirty database,
+ * and a dirty database is the normal case.
+ */
+export async function dependentsOfContact(
+  contactId: string,
+  known: (string | undefined)[] = []
+): Promise<{ projectIds: string[]; estimateIds: string[] }> {
+  const [{ data: projects }, { data: estimates }] = await Promise.all([
+    admin.from('projects').select('id').eq('contact_id', contactId),
+    admin.from('estimates').select('id').eq('contact_id', contactId),
+  ]);
+  const seed = known.filter((v): v is string => Boolean(v));
+  const ids = (rows: { id: string }[] | null) =>
+    Array.from(new Set([...seed, ...(rows ?? []).map((r) => r.id)]));
+  // `seed` is unioned into BOTH so a row whose contact_id was never set is
+  // still disposed of; the delete of an id that does not exist is a no-op.
+  return {
+    projectIds: ids(projects as { id: string }[] | null),
+    estimateIds: ids(estimates as { id: string }[] | null),
+  };
 }
 
 /**
