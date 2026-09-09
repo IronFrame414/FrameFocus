@@ -191,6 +191,14 @@ export type EmailType =
   // 7D1 §13 — a sent invoice delivered to the client, PDF attached
   // (email_types row seeded in 20260807000000).
   | 'invoice'
+  // S107 Part B — a bid request sent to a subcontractor: a SUMMARY plus the
+  // tokenised link, never the detail and never money. The `email_types` row is
+  // seeded in 20261580000000 — ⚠️ note that is an INSERT into a LOOKUP TABLE,
+  // not a CHECK widening; the `email_logs_email_type_check` constraint the
+  // older migrations rewrite no longer exists (replaced by
+  // `email_logs_email_type_fkey`). Adding a member here without the row makes
+  // the send succeed and its log INSERT fail, after the mail has gone.
+  | 'sub_bid_request'
   // 7E §6 — an AR reminder on an overdue invoice (email_types row seeded in
   // 20260815000000). The ONLY §7 event that rides this mechanism — see the
   // reminder cron's header.

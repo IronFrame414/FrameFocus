@@ -15,6 +15,7 @@ import { AuthEmail, AUTH_EMAIL_COPY, type AuthEmailKind } from '@/lib/email/temp
 import { RetentionWarningEmail } from '@/lib/email/templates/retention-warning-email';
 import { SelectionReleasedEmail } from '@/lib/email/templates/selection-released-email';
 import { SelectionSpecificationsEmail } from '@/lib/email/templates/selection-specifications-email';
+import { SubBidRequestEmail } from '@/lib/email/templates/sub-bid-request-email';
 import { subjectFor } from '@/lib/services/auth-email';
 import { buildSelectionSpecificationsSubject, buildSelectionsReleasedSubject } from '@/lib/services/selection-email';
 
@@ -139,6 +140,23 @@ const CLIENT_FACING = [
   // the release above, not a variant of it: one asks her to choose, one tells
   // her what she chose and carries the PDF.
   [
+    'sub bid request',
+    () => (
+      <SubBidRequestEmail
+        companyName={COMPANY}
+        logoUrl={LOGO}
+        brandColor="#2f49d1"
+        subcontractorName="Acme Framing"
+        lineItemName="Second floor framing"
+        projectLabel="Maple St. remodel"
+        message="Plans attached behind the link."
+        bidsDueDate="October 1, 2026"
+        replyUrl="https://example.com/bid/tok"
+        expiresOn="October 15, 2026"
+      />
+    ),
+  ],
+  [
     'selection specifications',
     () => (
       <SelectionSpecificationsEmail
@@ -189,6 +207,10 @@ const COVERED = new Set([
   // [S175 stage 6] The specifications sheet's delivery. White-label
   // client-facing, rendered in CLIENT_FACING above.
   'selection-specifications-email.tsx',
+  // [S107 Part B] The bid request to a subcontractor. White-label: it leaves
+  // under the CONTRACTOR's identity to an outside trade, same as the PO email.
+  // Rendered in CLIENT_FACING above.
+  'sub-bid-request-email.tsx',
   // [Deletion sweep §3] The three retention warnings. Platform identity by
   // ruling (retention-warning-emails.md) — the product writing to its own
   // customer about deletion; a tenant brand here would be nonsense.
