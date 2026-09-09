@@ -110,7 +110,47 @@ claude mcp list
 
 ### Migrations
 
-## All 32 migration files live in `supabase/migrations/` with 14-digit timestamp format. `npx supabase migration list` shows all 32 in sync (Local + Remote; re-verified Session 48). Latest two: `20260611002451` (cost_catalog, 4B) and `20260611102749` (estimates module, 4C) — both applied to prod. Migration 006 was never created — intentional gap in the historical ordinal numbering. Source of truth is the file list on disk.
+Migration files live in `supabase/migrations/` with the 14-digit timestamp format required by the
+CLI. Migration 006 was never created — an intentional gap in the historical ordinal numbering. The
+source of truth for what EXISTS is the file list on disk; the source of truth for what is APPLIED is
+the record below.
+
+### ⚠️ PRODUCTION SYNC RECORD — current through `20261570000000` [verified 2026-09-09, S107]
+
+**Production (`jwkcknyuyvcwcdeskrmz`) is CURRENT through `20261570000000`.** Verified directly
+against production **twice in the same session**:
+
+1. **The ledger was fingerprinted before anything was pushed** — 211 rows through
+   `20261490000000`, with a matching **md5 over the ordered versions**, **no duplicates**, and
+   **no MCP-signature rows**.
+2. **Then `20261540000000`, `20261550000000`, `20261560000000` and `20261570000000` were pushed,
+   and every object was confirmed on production**, not inferred from the push exiting 0:
+   `files.estimate_id`; `files_owner_arm_check` **VALID**; `convert_estimate_to_project` carrying
+   the files re-point; **both** line-total invariant triggers; `set_winning_bid` clearing the
+   override; `estimate_line_rows.total_override`; and the mutual-exclusion **CHECK VALID**.
+
+**Owed to production: `20261580000000_email_type_sub_bid_request.sql` only** — the one migration in
+the repo newer than `20261570000000`.
+
+> #### ⚠️ THE STALE RECORD THIS REPLACES, AND THE INFERENCE IT INVITED
+>
+> _Superseded text, quoted rather than deleted:_ _"All 32 migration files live in
+> `supabase/migrations/` … `npx supabase migration list` shows all 32 in sync (Local + Remote;
+> re-verified Session 48). Latest two: `20260611002451` … and `20260611102749` … both applied to
+> prod."_
+>
+> That paragraph described **32** migrations and Session **48**. The repo now holds **220**. The
+> only other sync statement in this file was S98's (2026-08-04), and between them they left the
+> newest applied migration unstated for a year of work.
+>
+> **This is not a harmless staleness.** At S107 a session counted the 155 migrations added to the
+> repo since the S98 date and reported production as "155 migrations behind" — a conclusion drawn
+> from **this file** rather than from the database, because the stop rules (correctly) forbade
+> touching production to check. It was wrong: **STATE.md was stale, the database was not.**
+>
+> So the rule this record is written under: **a sync claim must name the newest applied version,
+> the date, and how it was verified.** A sync record without those three is an invitation to
+> re-derive it from file counts, and the derivation is always wrong in the alarming direction.
 
 ## Codebase State
 
