@@ -410,3 +410,44 @@ tests tip over depends on when auth happens to be slow. That is precisely the ru
 variation that made this look like a chat problem for four merges.
 
 It also means the 60s raise addresses the real mechanism: 38s of auth fits in 60s, not in 30s.
+
+### ⚠️ CORRECTION — the degradation WAS load-related, with a long recovery tail
+
+The section above concluded the slow auth was "not self-inflicted", on the grounds that a probe
+issuing **one request every 45 seconds** was still seeing 504s. That reasoning was wrong, and
+the measurement that settles it is the recovery.
+
+The probe, 21:46 → 22:04, one request per 45s:
+
+```
+44,597ms ERR 504      206,540ms ERR 504     16,992ms ok
+43,865ms ERR 504       66,874ms ERR 504     44,807ms ERR 504
+11,777ms ok             5,833ms ok          43,450ms ERR 504
+42,553ms ERR 504       41,353ms ERR 504     20,178ms ok
+```
+
+**8 of 12 failed with a 504.** But the same project measured after a longer idle period:
+
+```
+signIn x5 -> 5 ok, 0 err, median 187ms
+PostgREST trivial select -> ok, 645ms
+```
+
+And it was never auth alone — during the bad window a service-role `select id limit 1` took
+**26,653ms**, so PostgREST was degraded too. Project-wide, not GoTrue.
+
+**The correct reading:** sustained load degrades the whole rebuild-test project, and it stays
+degraded for **tens of minutes after the load stops** — which is why a 1-request-per-45s probe
+still saw failures and misled me into calling it external. It recovers on its own once genuinely
+idle.
+
+**The operational consequence, which is the part worth keeping:** back-to-back full suites will
+hit this. This session ran two full live suites (1,600+ tests each) and two full e2e suites
+(568 each) inside a few hours against one shared database. A run started while the project is
+still in that recovery tail will fail on timeouts that have nothing to do with the code — and
+those failures will look exactly like the ones this session spent its length diagnosing.
+
+> **So the sequencing matters as much as the timeout budget.** The 60s raise (item 4) buys
+> headroom for a healthy-but-slow project; it does not survive a project in the recovery tail,
+> where a single sign-in took 206 seconds. Leave the database idle between full runs, and treat
+> a suite that goes red immediately after another full run as unproven rather than failed.
