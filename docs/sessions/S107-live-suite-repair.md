@@ -279,3 +279,88 @@ a failure wear the wrong name.** The S104 Purchase orphan, the live guard's null
 real signal was read, and expensive to find while it was not. The corollary that bit twice
 more: **a task notification's "exit code 0" is the trailing `echo`'s**, and a `FULL TURBO`
 cache hit is not a build.
+
+---
+
+## 8 — CI had been red since #290, and it was not the chat specs
+
+Local checks were all green while GitHub Actions' e2e job was red across four merges. Three
+premises turned out to be wrong, and correcting them was most of the diagnosis.
+
+**#301 was CANCELLED, not failed.** Its E2E job reports `conclusion: cancelled`; runs 298-302
+were all cancelled, each superseded by the next S107 push. The last genuine failure is **#297**.
+
+**The chat specs were never the persistent failure.** They appear in none of #292, #293, #295,
+#297. They failed in #301 only as timeout casualties before it was cancelled. All of them pass
+locally with `CI=1` against the same database and the same production server.
+
+**`ERR_ABORTED` was the wreckage, not the cause.** Every instance is preceded by
+`Test timeout of 30000ms exceeded`; Playwright then tears the page down, which aborts the
+in-flight `goto`. Not a redirect race, not a middleware bounce.
+
+### The real history
+
+|              |                                                           |
+| ------------ | --------------------------------------------------------- |
+| last green   | **#287**, 2026-09-01                                      |
+| first red    | **#290**, 2026-09-05, `0c4e2b5` — the 9b/estimates merge  |
+| second cause | **#292**, 2026-09-06, `20b82d9` — the 7G QuickBooks merge |
+
+Three specs failed deterministically and reproduced locally; the rest were timeouts that
+rotated run to run.
+
+### What each was
+
+**`m-capture:741` — the one I had flagged as a possible real defect. It was not.**
+
+A member has TWO names and the surfaces disagree on purpose:
+`company_members.display_name` is what `LiveBoard` renders
+(`time-tracking-client.ts:533`), `profiles.first_name/last_name` is the person. They may
+differ — a subcontractor member has a display_name and no profile at all. On the QA tenant:
+
+| field                          | value           |
+| ------------------------------ | --------------- |
+| `company_members.display_name` | **QA PM A**     |
+| `profiles` first + last        | **Pat Manager** |
+
+The test asserted the PROFILE name against a board that renders the MEMBER name, so the anchor
+never appeared and it burned its whole 30s budget every run. This is the S176 rename fallout
+STATE.md already records as "the stale display_name twin".
+
+> **⚠️ D-34 ITSELF WAS NEVER UNENFORCED, which is the half that mattered before touching
+> anything.** The guard is `hasCoordinates(row.gps_in) ? ' · on site' : ''`
+> (`live-board.tsx:140`); `hasCoordinates` requires numeric `lat` AND `lng`
+> (`packages/shared/utils/time-tracking.ts:145`), so a `{reason:'permission_denied'}` failure
+> object renders nothing; `m6m-capture.test.ts` unit-covers it. The property held. What was
+> unverified was the e2e proof of it.
+
+Fixed by DERIVING the name (`memberDisplayName()`, which throws rather than returning empty)
+rather than retyping today's value — `4fe9393` set that precedent for the chat mention test.
+36s of timeouts → **8.1s green**.
+
+**`settings-billing:34`** — `getByText('Status', {exact:true})` was unscoped, and 7G added an
+Accounting panel with its own Status row, so strict mode failed on two matches. Scoped to
+`settings-panel-billing`. Deliberately NOT `.first()`, which would also go green while
+silently asserting against the Accounting panel. **6/6.**
+
+**`estimate-send:94`** — asserted `est-send`, the header button `00eb9a6` deliberately
+REMOVED ("send lives in Review & Send"). Rewritten against the real path —
+`est-review-send → sheet → "Send to client" → openSendModal → Send Proposal` — keeping all
+three original claims, including that `est-mark-sent` is still a separate control. The button
+stays deleted. **3/3.**
+
+### Item 4 — the per-test timeout, ruled and recorded
+
+Raised 30s → 60s in CI. The other two levers were already ruled out above and the ruling
+stands: `workers > 1` and sharding both reintroduce the intra-DB concurrency behind CI #201.
+Costs nothing on a green run.
+
+Both caveats are written into `ci.yml` at Josh's instruction, not just here: that this is a
+**treadmill, not a fix** (the growth is per-statement DB overhead from accumulating RLS
+policies, not test count), and that it **weakens a real signal** (a test legitimately taking
+45s now passes silently). The durable fix — **a database per shard** — is named there as the
+recorded answer, still blocked on a reproducible seed.
+
+⚠️ One process note: while probing the one-open-session constraint during the read-only
+diagnosis I inserted a `time_clock_sessions` row on rebuild-test. That was a write in a
+read-only task. It was caught, deleted, and the member verified back to 0 open sessions.
