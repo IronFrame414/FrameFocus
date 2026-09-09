@@ -262,10 +262,11 @@ docs/
 All env vars below are stored as **GitHub Codespace secrets** and auto-inject into the shell environment on Codespace start. `apps/web/.env.local` does NOT need to exist for the dev server to work. Verify with `printenv | grep -E "SUPABASE|STRIPE|OPENAI"` if uncertain. Vercel env vars must match these values exactly.
 
 ```
-# ⚠️ LIVE TEST HARNESSES RUN AGAINST REBUILD-TEST ONLY.
-# assertRebuildTest() refuses any URL without nmyphyhmfttxkdoposvf — but it
-# checks the URL only, never the key, and runs in beforeAll, AFTER createClient
-# at module load. A production key with a rebuild-test URL passes the guard.
+# ⚠️ LIVE TEST HARNESSES RUN AGAINST REBUILD-TEST ONLY, and this is now
+# ENFORCED rather than asserted. `test/live-guard.ts` verifies the KEY as well
+# as the URL, at module load, before any client is constructed, in every one of
+# the 123 harnesses. A production key with a rebuild-test URL is refused by
+# name. See "Restoring .env.local" below before pasting anything here.
 NEXT_PUBLIC_SUPABASE_URL=https://nmyphyhmfttxkdoposvf.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=(rebuild-test sb_publishable_ key)
 SUPABASE_SERVICE_ROLE_KEY=(rebuild-test eyJ... service role key)
@@ -293,6 +294,37 @@ enabled, `/api/auth/send-email` is inert and auth email still goes over the buil
 Exact steps: [`docs/specs/S160-auth-email-hook.md`](docs/specs/S160-auth-email-hook.md) §3.
 
 Vercel env vars must match `.env.local` exactly.
+
+### Restoring `.env.local` for the live harnesses — REBUILD-TEST ONLY
+
+`apps/web/.env.local` is gitignored and does **not** survive a Codespace rebuild. As of S107 it is
+absent and all three Supabase variables are unset, so **no `.live.ts` harness can run at all**.
+That is three separate gaps, not one — a service-role key on its own fixes nothing.
+
+| Variable                        | Value                                                        |
+| ------------------------------- | ------------------------------------------------------------ |
+| `NEXT_PUBLIC_SUPABASE_URL`      | `https://nmyphyhmfttxkdoposvf.supabase.co`                   |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | rebuild-test's **publishable / anon** key                    |
+| `SUPABASE_SERVICE_ROLE_KEY`     | rebuild-test's **service_role / secret** key — RLS-bypassing |
+
+All three come from **one place**: the Supabase dashboard → project **`nmyphyhmfttxkdoposvf`
+(framefocus-rebuild-test)** → Project Settings → API keys. Never from `jwkcknyuyvcwcdeskrmz`.
+
+**The variable NAME is `SUPABASE_SERVICE_ROLE_KEY`.** Nothing in this repo reads
+`SUPABASE_SECRET_KEY`, and renaming a key into that slot is exactly the move that would have gone
+live on production. Either key format works — a legacy `eyJ…` `service_role` JWT or a
+rebuild-test `sb_secret_…` — the guard handles both.
+
+⚠️ **Put it in `apps/web/.env.local`, NOT in an account-level GitHub Codespaces secret.**
+Account-level secrets override `.env.local` at the shell level and silently reappear on every
+rebuild. That trap has caused four incidents in this repo — including a `CRON_SECRET` that held a
+Resend API key and broke the sync drain, and the S107 production `sb_secret_` key above.
+
+**You cannot get this wrong quietly any more.** `test/live-guard.ts` refuses to let a harness load
+unless both the URL and the service-role key are proven to be rebuild-test's, and a mismatch names
+the project the key actually reaches — including "framefocus PRODUCTION — Josh's real books". A
+correct restore prints one line instead:
+`[live-guard] target nmyphyhmfttxkdoposvf — decoded from the key's own ref claim`.
 
 ---
 
@@ -514,7 +546,9 @@ rows shown, **109 assertions**:
 | `s115-co-recalc-rates.live.ts`        | #140/D-62 — PM-scoped client refused, privileged client prices, no rate returned | 7/7                                               |
 
 Session helper: `test/live-session.ts` (`sessionFor`, `admin`, `assertRebuildTest`) — copy that
-pattern for any new role check. The runner compiles JSX via `oxc`, so a harness can render a real
+pattern for any new role check. The production guard is `test/live-guard.ts`, wired into the live
+runner's `setupFiles`, so it protects a new harness whether or not that harness imports anything;
+`assertRebuildTest()` is now only a cheap re-assertion that it ran. The runner compiles JSX via `oxc`, so a harness can render a real
 client component to static markup and execute its gate rather than read it.
 
 ### Other test data

@@ -260,9 +260,17 @@ session as the schedule. Filed as Q6.
 
 ## 6 — How this gets proven without destroying real data
 
-All live tests already hard-refuse to run anywhere but **rebuild-test** (`assertRebuildTest()`
-pins project `nmyphyhmfttxkdoposvf`; the S138 deletion test additionally refuses to run unless the
-fixture is the ONLY company due). The plan extends the existing S137/S138 harness pattern:
+All live tests hard-refuse to run anywhere but **rebuild-test** (`nmyphyhmfttxkdoposvf`); the S138
+deletion test additionally refuses to run unless the fixture is the ONLY company due.
+
+> ⚠️ **Corrected [S107].** This sentence used to credit `assertRebuildTest()`, and as written it
+> was not true: that check read the **URL only, never the key**, ran in `beforeAll` **after**
+> `createClient()`, and **six of the 123 harnesses never called it** — five of which build their
+> own client straight from `process.env`. A production service-role key with a rebuild-test URL
+> passed it. The claim is true now by a different mechanism: `test/live-guard.ts`, wired into the
+> live runner's `setupFiles`, verifies the key as well as the URL before any harness module loads.
+> Kept rather than rewritten, because "the guard already covers this" is exactly the belief that
+> let the gap survive. The plan extends the existing S137/S138 harness pattern:
 
 1. **Registry completeness (unit, no data at risk):** census-diff test — parse the generated
    types; assert every `company_id` table is in exactly one of `COMPANY_TABLES` / `SURVIVES` / an
