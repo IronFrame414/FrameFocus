@@ -31,6 +31,12 @@ let estimateId: string;
 let coId: string;
 let subContractId: string;
 let paymentId: string;
+// S106 — the award-prompt fixture (tests 7 & 8), on its own estimate: test 6
+// soft-deletes `estimateId`, and an awarded line must not share a fixture with it.
+let awardEstimateId: string;
+let awardLineId: string;
+let awardBidId: string;
+let awardSubId: string;
 
 async function sweep(): Promise<string[]> {
   const admin = adminClient();
@@ -67,6 +73,9 @@ async function sweep(): Promise<string[]> {
   const { data: ests } = await admin.from('estimates').select('id').like('name', `${MARKER}%`);
   const estIds = (ests ?? []).map((e) => e.id);
   if (estIds.length) check('estimates', (await admin.from('estimates').delete().in('id', estIds)).error);
+  // S106 — the award fixture's bidder. estimate_sub_bids.subcontractor_id has no
+  // cascade back to here, so the estimates delete above must run FIRST (it does).
+  check('subcontractors', (await admin.from('subcontractors').delete().like('company_name', `${MARKER}%`)).error);
   check('company_members', (await admin.from('company_members').delete().like('display_name', `${MARKER}%`)).error);
   check('contacts', (await admin.from('contacts').delete().like('last_name', `${MARKER}%`)).error);
   return errors;
@@ -253,6 +262,90 @@ test.beforeAll(async () => {
     .single();
   if (payErr) throw new Error(`payment: ${payErr.message}`);
   paymentId = payment!.id;
+
+  // ── S106 award-prompt fixture ────────────────────────────────────────────
+  // Every pricing input is PINNED so $Y is a fixed number the test can assert
+  // as a string, not a figure recomputed by the test (which would pass against
+  // its own bug). fixed_price + markup mode + 20% sub default + 0% tax means
+  // the $10,000 bid must project to exactly $12,000; the manual total is $4,200,
+  // a value the default could never produce.
+  const { data: sub, error: subErr } = await admin
+    .from('subcontractors')
+    .insert({
+      company_id: companyId,
+      company_name: `${MARKER} Bidder`,
+      sub_type: 'subcontractor',
+      status: 'active',
+    })
+    .select('id')
+    .single();
+  if (subErr) throw new Error(`subcontractor: ${subErr.message}`);
+  awardSubId = sub!.id;
+
+  const { data: awardEstimate, error: aeErr } = await admin
+    .from('estimates')
+    .insert({
+      company_id: companyId,
+      contact_id: contact!.id,
+      name: `${MARKER} award estimate`,
+      status: 'draft',
+      estimate_number: 'EST-E2ECNF-2',
+      created_by_role: 'owner',
+      contract_type: 'fixed_price',
+      pricing_mode: 'markup',
+      subcontractor_markup_percent: 20,
+      tax_rate: 0,
+    })
+    .select('id')
+    .single();
+  if (aeErr) throw new Error(`award estimate: ${aeErr.message}`);
+  awardEstimateId = awardEstimate!.id;
+
+  const { data: awardCategory, error: acErr } = await admin
+    .from('estimate_categories')
+    .insert({
+      company_id: companyId,
+      estimate_id: awardEstimateId,
+      name: `${MARKER} category`,
+      sort_order: 0,
+    })
+    .select('id')
+    .single();
+  if (acErr) throw new Error(`award category: ${acErr.message}`);
+
+  // NO estimate_line_rows on this line — the total_price_override invariant
+  // (20261560000000) refuses an override on a line that has any, and the award
+  // prompt only fires on the zero-row branch.
+  const { data: awardLine, error: alErr } = await admin
+    .from('estimate_line_items')
+    .insert({
+      company_id: companyId,
+      estimate_id: awardEstimateId,
+      category_id: awardCategory!.id,
+      name: `${MARKER} overridden line`,
+      sort_order: 0,
+      total_price: 4200,
+      total_price_override: 4200,
+    })
+    .select('id')
+    .single();
+  if (alErr) throw new Error(`award line: ${alErr.message}`);
+  awardLineId = awardLine!.id;
+
+  const { data: awardBid, error: abErr } = await admin
+    .from('estimate_sub_bids')
+    .insert({
+      company_id: companyId,
+      estimate_id: awardEstimateId,
+      line_item_id: awardLineId,
+      subcontractor_id: awardSubId,
+      bid_amount: 10000,
+      is_winner: false,
+    })
+    .select('id')
+    .single();
+  if (abErr) throw new Error(`award bid: ${abErr.message}`);
+  awardBidId = awardBid!.id;
 });
 
 test.afterAll(async () => {
@@ -428,4 +521,146 @@ test('6 · delete estimate — the confirm soft-deletes the draft', async ({ pag
       return data!.is_deleted;
     }, AFTER_POST)
     .toBe(true);
+});
+
+// ============================================================================
+// S106 — the award prompt [RULED Josh].
+// ============================================================================
+// Awarding a bid ITEMIZES a line, and `set_winning_bid` CLEARS that line's
+// manual total (`total_price_override`, migration 20261560000000) so a cost can
+// never outlive its rows. The prompt announces the clear before it happens.
+//
+// ⚠️ THESE TWO RUN IN ORDER AND THE ORDER IS THE POINT. Test 7 cancels, and
+// test 8 then awards THE SAME LINE — so 8 passing is itself proof that 7 left
+// the fixture pristine. Cancel is claimed to be a no-op by ORDERING (every
+// statement above the confirm is a SELECT; the RPC that writes sits below the
+// early return). Until this file existed that claim was proven only by reading
+// the code.
+//
+// Pricing is pinned in the fixture, so the expected figures are LITERALS here.
+// A test that recomputed $Y with the same formula the app uses would pass
+// against a shared bug — the whole failure mode the prompt exists to prevent.
+const AWARD_MANUAL_TOTAL = '$4,200.00'; // the line's total_price_override
+const AWARD_PROJECTED = '$12,000.00'; // 10,000 bid × 1.20 sub default, untaxed
+
+test('7 · award prompt — CANCEL is a true no-op: no winner, no row, override intact', async ({
+  page,
+}) => {
+  const admin = adminClient();
+
+  await signIn(page, OWNER);
+  await page.goto(`/dashboard/estimates/${awardEstimateId}`);
+  await page.getByTestId('est-tab-bidding').click();
+
+  await page.locator(`input[name="winner-${awardLineId}"]`).click();
+
+  // The dialog says all three ruled lines. `pre-line` renders the \n breaks, so
+  // the DOM text runs them together — assert each independently.
+  const dialog = page.getByTestId('confirm-dialog');
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toContainText('Replace your manual total?');
+  await expect(dialog).toContainText(`Your total: ${AWARD_MANUAL_TOTAL}`);
+  await expect(dialog).toContainText(`After awarding: ${AWARD_PROJECTED} (bid + markup)`);
+  await expect(dialog).toContainText(
+    'Awarding itemizes this line, so your manual total no longer applies.'
+  );
+  await expect(page.getByTestId('confirm-accept')).toHaveText('Replace');
+  await expect(page.getByTestId('confirm-cancel')).toHaveText('Cancel');
+
+  await page.getByTestId('confirm-cancel').click();
+  await expect(dialog).toBeHidden();
+
+  // ⚠️ THE ASSERTION THAT MATTERS. A no-op cannot be proven by waiting — there
+  // is nothing to wait FOR. Give the RPC every chance to have fired (the whole
+  // AFTER_POST budget the other tests poll for a change within), then read the
+  // three things an award would have touched. All three must be untouched.
+  await page.waitForTimeout(AFTER_POST.timeout / 4);
+
+  const { data: line } = await admin
+    .from('estimate_line_items')
+    .select('total_price_override, total_price')
+    .eq('id', awardLineId)
+    .single();
+  expect(line!.total_price_override, 'CANCEL cleared the manual total').toBe(4200);
+  expect(Number(line!.total_price), 'CANCEL repriced the line').toBe(4200);
+
+  const { data: bid } = await admin
+    .from('estimate_sub_bids')
+    .select('is_winner')
+    .eq('id', awardBidId)
+    .single();
+  expect(bid!.is_winner, 'CANCEL set the winner').toBe(false);
+
+  const { data: rows } = await admin
+    .from('estimate_line_rows')
+    .select('id')
+    .eq('line_item_id', awardLineId);
+  expect(rows ?? [], 'CANCEL inserted the subcontractor row').toHaveLength(0);
+
+  // Still unchecked — the radio is controlled by is_winner, so a stuck check
+  // would mean the UI is showing an award the database never took.
+  await expect(page.locator(`input[name="winner-${awardLineId}"]`)).not.toBeChecked();
+});
+
+test('8 · award prompt — REPLACE awards: override cleared, row inserted, line repriced', async ({
+  page,
+}) => {
+  const admin = adminClient();
+
+  // Test 7 must have left this pristine. Asserted, not assumed: if 7 leaked, 8
+  // would otherwise "pass" against a line that was already awarded.
+  const { data: before } = await admin
+    .from('estimate_line_items')
+    .select('total_price_override')
+    .eq('id', awardLineId)
+    .single();
+  expect(before!.total_price_override, 'test 7 did not leave the line pristine').toBe(4200);
+
+  await signIn(page, OWNER);
+  await page.goto(`/dashboard/estimates/${awardEstimateId}`);
+  await page.getByTestId('est-tab-bidding').click();
+
+  await page.locator(`input[name="winner-${awardLineId}"]`).click();
+  await expect(page.getByTestId('confirm-dialog')).toBeVisible();
+  await page.getByTestId('confirm-accept').click();
+
+  // The override is gone AND the line carries the projected total. Both, because
+  // a cleared override with a stale total_price is the silent-wrong-money case.
+  await expect
+    .poll(async () => {
+      const { data } = await admin
+        .from('estimate_line_items')
+        .select('total_price_override, total_price')
+        .eq('id', awardLineId)
+        .single();
+      return `${data!.total_price_override}/${Number(data!.total_price)}`;
+    }, AFTER_POST)
+    .toBe('null/12000');
+
+  const { data: bid } = await admin
+    .from('estimate_sub_bids')
+    .select('is_winner')
+    .eq('id', awardBidId)
+    .single();
+  expect(bid!.is_winner).toBe(true);
+
+  // The row the RPC inserts: cost = the bid, no per-row markup (it inherits the
+  // estimate default), untaxed, priced to the same figure the prompt quoted.
+  const { data: rows } = await admin
+    .from('estimate_line_rows')
+    .select('row_type, amount, total, markup_percent, apply_tax, subcontractor_id')
+    .eq('line_item_id', awardLineId);
+  expect(rows ?? []).toHaveLength(1);
+  expect(rows![0].row_type).toBe('subcontractor');
+  expect(Number(rows![0].amount)).toBe(10000);
+  expect(Number(rows![0].total)).toBe(12000);
+  expect(rows![0].markup_percent).toBeNull();
+  expect(rows![0].apply_tax).toBe(false);
+  expect(rows![0].subcontractor_id).toBe(awardSubId);
+
+  // ⚠️ THE PROMPT'S OWN CLAIM, CHECKED. $12,000 is what the dialog said in test
+  // 7 and what the line actually became. If these ever diverge, the second
+  // dialog ("The awarded total is not what the prompt showed") should be on
+  // screen — so its ABSENCE here is part of the assertion.
+  await expect(page.getByTestId('alert-dialog')).toBeHidden();
 });

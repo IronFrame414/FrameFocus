@@ -75,6 +75,64 @@ Complete as of Session 40. All polish items closed. Module 4 build is unblocked.
 
 ### Branch-scoped, awaiting real numbers — `feature/s106` [S106]
 
+- **#7-s106 — the S106 award-prompt e2e (`desktop-confirms.spec.ts` tests 7 & 8) has NEVER
+  BEEN EXECUTED.** It is written, type-checks, and follows the file's established
+  pre-state/click/DB-assert pattern — but this Codespace has **neither `apps/web/.env.local`
+  (gitignored, does not survive a rebuild — CLAUDE.md → Known Codespaces Gotchas) nor the
+  Playwright browsers** (`~/.cache/ms-playwright` empty; `npx playwright install chromium`
+  is owed after every rebuild). The environment exposes `SUPABASE_ACCESS_TOKEN` and
+  `SUPABASE_SECRET_KEY` but no `NEXT_PUBLIC_SUPABASE_URL`/anon key, so neither the dev server
+  nor `signIn` could run. ⚠️ **An unrun test is not a passing test, and it is not a failing
+  one either — it is unknown.** The likeliest first-run failures are fixture shape (the
+  `estimates`/`subcontractors` inserts), not the assertions. **Fix:** restore `.env.local`
+  from the Vercel env vars, `npx playwright install chromium`, then
+  `scripts/e2e-preflight.sh` and run `desktop-confirms.spec.ts` alone. Until then the
+  Cancel-is-a-no-op guarantee rests on code reading, which is the gap the tests were written
+  to close.
+
+- **#6-s106 — the row-shape contract between `set_winning_bid`'s INSERT and
+  `previewAwardedLineTotal` is unguarded, and it spans two languages.** The award prompt's
+  $Y is trustworthy only because the TypeScript preview builds the row the plpgsql RPC will
+  insert — `markup_percent` NULL, `apply_tax` false, `amount = bid_amount`, no
+  `total_override`. **Nothing fails if someone edits the SQL INSERT and not the TS**, or the
+  reverse. `s106-award-prompt-projection.test.ts` pins the *pricing* of that row shape but
+  cannot see the migration. Today the drift is caught only at runtime, by the read-back in
+  `setWinningBid`, **after a user has already been shown a wrong number once**. **Fix
+  shapes:** (a) a live test that awards through the real RPC and asserts the inserted row's
+  columns against the same literal the preview builds — the cheapest real guard; or (b) a
+  unit test that parses the shipped migration's INSERT column list. ⚠️ Not "add a comment
+  saying keep these in sync" — that is what is there now.
+
+- **#5-s106 — `previewAwardedLineTotal` has no live test.** Its four SELECTs, its RLS
+  behaviour under a PM (who may award only on estimates they authored), and **two of its
+  three RPC-mirroring branches** (the 1-existing-sub-row fill-only-when-empty arm and the
+  2+-rows refusal) are exercised by nothing. The unit test covers only the pure pricing of
+  the 0-row branch. ⚠️ **The untested branches are the ones that never prompt**, so a defect
+  there is silent by construction — it would surface only as a read-back divergence dialog
+  on an award that should have been quiet. Belongs in a `*.live.ts` against rebuild-test,
+  alongside `s121-award-assign.live.ts`.
+
+- **#4-s106 — the award read-back divergence path has never fired.** `setWinningBid` returns
+  `lineTotal` and `handleSetWinner` raises a second dialog when it differs from the quoted
+  $Y by ≥ half a cent. **No test provokes a divergence**, so the dialog, its copy, and the
+  comparison's tolerance are unexercised — including whether `Number()` on a PostgREST
+  numeric behaves as assumed. Provoking it needs a rate superseded between the prompt and
+  the click (or a concurrent line edit), and there is no fixture for either. **Fix shape:**
+  a unit test around the comparison with an injected `lineTotal`, plus a live test that
+  supersedes an `instrument_rates` row mid-flight. ⚠️ This is the guard for the exact
+  failure Josh named — the prompt showing one number and the line getting another — and it
+  is currently the only part of that guard with no coverage at all.
+
+- **#3-s106 — `whiteSpace: 'pre-line'` on the shared confirm/alert overlay is unverified on
+  the other 54 call sites.** S106 added it to `confirm-provider.tsx` so the award prompt's
+  three `\n`-separated lines render as lines. Reasoning says every existing message is
+  single-line and `pre-line` still collapses space runs and still wraps, so nothing else
+  changes — **but no screenshot, render test or e2e confirms it**, and the property now
+  applies to every dialog in the desktop app. ⚠️ The realistic risk is not breakage but a
+  message built by string concatenation across source lines picking up an unintended break.
+  **Fix:** grep the 54 `useConfirm`/`useAlert` call sites for multi-line template literals,
+  or add a render test asserting one representative single-line message is unchanged.
+
 - **#2-s106 — `files_owner_arm_check` (the three-arm CHECK) is NARROWER than the table's
   actual ownership model.** It admits exactly `project_id` XOR `estimate_id`, OR a
   company-level row of category `(contracts, lien_releases, compliance)`. But `files` has
