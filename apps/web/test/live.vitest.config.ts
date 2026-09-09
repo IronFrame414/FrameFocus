@@ -63,11 +63,21 @@ export default defineConfig({
   },
   test: {
     include: ['test/*.live.ts'],
+    // ⚠️ ORDER MATTERS. live-guard-setup runs FIRST and throws unless the
+    // service-role key is proven to belong to rebuild-test. It is a setup file
+    // rather than a check inside live-session.ts because setup files run in the
+    // worker before the test module is imported — which is the only hook that
+    // reaches the five s104 harnesses that build their own client from
+    // process.env and import live-session.ts not at all. See test/live-guard.ts.
+    //
     // Global React `cache` passthrough shim — the fix for the Class-A regression
     // where every .live.ts importing a server service (transitively
     // lib/supabase-server, which calls cache() at module load) threw at
     // collection and registered zero tests. See test/setup/react-cache-shim.ts.
-    setupFiles: [fileURLToPath(new URL('./setup/react-cache-shim.ts', import.meta.url))],
+    setupFiles: [
+      fileURLToPath(new URL('./setup/live-guard-setup.ts', import.meta.url)),
+      fileURLToPath(new URL('./setup/react-cache-shim.ts', import.meta.url)),
+    ],
     environment: 'node',
     testTimeout: 120_000,
     hookTimeout: 240_000,

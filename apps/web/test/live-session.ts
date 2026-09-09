@@ -20,10 +20,11 @@ import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileS
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { deleteCompanies, purgeCompaniesNamed } from '../test-support/company-purge';
+import { REQUIRED_PROJECT_REF, describeRef, guardLiveTarget } from './live-guard';
 
 export { deleteCompanies, purgeCompaniesNamed };
 
-export const REQUIRED_PROJECT_REF = 'nmyphyhmfttxkdoposvf'; // framefocus-rebuild-test
+export { REQUIRED_PROJECT_REF };
 
 /** Shared password for every seeded test identity. See STATE.md → Test Data. */
 export const TEST_PASSWORD = 'FrameFocusTest!2026';
@@ -32,13 +33,43 @@ export const URL_ = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 export const ANON = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 export const SERVICE = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
+// ============================================================================
+// ⚠️ THE GUARD RUNS HERE, AT MODULE LOAD, BEFORE ANY CLIENT IS CONSTRUCTED.
+// ============================================================================
+// This top-level await is the fix for the second of the guard's two old holes:
+// `assertRebuildTest()` ran in `beforeAll`, which is AFTER `createClient()`
+// below had already been handed a URL and a service-role key.
+//
+// It verifies the KEY, not just the URL — the first hole. A production
+// service-role key paired with a rebuild-test URL used to pass, and that
+// pairing was one `.env.local` restore away from real: a production
+// `sb_secret_…` key was live in an account-level Codespaces secret granted to
+// this repo, and STATE.md's env block documented the PRODUCTION url in the
+// very block TECH_DEBT #7-s106 tells you to restore `.env.local` from.
+//
+// Cheap when it can be: a legacy JWT key names its own project and is decoded
+// offline. Only an opaque `sb_secret_…` costs a network round-trip, memoised
+// per process and cached per (url, key) pair. See test/live-guard.ts.
+const LIVE_TARGET = await guardLiveTarget();
+
 /** Service-role client — fixtures, verification reads, and nothing else. */
 export const admin = createSupabaseClient(URL_, SERVICE, {
   auth: { autoRefreshToken: false, persistSession: false },
 });
 
-/** Refuse to touch anything but rebuild-test. Call this in every beforeAll. */
+/**
+ * Refuse to touch anything but rebuild-test. Called in 117 `beforeAll`s.
+ *
+ * ⚠️ THIS IS NO LONGER THE GUARD — it is a cheap re-assertion that the real one
+ * ran. The verification happens above, at module load, and cannot be skipped by
+ * a harness that forgets to call this. Kept sync, and kept exported, because
+ * every existing call site is `assertRebuildTest()` with no `await`: making it
+ * async would turn 117 real checks into 117 ignored promises.
+ */
 export function assertRebuildTest(): void {
+  if (LIVE_TARGET.ref !== REQUIRED_PROJECT_REF) {
+    throw new Error(`REFUSING TO RUN: verified project is ${describeRef(LIVE_TARGET.ref)}`);
+  }
   if (!URL_?.includes(REQUIRED_PROJECT_REF)) {
     throw new Error(`REFUSING TO RUN: linked project is not ${REQUIRED_PROJECT_REF}. URL=${URL_}`);
   }
