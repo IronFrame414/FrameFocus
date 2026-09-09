@@ -87,3 +87,27 @@ export async function listSubBidRequests(estimateId: string): Promise<SubBidRequ
     .order('created_at', { ascending: false });
   return (data ?? []) as SubBidRequestRow[];
 }
+
+/**
+ * S107 — SEND (or re-send) a bid request by email.
+ *
+ * ⚠️ THE TOKEN IS NOT REGENERATED. A re-send reuses it [RULED], so a link a sub
+ * already has — and may be mid-upload against — never dies because the estimator
+ * clicked send twice. The route enforces the same rule; this is only its caller.
+ *
+ * The route, not this function, owns the floor and the origin guard: it refuses
+ * to send at all when `NEXT_PUBLIC_APP_URL` is unset, because a relative
+ * `/bid/<token>` in an email is a dead link and an email cannot be unsent.
+ */
+export async function sendSubBidRequest(
+  estimateId: string,
+  requestId: string
+): Promise<{ success: boolean; error?: string; to?: string }> {
+  const res = await fetch(
+    `/api/estimates/${estimateId}/bid-requests/${requestId}/send`,
+    { method: 'POST' }
+  );
+  const body = (await res.json().catch(() => ({}))) as { error?: string; to?: string };
+  if (!res.ok) return { success: false, error: body.error ?? `Send failed (${res.status})` };
+  return { success: true, to: body.to };
+}

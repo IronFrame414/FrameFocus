@@ -288,3 +288,19 @@ cd apps/web && NEXT_PUBLIC_SUPABASE_URL=... NEXT_PUBLIC_SUPABASE_ANON_KEY=... \
   SUPABASE_SERVICE_ROLE_KEY=<rebuild-test service key> \
   npx vitest run --config test/live.vitest.config.ts s107-bid-upload-e2e
 ```
+
+### B5 · The send button — Part B is now reachable from the app
+
+A sender with no caller is not delivered work. `sendSubBidRequest()` in
+`sub-bid-requests-client.ts`, and a **Send / Resend** action on each request chip in the Sub Bids
+tab. The label follows `sent_at` — **"Send" before it has ever been mailed, "Resend" after** —
+which is only meaningful because B3b made `sent_at` mean "sent" instead of "row created".
+
+- Hidden for `submitted` / `cancelled` / `declined` (the route also returns **409** for those, so
+  the UI and the server agree rather than the UI merely being polite).
+- ⚠️ **A failure is shown, never swallowed** — a bid request that silently did not send is a sub
+  who never bids and an estimator who believes they did.
+- The confirmation states that **resending reuses the same link**, because a sub may be
+  mid-upload against the one they already have.
+
+`TSC_EXIT: 0`. Full unit suite after Part B: see below.

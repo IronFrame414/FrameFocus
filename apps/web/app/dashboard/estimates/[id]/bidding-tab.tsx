@@ -21,6 +21,7 @@ import {
 } from '@/lib/services/files-client';
 import {
   createSubBidRequest,
+  sendSubBidRequest,
   listSubBidRequests,
   bidReplyUrl,
   type SubBidRequestRow,
@@ -49,6 +50,7 @@ export function BiddingTab({ data, canEdit, reload, companyTimeZone }: TabProps)
   const [addingFor, setAddingFor] = useState<string | null>(null);
   const [requests, setRequests] = useState<SubBidRequestRow[]>([]);
   const [requestingFor, setRequestingFor] = useState<string | null>(null);
+  const [sendingId, setSendingId] = useState<string | null>(null);
   const confirm = useConfirm();
   const alert = useAlert();
 
@@ -159,6 +161,26 @@ export function BiddingTab({ data, canEdit, reload, companyTimeZone }: TabProps)
           'The award went through. Check the line before you send this estimate.',
       });
     }
+  }
+
+  // S107 — mail the request. The route owns the floor, the origin guard and the
+  // email_logs row; this only reports the outcome where the estimator is looking.
+  // ⚠️ A failure is SHOWN, never swallowed: a bid request that silently did not
+  // send is a sub who never bids and an estimator who thinks they did.
+  async function handleSendRequest(requestId: string) {
+    setError(null);
+    setSendingId(requestId);
+    const result = await sendSubBidRequest(data.estimate.id, requestId);
+    setSendingId(null);
+    if (!result.success) {
+      setError(result.error || 'Could not send the bid request');
+      return;
+    }
+    setRequests(await listSubBidRequests(data.estimate.id));
+    await alert({
+      title: 'Bid request sent',
+      message: `Sent to ${result.to ?? 'the subcontractor'}.\nThe link stays valid until the request expires — resending reuses the same link.`,
+    });
   }
 
   async function handleDeleteBid(subBidId: string) {
@@ -492,6 +514,30 @@ export function BiddingTab({ data, canEdit, reload, companyTimeZone }: TabProps)
                         }}
                       >
                         {subName(r.subcontractor_id)} · {r.status}
+                        {/* S107 — the SEND action. Before this the request row and
+                            its token existed and nothing was ever mailed, so the
+                            sub only ever got the link if someone copied it by
+                            hand. "Resend" reuses the SAME token by ruling. */}
+                        {canEdit && !['submitted', 'cancelled', 'declined'].includes(r.status) && (
+                          <button
+                            type="button"
+                            onClick={() => void handleSendRequest(r.id)}
+                            disabled={sendingId === r.id}
+                            style={{
+                              marginLeft: '0.5rem',
+                              border: 'none',
+                              background: 'none',
+                              padding: 0,
+                              font: 'inherit',
+                              fontWeight: 700,
+                              color: '#3b4ae0',
+                              cursor: sendingId === r.id ? 'wait' : 'pointer',
+                              textDecoration: 'underline',
+                            }}
+                          >
+                            {sendingId === r.id ? 'Sending…' : r.sent_at ? 'Resend' : 'Send'}
+                          </button>
+                        )}
                       </span>
                     ))}
                 </div>
