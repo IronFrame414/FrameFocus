@@ -128,3 +128,65 @@ never raise the claim limit) rather than weakened.
 
 **This is exactly where the two halves of item 5 meet:** (1) makes three of the four files
 survive any backlog; (2) is what keeps the fourth green. Neither alone is sufficient.
+
+---
+
+## 3 — Items 1–7, as fixed
+
+| #   | File                           | Before                     | After          | What it actually was                                                                         |
+| --- | ------------------------------ | -------------------------- | -------------- | -------------------------------------------------------------------------------------------- |
+| 1   | `s175-stage6-spec-sheet`       | 1 failed \| 23 passed      | **24/24**      | Code correct; the test asserted absence with `download()`, which reads through an edge cache |
+| 2   | `s97ct-7e-clicktest`           | 1 failed \| 33 passed      | **34/34**      | Test asserted the pre-guard rule; inverted to assert the guard                               |
+| 3   | `po18-committed`               | 1 failed \| 7 passed       | **8/8**        | M-J: accounts are picked, not typed                                                          |
+| 3   | `s151-retainage-rate-recorded` | 3 failed \| 2 passed       | **5/5**        | 1 root + 2 cascades                                                                          |
+| 3   | `s175-stage5-selection-money`  | 3 failed \| 34 passed      | **37/37**      | 2 root + 1 cascade                                                                           |
+| 4   | `s178-storage-trash`           | 3 failed \| 4 passed       | **7/7**        | `files_owner_arm_check`: company ownership arm                                               |
+| 6   | `s97ct-estimate-lines`         | 11 passed + teardown throw | **11/11**      | Residue, three layers deep                                                                   |
+| 6   | `s97ct-remaining-to-bill`      | 11 passed + teardown throw | **11/11**      | Same                                                                                         |
+| 7   | `s160-auth-email`              | 13 failed                  | **13 skipped** | Absent `RESEND_API_KEY` is the ruled state                                                   |
+
+### Item 1's finding, because it inverted the diagnosis
+
+`remove()` is **not** failing. Instrumenting it logged nothing, so the test was instrumented:
+
+```
+createSignedUrl(stalePath) -> "Object not found"       (storage.objects)
+list(folder)               -> [ the NEW object only ]  (storage.objects)
+download(stalePath)        -> 11844 bytes, "%PDF-1.3", error: none
+```
+
+The object is genuinely deleted; Supabase serves downloads through an edge cache, so a
+freshly-removed key keeps returning its bytes with no error. **`download()` can prove presence,
+never absence.** C1 now asserts against `storage.objects` twice over. The service-layer capture
+was kept anyway and reads `data` as well as `error` — `remove()` reports success for a key that
+matched nothing, so an empty `data` is a failed remove wearing a green tick.
+
+---
+
+## 4 — The full live suite
+
+### Run 1 — 120 passed | 2 failed | 1 skipped (123 files)
+
+> ⚠️ **The task notification for this run said "exit code 0". It was the trailing `echo`'s
+> status** — the trap `CLAUDE.md` documents verbatim. The printed `LIVE_EXIT_CODE_LINE` was
+> **1**, corroborated by two `FAIL` lines. Read the printed line, never the wrapper.
+
+Both failures passed in isolation, and neither was in the original 13:
+
+- **`s123-cron-loops`** — `idx_time_clock_sessions_one_open_per_member` refused the §3j seed.
+  One open session per member is the domain rule the block is written around, and an
+  interrupted earlier run had left one on the QA crew member (`madeSessions` lives in memory
+  and dies with the run). `beforeAll` now sweeps strays, scoped hard: OPEN only, this member
+  only, `status='pending'` only — the exact shape `seedSession()` creates.
+- **`s187-qb-drain-parked`** — `outcome.waiting` read 0 because earlier files leave claimable
+  rows. **I had documented this as unscopeable. It is not.** The file now MAKES its
+  precondition: it soft-deletes every other claimable row in `beforeAll` and restores them in
+  `afterAll`. Reversible, deletes nothing, cannot race (`fileParallelism: false`). The stale
+  "CANNOT BE SCOPED" comment was replaced rather than left standing.
+
+Both verified against a deliberately restored 102-row backlog: **s187 4/4, s123-cron 9/9.**
+Queue integrity re-checked after the quiet/restore cycle — all 102 ids present, none left
+retired by the file, nothing lost.
+
+**The backlog regrew during run 1**, 208 → 271 rows. That is the point: item 5(2) was a
+one-time unblock, and item 5(1) is what makes the regrowth stop mattering.
