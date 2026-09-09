@@ -304,3 +304,21 @@ which is only meaningful because B3b made `sent_at` mean "sent" instead of "row 
   mid-upload against the one they already have.
 
 `TSC_EXIT: 0`. Full unit suite after Part B: see below.
+
+### B6 · A guard test caught the new template — fixed the template, not the guard
+
+The full suite went **red** after B5: `brand-email-footer.test.tsx` →
+_"⚠️ the templates directory holds nothing this file does not assert"_. It walks
+`lib/email/templates/` on disk and fails on any `.tsx` with no brand assertion — so my new
+template was caught the moment it existed.
+
+**It was right and I was wrong: `sub-bid-request-email.tsx` had no brand footer at all.** Every
+other template ends with `Sent by {companyName} via {brand.name}`. Fixed by adding the footer and
+registering the template in `COVERED` **with a render block in `CLIENT_FACING`**, so it is now
+asserted white-label like the PO and proposal emails — the contractor's logo in the header, the
+product named only in the attribution. Registering the filename without the render block would
+have satisfied the walk while asserting nothing.
+
+⚠️ **This is the guard working exactly as designed**, and worth recording: the failure was not a
+flake or an unrelated regression, it was a new file failing a completeness invariant on its first
+run. `brand-email-footer.test.tsx`: 66 passing.

@@ -10,6 +10,7 @@ import {
   Section,
   Text,
 } from '@react-email/components';
+import { brand } from '@/lib/brand';
 
 // S107 Part B — the bid request a subcontractor receives.
 //
@@ -127,6 +128,16 @@ export function SubBidRequestEmail({
           </Text>
           <Text style={{ fontSize: '12px', lineHeight: '18px', color: '#7b8699', wordBreak: 'break-all' }}>
             {replyUrl}
+          </Text>
+
+          {/* WHITE-LABEL: the header carries the CONTRACTOR's logo and the
+              product is named only here, in the attribution. This mail goes to
+              an outside trade under the contractor's identity, exactly like the
+              proposal and PO emails. `brand-email-footer.test.tsx` asserts both
+              halves and will fail if a product mark ever moves into the header. */}
+          <Hr style={{ borderColor: '#e5e7eb', margin: '16px 0' }} />
+          <Text style={{ fontSize: '11px', color: '#9ca3af' }}>
+            Sent by {companyName} via {brand.name}
           </Text>
         </Container>
       </Body>
