@@ -67,7 +67,44 @@ export function adminClient(): SupabaseClient {
 /** Company A (Sabal Point Construction) and the crew test identity's member row. */
 export const COMPANY_A = '03bb903f-1084-4ab4-afb8-03192cb58d30';
 export const CREW_MEMBER = '18a105e7-2ff9-4546-a17b-87524a45e978'; // Casey Crew
-export const OTHER_MEMBER = '9b0380c5-18f9-4c93-88b0-229fd18390c4'; // Pat Manager
+export const OTHER_MEMBER = '9b0380c5-18f9-4c93-88b0-229fd18390c4'; // profile: Pat Manager
+
+/**
+ * The name a MEMBER is rendered under — read from the database, never typed.
+ *
+ * ⚠️ A MEMBER HAS TWO NAMES AND THE SURFACES DISAGREE ON PURPOSE.
+ * `company_members.display_name` is what the live board, the roster and every
+ * member-scoped surface render; `profiles.first_name/last_name` is the person.
+ * They are allowed to differ — a subcontractor member has a display_name and no
+ * profile at all — so the board showing something other than the profile name
+ * is the design, not a bug.
+ *
+ * ⚠️ AND THEY DO DIFFER ON THE QA TENANT. `OTHER_MEMBER` is display_name
+ * "QA PM A" against profile "Pat Manager", from the S176 rename that STATE.md
+ * records as "the stale display_name twin". `m-capture`'s D-34 test asserted
+ * the PROFILE name against a board that renders the MEMBER name, so it timed
+ * out for 30s a run and had been red in CI since #290 (2026-09-05).
+ *
+ * Deriving it is the fix rather than retyping the current value: the same
+ * rename will happen again, and `4fe9393` already set this precedent for the
+ * chat mention test. A hardcoded name is a fixture that rots silently.
+ */
+export async function memberDisplayName(admin: SupabaseClient, memberId: string): Promise<string> {
+  const { data, error } = await admin
+    .from('company_members')
+    .select('display_name')
+    .eq('id', memberId)
+    .single();
+  if (error) throw new Error(`memberDisplayName(${memberId}): ${error.message}`);
+  const name = (data as { display_name: string | null }).display_name;
+  if (!name) {
+    throw new Error(
+      `memberDisplayName(${memberId}): display_name is empty — the live board ` +
+        'renders this field, so there would be nothing to assert against.'
+    );
+  }
+  return name;
+}
 
 export type HubFixture = {
   admin: SupabaseClient;
@@ -228,14 +265,16 @@ export async function setupHubFixture(prefix = 'M6M'): Promise<HubFixture> {
     requires_verification: false,
   });
 
-  await admin.from('punch_list_items').insert([
-    item('M6M — open A', 'open', CREW_MEMBER),
-    item('M6M — open B', 'open', CREW_MEMBER),
-    item('M6M — in progress', 'in_progress', CREW_MEMBER),
-    item('M6M — open, someone else', 'open', OTHER_MEMBER),
-    item('M6M — complete', 'complete', CREW_MEMBER),
-    item('M6M — verified', 'verified', CREW_MEMBER),
-  ]);
+  await admin
+    .from('punch_list_items')
+    .insert([
+      item('M6M — open A', 'open', CREW_MEMBER),
+      item('M6M — open B', 'open', CREW_MEMBER),
+      item('M6M — in progress', 'in_progress', CREW_MEMBER),
+      item('M6M — open, someone else', 'open', OTHER_MEMBER),
+      item('M6M — complete', 'complete', CREW_MEMBER),
+      item('M6M — verified', 'verified', CREW_MEMBER),
+    ]);
 
   // -------------------------------------------------------------------------
   // SCHEDULE — "Up next" (D-24).
@@ -307,10 +346,7 @@ export async function setupHubFixture(prefix = 'M6M'): Promise<HubFixture> {
  * break, which is precisely why A-8b exists and why zero highlighted cards is a
  * normal state rather than a bug.
  */
-export async function openSegment(
-  f: HubFixture,
-  kind: 'work' | 'break'
-): Promise<void> {
+export async function openSegment(f: HubFixture, kind: 'work' | 'break'): Promise<void> {
   await closeSegment(f);
 
   const { data: session, error } = await f.admin
@@ -402,16 +438,26 @@ async function hardDelete(admin: SupabaseClient, prefix: string): Promise<void> 
   // rows first so FKs clear, then the objects.
   const { data: files } = await admin.from('files').select('id, file_path').in('project_id', ids);
   if (files?.length) {
-    await admin.from('files').delete().in('id', files.map((f) => f.id));
+    await admin
+      .from('files')
+      .delete()
+      .in(
+        'id',
+        files.map((f) => f.id)
+      );
     await admin.storage.from('project-files').remove(files.map((f) => f.file_path));
   }
 
   await admin.from('daily_logs').delete().in('project_id', ids);
   await admin.from('safety_incidents').delete().in('project_id', ids);
-  await admin.from('delivery_items').delete().in(
-    'delivery_id',
-    (await admin.from('deliveries').select('id').in('project_id', ids)).data?.map((d) => d.id) ?? []
-  );
+  await admin
+    .from('delivery_items')
+    .delete()
+    .in(
+      'delivery_id',
+      (await admin.from('deliveries').select('id').in('project_id', ids)).data?.map((d) => d.id) ??
+        []
+    );
   await admin.from('deliveries').delete().in('project_id', ids);
   await admin.from('tasks').delete().in('project_id', ids);
   await admin.from('project_assignments').delete().in('project_id', ids);
