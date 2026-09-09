@@ -137,3 +137,42 @@ again. **Audit item 11 is closed.**
 
 Verified: `TSC_EXIT: 0`, full suite **87 files / 1156 tests, all passing** (was 86/1149 — +1 file,
 +7 tests, no regressions).
+
+### B2 · The sub's file GET — DONE
+
+`GET /api/bid/[token]/files` added. The ruling says the sub sees "scope, files, and their own
+bid form"; only the upload half existed (the route was POST-only).
+
+**The decision this forced, which no ruling covered — recorded rather than idled on.** An
+estimate's `files` rows are the estimator's scope documents **and every other subcontractor's
+uploaded bid**. The page is anonymous and the token is the only credential, so an unfiltered
+list would hand a bidder their competitors' pricing — money on a public surface, and the worst
+thing this route could do. I took the conservative reading: **the sub sees only staff-uploaded
+files, never another sub's upload.**
+
+**Two independent exclusions, both required** (`lib/services/sub-bid-files.ts`):
+1. `created_by IS NOT NULL` — a signed-in staff member uploaded it. Every bid-token upload goes
+   through the service role and has no `auth.uid()`.
+2. the row does not carry `tags: ['sub-bid-upload']` — a **positive** marker the POST now stamps.
+
+Either alone suffices today. Both are applied because they **fail independently**: (1) breaks if
+a future staff insert path forgets `created_by`; (2) breaks if a tag is edited off. One
+regression is then a bug, not a leak.
+
+⚠️ **Why the marker exists at all:** `created_by` being NULL for sub uploads is real but
+*incidental* — nothing declares it. The tag states it.
+
+**Also:** token resolution is now a single `resolveToken()` shared by GET and POST, so the two
+cannot drift on what a valid token is (404 missing/deleted, 410 expired, no existence oracle).
+The GET returns only `id, file_name, file_size, mime_type, url` — `file_path`, `created_by` and
+`tags` are deliberately withheld, because #136's lesson is that a payload leaks what a renderer
+hides.
+
+**Blocked by a Next constraint worth recording:** a route module cannot export a constant — the
+App Router's generated types constrain a route file's exports to the handlers, and `tsc` fails
+with `Type '"sub-bid-upload"' is not assignable to type 'never'`. The marker had to move to
+`lib/`, which is where the parity rule wanted it anyway.
+
+Tests: `s107-bidder-file-visibility.test.ts`, 6 cases including **both single-regression
+scenarios** (tag missing → `created_by` catches it; `created_by` present → the tag catches it).
+`VITEST_EXIT: 0`, 6/6. `TSC_EXIT: 0`.
