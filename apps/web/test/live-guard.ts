@@ -223,6 +223,14 @@ export async function verifyLiveTarget(
   }
 
   // 4. A legacy service key that decoded to rebuild-test is already proven.
+  //
+  // ⚠️ THE JWT SIGNATURE IS NOT VERIFIED, DELIBERATELY. We have no secret to
+  // verify it with, and we do not need one. The threat this guard exists for is
+  // an operator holding the WRONG REAL KEY — and a real production key names
+  // production in its own `ref` claim, which is exactly what step 3 rejected.
+  // A key with a FORGED claim is not a danger: it authenticates against nothing,
+  // so it cannot write anywhere. Trusting the claim can only ever let through a
+  // key that is useless, never one that is dangerous.
   if (refFromKey(env.service) === REQUIRED_PROJECT_REF) {
     return { ref: REQUIRED_PROJECT_REF, how: "decoded from the key's own `ref` claim" };
   }
