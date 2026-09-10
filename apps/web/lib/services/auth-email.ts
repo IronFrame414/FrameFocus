@@ -118,6 +118,16 @@ export interface AuthEmailOutcome {
   sent: boolean;
   logged: boolean;
   error: string | null;
+  /**
+   * ⚠️ WHY THE LOG ROW IS MISSING, OR WHY P3 DID NOT FIRE — in words.
+   *
+   * Added 2026-09-10 after `auth_signup_confirmation` was found to have ZERO
+   * rows on production while the mail was demonstrably delivering. Every path
+   * that ends in "no row" or "sent anyway" now says which one it was, and the
+   * route puts this in its 200 body and in the Vercel log line. Null when
+   * nothing noteworthy happened.
+   */
+  diagnosis?: string | null;
 }
 
 /**
@@ -176,36 +186,102 @@ export function buildVerifyUrl(
  * the log row needs.
  *
  * ⚠️ `email_logs.company_id` IS NOT NULL [LIVE], which is why this is resolved
- * rather than defaulted. Every real case has one by the time the hook runs — the
- * `auth.users` trigger creates the profile (and, on the owner path, the company)
- * INSIDE the insert, so the row exists before GoTrue gets as far as sending.
- * When it somehow does not, the email still goes out and only the LOG is
- * skipped: see `deliver()`. An unsent email is a user-visible failure; an
- * unlogged one is a bookkeeping gap, and trading the first for the second would
- * be the wrong way round.
+ * rather than defaulted.
+ *
+ * ⚠️ THE COMMENT THAT STOOD HERE WAS RIGHT ABOUT THE TRIGGER AND WRONG ABOUT
+ * VISIBILITY. Quoted rather than deleted, because it is the reason nobody
+ * looked:
+ *
+ *   "Every real case has one by the time the hook runs — the `auth.users`
+ *    trigger creates the profile (and, on the owner path, the company) INSIDE
+ *    the insert, so the row exists before GoTrue gets as far as sending."
+ *
+ * The trigger half is correct. `handle_new_user()` does create the profile
+ * inside the insert. But INSIDE THE INSERT IS INSIDE A TRANSACTION, and this
+ * function reads over a SEPARATE CONNECTION through `getSupabaseAdmin()`. A row
+ * written by an uncommitted transaction is invisible from outside it. So the
+ * sentence describes precisely why the code ought to work while naming the
+ * exact reason it cannot.
+ *
+ * WHAT IT SHOULD HAVE SAID: on RECOVERY, MAGIC LINK, EMAIL CHANGE and
+ * REAUTHENTICATION the user is long committed and this resolves normally. On
+ * SIGNUP it resolves to null essentially always, because a signup is by
+ * definition the case where the profile is newest — GoTrue calls the hook
+ * during the signup request, and the row it needs is still inside that
+ * request's open transaction.
+ *
+ * MEASURED, 2026-09-10: production `email_logs` held 37 `invite` rows,
+ * 1 `auth_recovery` row and ZERO `auth_signup_confirmation` rows, while signup
+ * confirmations were demonstrably being delivered. An invited crew member's
+ * invitation row was written at 21:40:45 and their profile at 21:41:04 —
+ * nineteen seconds later, inside the transaction the hook was already running
+ * against.
+ *
+ * ⚠️ AND THE CONSEQUENCE IS NOT ONLY A MISSING LOG ROW. `sender` gates the From
+ * line as well, so every signup confirmation goes out as
+ * `no-reply@ezcontractorbinder.com` rather than under the tenant's name — a
+ * second From address accumulating its own sending reputation on a domain with
+ * very little. See `docs/specs/email-deliverability-diagnosis.md` §6 and §7.
+ *
+ * The trade below still holds and is unchanged: when the sender cannot be
+ * resolved the email STILL GOES OUT and only the LOG is skipped. An unsent
+ * email is a user-visible failure; an unlogged one is a bookkeeping gap, and
+ * trading the first for the second would be the wrong way round. What was wrong
+ * was believing this path was rare.
  */
+type SenderResolution =
+  | { sender: { companyId: string; from: string }; reason: null }
+  | { sender: null; reason: string };
+
 async function senderFor(
   admin: SupabaseClient<Database>,
   userId: string
-): Promise<{ companyId: string; from: string } | null> {
-  const { data: profile } = await admin
+): Promise<SenderResolution> {
+  // ⚠️ THE ERROR IS READ, NOT DISCARDED [2026-09-10]. This function previously
+  // destructured `data` alone on BOTH queries, which made "the query failed"
+  // and "the row is not there" produce an identical null — and therefore an
+  // identical silent skip of logEmail(). That is the FOURTH instance of this
+  // pattern in this campaign: the S104 Purchase orphan, S107's cached storage
+  // read, the absent DNS tool that read as a missing DNS record, and this.
+  //
+  // The four differ in subject and are the same defect: a result destructured
+  // for its happy path, so the failure arrives wearing the empty case's
+  // clothes. Reading the error does not fix anything here — it makes the
+  // question answerable, which it was not.
+  const { data: profile, error: profileError } = await admin
     .from('profiles')
     .select('company_id')
     .eq('user_id', userId)
     .eq('is_deleted', false)
     .maybeSingle();
-  if (!profile) return null;
+
+  if (profileError) {
+    return { sender: null, reason: `profiles query FAILED: ${profileError.message}` };
+  }
+  if (!profile) {
+    // The expected shape of the signup case: the row exists inside the
+    // uncommitted insert and is invisible from this connection. Named as
+    // "not visible" rather than "missing" because those are different facts and
+    // only one of them is a bug.
+    return { sender: null, reason: 'no profiles row VISIBLE for this user' };
+  }
 
   const companyId = (profile as { company_id: string }).company_id;
-  const { data: company } = await admin
+  const { data: company, error: companyError } = await admin
     .from('companies')
     .select('name, slug')
     .eq('id', companyId)
     .maybeSingle();
-  if (!company) return null;
+
+  if (companyError) {
+    return { sender: null, reason: `companies query FAILED: ${companyError.message}` };
+  }
+  if (!company) {
+    return { sender: null, reason: `no companies row VISIBLE for ${companyId}` };
+  }
 
   const co = company as { name: string; slug: string };
-  return { companyId, from: buildSenderAddress(co) };
+  return { sender: { companyId, from: buildSenderAddress(co) }, reason: null };
 }
 
 /**
@@ -229,12 +305,26 @@ export async function invitedCompanyFor(
   const raw = user.user_metadata?.invitation_token;
   if (typeof raw !== 'string' || raw.length === 0) return null;
 
-  const { data } = await admin
+  // ⚠️ THE ERROR IS READ, NOT DISCARDED [2026-09-10] — same pattern as
+  // senderFor above, and this one is NOT merely a bookkeeping gap. A null here
+  // silently turns P3 OFF: the invited user is not auto-confirmed and is sent a
+  // confirmation email instead. That is user-visible, and it is
+  // indistinguishable from "this token is not an invitation" unless the error
+  // is read.
+  const { data, error } = await admin
     .from('invitations')
     .select('id, company_id, email')
     .eq('token', raw)
     .eq('is_deleted', false)
     .maybeSingle();
+  if (error) {
+    console.error('auth email hook: invitations lookup FAILED; treating as not invited', {
+      route: 'POST /api/auth/send-email',
+      user_id: user.id,
+      message: error.message,
+    });
+    return null;
+  }
   if (!data) return null;
 
   const inv = data as { company_id: string; email: string };
@@ -260,6 +350,8 @@ export async function handleAuthEmail(
 ): Promise<AuthEmailOutcome> {
   const actionRaw = payload.email_data.email_action_type;
   const action = (actionRaw in ACTIONS ? actionRaw : 'unknown') as AuthEmailAction | 'unknown';
+  /** Set only when P3 was reached and did not short-circuit. See below. */
+  let p3Diagnosis: string | null = null;
 
   // ── P3 ────────────────────────────────────────────────────────────────────
   if (action === 'signup') {
@@ -279,6 +371,11 @@ export async function handleAuthEmail(
           user_id: payload.user.id,
           message: error.message,
         });
+        // ⚠️ CARRIED FORWARD [2026-09-10] rather than only printed. This branch
+        // is the leading explanation for why an INVITED user received a signup
+        // confirmation at all — under a working P3 no email is sent — and until
+        // now the only trace it left was a console line nobody had read.
+        p3Diagnosis = `P3 auto-confirm FAILED, fell through to sending: ${error.message}`;
       } else {
         return {
           action,
@@ -315,10 +412,17 @@ export async function handleAuthEmail(
     action === 'email_change_new'
   );
 
-  const sender = await senderFor(admin, payload.user.id);
+  const { sender, reason: senderReason } = await senderFor(admin, payload.user.id);
   // The platform fallback exists only for the case with no resolvable company.
   // It is a real, verified address on the same domain, so alignment holds even
   // here; what is lost is the tenant's name on the From line.
+  //
+  // ⚠️ ON SIGNUP THIS IS NOT A FALLBACK, IT IS THE ONLY PATH [measured
+  // 2026-09-10]. `sender` gates BOTH this line and the logEmail() call below,
+  // so a null here produces a `no-reply@` From AND no `email_logs` row, from one
+  // cause. Production had 37 `invite` rows, 1 `auth_recovery` row and ZERO
+  // `auth_signup_confirmation` rows while confirmations were demonstrably
+  // delivering. See `docs/specs/email-deliverability-diagnosis.md` §7.
   const from = sender?.from ?? `${brand.name} <no-reply@${SENDING_DOMAIN}>`;
   const subject = subjectFor(kind);
 
@@ -360,14 +464,24 @@ export async function handleAuthEmail(
     logged = id !== null;
   } else {
     // Named, because "no row appeared" must never be the only symptom again.
+    // ⚠️ AND NOW IT NAMES WHICH REASON. Before 2026-09-10 this line said only
+    // "no company for user", which is true of a failed query and of an absent
+    // row alike — so the one question worth asking could not be answered from
+    // it.
     console.error('auth email hook: no company for user; send NOT logged', {
       route: 'POST /api/auth/send-email',
       user_id: payload.user.id,
       email_action_type: actionRaw,
+      reason: senderReason,
     });
   }
 
-  return { action, autoConfirmedInvite: false, sent: error === null, logged, error };
+  const diagnosis =
+    [p3Diagnosis, sender ? null : `send NOT logged — ${senderReason}`]
+      .filter(Boolean)
+      .join('; ') || null;
+
+  return { action, autoConfirmedInvite: false, sent: error === null, logged, error, diagnosis };
 }
 
 /** Subjects, ours rather than GoTrue's — see `mailer_subjects_*` in §4.1. */

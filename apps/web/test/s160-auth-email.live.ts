@@ -469,6 +469,16 @@ describeSend('S160-C — P1/P2: the send goes out branded, and it is logged', ()
 
     expect(outcome.sent, 'the email was dropped because it could not be logged').toBe(true);
     expect(outcome.logged).toBe(false);
+    // ⚠️ ADDED [2026-09-10]. Until now "logged: false" was the ONLY trace, and
+    // it is true of a failed query and of an absent row alike — which is why
+    // zero `auth_signup_confirmation` rows on production could not be explained
+    // from the outside. The reason must survive to the caller.
+    expect(outcome.diagnosis, 'the skip left no explanation').toBeTruthy();
+    expect(outcome.diagnosis).toContain('send NOT logged');
+    expect(
+      outcome.diagnosis,
+      'the diagnosis does not distinguish an absent row from a failed query'
+    ).toMatch(/VISIBLE|FAILED/);
     expect(state.calls, 'Resend was not called for the orphan').toHaveLength(1);
     // The platform fallback still sends from the ALIGNED domain.
     expect(state.calls[0].from).toContain(`@ezcontractorbinder.com`);
