@@ -754,3 +754,24 @@ probes clean immediately after. There is no slope here to extrapolate.
 
 **§9's blocker is lifted. A red CI run is once again a signal rather than an ambiguity**, which
 was the precondition the merge authorization was waiting on.
+
+---
+
+## 13 — CI: a PR was required to get a pre-merge signal at all
+
+**The workflow triggers on `push` to `main`/`dev` and on `pull_request` targeting them — nothing
+else.** So pushing this feature branch ran no CI, and the branch had **zero** runs against it. The
+repo's entire recent CI history (#290-#302) is `event: push` on `main`, i.e. every signal this
+campaign has ever read was produced *after* a merge had already landed.
+
+> **That is worth naming, because it is half of why this took four merges to notice.** "Merge,
+> then find out" is the only mode this configuration offers by default. #298-#302 then cancelled
+> each other as pushes stacked up, so four of the five most recent signals were not failures at
+> all — they were runs that never finished.
+
+**PR #7** (`fix/e2e-red-since-290` → `main`) opened to trigger CI **before** merging rather than
+after, since the merge authorization is conditioned on a green run. **Run #303**, `39a0cd1`,
+`event: pull_request` — the first run this branch has ever had.
+
+The local merge sequence is unchanged and still local: `--no-ff`, build and unit suite on the
+merged `main`, then push. The PR is a signal mechanism, not the merge route.
