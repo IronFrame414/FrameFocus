@@ -683,3 +683,74 @@ Deleting it would turn the test green without making it correct, and the next in
 would recreate it. The fix is to assert the RULING rather than the seeded world — and leaving the
 polluted row present is what proves the fixed test against the real adversarial condition instead
 of a hypothetical one.
+
+### Fixed, and verified against the pollution rather than around it
+
+`expect(...).toEqual([])` → the ruling, computed in both directions:
+
+```ts
+expect(delivered.length).toBe(mineThere);              // exactly their own
+expect(delivered.length).toBeLessThan(coneThere.length); // and demonstrably not all
+```
+
+**Both, because either alone passes on a broken build.** The count alone is satisfied by a page
+that ships the WRONG rows in the right number; the inequality alone is satisfied by a page that
+ships nothing at all. Together they pin it.
+
+The `mine[0]` pick was ordered while here — CLAUDE.md's `.limit(1)` rule, category 1: an
+unordered first-row pick is stable until any CO is updated, and then it is not.
+
+**Verified with the orphan row still present: 5.3 s green, and 8/8 for the file.** That is the
+point of leaving it — the test is now proven against the residue that broke it, not against a
+clean database it will rarely meet.
+
+---
+
+## 12 — The full suite on MICRO: it holds
+
+```
+1 failed | 10 skipped | 557 passed (28.1m)
+FULL_E2E_PRINTED_EXIT: 1
+```
+
+> The task notification said "exit code 0" again. The printed line said **1**. **Fifth time in
+> this campaign** — the `[exited with code 0]` trailer in the task output is the wrapper's status,
+> not the run's. Read the printed line; it is the only one that belongs to the process under test.
+
+The single failure is `desktop-payload:129`, diagnosed in §11 and fixed above.
+
+### Latency through the whole run, sampled every 180 s
+
+```
+00:25:58  154ms   00:34:59  216ms   00:43:59   86ms
+00:28:58   61ms   00:37:59   70ms   00:46:59   74ms
+00:31:59  138ms   00:40:59   59ms   00:49:59   62ms
+                                     00:53:00  673ms
+```
+
+Post-run idle: **select 67 ms, sign-in 131 ms, 0/5 errors.**
+
+| | NANO (§9) | MICRO |
+| --- | --- | --- |
+| idle | 645 ms | 84 ms |
+| under sustained suite load | **64,957 ms**, then refused connections | **59-216 ms, no trend** |
+| immediately after | Management API connection timeout | **67 ms** |
+| recovery tail | tens of minutes | none — never degraded |
+| full suite | 7 failed, 2 flaky, 522 passed, **49.7m** | 1 failed, 0 flaky, 557 passed, **28.1m** |
+
+**The suite is 21.6 minutes faster and no longer produces flakes.** Some of that is the five
+60-second timeout burns that are gone; most of it is the tier.
+
+### ⚠️ THE HONEST LIMIT OF THIS MEASUREMENT
+
+**MICRO is proven for 28 minutes of continuous suite load, not for 40+.** NANO's collapse was
+measured at minute 40 of a 49.7-minute run, and this suite now finishes in 28.1 — so the run
+never reached the wall-clock point where NANO fell over, and cannot claim to have survived it.
+
+What can be claimed is stronger than wall clock, though: **the latency series has no upward
+trend at all.** NANO did not fall off a cliff at minute 40 — it degraded visibly on the way
+there, and stayed degraded for tens of minutes afterwards. MICRO ends the run at 62-673 ms and
+probes clean immediately after. There is no slope here to extrapolate.
+
+**§9's blocker is lifted. A red CI run is once again a signal rather than an ambiguity**, which
+was the precondition the merge authorization was waiting on.
