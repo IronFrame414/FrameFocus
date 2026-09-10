@@ -6,6 +6,39 @@
 
 ---
 
+> ## ⚠️ UPDATE 2026-09-10 — THREE OF THIS DOCUMENT'S FINDINGS ARE NOW FIXED
+>
+> The body below is left as written. Read these four notes first; the sections they
+> correct carry inline pointers back here.
+>
+> **1. The Resend webhook is LIVE. §1b is superseded.** [Josh] It had been pointed at
+> `https://frame-focus-eight.vercel.app/api/webhooks/resend` — **the pre-rebrand host** — which is
+> why `delivered_at` / `opened_at` / `bounced_at` were zero across all 1,105 rows. Repointed to
+> `https://ezcontractorbinder.com/api/webhooks/resend`, **Enabled**, listening for
+> `email.bounced`, `email.delivered` and three more, and events return `{"received":true}` with
+> Success. **Bounce and delivery visibility is live as of this date.** The handler itself was
+> always correct and is unchanged — this was configuration, not code.
+>
+> **2. DMARC reporting is fixed and enforcement raised. §1e is superseded.** [Josh] `rua` was
+> cross-domain (`josh@worthprop.com`) with the RFC 7489 authorization record on the receiving
+> side **absent**, so conforming receivers sent no aggregate reports at all. It now points at
+> `EZContractorBinder@gmail.com` — same domain, no authorization record needed — and `p=none` was
+> raised to **`p=quarantine` with `fo=1`**.
+>
+> **3. The bounce guard shipped.** §3's row *"Stop mailing `.invalid` from fixtures (or gate
+> undeliverable TLDs at the `sendEmail()` choke point)"* is built, as the choke-point form:
+> `recipientIsDeliverable()` in `email-service.ts`, refusing RFC 2606/6761 reserved domains after
+> the send gate and before the consent check. Static list, no DNS lookup — RULED [Josh].
+>
+> **4. ⚠️ AND A FINDING THIS DOCUMENT DID NOT HAVE: THE DOMAIN HAS TWO SENDERS.** §1c concluded
+> *"today only ONE local part has ever sent (`bishop-contracting@`, 1,067 rows)"*. That is no
+> longer true, and the second one is **not a tenant slug**. A real employee signed up on
+> 2026-09-10 and the confirmation delivered successfully **from
+> `EZ Contractor Binder <no-reply@ezcontractorbinder.com>`** — Supabase Auth's sender, not
+> `buildSenderAddress()`. See §6 below, added the same day.
+
+---
+
 ## 1. The evidence
 
 ### 1a. Volume and recipients (A1)
@@ -271,3 +304,65 @@ themselves off from documents they need.*
 - **UNKNOWNs:** Resend suppression list and dashboard reputation (no key reachable read-only);
   the date spam-foldering began (no Gmail-side data); whether any DMARC rua report ever arrived
   (DNS says none should); when DMARC was added (no DNS history).
+
+---
+
+## 6. The domain has TWO senders, and only one of them can be warmed [added 2026-09-10]
+
+§1c concluded *"today only ONE local part has ever sent (`bishop-contracting@`, 1,067 rows)"* and
+treated many-local-parts as a future risk. A real employee signed up on 2026-09-10 and the
+confirmation **delivered successfully** — from `EZ Contractor Binder <no-reply@ezcontractorbinder.com>`.
+
+### 6a. Where that From line comes from — identified, not guessed
+
+That string exists in exactly one place in the tree: `auth-email.ts:322`.
+
+```ts
+const from = sender?.from ?? `${brand.name} <no-reply@${SENDING_DOMAIN}>`;
+```
+
+`brand.name` is `'EZ Contractor Binder'` (`lib/brand.ts:51`) and `SENDING_DOMAIN` is
+`ezcontractorbinder.com`. It is the **platform fallback**, taken when `senderFor()` cannot resolve a
+company for the user.
+
+**And for a signup confirmation it is not a fallback — it is the normal path.** The profile and
+company do not exist yet when the confirmation goes out, so `senderFor()` returns null by
+construction. **Every new-user signup confirmation this platform ever sends will come from
+`no-reply@`,** not from a tenant slug.
+
+### 6b. ⚠️ Two consequences that are not in STATE.md
+
+1. **The Send Email Hook appears to be ENABLED, and STATE.md still says it is off.** STATE.md's
+   Supabase Configuration table records `Send Email Hook ❌ Off (hook_send_email_enabled: false)
+   [LIVE, S160]`. Auth mail bearing our own code's From line means GoTrue is calling
+   `/api/auth/send-email`. **Inferred, not verified from here** (no production read path).
+2. **The discriminator, if anyone wants certainty**, is one query on production:
+   an `email_logs` row with `email_type = 'auth_signup_confirmation'` for that employee's address.
+   **Present** → the hook is on and auth mail runs through `sendEmail()` (and therefore through the
+   send gate, the bounce guard and `email_logs`). **Absent** → Supabase Custom SMTP is configured
+   with a matching From, and auth mail bypasses all three.
+
+### 6c. Does the split matter for reputation?
+
+**Partially, and less than the two-From framing suggests.** Gmail scores primarily at the
+**domain** level — the DKIM `d=` domain and the DMARC-aligned organizational domain — which is
+`ezcontractorbinder.com` for both senders. Warming the tenant slugs therefore builds standing that
+`no-reply@` shares. The From address is a secondary signal, not a separate reputation.
+
+**Two asymmetries make it worth attention anyway:**
+
+- **`no-reply@` carries the highest-stakes mail on the platform** — signup confirmation and
+  password reset. A user who cannot confirm their account never becomes a customer. If exactly one
+  From on this domain must never be spam-foldered, it is this one.
+- **It is the one sender that cannot be warmed on demand.** Its volume is driven by real signups,
+  which is precisely the volume that does not exist yet, and a warming design that sends *as Worth
+  Properties* and *as H&H* never touches it.
+
+**The honest limit on any fix.** The observed verdict was *"similar to messages that were
+identified as spam in the past"* — a **content**-similarity judgement. Warming `no-reply@` with
+mail that is not auth mail may build the address's sending history without moving that particular
+verdict, and real auth mail cannot be used as warming (a magic link is mutating on click, which the
+2026-09-10 ruling excludes). Volume under a third From is a partial instrument, not a fix.
+
+**Open for Josh** — warming as specified is 24/week across two tenant senders. Adding `no-reply@`
+as a third rotated sender is a change to that shape and is his call. Not assumed, not built.

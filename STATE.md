@@ -375,13 +375,40 @@ correct restore prints one line instead:
 | Email provider              | ✅ Enabled                                                                                  |
 | Email confirmation          | ✅ Enabled (`mailer_autoconfirm: false`) — **and it must stay on** [S160, see below]        |
 | Custom SMTP                 | ❌ **None** (`smtp_host: null`) [LIVE, S159] — which is why S160 built the Send Email Hook  |
-| Send Email Hook             | ❌ **Off** (`hook_send_email_enabled: false`) [LIVE, S160] — attended step, S160 spec §3    |
+| Send Email Hook             | ⚠️ **LIKELY ON — this row is STALE** [2026-09-10], see below                                |
 | Auth email rate limit       | **2 per hour, project-wide** (`rate_limit_email_sent`) while GoTrue is the sender           |
 | Site URL                    | `https://EZContractorBinder.com` — **corrected S160**; the old value below was stale        |
 | Redirect URLs               | `https://frame-focus-eight.vercel.app/auth/callback`, `http://localhost:3000/auth/callback` |
 | Automatic RLS on new tables | ✅ Enabled                                                                                  |
 | Data API                    | ✅ Enabled                                                                                  |
 | OTP/email link expiry       | 24 hours (raised Session 23 from default)                                                   |
+
+> ### ⚠️ Send Email Hook — the row above is stale, and one query settles it [2026-09-10]
+>
+> _Superseded value, quoted rather than deleted:_
+> _`| Send Email Hook | ❌ **Off** (hook_send_email_enabled: false) [LIVE, S160] — attended step, S160 spec §3 |`_
+>
+> A real employee signed up on 2026-09-10 and the confirmation delivered **from
+> `EZ Contractor Binder <no-reply@ezcontractorbinder.com>`**. That exact From line is built in
+> exactly one place in this repository — `auth-email.ts:322`, the platform fallback
+> `` `${brand.name} <no-reply@${SENDING_DOMAIN}>` `` — which only runs when GoTrue calls
+> `/api/auth/send-email`. Supabase's own shared mailer would have sent from
+> `noreply@mail.app.supabase.io`.
+>
+> **⚠️ INFERRED FROM THE From LINE, NOT VERIFIED.** No production read path exists from a
+> Codespace (CLI and MCP are both pinned to rebuild-test). The competing explanation is Custom
+> SMTP configured with a matching From — which would mean auth mail bypasses `sendEmail()`, and
+> therefore bypasses the send gate, the bounce guard **and** `email_logs`.
+>
+> **The discriminator is one query on production:** an `email_logs` row with
+> `email_type = 'auth_signup_confirmation'` for that employee's address. **Present** → the hook is
+> on. **Absent** → Custom SMTP, and three safety mechanisms do not cover auth mail.
+>
+> Note also that the **Auth email rate limit** row above says "while GoTrue is the sender" — if
+> the hook is on, GoTrue is no longer the sender and that limit no longer binds. Both rows need
+> re-verifying together.
+>
+> Context and the reputation consequence: `docs/specs/email-deliverability-diagnosis.md` §6.
 | Redirect URLs               | + wildcards `/auth/callback?next=*` for prod and localhost                                  |
 
 > **⚠️ `Site URL` was `https://frame-focus-eight.vercel.app` in this table and is not** — the live
