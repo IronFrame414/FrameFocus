@@ -589,3 +589,39 @@ fix. The guard worked.
 `m-details` cohort failed only in the degraded run. On MICRO, `:962` passes in **2.9 s**. §9's
 "a run whose failure set grows as the database slows is not measuring the code" holds for these,
 and only these.
+
+### The five, fixed
+
+All five were the same finding — `e82c4e6` moved the anchors — and all five are now green in
+the time a working test takes, which is the tell that they were never slow:
+
+| spec                                   | before          | after      |
+| -------------------------------------- | --------------- | ---------- |
+| `m-capture.spec.ts` control case        | 5.8-6.1 s ✘ ×3  | **1.1 s** ✓ |
+| `m-capture-camera` A-21b                | 1.0 m ✘ ×3      | **1.6 s** ✓ |
+| `m-capture-camera` A-20c                | 1.0 m ✘ ×3      | **1.8 s** ✓ |
+| `m-capture-camera` A-21c                | 1.0 m ✘ ×3      | **4.7 s** ✓ |
+| `m-capture-camera` A-20d (offline)      | 31 s ✘ ×3       | **1.8 s** ✓ |
+| the camera file end to end              | 12.8 m of retries | **27.4 s, 16/16** |
+
+**What each assertion became, and why not simply `.first()` or a looser locator:**
+
+- **The control case** now asserts `m-capture-done` **and clicks through to `/m`**. The old test
+  asserted that a button existed; the rule is that the screen offers a way out. Proving it
+  *leaves* is the half a rename cannot silently satisfy — and this test's whole reason for
+  existing is that it catches a control being removed.
+- **The three online uploads** share `expectUploadConfirmed()`, which requires
+  `m-capture-empty` to read **"N photos saved."**. ⚠️ The text match is not decoration:
+  `m-capture-empty` is *also* the never-had-a-shot state, so a visibility-only assertion would
+  pass on a screen where the shutter never fired — green over precisely the failure the test
+  exists to catch. Same trap as `settings-billing`'s `.first()`, in a different costume.
+- **A-20d** asserts the queued message on the shot's **own row**, plus the batch summary line.
+  §6's rule ("told in the same confirmation, not a separate alert") survived the rewrite intact
+  — `e82c4e6` made it *more* true, since a per-shot row can say "queued" about exactly the shot
+  that is queued, which is what `capture-batch.ts` says a single banner must never do.
+- **A-20d's titles were rewritten too.** "…says so in one confirmation" described a structure the
+  app no longer has. CLAUDE.md's S157 rule is explicit that titles are read as statements, and a
+  title outliving its mechanism is the defect that rule was written for.
+
+No orphan is left: a sweep of every testid `e82c4e6` removed finds no remaining reference in
+`e2e/`, `test/`, `app/` or `components/` outside the comments that explain the move.
