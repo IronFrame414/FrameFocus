@@ -45,6 +45,31 @@ async function signInAs(page: Page, email: string) {
   await expect(page).toHaveURL(/\/dashboard/, { timeout: 30_000 });
 }
 
+// ---------------------------------------------------------------------------
+// ⚠️ THE CONFIRMATION MOVED [S107b] — `m-capture-confirmation` NO LONGER EXISTS
+// ---------------------------------------------------------------------------
+// `e82c4e6` rewrote M-22 around the held-shot tray, and with it the single
+// confirmation block. The new model is per-shot, deliberately: `capture-batch`'s
+// own comment rules that a batch verdict is "exactly the misreport this exists
+// to prevent — it would say 'queued' over a run where six landed and one did
+// not." So there is no one element left that means "the upload finished".
+//
+// What means it now: an uploaded shot LEAVES the tray, and once the tray is
+// empty `m-capture-empty` reads "N photos saved."
+//
+// ⚠️ THE TEXT ASSERTION IS LOAD-BEARING, NOT DECORATION. `m-capture-empty` is
+// ALSO the never-had-a-shot state ("No photos to file. Tap the camera button to
+// take some."), so a visibility-only check would pass on a screen where the
+// shutter never fired and nothing uploaded — green over the exact failure these
+// tests exist to catch. Match the count line, not the element.
+async function expectUploadConfirmed(page: Page, timeout = 60_000) {
+  const empty = page.getByTestId('m-capture-empty');
+  await expect(empty).toBeVisible({ timeout });
+  await expect(empty, 'the tray drained but nothing reported as saved').toHaveText(
+    /\d+ photos? saved\./i
+  );
+}
+
 // Photos created here are real `files` rows in a real bucket. Removed at the
 // end, for the reason TECH_DEBT #144 exists.
 test.afterAll(async () => {
@@ -196,7 +221,7 @@ test.describe('A-21 / A-21b · the project prompt comes after the shot, or not a
     await page.goto(`/m/p/${PROJECT}/punch`);
     await page.getByTestId('m-camera-input').setInputFiles(shot());
 
-    await expect(page.getByTestId('m-capture-confirmation')).toBeVisible({ timeout: 60_000 });
+    await expectUploadConfirmed(page);
     // Never asked.
     await expect(page.getByTestId('m-capture-project-prompt')).toHaveCount(0);
   });
@@ -209,7 +234,7 @@ test.describe('A-20c · the photo lands in project-files with category photos', 
   test('a shot taken in context is a photos-category row on that project', async ({ page }) => {
     await page.goto(`/m/p/${PROJECT}/punch`);
     await page.getByTestId('m-camera-input').setInputFiles(shot('shot-a20c.png'));
-    await expect(page.getByTestId('m-capture-confirmation')).toBeVisible({ timeout: 60_000 });
+    await expectUploadConfirmed(page);
 
     const admin = adminClient();
     const { data } = await admin
@@ -260,7 +285,7 @@ test.describe('A-21c · nothing is written before a project is chosen', () => {
 
     await page.getByTestId(`m-capture-project-${PROJECT}`).click();
     await page.getByTestId('m-capture-save').click();
-    await expect(page.getByTestId('m-capture-confirmation')).toBeVisible({ timeout: 60_000 });
+    await expectUploadConfirmed(page);
 
     expect(await countRows()).toBe(1);
   });
@@ -273,9 +298,13 @@ test.describe('A-21c · nothing is written before a project is chosen', () => {
 // stored as JPEG after sync." The HEIC half needs a real HEIC and a real
 // conversion; what is asserted here is the half that makes it possible — the
 // queue entry is a `photo` entity, whose executor calls `uploadFile`, and the
-// offline user is told in the SAME confirmation.
-test.describe('A-20d / §6 · offline queues, and says so in one confirmation', () => {
-  test('offline, the shot is queued and the confirmation says it will upload later', async ({
+// offline user is told ON THE SHOT ITSELF — §6's "in the same confirmation,
+// not a separate alert", now read against the per-shot tray `e82c4e6` replaced
+// the single confirmation block with. Titles updated with it [S107b]: a title
+// that still said "one confirmation" would describe a structure the app no
+// longer has, which is the failure CLAUDE.md's S157 rule is about.
+test.describe('A-20d / §6 · offline queues, and says so on the shot', () => {
+  test('offline, the shot is queued and its row says it will upload later', async ({
     page,
     context,
   }) => {
@@ -296,14 +325,23 @@ test.describe('A-20d / §6 · offline queues, and says so in one confirmation', 
 
     await page.getByTestId('m-camera-input').setInputFiles(shot('shot-offline.png'));
 
-    const confirmation = page.getByTestId('m-capture-confirmation');
-    await expect(confirmation).toBeVisible({ timeout: 30_000 });
+    // ⚠️ THE SHAPE OF THIS CLAIM SURVIVED THE REWRITE; THE ELEMENTS DID NOT
+    // [S107b]. §6's rule is "the user is told it will upload later — IN THE
+    // SAME CONFIRMATION, not a separate alert", i.e. the queued message is
+    // attached to the thing it describes rather than floating beside it.
+    //
+    // `e82c4e6` made that MORE true, not less: the message now lives on the
+    // shot's OWN ROW in the tray, so a mixed batch says "queued" about exactly
+    // the shot that is queued. The old single `m-capture-confirmation` block
+    // could not do that, which is why it went. Asserting containment on the row
+    // is the same criterion, read against the structure that exists.
+    const row = page.getByTestId('m-capture-shot-queued');
+    await expect(row).toBeVisible({ timeout: 30_000 });
+    await expect(row).toContainText(/upload when you are back online/i);
 
-    // §6: "the user is told it will upload later — IN THE SAME CONFIRMATION,
-    // not a separate alert." So the queued line must live INSIDE the
-    // confirmation block, not beside it.
-    await expect(confirmation.getByTestId('m-capture-queued')).toBeVisible();
-    await expect(confirmation).toContainText(/upload automatically/i);
+    // ...and the batch line agrees with the row, which is the half that would
+    // catch a tray that renders a queued shot while the summary claims it sent.
+    await expect(page.getByTestId('m-capture-progress')).toContainText(/waiting to upload/i);
 
     // Left queued on purpose: draining would upload a real object and insert a
     // real `files` row on every run. The queue is this context's IndexedDB and
