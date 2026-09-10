@@ -63,6 +63,8 @@ import {
 const OWNER = 'josh+test50@worthprop.com';
 const MARKER = 's160-auth';
 const INVITEE = `josh+${MARKER}-invitee@worthprop.com`;
+// C4's profile-less user. Deliberately NOT a reserved domain — see C4.
+const ORPHAN_EMAIL = 'orphan@qa-noreply.ezcontractorbinder.com';
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 
 let companyId: string;
@@ -449,11 +451,19 @@ describeSend('S160-C — P1/P2: the send goes out branded, and it is logged', ()
     // `email_logs.company_id` is NOT NULL, so there is nothing to log against.
     // The trade is deliberate and one-directional: an unsent email is a
     // user-visible failure, an unlogged one is a bookkeeping gap.
+    //
+    // ⚠️ THE ADDRESS CHANGED [bounce guard, 2026-09-10]. Superseded value,
+    // quoted rather than silently swapped: `orphan@example.invalid`. The bounce
+    // guard refuses reserved domains inside `sendEmail()`, so the old value
+    // would make `outcome.sent` FALSE and this test would assert the opposite
+    // of what it is about. What C4 tests is that a MISSING PROFILE does not
+    // stop a send; the recipient's domain was never the subject. Deliverable
+    // (no MX on `qa-noreply.`) and the transport is mocked, so nothing moves.
     state.calls.length = 0;
     const orphan = randomUUID();
     const outcome = await handleAuthEmail(
       admin as unknown as SupabaseClient<Database>,
-      payloadFor(orphan, 'orphan@example.invalid', 'recovery'),
+      payloadFor(orphan, ORPHAN_EMAIL, 'recovery'),
       SUPABASE_URL
     );
 
@@ -466,7 +476,7 @@ describeSend('S160-C — P1/P2: the send goes out branded, and it is logged', ()
     const { data } = await admin
       .from('email_logs')
       .select('id')
-      .eq('recipient_email', 'orphan@example.invalid');
+      .eq('recipient_email', ORPHAN_EMAIL);
     expect(data ?? [], 'a row was logged with no company').toHaveLength(0);
   });
 
