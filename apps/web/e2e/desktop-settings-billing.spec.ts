@@ -39,7 +39,23 @@ test.describe('Owner — sees and uses the Billing tab', () => {
     await tab.click();
     // The moved overview — heading + the Status row it always renders.
     await expect(page.getByRole('heading', { name: 'Billing & Subscription' })).toBeVisible();
-    await expect(page.getByText('Status', { exact: true })).toBeVisible();
+    // ⚠️ SCOPED TO THE BILLING PANEL [S107]. Unscoped, this was
+    // `page.getByText('Status', { exact: true })`, and the 7G QuickBooks merge
+    // (#292, 2026-09-06) added an Accounting panel with its own `Status` row —
+    // so the locator began resolving to two elements and Playwright's strict
+    // mode failed it:
+    //
+    //   1) <dt>Status</dt>            in settings-panel-accounting
+    //   2) <span>Status</span>        in settings-panel-billing
+    //
+    // The assertion is NOT weakened — it is the same "the Status row is
+    // rendered" claim, now made against the panel that is actually under test.
+    // Scoping it is also what makes it survive the next panel that ships a
+    // Status row, which an `.first()` would not: first() would have silently
+    // started asserting against Accounting.
+    await expect(
+      page.getByTestId('settings-panel-billing').getByText('Status', { exact: true })
+    ).toBeVisible();
   });
 
   test('the old /dashboard/billing URL permanently redirects into the tab', async ({ page }) => {

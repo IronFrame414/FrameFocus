@@ -3,7 +3,9 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import {
   setupHubFixture,
   teardownHubFixture,
+  memberDisplayName,
   COMPANY_A,
+  OTHER_MEMBER,
   type HubFixture,
 } from './hub-fixture';
 import { requireTestEnv } from './env';
@@ -75,9 +77,15 @@ test.beforeAll(async () => {
     (id) => !have.has(id)
   );
   if (wanted.length) {
-    await fx.admin.from('project_assignments').insert(
-      wanted.map((project_id) => ({ company_id: COMPANY_A, project_id, member_id: FOREMAN_MEMBER }))
-    );
+    await fx.admin
+      .from('project_assignments')
+      .insert(
+        wanted.map((project_id) => ({
+          company_id: COMPANY_A,
+          project_id,
+          member_id: FOREMAN_MEMBER,
+        }))
+      );
   }
 });
 
@@ -137,9 +145,7 @@ async function uiClockIn(page: Page, type: string, projectId?: string) {
   await page.goto('/m/timeclock');
   await page.getByTestId(`m-type-${type}`).click();
   if (projectId) {
-    await page
-      .locator(`[data-testid="m-clock-project"][data-project-id="${projectId}"]`)
-      .click();
+    await page.locator(`[data-testid="m-clock-project"][data-project-id="${projectId}"]`).click();
   }
   await expect(page.getByTestId('m-clock-in')).toBeEnabled();
   await page.getByTestId('m-clock-in').click();
@@ -203,9 +209,9 @@ test.describe('7a · type is a required choice', () => {
     await page.getByTestId('m-type-work').click();
     // Sorted or not, NOTHING is selected — proximity (were it computable)
     // changes order, never selection.
-    expect(
-      await page.locator('[data-testid="m-clock-project"][data-active="true"]').count()
-    ).toBe(0);
+    expect(await page.locator('[data-testid="m-clock-project"][data-active="true"]').count()).toBe(
+      0
+    );
     await expect(page.getByTestId('m-clock-in')).toBeDisabled();
   });
 
@@ -614,7 +620,9 @@ test.describe('7d · M-22 delivery check-in', () => {
 
     // The card flips to the error treatment AND carries the text strip —
     // never colour alone — and submit is blocked until a photo exists.
-    await expect(page.locator('[data-testid="m-checkin-line"][data-damaged="true"]')).toHaveCount(1);
+    await expect(page.locator('[data-testid="m-checkin-line"][data-damaged="true"]')).toHaveCount(
+      1
+    );
     await expect(page.getByTestId('m-damage-photo-strip')).toContainText(/photo required/i);
     await expect(page.getByTestId('m-submit-checkin')).toBeDisabled();
   });
@@ -655,7 +663,13 @@ test.describe('7d · M-22 delivery check-in', () => {
       await fx.admin.storage.from('project-files').remove([f.file_path]);
     }
     if (pdfs?.length) {
-      await fx.admin.from('files').delete().in('id', pdfs.map((f) => f.id));
+      await fx.admin
+        .from('files')
+        .delete()
+        .in(
+          'id',
+          pdfs.map((f) => f.id)
+        );
     }
     await fx.admin.from('deliveries').delete().eq('id', delivery!.id);
   });
@@ -667,9 +681,7 @@ test.describe('7d · M-22 delivery check-in', () => {
 test.describe('7e · M-23 incident report', () => {
   test.setTimeout(120_000);
 
-  test('an injury MUST name a party; the three types are the CHECK, verbatim', async ({
-    page,
-  }) => {
+  test('an injury MUST name a party; the three types are the CHECK, verbatim', async ({ page }) => {
     await page.goto(`/m/p/${fx.futureProject}/safety/new`);
 
     const types = await page
@@ -700,7 +712,9 @@ test.describe('7e · M-23 incident report', () => {
     await page.goto(`/m/p/${fx.futureProject}/safety/new`);
 
     await page.getByTestId('m-incident-type-injury').click();
-    await page.getByTestId('m-incident-description').fill('M6MC test — slipped on ice at the ramp.');
+    await page
+      .getByTestId('m-incident-description')
+      .fill('M6MC test — slipped on ice at the ramp.');
     await page.locator('[data-testid="m-injured-member"]').first().click();
     await page.getByTestId('m-file-report').click();
     await page.waitForURL(new RegExp(`/m/p/${fx.futureProject}/safety$`), { timeout: 45_000 });
@@ -726,7 +740,14 @@ test.describe('7e · M-23 incident report', () => {
     for (const f of pdfs ?? []) {
       await fx.admin.storage.from('project-files').remove([f.file_path]);
     }
-    if (pdfs?.length) await fx.admin.from('files').delete().in('id', pdfs.map((f) => f.id));
+    if (pdfs?.length)
+      await fx.admin
+        .from('files')
+        .delete()
+        .in(
+          'id',
+          pdfs.map((f) => f.id)
+        );
     await fx.admin.from('safety_incidents').delete().eq('id', incident!.id);
   });
 });
@@ -745,7 +766,7 @@ test.describe('A-7k5 · on-site is a coordinates claim', () => {
       .from('time_clock_sessions')
       .insert({
         company_id: COMPANY_A,
-        member_id: '9b0380c5-18f9-4c93-88b0-229fd18390c4',
+        member_id: OTHER_MEMBER,
         clock_in: new Date().toISOString(),
         status: 'pending',
         gps_in: { reason: 'permission_denied', error_code: 1 },
@@ -770,8 +791,26 @@ test.describe('A-7k5 · on-site is a coordinates claim', () => {
 
       await page.setViewportSize({ width: 1280, height: 900 });
       await page.goto('/dashboard/timeclock/timesheets');
-      const board = page.getByText('Pat Manager', { exact: false }).first();
-      await expect(board).toBeVisible({ timeout: 30_000 });
+      // ⚠️ THE MEMBER'S display_name, NOT THE PROFILE'S NAME [S107].
+      //
+      // `LiveBoard` renders `company_members.display_name`
+      // (time-tracking-client.ts:533 selects it; live-board.tsx renders it).
+      // This asserted the PROFILE name "Pat Manager" while the member's
+      // display_name is "QA PM A" — the S176 rename's "stale display_name
+      // twin". The anchor never appeared, the test burned its whole 30s budget,
+      // and it has been red in CI since run #290 (2026-09-05).
+      //
+      // ⚠️ D-34 ITSELF WAS NEVER BROKEN, and that is the important half: the
+      // guard is `hasCoordinates(row.gps_in) ? ' · on site' : ''`
+      // (live-board.tsx:140), `hasCoordinates` requires numeric lat AND lng
+      // (packages/shared/utils/time-tracking.ts:145), and m6m-capture.test.ts
+      // covers it. The property held; the test could not reach the row that
+      // demonstrates it.
+      const memberName = await memberDisplayName(fx.admin, OTHER_MEMBER);
+      const board = page.getByText(memberName, { exact: false }).first();
+      await expect(board, `the live board never rendered "${memberName}"`).toBeVisible({
+        timeout: 30_000,
+      });
       // NON-NULL gps_in with no coordinates renders NO "on site".
       await expect(page.locator('body')).not.toContainText('on site');
 
@@ -784,7 +823,7 @@ test.describe('A-7k5 · on-site is a coordinates claim', () => {
         .from('time_clock_sessions')
         .insert({
           company_id: COMPANY_A,
-          member_id: '9b0380c5-18f9-4c93-88b0-229fd18390c4',
+          member_id: OTHER_MEMBER,
           clock_in: new Date().toISOString(),
           status: 'pending',
           gps_in: { lat: 33.7, lng: -84.4 },
@@ -891,6 +930,17 @@ test.describe('A-7l2 · recently-used order (foreman identity)', () => {
 // Surveyed before fixing rather than after: `/m/capture` already carried Back
 // and Discard, so the gap was exactly the other two. This asserts all three, so
 // a fourth capture screen added later fails here rather than shipping stranded.
+//
+// ⚠️ M-22's EXIT WAS RENAMED, AND THIS BLOCK CAUGHT IT [S107b]. `e82c4e6`
+// rewrote the capture screen around the held-shot tray and replaced the old
+// `Back` (router.back()) + `Discard` pair with a single `Done`
+// (`m-capture-done`, → `/m`). The screen is still not a dead end — it carries
+// Done, the hamburger and the tab bar — so the RULE held and only the control
+// changed. The control case below now names the control that exists.
+//
+// Inverted rather than deleted, per CLAUDE.md's S157 rule: rewritten to the new
+// rule this becomes the regression guard for the rewrite, where deleting it
+// would discard the record that M-22's exit is load-bearing at all.
 test.describe('a capture screen is never a dead end', () => {
   for (const [label, route, exitTestId] of [
     ['M-21 · daily log', '/m/logs/new', 'm-log-cancel'],
@@ -914,10 +964,23 @@ test.describe('a capture screen is never a dead end', () => {
   }
 
   test('/m/capture already had one — the control case', async ({ page }) => {
-    // ⚠️ NOT REDUNDANT. Without it, a "fix" that added an exit to two screens
-    // and removed the one that worked would pass both tests above.
+    // ⚠️ NOT REDUNDANT, and it has already earned its place once: a "fix" that
+    // added an exit to two screens and removed the one that worked would pass
+    // both tests above. `e82c4e6` did exactly that, and this is what failed.
     await page.goto('/m/capture');
-    await expect(page.getByTestId('m-capture-back')).toBeVisible();
+
+    // The exit is `Done` since the tray rewrite. Asserted by testid AND by the
+    // accessible name, because the name is the half the user actually reads —
+    // a rename to a testid nobody sees would otherwise pass here.
+    const exit = page.getByTestId('m-capture-done');
+    await expect(exit).toBeVisible();
+    await expect(exit).toHaveText(/done/i);
+
+    // ⚠️ THE CRITERION IS "OFFERS A WAY OUT", NOT "HAS A BUTTON". Proving it
+    // LEAVES is what makes this a dead-end test rather than a render test —
+    // and it is the half that would have survived the rename unchanged.
+    await exit.click();
+    await expect(page).toHaveURL(/\/m$/, { timeout: 20_000 });
   });
 
   test('the exit RETURNS, rather than navigating somewhere fixed', async ({ page }) => {

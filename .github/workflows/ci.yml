@@ -121,6 +121,55 @@ jobs:
   # safe and useful. Whether CI should retry at all is a live, unruled question
   # that predates sharding and is not folded into this change.
   #
+  # ---------------------------------------------------------------------------
+  # PER-TEST TIMEOUT RAISED 30s -> 60s IN CI [S107, RULED Josh]
+  # ---------------------------------------------------------------------------
+  # The value lives in `apps/web/playwright.config.ts`
+  # (`timeout: (process.env.CI ? 60 : 30) * 1000`); the reasoning lives HERE,
+  # with the sharding and job-timeout reasoning it belongs beside.
+  #
+  # WHAT WAS HAPPENING. The suite ran on Playwright's 30s default. CI averaged
+  # ~20s/test against it, so the most expensive specs — sign in, navigate, open
+  # a panel, fetch, click — tipped over, and WHICH ones tipped varied run to
+  # run. That non-determinism is why the red was misread as a chat-feature
+  # problem for four merges. Measured at S107 under full-suite conditions, the
+  # chat photo tests took 23-24s LOCALLY; CI is slower still.
+  #
+  # WHY NOT THE OTHER TWO OPTIONS. Both were already ruled out above and the
+  # ruling stands: `workers > 1` and sharding each reintroduce the intra-DB
+  # concurrency behind CI #201, and `workers: 1` is load-bearing, not
+  # incidental. Raising the per-test budget is the only lever that does not
+  # touch concurrency.
+  #
+  # COST: NOTHING ON A GREEN RUN. A passing test never spends its budget. It
+  # costs only on genuine failures — up to 60s instead of 30s before each of
+  # the 2 retries — against the 50-minute job cap, which has headroom.
+  #
+  # ⚠️ CAVEAT 1 — THIS IS A TREADMILL, NOT A FIX.
+  # It is the same treadmill the 20 -> 35 -> 50 job-timeout history above
+  # records, one level down. What grows is PER-STATEMENT DB OVERHEAD from
+  # accumulating RLS policies and triggers on the one shared rebuild-test
+  # database this serial suite round-trips thousands of times — NOT the number
+  # of tests. A future session finding this budget exhausted again should
+  # FIX THE CAUSE rather than raise this number a second time. If you are here
+  # to change 60 to 90, you are on the treadmill: stop and read the durable fix
+  # below.
+  #
+  # ⚠️ CAVEAT 2 — IT WEAKENS A REAL SIGNAL, DELIBERATELY.
+  # A test that legitimately takes 45 seconds now PASSES SILENTLY where it used
+  # to fail. That is a genuine loss of information about the app getting
+  # slower, accepted here because the alternative was a suite too noisy to read
+  # at all. It means a slow-page regression will not announce itself in this
+  # suite any more; it will have to be caught by the latency work instead.
+  #
+  # THE DURABLE FIX, WHICH THIS IS NOT: A DATABASE PER SHARD — safe by
+  # construction, because per-shard fixture isolation removes the intra-DB
+  # concurrency that forces `workers: 1` in the first place. It remains the
+  # recorded answer and it remains BLOCKED on a reproducible seed that does not
+  # exist: the pinned fixtures are hand-curated on rebuild-test. The sharding
+  # work is correct and kept on branch `ci/shard-playwright` for when that seed
+  # lands.
+  #
   # JOB NAME `E2E (Playwright)` PRESERVED. A required status check may be pinned
   # to it; branch protection could not be read (403 Resource not accessible by
   # integration), so the name is kept rather than gambled on.
