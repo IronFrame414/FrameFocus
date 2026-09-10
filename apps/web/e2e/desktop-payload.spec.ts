@@ -129,9 +129,14 @@ test.describe('#117 · the CO list ships no money to a role that may not see it'
   test('a PM receives figures for their OWN change orders and no others', async ({ page }) => {
     // The ruling, through the payload, in BOTH directions — and both projects
     // are DISCOVERED, not hard-coded. A first draft asserted on the fixture
-    // project and failed correctly: this PM's only authored CO is on PRJ-100,
-    // so on the fixture project they legitimately see nothing. Hard-coding a
-    // project is how an authored-by test becomes a coin flip.
+    // project and failed correctly: at the time this PM's only authored CO was
+    // on PRJ-100, so on the fixture project they legitimately saw nothing.
+    // Hard-coding a project is how an authored-by test becomes a coin flip.
+    //
+    // ⚠️ AND "THEY SEE NOTHING THERE" IS ITSELF NO LONGER A SAFE PREMISE —
+    // see HALF 2. Every count below is COMPUTED from the rows that exist at run
+    // time; nothing here may assume how many COs a project carries or who wrote
+    // them.
     const db = adminClient();
     const { data: pmProfile } = await db
       .from('profiles')
@@ -147,7 +152,14 @@ test.describe('#117 · the CO list ships no money to a role that may not see it'
 
     const mine = (cos ?? []).filter((c) => c.created_by === pmUser);
     expect(mine.length, 'the PM authored no CO — the widening cannot be tested').toBeGreaterThan(0);
-    const myProject = mine[0].project_id as string;
+
+    // ⚠️ ORDERED, NOT `mine[0]` OF A HEAP-ORDER SELECT [S107b]. CLAUDE.md's
+    // `.limit(1)` rule, category 1: the caller wants *a* deterministic project
+    // and any stable one will do, so the pick must not depend on which row the
+    // storage engine hands back — that shifts the moment any CO is updated and
+    // turns this into a test that passes for several runs and then does not.
+    const myProject = [...mine].sort((a, b) => (a.id as string).localeCompare(b.id as string))[0]
+      .project_id as string;
     const myCountThere = mine.filter((c) => c.project_id === myProject).length;
 
     // ── HALF 1: the WIDENING. On a project where the PM authored a CO they now
@@ -160,19 +172,51 @@ test.describe('#117 · the CO list ships no money to a role that may not see it'
       myCountThere
     );
 
-    // ── HALF 2: the FLOOR. On a project with change orders they did NOT author,
-    //    they receive none. The fixture project carries COs and none are theirs.
-    const othersThere = (cos ?? []).filter(
-      (c) => c.project_id === PROJECT && c.created_by !== pmUser
-    ).length;
+    // ── HALF 2: the FLOOR. On a project carrying change orders they did NOT
+    //    author, the foreign ones are redacted.
+    //
+    // ⚠️ THIS ASSERTED `[]` UNTIL S107b, AND THAT WAS A STATEMENT ABOUT THE
+    // SEEDED WORLD RATHER THAN ABOUT THE RULING. The old comment read "the
+    // fixture project carries COs and none are theirs" — true when written, and
+    // false as soon as anything left a PM-authored CO on this project.
+    //
+    // Something did. `m-writes.spec.ts:486` creates PM-authored draft COs here
+    // and removes them in the `afterAll` TECH_DEBT #144 exists for; an
+    // interrupted run (a saturation casualty, §9) left one behind, and this test
+    // went red reporting `["0"]` — the PM's OWN net_delta, correctly delivered.
+    // The Floor was never breached. The premise had expired.
+    //
+    // It survived for months because ordering hid it: the `chromium` project
+    // finishes before `chromium-auth` creates those rows, so within ONE clean
+    // run there is nothing to see. It fails only against residue from a
+    // PREVIOUS run — which is exactly why `[]` was the wrong assertion to leave
+    // pointed at live, shared, mutable data (CLAUDE.md, S157).
+    //
+    // So state the RULING instead: they receive figures for the COs they
+    // authored here, and for no others. That is immune to residue, and it says
+    // more than `[]` did.
+    const coneThere = (cos ?? []).filter((c) => c.project_id === PROJECT);
+    const othersThere = coneThere.filter((c) => c.created_by !== pmUser).length;
+    const mineThere = coneThere.filter((c) => c.created_by === pmUser).length;
     expect(othersThere, 'the fixture project has no foreign-authored CO to test with').toBeGreaterThan(0);
 
     await page.goto(`/dashboard/projects/${PROJECT}/changes`);
     await expect(page.locator('body')).toContainText(/Awaiting Signature/i, { timeout: 20_000 });
+    const delivered = numericOccurrences(await page.content(), 'net_delta');
+
+    // ⚠️ BOTH ASSERTIONS, BECAUSE EITHER ALONE CAN PASS ON A BROKEN BUILD. The
+    // count alone would be satisfied by a page that shipped the WRONG rows in
+    // the right number; the strict-inequality alone would be satisfied by a page
+    // that shipped nothing at all. Together they pin it: exactly the PM's own,
+    // and demonstrably fewer than everything on the project.
     expect(
-      numericOccurrences(await page.content(), 'net_delta'),
-      "the PM received figures for change orders they did not author"
-    ).toEqual([]);
+      delivered.length,
+      'the PM received a different number of figures than the COs they authored here'
+    ).toBe(mineThere);
+    expect(
+      delivered.length,
+      'the PM received a figure for every CO on the project — nothing was redacted'
+    ).toBeLessThan(coneThere.length);
   });
 
 });
