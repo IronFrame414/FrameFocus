@@ -9920,6 +9920,7 @@ export type Database = {
         }[]
       }
       get_sub_bid_request: { Args: { p_token: string }; Returns: Json }
+      invited_signup_autoconfirm_installed: { Args: never; Returns: boolean }
       is_assigned_to_project: {
         Args: { p_project_id: string }
         Returns: boolean

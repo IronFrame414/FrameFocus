@@ -336,6 +336,82 @@ export async function invitedCompanyFor(
 }
 
 /**
+ * Is the in-transaction autoconfirm trigger actually installed?
+ *
+ * ⚠️ FEATURE DETECTION, NOT A FLAG. `invited_signup_autoconfirm_installed()`
+ * (20261600000000) reads `pg_trigger` at call time, so it reports what is
+ * really there rather than what somebody remembered to record.
+ *
+ * FAILS SAFE: a missing function, a permissions problem or any other error
+ * returns FALSE, which sends the confirmation email — the behaviour that
+ * shipped before this mechanism existed.
+ */
+async function autoconfirmTriggerInstalled(
+  admin: SupabaseClient<Database>
+): Promise<boolean> {
+  const { data, error } = await admin.rpc('invited_signup_autoconfirm_installed');
+  if (error) {
+    console.error('auth email hook: autoconfirm feature-detection failed; assuming absent', {
+      route: 'POST /api/auth/send-email',
+      message: error.message,
+    });
+    return false;
+  }
+  return data === true;
+}
+
+type ConfirmationState =
+  /** GoTrue can see the user and they are confirmed. */
+  | 'confirmed'
+  /** GoTrue can see the user and they are NOT confirmed — the trigger did not fire. */
+  | 'committed_unconfirmed'
+  /** GoTrue cannot see the user: mid-transaction, the normal signup case. */
+  | 'not_visible'
+  /** Anything else. Treated as doubt, and doubt sends the email. */
+  | 'unknown';
+
+/**
+ * What GoTrue currently believes about this user's confirmation.
+ *
+ * ⚠️ 'User not found' IS THE EXPECTED ANSWER ON SIGNUP, not an error. It is the
+ * same invisibility that broke the old P3, read deliberately this time: it tells
+ * us the signup transaction is still open, which is precisely when the
+ * in-transaction trigger is the right thing to trust.
+ *
+ * The valuable answer is `committed_unconfirmed` — the user IS visible and is
+ * still unconfirmed, which means the trigger has already had its chance and did
+ * not take it. That is the only way this code can catch a silently swallowed
+ * trigger failure, and it is why the trigger is allowed to swallow at all.
+ */
+async function confirmationState(
+  admin: SupabaseClient<Database>,
+  userId: string
+): Promise<ConfirmationState> {
+  try {
+    const { data, error } = await admin.auth.admin.getUserById(userId);
+    if (error) {
+      const status = (error as { status?: number }).status;
+      if (status === 404 || /not found/i.test(error.message)) return 'not_visible';
+      console.error('auth email hook: could not read confirmation state', {
+        route: 'POST /api/auth/send-email',
+        user_id: userId,
+        message: error.message,
+      });
+      return 'unknown';
+    }
+    if (!data?.user) return 'not_visible';
+    return data.user.email_confirmed_at ? 'confirmed' : 'committed_unconfirmed';
+  } catch (err: unknown) {
+    console.error('auth email hook: confirmation-state lookup threw', {
+      route: 'POST /api/auth/send-email',
+      user_id: userId,
+      message: err instanceof Error ? err.message : 'unknown',
+    });
+    return 'unknown';
+  }
+}
+
+/**
  * Handle one Send Email Hook payload: confirm-and-skip, or render, send and log.
  *
  * NEVER THROWS. GoTrue treats a non-2xx as a failed auth operation, so a thrown
@@ -354,28 +430,61 @@ export async function handleAuthEmail(
   let p3Diagnosis: string | null = null;
 
   // ── P3 ────────────────────────────────────────────────────────────────────
+  //
+  // ⚠️ REBUILT 2026-09-10. The old version called
+  // `admin.auth.admin.updateUserById(id, { email_confirm: true })` from here and
+  // suppressed the email only if that succeeded. It NEVER succeeded: GoTrue
+  // calls this hook DURING the signup request, before the `auth.users` insert
+  // commits, and the admin API reaches GoTrue over HTTP on a different
+  // connection. Production, 21:41:04: `message: 'User not found'` — GoTrue
+  // naming the cause itself. So every invited user fell through and was mailed a
+  // confirmation they should never have received, and P3 had been silently off
+  // since it shipped.
+  //
+  // THE CONFIRM NOW HAPPENS IN THE TRANSACTION, in the
+  // `on_auth_user_created_autoconfirm` trigger (20261600000000), where the row
+  // is visible. That call is gone from here rather than kept as a fallback: it
+  // cannot work in this flow, and a call that always errors is noise that has
+  // already cost one investigation.
+  //
+  // ⚠️ THIS CODE'S JOB IS NARROWER NOW, AND IT IS THE DANGEROUS HALF. Deciding
+  // to suppress the email is a decision to make someone's only route into their
+  // account unnecessary. If that judgement is wrong the user is not merely
+  // un-emailed, they are LOCKED OUT with no self-service fix. So suppression
+  // requires THREE things to hold, and any doubt sends the email — which is
+  // exactly today's behaviour, so the failure mode of this whole mechanism is
+  // "no change".
   if (action === 'signup') {
     const invitedCompanyId = await invitedCompanyFor(admin, payload.user);
-    if (invitedCompanyId) {
-      const { error } = await admin.auth.admin.updateUserById(payload.user.id, {
-        email_confirm: true,
-      });
-      if (error) {
-        // ⚠️ FALL THROUGH TO SENDING, do not fail. A user who is neither
-        // confirmed NOR sent a confirmation link cannot sign in and has no way
-        // to fix it themselves — strictly worse than the behaviour this
-        // replaces. The confirmation email is the safety net for P3's own
-        // failure.
-        console.error('auth email hook: invited auto-confirm failed; sending confirmation', {
-          route: 'POST /api/auth/send-email',
-          user_id: payload.user.id,
-          message: error.message,
-        });
-        // ⚠️ CARRIED FORWARD [2026-09-10] rather than only printed. This branch
-        // is the leading explanation for why an INVITED user received a signup
-        // confirmation at all — under a working P3 no email is sent — and until
-        // now the only trace it left was a console line nobody had read.
-        p3Diagnosis = `P3 auto-confirm FAILED, fell through to sending: ${error.message}`;
+
+    if (!invitedCompanyId) {
+      // A public signup, or a token that does not match this address. Either
+      // way the address is unverified and the email is the verification.
+      p3Diagnosis = 'P3: NOT suppressed — no invitation matched this token and address';
+    } else if (!(await autoconfirmTriggerInstalled(admin))) {
+      // (2) `apps/web` deploys from `main` while migrations are applied by hand,
+      // so the two can skew. Suppressing against a database without the trigger
+      // would lock out every invited user.
+      p3Diagnosis =
+        'P3: NOT suppressed — the in-transaction autoconfirm trigger is NOT installed ' +
+        '(migration 20261600000000 not applied to this database); sent the confirmation instead';
+    } else {
+      // (3) THE LOCKOUT GUARD, and it is a READ rather than an assumption.
+      //
+      // If GoTrue can see this user, the signup transaction has committed and
+      // the trigger has had its chance — so `email_confirmed_at` is the truth
+      // about whether it worked. If GoTrue CANNOT see them ('User not found'),
+      // we are mid-transaction, which is the normal signup case and the one
+      // where trusting the trigger is correct.
+      const confirmed = await confirmationState(admin, payload.user.id);
+      if (confirmed === 'committed_unconfirmed') {
+        p3Diagnosis =
+          'P3: NOT suppressed — the user is committed and STILL UNCONFIRMED, so the ' +
+          'autoconfirm trigger did not confirm them; sent the confirmation instead';
+      } else if (confirmed === 'unknown') {
+        p3Diagnosis =
+          'P3: NOT suppressed — could not establish whether the user is confirmed; ' +
+          'sent the confirmation rather than risk a lockout';
       } else {
         return {
           action,
@@ -383,6 +492,10 @@ export async function handleAuthEmail(
           sent: false,
           logged: false,
           error: null,
+          diagnosis:
+            `P3: SUPPRESSED — invited to company ${invitedCompanyId}; auto-confirmed ` +
+            `in-transaction by on_auth_user_created_autoconfirm` +
+            (confirmed === 'confirmed' ? ' (verified: user is confirmed)' : ' (user not yet visible: mid-transaction, as expected on signup)'),
         };
       }
     }

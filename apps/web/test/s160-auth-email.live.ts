@@ -284,20 +284,92 @@ afterAll(async () => {
 // ============================================================================
 
 describeSend('S160-A — P3: invited users do not confirm their email', () => {
-  it('A1 — the invitee starts UNCONFIRMED, so A2 is not vacuous', async () => {
-    // ⚠️ `?? null`, because GoTrue's JS client OMITS the field when it is unset
-    // rather than returning null. Without the coalesce this reads `undefined`
-    // — and, worse, A2's `.not.toBeNull()` would then have PASSED on an
-    // `undefined` too, i.e. on a user who was never confirmed. Both halves are
-    // written against the value, not against its absence.
-    const { data } = await admin.auth.admin.getUserById(inviteeUserId);
-    expect(
-      data.user?.email_confirmed_at ?? null,
-      'the fixture was created already confirmed'
-    ).toBeNull();
+  // ⚠️ A1 AND A2 INVERTED [2026-09-10], per the S157 rule — superseded
+  // assertions quoted rather than deleted, because they name what changed.
+  //
+  //   it('A1 — the invitee starts UNCONFIRMED, so A2 is not vacuous', …)
+  //     expect(data.user?.email_confirmed_at ?? null).toBeNull();
+  //
+  //   it('A2 — a signup hook for the invitee confirms them and sends NOTHING', …)
+  //
+  // BOTH DESCRIBED A MECHANISM THAT NEVER WORKED IN PRODUCTION. The hook called
+  // `updateUserById()` to confirm, which cannot see a user inside the still-open
+  // signup transaction — measured 2026-09-10, `message: 'User not found'`. These
+  // passed only because the live fixture creates its user through
+  // `admin.auth.admin.createUser()` and then calls `handleAuthEmail()` as a
+  // SEPARATE, LATER step, by which time the user is committed. The harness's
+  // sequencing was the thing under test, not the product's.
+  //
+  // ⚠️ THAT IS THE LESSON WORTH KEEPING: a live test that drives a hook by hand
+  // cannot reproduce a hook called mid-transaction, and A1/A2 were green for
+  // eleven sessions over a feature that had never once fired.
+  //
+  // The confirm now happens in the `on_auth_user_created_autoconfirm` trigger
+  // (20261600000000), inside the insert — so it has ALREADY happened by the time
+  // `createUser` returns, and the hook's only job is to suppress the email.
+
+  it('A1 — the autoconfirm trigger is installed on THIS database', async () => {
+    // Feature detection, asserted rather than assumed: every assertion below is
+    // about a trigger, and a database without it would make them describe
+    // nothing. This is also the exact check the hook itself makes.
+    const { data, error } = await admin.rpc('invited_signup_autoconfirm_installed');
+    must('autoconfirm feature detection', error);
+    expect(data, 'migration 20261600000000 is not applied to this database').toBe(true);
   });
 
-  it('A2 — a signup hook for the invitee confirms them and sends NOTHING', async () => {
+  it('A1b — the invitee was confirmed AT INSERT, before any hook ran', async () => {
+    // `createUser` was called with `email_confirm: false` (see beforeAll), so a
+    // confirmed timestamp here can only have come from the trigger, in the
+    // transaction. Nothing in this file has called handleAuthEmail yet.
+    const { data } = await admin.auth.admin.getUserById(inviteeUserId);
+    const confirmedAt = data.user?.email_confirmed_at ?? null;
+    expect(
+      confirmedAt,
+      'the invited user was NOT auto-confirmed by the trigger — P3 is off'
+    ).toBeTypeOf('string');
+    expect(
+      Number.isNaN(Date.parse(confirmedAt as string)),
+      'email_confirmed_at is not a date'
+    ).toBe(false);
+  });
+
+  it('⚠️ A1c — and the trigger DISCRIMINATES: no invitation, no auto-confirm', async () => {
+    // Without this, A1b would pass against a trigger that confirmed EVERY new
+    // user — which would auto-confirm public signups and destroy address
+    // verification for the whole product. The dangerous way for A1b to be green.
+    const strayEmail = `josh+${MARKER}-stray-${randomUUID()}@worthprop.com`;
+    const { data: stray, error: strayErr } = await admin.auth.admin.createUser({
+      email: strayEmail,
+      password: 'FrameFocusTest!2026',
+      email_confirm: false,
+      user_metadata: { first_name: 'S160', last_name: 'Stray' },
+    });
+    must('stray createUser', strayErr);
+    if (!stray?.user) throw new Error('stray createUser returned no user and no error');
+    try {
+      const { data } = await admin.auth.admin.getUserById(stray.user.id);
+      expect(
+        data.user?.email_confirmed_at ?? null,
+        'a signup with NO invitation token was auto-confirmed — the trigger is too broad'
+      ).toBeNull();
+    } finally {
+      // The owner path gave this user a company and a profile; sweep both.
+      const { data: prof } = await admin
+        .from('profiles')
+        .select('id, company_id')
+        .eq('user_id', stray.user.id)
+        .maybeSingle();
+      if (prof) {
+        const pr = prof as { id: string; company_id: string };
+        await admin.from('company_members').delete().eq('profile_id', pr.id);
+        await admin.from('profiles').delete().eq('id', pr.id);
+        await admin.from('companies').delete().eq('id', pr.company_id);
+      }
+      await admin.auth.admin.deleteUser(stray.user.id);
+    }
+  });
+
+  it('A2 — the signup hook SUPPRESSES the email and says so', async () => {
     state.calls.length = 0;
     const outcome = await handleAuthEmail(
       admin as unknown as SupabaseClient<Database>,
@@ -310,15 +382,12 @@ describeSend('S160-A — P3: invited users do not confirm their email', () => {
     expect(outcome.error).toBeNull();
     expect(state.calls, 'Resend was called for an invited signup').toHaveLength(0);
 
-    // A real timestamp, not merely "not null" — see A1 for why that is the
-    // weaker assertion here.
-    const { data } = await admin.auth.admin.getUserById(inviteeUserId);
-    const confirmedAt = data.user?.email_confirmed_at ?? null;
-    expect(confirmedAt, 'the invited user was not confirmed').toBeTypeOf('string');
-    expect(
-      Number.isNaN(Date.parse(confirmedAt as string)),
-      'email_confirmed_at is not a date'
-    ).toBe(false);
+    // ⚠️ [Josh's condition, 2026-09-10] THE DIAGNOSIS IS THE TEST. After this
+    // ships, an invitation to a real person is read back through this field, so
+    // it must say plainly that P3 suppressed the mail.
+    expect(outcome.diagnosis, 'the suppression left no explanation').toBeTruthy();
+    expect(outcome.diagnosis).toContain('P3: SUPPRESSED');
+    expect(outcome.diagnosis).toContain(companyId);
   });
 
   it('A3 — and NOTHING was logged, because nothing was sent', async () => {

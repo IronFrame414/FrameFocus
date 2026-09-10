@@ -18,7 +18,7 @@
 | --- | --- | --- | --- |
 | **P1** | Auth email over Resend | `app/api/auth/send-email/route.ts` + `lib/services/auth-email.ts` + `lib/email/templates/auth-email.tsx` | Built. **Needs §3.** |
 | **P2** | Log those sends | `handleAuthEmail()` → `logEmail()`; six `auth_*` rows in `20261009000000` | Built, falls out of P1 |
-| **P3** | Invited users do not confirm | `handleAuthEmail()`'s signup branch | Built. **Needs §3** (it runs inside the hook) |
+| **P3** | Invited users do not confirm | ⚠️ **MOVED** — `on_auth_user_created_autoconfirm` trigger (20261600000000); the hook only suppresses the email | **Rebuilt 2026-09-10. The original never fired in production.** See §6 |
 | **P4** | `emailRedirectTo` on invite acceptance | `app/invite/accept/accept-invite.tsx` | **Live on merge** — no config needed |
 | **P5** | A live harness over the invite send | `test/s160-invite-send.live.ts` | **Live now**, 8/8 |
 
@@ -207,3 +207,78 @@ its most important line is #3 — a public sign-up must still require confirmati
 
 Production's `email_logs` for `email_type = 'invite'` — S159 §6. Left for Josh by his own
 instruction. It is independent of everything here.
+
+
+---
+
+## 6. ⚠️ P3 NEVER FIRED IN PRODUCTION. Rebuilt 2026-09-10.
+
+**Measured, Vercel production logs, 2026-09-10 21:41:04, an invited crew member:**
+
+```
+auth email hook: invited auto-confirm failed; sending confirmation
+  { user_id: '09f07515-…', message: 'User not found' }
+auth email hook: no company for user; send NOT logged
+  { user_id: '09f07515-…', email_action_type: 'signup' }
+```
+
+`'User not found'` is **GoTrue naming the cause itself**. The Send Email Hook is called DURING the
+signup request, before the `auth.users` INSERT commits. `admin.auth.admin.updateUserById()` reaches
+GoTrue over HTTP, on a different connection, and cannot see a row inside somebody else's open
+transaction. So the auto-confirm always failed, the code fell through to sending (correctly — a
+user who is neither confirmed nor sent a link is stuck), and **every invited user has received a
+confirmation email P3 exists to prevent, since the day P3 shipped.**
+
+132ms later the SAME invisibility made `senderFor()` return null, which is why that mail went out
+as `no-reply@ezcontractorbinder.com` and left no `email_logs` row. **One root cause, three
+symptoms.**
+
+### 6a. ⚠️ Why the live test was green for eleven sessions
+
+`s160-auth-email.live.ts` A1/A2 asserted P3 worked, and passed. They passed because the harness
+creates its user with `admin.auth.admin.createUser()` and then calls `handleAuthEmail()` as a
+**separate, later step** — by which time the user is committed and `updateUserById()` can see them.
+**The harness's sequencing was under test, not the product's.**
+
+> A live test that drives a hook by hand cannot reproduce a hook called mid-transaction. Wherever a
+> hook's correctness depends on WHEN it is called, driving it directly proves the opposite of what
+> it appears to.
+
+A1 and A2 are inverted in the same commit, superseded assertions quoted.
+
+### 6b. The rebuild
+
+**The confirm moved into the transaction** — `on_auth_user_created_autoconfirm`, an AFTER INSERT
+trigger on `auth.users` (20261600000000), where the row is visible. It runs after
+`handle_new_user()` (guaranteed by alphabetical trigger ordering: `on_auth_user_created` is a
+strict prefix), checks token **and email address** — `get_invitation_for_signup()` does not check
+the address, and auto-confirming is the privilege that check protects — and joins `profiles` to
+prove `handle_new_user()` ran its invite path for this user in this transaction.
+
+**The `updateUserById()` call is gone from the hook**, not kept as a fallback: it cannot work in
+this flow, and a call that always errors is noise that already cost one investigation.
+
+**The hook now only decides whether to suppress the email**, and suppression needs three things:
+
+1. `invitedCompanyFor()` matches the token **and** the address;
+2. `invited_signup_autoconfirm_installed()` reports the trigger is really installed — feature
+   detection against `pg_trigger`, not a flag, because `apps/web` deploys from `main` while
+   migrations are applied by hand and the two can skew;
+3. GoTrue does **not** report the user as committed-and-still-unconfirmed.
+
+### 6c. What happens when it fails
+
+| Failure | Result |
+| --- | --- |
+| The trigger raises | Swallowed as a `WARNING`; signup completes. **A trigger that throws on `auth.users` fails the INSERT and breaks sign-up outright** — not an available failure mode |
+| The trigger is not installed (migration skew) | (2) is false → the hook sends the confirmation → today's behaviour exactly |
+| The trigger ran and did not confirm | (3) sees `committed_unconfirmed` → the hook sends the confirmation |
+| Feature detection errors | Treated as `false` → the hook sends the confirmation |
+| Confirmation state unreadable | Treated as doubt → the hook sends the confirmation |
+
+**Every failure path ends in "send the email", which is the behaviour that shipped before this
+existed.** No path throws, so the route still returns 2xx and a sign-up cannot fail because of it.
+
+**The residual, stated:** a user confirmed by the trigger whose invitation is later mutated
+mid-transaction would still be suppressed. There is no way to close it from outside the
+transaction, and the consequence is one unsent confirmation to a user who is already confirmed.

@@ -475,3 +475,53 @@ of what production has actually done. The one type that IS being sent and is not
 **Not fixed here — read-only investigation.** The fix is small (resolve the sender after the send,
 or log with a resolved-later company id) but it turns on which of A/B/C holds, and A cannot be
 confirmed from a Codespace.
+
+
+---
+
+## 8. §7 CONFIRMED ON THE WIRE — and it was never a theory about logging alone [2026-09-10]
+
+Josh read the production Vercel logs. Both lines, same user, `2026-09-10 21:41:04`:
+
+```
+[error] auth email hook: invited auto-confirm failed; sending confirmation
+  { route: 'POST /api/auth/send-email', user_id: '09f07515-8b52-4f54-a2ee-d00fa8001bc2',
+    message: 'User not found' }
+
+[error] auth email hook: no company for user; send NOT logged
+  { route: 'POST /api/auth/send-email', user_id: '09f07515-8b52-4f54-a2ee-d00fa8001bc2',
+    email_action_type: 'signup' }
+```
+
+**`'User not found'` is GoTrue naming the cause itself.** §7b's candidate **A** (transaction
+visibility) is confirmed; **B** (a discarded query error) and **C** (a missing company row) are
+dead. The employee is fine — `ramon50439@gmail.com`, `crew_member` in Worth Properties
+`dc4da2a7-b636-4b56-9a30-39861109c827`, profile created `21:41:04`, invitation row `21:40:45`. Not
+an orphan, not a new tenant; the invite path worked.
+
+**The two log lines are 132ms apart and are the same invisibility twice**: first
+`updateUserById()` cannot see the uncommitted `auth.users` row, then `senderFor()` cannot see the
+profile written inside the same open transaction.
+
+### 8a. ⚠️ It was three symptoms, not one
+
+§7 set out to explain a missing `email_logs` row. The confirmed cause explains more than that:
+
+1. **P3 never fired in production** — every invited user has received a confirmation email the
+   feature exists to suppress, and was not auto-confirmed. **User-visible, and the largest of the
+   three.**
+2. **Every signup confirmation goes out as `no-reply@`** rather than under the tenant's name — §6's
+   second sending identity, now explained rather than merely observed.
+3. **No `email_logs` row**, the symptom that started this.
+
+`sender === null` causes 2 and 3; the same invisibility causes 1.
+
+### 8b. Fixed, and in what order
+
+**P3 first** — the confirm moved into the signup transaction
+(`on_auth_user_created_autoconfirm`, migration 20261600000000). Sequenced first deliberately:
+fixing it removes most signup confirmations altogether, which changes what the logging fix has to
+cover. Full design, failure table and the residual: `S160-auth-email-hook.md` §6.
+
+**The logging fix is still owed**, and §7d's consequence stands until it lands: the highest-volume
+auth mail is the one with no audit trail.
