@@ -1,10 +1,81 @@
 name: CI
 
+# -----------------------------------------------------------------------------
+# TRIGGER ON EVERY BRANCH, AND CANCEL SUPERSEDED RUNS. [Josh, S107b — one change]
+# -----------------------------------------------------------------------------
+# These two edits are ONE ruling and must not be separated. Branch triggers on
+# their own multiply runs and make the collision below WORSE; the concurrency
+# group on its own leaves the signal arriving too late. Together they are net
+# FEWER concurrent runs than the config they replace.
+#
+# WHY BRANCH TRIGGERS (§14a). Every red in the S107 campaign appeared AFTER the
+# merge that caused it — the streak from #290 ran four merges deep before
+# anything surfaced. That is not a discipline failure, it is what
+# `branches: [main, dev]` ALLOWS: pushing and merging happen in one sequence, so
+# a signal scoped to main always arrives behind the merge it was meant to gate.
+# Triggering on any branch puts the red in FRONT of the merge. It costs no extra
+# discipline, because the unattended-run rule (CLAUDE.md, S105/S173) already
+# requires a push after every commit — the pushes were happening; nothing was
+# watching them.
+#
+# `'**'` NOT `'*'`, AND THE DIFFERENCE IS LOAD-BEARING. `'*'` does not match a
+# branch name containing a slash, and this repo's convention is
+# `feature/...`, `fix/...`, `docs/...` — i.e. `'*'` would silently match
+# almost nothing we actually push.
+#
+# WHY THE CONCURRENCY GROUP (§14b). There was no `concurrency:` key in this file
+# at all before this commit — every occurrence of that word was prose in the
+# comments below. That absence is why runs #303 and #304 coexisted and drove the
+# one shared rebuild-test database simultaneously: `m-capture-camera`'s afterAll
+# deletes `files` rows matching `shot%` for the fixture project, `m-writes`
+# creates and deletes PM-authored change orders that `desktop-payload` reads,
+# and `workers: 1` — load-bearing, see below — cannot see a SECOND RUN. Nor
+# could it be cleaned up by hand: the Codespace GITHUB_TOKEN lacks
+# `actions:write`, so cancelling returns 403. The fix has to be declarative.
+#
+# THE GROUP KEY IS `head_ref || ref_name`, DELIBERATELY, and this is the detail
+# that makes the pair work. Once a PR is open, one push fires BOTH a `push` and
+# a `pull_request` event. Grouping on `github.ref` would put them in DIFFERENT
+# groups — `refs/heads/X` vs `refs/pull/N/merge` — so both would run, against
+# one database, which is the #303/#304 collision reintroduced by the very change
+# meant to end it. `github.head_ref` is set only on pull_request and holds the
+# HEAD branch; `github.ref_name` is the branch on push. Together they resolve to
+# the same string for both events, so the two collapse into one group and the
+# newest wins.
+#
+# CANCELLING APPLIES TO main TOO, and that is considered rather than overlooked.
+# A cancelled run is only ever one superseded by a NEWER run of the same branch,
+# so there is always a most-recent run for the current state. On main the state
+# that matters is main's tip, and the newer run tests a tree that INCLUDES the
+# commit whose run was cancelled. The only thing lost is a result for an
+# intermediate commit that no longer represents main.
+#
+# THE PUSH-HOLD EXCEPTION IS NOT BEING WRITTEN INTO THE RULE. S107 §14b proposed
+# one — hold the push while a run is in progress, batch and send on a terminal
+# state — because the unattended-push rule and a running CI job were in direct
+# conflict. `cancel-in-progress` dissolves that conflict at the source: a
+# superseded run CANCELS rather than competes, so there is nothing to hold for.
+# Recorded because it was proposed and reasoned about, and a future reader
+# should know it was made unnecessary rather than forgotten. [Josh, S107b]
+#
+# ⚠️ AND THE ASYMMETRY THAT MADE THE COLLISIONS SURVIVABLE, kept because it is
+# what lets a result from a contaminated window still be acted on: CONTENTION
+# MANUFACTURES FALSE REDS, NEVER FALSE GREENS. Nothing about interference makes
+# a failing assertion pass. So a GREEN is trustworthy even if another run
+# overlapped it — CI #304 is green on exactly this reasoning — and only a RED
+# needs the question "was anything else running?" asked before it is believed.
+#
+# Cross-ref TECH_DEBT #157, and #150 for the shared-fixture exposure list.
+# -----------------------------------------------------------------------------
 on:
   push:
-    branches: [main, dev]
+    branches: ['**']
   pull_request:
     branches: [main, dev]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
 
 # ⚠️ TECH_DEBT #137 [S122] — EVERY `run:` STEP GETS `pipefail`.
 #
