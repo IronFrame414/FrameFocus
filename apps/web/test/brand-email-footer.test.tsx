@@ -16,6 +16,7 @@ import { RetentionWarningEmail } from '@/lib/email/templates/retention-warning-e
 import { SelectionReleasedEmail } from '@/lib/email/templates/selection-released-email';
 import { SelectionSpecificationsEmail } from '@/lib/email/templates/selection-specifications-email';
 import { SubBidRequestEmail } from '@/lib/email/templates/sub-bid-request-email';
+import { WarmingEmail } from '@/lib/email/templates/warming-email';
 import { subjectFor } from '@/lib/services/auth-email';
 import { buildSelectionSpecificationsSubject, buildSelectionsReleasedSubject } from '@/lib/services/selection-email';
 
@@ -215,6 +216,14 @@ const COVERED = new Set([
   // ruling (retention-warning-emails.md) — the product writing to its own
   // customer about deletion; a tenant brand here would be nonsense.
   'retention-warning-email.tsx',
+  // ⚠️ [Warming sender, 2026-09-10] A THIRD BRAND CONTRACT, and it is NO
+  // IDENTITY AT ALL — not white-label, not platform-branded. Ruled [Josh]:
+  // plainly worded, human-voiced, "do not dress it as something it isn't". It
+  // is a note from a person, not a business document, so it carries no logo, no
+  // brand colour, no footer and no product name. Chrome would make it look like
+  // exactly the near-duplicate template mail that got this domain
+  // spam-foldered. Asserted in its own describe block below.
+  'warming-email.tsx',
 ]);
 
 describe('every email template is covered by this file', () => {
@@ -327,6 +336,54 @@ describe('transactional emails carry the rebranded footer', () => {
     it('carries no tenant logo — it is internal mail', async () => {
       const html = await render(make());
       expect(html).not.toContain(LOGO);
+    });
+  });
+
+  // [Warming sender, 2026-09-10] The third contract: NO identity. Every other
+  // template in this file is asserted to carry SOMETHING — the tenant's mark or
+  // the product's. This one is asserted to carry neither, which is why it needs
+  // its own block rather than a row in CLIENT_FACING.
+  describe('warming (no identity at all)', () => {
+    const make = () => (
+      <WarmingEmail
+        body={'Hi Josh,\n\nThis is a delivery test from Sabal Point Construction.\n\n— Sabal Point Construction'}
+        preview="Quick check on our email setup"
+      />
+    );
+
+    it('⚠️ names NEITHER the product nor a product mark', async () => {
+      const html = readable(await render(make()));
+      expect(html).not.toContain(brand.name);
+      expect(html).not.toContain('FrameFocus');
+      expect(html).not.toContain('logo-full-');
+      expect(html).not.toContain('/logo-');
+    });
+
+    it('⚠️ carries no tenant logo and no footer either — it is a note, not a document', async () => {
+      const html = await render(make());
+      expect(html).not.toContain(LOGO);
+      expect(html).not.toContain('Sent by');
+    });
+
+    it('⚠️ contains NO LINK — the constraint the whole warming design turns on', async () => {
+      // These go to four real inboxes from production. A link is the thing that
+      // could create an account, reach a signing session or take a payment.
+      const html = await render(make());
+      // ⚠️ ANCHORS AND hrefs, NOT a bare /https?:/ sweep over the document. The
+      // XHTML doctype every @react-email render emits carries
+      // `xmlns="http://www.w3.org/1999/xhtml"`, so the naive check fails on
+      // markup that is not a link and never reaches a reader. Caught here; the
+      // narrower assertion is also the true one.
+      expect(html).not.toMatch(/<a\s/i);
+      expect(html).not.toContain('href=');
+      // And the reader-visible text carries no URL at all.
+      const text = await render(make(), { plainText: true });
+      expect(text).not.toMatch(/https?:\/\//);
+    });
+
+    it('the company name survives into the plain-text alternative', async () => {
+      const text = await render(make(), { plainText: true });
+      expect(text).toContain('Sabal Point Construction');
     });
   });
 

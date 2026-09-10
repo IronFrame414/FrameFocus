@@ -367,7 +367,19 @@ export type EmailType =
   // `email_types.retention_warning` row lands in 20261053000000, same rule as
   // every member above: both halves or neither. One type for all three
   // emails; email_logs.metadata.kind tells them apart.
-  | 'retention_warning';
+  | 'retention_warning'
+  // Deliverability warming [Josh, 2026-09-10] — a low, steady, non-clockwork
+  // send to four inboxes Josh owns, so Gmail has volume it can score. The
+  // `email_types.warming` row lands in 20261590000000, in the SAME commit as
+  // this line. FIFTH time this rule is written down and it has been broken once
+  // (`mention`): the table half fails at RUNTIME, this half at COMPILE time, so
+  // one without the other ships silently. Both halves or neither.
+  //
+  // ⚠️ IT IS ITS OWN TYPE BECAUSE NO EXISTING TYPE COULD BE MADE INERT. Every
+  // other member of this union is defined by a record it points at, and warming
+  // mail points at nothing. Logging it as `proposal` or `invite` would also
+  // poison the one table the deliverability work has to read.
+  | 'warming';
 
 export interface LogEmailInput {
   company_id: string;
