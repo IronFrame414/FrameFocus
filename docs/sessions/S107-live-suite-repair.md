@@ -625,3 +625,61 @@ the time a working test takes, which is the tell that they were never slow:
 
 No orphan is left: a sweep of every testid `e82c4e6` removed finds no remaining reference in
 `e2e/`, `test/`, `app/` or `components/` outside the comments that explain the move.
+
+---
+
+## 11 — The seventh: `desktop-payload:129`, and the Floor is NOT breached
+
+The full-suite run surfaced the last of the seven, and it is worth writing down carefully
+because it *reads* as a Financial Visibility Floor breach and is not one.
+
+```
+✘ desktop-payload.spec.ts:129 · a PM receives figures for their OWN change orders and no others
+  Error: the PM received figures for change orders they did not author
+    Expected: []   Received: ["0"]
+```
+
+Fast and assertion-shaped — 5.2 s / 13.6 s / 3.9 s across three retries, on a database whose
+sampled latency never left 59-216 ms. Not starvation.
+
+### What is actually true, verified against the live rows
+
+| author on the fixture project | COs | with a `net_delta` |
+| ----------------------------- | --- | ------------------ |
+| `josh+pm@worthprop.com`       | 1   | 1                  |
+| `josh+test50@worthprop.com`   | 4   | 4                  |
+
+**The PM received exactly one figure, for the one change order they authored. That is the
+ruling working.** `change_orders_select_visible` and `redactCo()` both did their job.
+
+### Why the test failed anyway
+
+HALF 2 asserts `[]` on the fixture project, on the premise stated in its own comment: _"The
+fixture project carries COs and none are theirs."_ **That premise expired.** The offending row:
+
+```
+id 9c8e34d6…  co_number CO-101-476  title "E2E Send 652432"
+created_by josh+pm@…   net_delta 0   created_at 2026-09-09 21:34:14
+```
+
+`E2E Send …` is `m-writes.spec.ts:486`, which creates PM-authored draft COs on this project and
+removes them in the `afterAll` that TECH_DEBT #144 exists for. **The row survived because a run
+was interrupted** — one of yesterday's saturation casualties, killed before its cleanup ran.
+
+Within one clean run the ordering hides this: `chromium` (desktop) completes before
+`chromium-auth` (the `m-*` files), so `m-writes`' fixtures do not exist yet when
+`desktop-payload` reads. The test only fails against **residue from a previous run**, which is
+why it has been green for months and went red now.
+
+> **So this is fallout from the NANO saturation, not a defect in the code and not a defect in the
+> Floor.** It is also the precise trap CLAUDE.md's S157 section names: _"assertions that describe
+> the freshly-seeded world and then test it forever against live, shared, mutable data."_
+> `desktop-payload` HALF 2 is a fourth instance, alongside `s145-contracts` and
+> `s140-lien-releases`.
+
+### The orphan row is being LEFT IN PLACE, deliberately
+
+Deleting it would turn the test green without making it correct, and the next interrupted run
+would recreate it. The fix is to assert the RULING rather than the seeded world — and leaving the
+polluted row present is what proves the fixed test against the real adversarial condition instead
+of a hypothetical one.
