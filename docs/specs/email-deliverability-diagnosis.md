@@ -366,3 +366,112 @@ verdict, and real auth mail cannot be used as warming (a magic link is mutating 
 
 **Open for Josh** — warming as specified is 24/week across two tenant senders. Adding `no-reply@`
 as a third rotated sender is a change to that shape and is his call. Not assumed, not built.
+
+---
+
+## 7. Why signup confirmations leave no `email_logs` row [2026-09-10, read-only]
+
+**Production `email_logs`, all types ever:** `invite` 37 (latest 2026-09-10 21:40),
+`auth_recovery` 1 (2026-09-09 20:41). `auth_signup_confirmation`: **zero**. The employee's
+confirmation delivered and the Resend webhook recorded it, so the mail went out.
+
+**This settles §6b: the Send Email Hook is ON.** An `auth_recovery` row can only be written by
+`auth-email.ts`. GoTrue's own mailer writes nothing here. §6b's "inferred, not verified" is
+discharged, and the competing Custom-SMTP explanation is dead — auth mail runs through
+`sendEmail()`, and therefore through the send gate, the bounce guard and `email_logs`.
+
+### 7a. The branch, and it is proved rather than inferred
+
+It is **not** a different email_type, and **not** a failed write. It is a branch that skips
+`logEmail()` — `auth-email.ts:322` and `:346-367`:
+
+```ts
+const from = sender?.from ?? `${brand.name} <no-reply@${SENDING_DOMAIN}>`;   // :322
+…
+if (sender) { const id = await logEmail(admin, {…}); logged = id !== null; }  // :346
+else { console.error('auth email hook: no company for user; send NOT logged', {…}); }
+```
+
+**One variable gates both.** The observed From line was `no-reply@ezcontractorbinder.com`, which is
+reachable only when `sender === null` — which is the same condition that takes the `else`. So the
+`no-reply@` From and the missing row are not two symptoms; they are **one cause, already
+observed**. No log-write failure needs to be hypothesised, and none is in evidence.
+
+`logEmail()` itself is not the culprit either: it `console.error`s and returns null on failure
+(`email-service.ts`), and a failed write would still have been *attempted* — with `sender` null it
+is never called at all.
+
+### 7b. ⚠️ But WHY `sender` is null has three candidates, and two are indistinguishable
+
+`senderFor()` (`auth-email.ts:188-208`) **discards the error on both of its queries**:
+
+```ts
+const { data: profile } = await admin.from('profiles')…    // error discarded
+const { data: company } = await admin.from('companies')…   // error discarded
+```
+
+Destructuring only `data` means a query that ERRORS and a row that is ABSENT produce the identical
+`null`. That is this repository's recurring pattern, and the reason for looking: a discarded error
+made a Purchase orphan invisible (S104), a deleted storage object look present (S107), and a
+missing DNS tool look like a missing DNS record.
+
+| # | Cause | Fits the data? |
+| --- | --- | --- |
+| **A** | **No profile VISIBLE at hook time** — GoTrue calls the hook during the signup request, and `getSupabaseAdmin()` reads on a separate connection. A row the `auth.users` trigger created inside an uncommitted transaction is invisible from outside it. | **Best fit.** Deterministic: explains 0/0 for signup and 1/1 for recovery (a recovering user is long committed) with no intermittency. |
+| **B** | The `profiles` query **errored** and the error was discarded. | Possible, poorly supported — would be intermittent, and would not spare `auth_recovery` every time. |
+| **C** | A profile exists but the `companies` row does not, or that query errored. | Same objection as B. |
+
+**A also falsifies a comment in this file's own code.** `senderFor()`'s header asserts: *"Every real
+case has one by the time the hook runs — the `auth.users` trigger creates the profile (and, on the
+owner path, the company) INSIDE the insert, so the row exists before GoTrue gets as far as
+sending."* The trigger half is correct. What the comment misses is **visibility**: inside the
+insert is inside a transaction, and this code reads from outside it. If A holds, the comment
+describes why the code should work while naming the exact reason it cannot.
+
+Ruled out: RLS (the admin client is service-role), and `is_deleted` (a brand-new profile).
+
+### 7c. Three read-only checks that settle it, in order of value
+
+1. **Does a `profiles` row exist for that employee now, and in WHICH company?** If yes, the row was
+   never permanently missing → timing (A), not absence. **And if the company is a NEW one rather
+   than Josh's, that is a second and larger finding** — an invited employee who signed up outside
+   the invite link lands on `handle_new_user()`'s OWNER PATH and gets their own tenant.
+2. **Vercel function logs for `POST /api/auth/send-email` around 2026-09-10 21:40.** The `else`
+   branch prints `auth email hook: no company for user; send NOT logged` with the `user_id`. Its
+   presence confirms the branch; its absence would overturn §7a.
+3. **Whether that employee's `invitations` row shows `status='accepted'`.** If it is still
+   `pending` while the user exists, P3 never fired and the signup did not use the invite link.
+
+### 7d. Consequence: this is the highest-volume auth mail, and none of it is recorded
+
+Signup confirmation is the one auth email every new user receives. Under A it is skipped
+**deterministically, for every signup**, because a signup is definitionally the case where the
+profile is newest. `email_logs` is the only place "did this person get their confirmation?" can be
+answered — the exact question S159 was opened to answer — so the audit trail is blank precisely
+where onboarding fails.
+
+### 7e. Do other types skip the log too? No — but there is one deliberate exception
+
+Every `sendEmail()` caller was checked against its `logEmail()`. **19 send sites, and all but two
+log unconditionally** — `logEmail()` sits immediately after the send in the same block, outside the
+`try`, so success and failure both write a row (`signing-service.ts:132/149`,
+`incident-notify.ts:224/242`, `mention-email.ts:140/166`, `deliveries/check-in:334/352`,
+`co-signing-service.ts:449/468` and `:525/543`, and the nine route senders).
+
+The two exceptions:
+
+- **`auth-email.ts`** — the accidental one, above.
+- **`deletion.ts:617-651` `alertDeletionStopped()`** — **deliberate and documented**: *"Internal ops
+  mail: no email_logs row (that table is the CUSTOMER audit)."* It is also **a third From address on
+  this domain** — `` `${brand.name} <notices@${SENDING_DOMAIN}>` `` — reached only when a deletion
+  job enters `stopped`.
+
+**So the answer to "why only two types" is: genuinely never sent from production.** The other 23
+have logging-complete paths; production simply has not sent an estimate, invoice, change order,
+purchase order, selection or reminder yet. `invite` 37 and `auth_recovery` 1 is a faithful picture
+of what production has actually done. The one type that IS being sent and is not recorded is
+`auth_signup_confirmation`.
+
+**Not fixed here — read-only investigation.** The fix is small (resolve the sender after the send,
+or log with a resolved-later company id) but it turns on which of A/B/C holds, and A cannot be
+confirmed from a Codespace.

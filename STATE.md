@@ -375,7 +375,7 @@ correct restore prints one line instead:
 | Email provider              | ✅ Enabled                                                                                  |
 | Email confirmation          | ✅ Enabled (`mailer_autoconfirm: false`) — **and it must stay on** [S160, see below]        |
 | Custom SMTP                 | ❌ **None** (`smtp_host: null`) [LIVE, S159] — which is why S160 built the Send Email Hook  |
-| Send Email Hook             | ⚠️ **LIKELY ON — this row is STALE** [2026-09-10], see below                                |
+| Send Email Hook             | ✅ **ON** [LIVE, 2026-09-10] — evidence below; supersedes the S160 `Off` row                 |
 | Auth email rate limit       | **2 per hour, project-wide** (`rate_limit_email_sent`) while GoTrue is the sender           |
 | Site URL                    | `https://EZContractorBinder.com` — **corrected S160**; the old value below was stale        |
 | Redirect URLs               | `https://frame-focus-eight.vercel.app/auth/callback`, `http://localhost:3000/auth/callback` |
@@ -383,32 +383,31 @@ correct restore prints one line instead:
 | Data API                    | ✅ Enabled                                                                                  |
 | OTP/email link expiry       | 24 hours (raised Session 23 from default)                                                   |
 
-> ### ⚠️ Send Email Hook — the row above is stale, and one query settles it [2026-09-10]
+> ### ⚠️ Send Email Hook is ON — measured, not inferred [2026-09-10]
 >
 > _Superseded value, quoted rather than deleted:_
 > _`| Send Email Hook | ❌ **Off** (hook_send_email_enabled: false) [LIVE, S160] — attended step, S160 spec §3 |`_
 >
-> A real employee signed up on 2026-09-10 and the confirmation delivered **from
-> `EZ Contractor Binder <no-reply@ezcontractorbinder.com>`**. That exact From line is built in
-> exactly one place in this repository — `auth-email.ts:322`, the platform fallback
-> `` `${brand.name} <no-reply@${SENDING_DOMAIN}>` `` — which only runs when GoTrue calls
-> `/api/auth/send-email`. Supabase's own shared mailer would have sent from
-> `noreply@mail.app.supabase.io`.
+> **The evidence is a production `email_logs` row.** All types ever, on production:
+> `invite` 37 (latest 2026-09-10 21:40) and **`auth_recovery` 1** (2026-09-09 20:41). An
+> `auth_recovery` row can only be written by `auth-email.ts` — GoTrue's own mailer writes nothing
+> to this table. So auth mail is routing through `/api/auth/send-email`, and therefore through
+> `sendEmail()`, the send gate, the bounce guard and `email_logs`.
 >
-> **⚠️ INFERRED FROM THE From LINE, NOT VERIFIED.** No production read path exists from a
-> Codespace (CLI and MCP are both pinned to rebuild-test). The competing explanation is Custom
-> SMTP configured with a matching From — which would mean auth mail bypasses `sendEmail()`, and
-> therefore bypasses the send gate, the bounce guard **and** `email_logs`.
+> ⚠️ **An earlier note in this place reasoned from the `no-reply@ezcontractorbinder.com` From line
+> and hedged that Custom SMTP could explain it too. That hedge was wrong to leave standing** — the
+> `auth_recovery` row settles it, and Custom SMTP is ruled out.
 >
-> **The discriminator is one query on production:** an `email_logs` row with
-> `email_type = 'auth_signup_confirmation'` for that employee's address. **Present** → the hook is
-> on. **Absent** → Custom SMTP, and three safety mechanisms do not cover auth mail.
+> ⚠️ **The adjacent rows are now stale in consequence.** `Custom SMTP ❌ None` and
+> `Auth email rate limit — 2 per hour, project-wide … while GoTrue is the sender` both describe a
+> world where GoTrue sends. It does not. **The rate limit no longer binds**, and nothing else has
+> replaced it: auth email volume is now limited only by Resend.
 >
-> Note also that the **Auth email rate limit** row above says "while GoTrue is the sender" — if
-> the hook is on, GoTrue is no longer the sender and that limit no longer binds. Both rows need
-> re-verifying together.
->
-> Context and the reputation consequence: `docs/specs/email-deliverability-diagnosis.md` §6.
+> ⚠️ **AND `auth_signup_confirmation` HAS ZERO ROWS while the mail is being delivered.** Signup
+> confirmations take a branch in `auth-email.ts` that skips `logEmail()` entirely — the same
+> `sender === null` that produces the `no-reply@` From line. Highest-volume auth mail, no audit
+> trail. Full chain, the three candidate causes, and the read-only checks that settle it:
+> `docs/specs/email-deliverability-diagnosis.md` §7. **Open, not fixed.**
 | Redirect URLs               | + wildcards `/auth/callback?next=*` for prod and localhost                                  |
 
 > **⚠️ `Site URL` was `https://frame-focus-eight.vercel.app` in this table and is not** — the live
