@@ -534,3 +534,58 @@ auth was never the idle bottleneck, it was the first thing to fall over under lo
 that moved is the one §9 measured degrading to 64,957 ms.
 
 Probe: `signIn` ×5 and `select id limit 1` ×5, service-role and anon, same shape as §9's.
+
+### MICRO holds under the suite's own load — §9's blocker does not reproduce
+
+The 12.8-minute capture run (43 tests, `workers: 1`, `CI=1`, production server) with the same
+probe taken immediately before and after:
+
+| moment                              | `select id limit 1` | sign-in | errors |
+| ----------------------------------- | ------------------- | ------- | ------ |
+| before the run                      | 84 ms               | 143 ms  | 0/5    |
+| **immediately after 12.8 min**      | **51 ms**           | 129 ms  | 0/5    |
+
+**Faster after the run than before it**, where NANO reached 64,957 ms forty minutes in and then
+refused connections outright. Box load average 1.76 on 2 CPUs. **The failure set did not grow:
+5 failed, 38 passed, and every failure repeated at identical timings across all three retries.**
+
+That last property is what makes this run classifiable where §9's was not.
+
+### ⚠️ CORRECTION to §9 — four of the seven were NOT starved. They are deterministic breaks.
+
+§9 read the camera specs' "exactly 1.0m" as saturation: _"they consumed the new budget rather
+than fitting inside it"_. **That was wrong, and the 1.0m is not the per-test budget at all** —
+it is `{ timeout: 60_000 }` written into the assertions themselves at
+`m-capture-camera.spec.ts:199, 212, 263`. They would wait that long on any database.
+
+**The cause is this branch's own parent commit.** `e82c4e6` (_"S107 A2: the tray, multi-file
+capture, and the real weak-signal fix"_) rewrote `capture-screen.tsx` and removed three testids
+that five tests still assert:
+
+| removed by `e82c4e6` | replaced with                                            | asserted by                              |
+| -------------------- | -------------------------------------------------------- | ---------------------------------------- |
+| `m-capture-back`     | `m-capture-done` ("Done" → `/m`)                         | `m-capture.spec.ts:959`                  |
+| `m-capture-confirmation` | the per-shot tray; on drain, `m-capture-empty` "N photos saved." | `m-capture-camera.spec.ts` ×4 |
+| `m-capture-queued`   | `m-capture-shot-queued` row text                         | `m-capture-camera.spec.ts:305`           |
+
+**The decisive evidence that these are stale assertions and not functional regressions:** the
+cleanup line prints `files=1` on every failing camera run — the photo uploaded and the row was
+written. Only the anchor moved. Every other test in that file passes in 0.8-1.7 s.
+
+And the control case is not a false alarm either. `/m/capture` still carries an exit — the page
+snapshot shows Menu, the tab bar and **Done** — so the screen is not a dead end. The test caught
+a RENAMED control, which is exactly what its own comment says it exists for: _"a fix that added
+an exit to two screens and removed the one that worked would pass both tests above."_ A2 is that
+fix. The guard worked.
+
+> **This is CLAUDE.md's S157 rule arriving from the other direction.** That rule is about tests
+> that stay GREEN while contradicting a shipped change. These went red — but the red was wearing
+> a timeout's clothing, and a saturated database was standing next to them holding the same
+> shape. §9 attributed all seven to the environment because four of them looked environmental.
+
+### The other two of the seven were genuinely starved
+
+`m-capture.spec.ts:962` (_"the exit RETURNS, rather than navigating somewhere fixed"_) and the
+`m-details` cohort failed only in the degraded run. On MICRO, `:962` passes in **2.9 s**. §9's
+"a run whose failure set grows as the database slows is not measuring the code" holds for these,
+and only these.
