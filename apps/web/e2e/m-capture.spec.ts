@@ -930,6 +930,17 @@ test.describe('A-7l2 · recently-used order (foreman identity)', () => {
 // Surveyed before fixing rather than after: `/m/capture` already carried Back
 // and Discard, so the gap was exactly the other two. This asserts all three, so
 // a fourth capture screen added later fails here rather than shipping stranded.
+//
+// ⚠️ M-22's EXIT WAS RENAMED, AND THIS BLOCK CAUGHT IT [S107b]. `e82c4e6`
+// rewrote the capture screen around the held-shot tray and replaced the old
+// `Back` (router.back()) + `Discard` pair with a single `Done`
+// (`m-capture-done`, → `/m`). The screen is still not a dead end — it carries
+// Done, the hamburger and the tab bar — so the RULE held and only the control
+// changed. The control case below now names the control that exists.
+//
+// Inverted rather than deleted, per CLAUDE.md's S157 rule: rewritten to the new
+// rule this becomes the regression guard for the rewrite, where deleting it
+// would discard the record that M-22's exit is load-bearing at all.
 test.describe('a capture screen is never a dead end', () => {
   for (const [label, route, exitTestId] of [
     ['M-21 · daily log', '/m/logs/new', 'm-log-cancel'],
@@ -953,10 +964,23 @@ test.describe('a capture screen is never a dead end', () => {
   }
 
   test('/m/capture already had one — the control case', async ({ page }) => {
-    // ⚠️ NOT REDUNDANT. Without it, a "fix" that added an exit to two screens
-    // and removed the one that worked would pass both tests above.
+    // ⚠️ NOT REDUNDANT, and it has already earned its place once: a "fix" that
+    // added an exit to two screens and removed the one that worked would pass
+    // both tests above. `e82c4e6` did exactly that, and this is what failed.
     await page.goto('/m/capture');
-    await expect(page.getByTestId('m-capture-back')).toBeVisible();
+
+    // The exit is `Done` since the tray rewrite. Asserted by testid AND by the
+    // accessible name, because the name is the half the user actually reads —
+    // a rename to a testid nobody sees would otherwise pass here.
+    const exit = page.getByTestId('m-capture-done');
+    await expect(exit).toBeVisible();
+    await expect(exit).toHaveText(/done/i);
+
+    // ⚠️ THE CRITERION IS "OFFERS A WAY OUT", NOT "HAS A BUTTON". Proving it
+    // LEAVES is what makes this a dead-end test rather than a render test —
+    // and it is the half that would have survived the rename unchanged.
+    await exit.click();
+    await expect(page).toHaveURL(/\/m$/, { timeout: 20_000 });
   });
 
   test('the exit RETURNS, rather than navigating somewhere fixed', async ({ page }) => {
