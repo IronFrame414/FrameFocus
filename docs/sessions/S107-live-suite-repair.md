@@ -513,3 +513,24 @@ duty: it was the answer to the concurrency that forces `workers: 1`, and it is a
 to this, because the load would no longer land on one shared instance. It is still blocked on a
 reproducible seed. The alternative is a larger compute tier for rebuild-test. Both are Josh's
 call; neither is a code change.
+
+---
+
+## 10 — MICRO: the baseline re-measured, and §9's blocker is lifted
+
+`framefocus-rebuild-test` was moved from **NANO** (shared CPU, 0.5 GB, metrics showing 99%
+compute / 96% CPU / 99% disk IO) to **MICRO** (dedicated 2-core, 1 GB) between sessions, at the
+same cost. Production moved too. §9 said to measure rather than assume, so this is the
+measurement, taken idle before any suite ran.
+
+| probe, project idle          | NANO (§9)  | MICRO           |
+| ---------------------------- | ---------- | --------------- |
+| PostgREST `select id limit 1` | **645 ms** | **84 ms** median |
+| auth `signInWithPassword`     | 187 ms     | **157 ms**      |
+| sign-in errors                | 0/5        | 0/5             |
+
+**The trivial select is 7.7× faster; auth is unchanged.** That split is itself informative —
+auth was never the idle bottleneck, it was the first thing to fall over under load. The figure
+that moved is the one §9 measured degrading to 64,957 ms.
+
+Probe: `signIn` ×5 and `select id limit 1` ×5, service-role and anon, same shape as §9's.
