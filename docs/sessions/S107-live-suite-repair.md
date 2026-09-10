@@ -775,3 +775,142 @@ after, since the merge authorization is conditioned on a green run. **Run #303**
 
 The local merge sequence is unchanged and still local: `--no-ff`, build and unit suite on the
 merged `main`, then push. The PR is a signal mechanism, not the merge route.
+
+---
+
+## 14 — Two findings about the PROCESS, which outlast the fixes
+
+The six stale fixtures are gone and will not recur. These two will, because neither is a bug in
+anything — both are configurations that behave exactly as written and produce a bad outcome
+anyway.
+
+### 14a — CI can only tell you AFTER you have already merged
+
+`.github/workflows/ci.yml`:
+
+```yaml
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+```
+
+**A feature branch triggers nothing.** This branch, carrying eight commits and six test repairs,
+had **zero** CI runs against it until a PR was opened by hand. And the campaign's whole signal
+history reflects that: #290 through #302 are **every one** `event: push` on `main`.
+
+| run | branch | event | conclusion |
+| --- | ------ | ----- | ---------- |
+| #287 | main | push | success — the last green |
+| #290 | main | push | **failure** — `0c4e2b5`, the 9b/estimates merge |
+| #292 | main | push | failure — `20b82d9`, the 7G QuickBooks merge |
+| #295, #296, #297 | main | push | failure |
+| #298-#302 | main | push | **cancelled**, each superseded by the next push |
+
+> **Every red in this campaign was discovered on `main`, after the merge that caused it.** The
+> configuration offers "merge, then find out" as its only default mode. That is not a contributing
+> factor to the four-merge delay — it is structurally half of it. The other half was #298-#302
+> cancelling one another, so that four of the five most recent signals were not verdicts at all.
+
+**Why the fixture drift specifically was invisible until a merge.** Each of the six was introduced
+by a merge that was itself green in isolation: `00eb9a6` removed a Send button, 7G added an
+Accounting panel, S176 renamed a display_name, `e82c4e6` rewrote the capture screen. None broke
+its own tests. Each broke *someone else's*, and there was no pre-merge run in which those someone
+else's tests were executed against the change.
+
+**Proposed fixes, NOT APPLIED — `ci.yml` deliberately untouched, this is Josh's ruling:**
+
+1. **Trigger on push to any branch** — `on: push:` with no `branches:` filter, or
+   `branches-ignore: []`. Simplest, and every branch gets a signal the moment it is pushed.
+   **Cost:** every push burns a ~40-minute e2e job, and pushes during a run collide (see 14b).
+2. **Make the PR path the norm** — keep the trigger as-is and require a PR for every branch, so
+   `pull_request` fires. Costs nothing extra in minutes and adds a review surface.
+   **Cost:** relies on discipline; a branch merged without a PR still gets no pre-merge signal.
+3. **Both, with a concurrency group** — `concurrency: { group: ci-${{ github.ref }},
+   cancel-in-progress: true }` bounds the minutes and makes superseding explicit rather than
+   accidental. ⚠️ **But note what that does to the DATABASE problem**: cancel-in-progress prevents
+   two runs on the SAME ref, and does nothing about two runs on DIFFERENT refs, which is the case
+   that actually collides. See 14b.
+
+**A note that belongs with any of the three:** there is currently **no `concurrency:` block at
+all**. #298-#302's cancellations were therefore not automatic — something or someone cancelled
+them. Whatever the mechanism, the configuration does not itself prevent two runs coexisting, which
+is what 14b is about.
+
+### 14b — "push after every commit" and a running CI job are in direct conflict
+
+The unattended-run rule (`CLAUDE.md`, S105/S173) says: commit each discrete step, **push the
+feature branch after every commit**, because this Codespace has destroyed unattended work three
+times and a local branch dies with the box. That rule is right and is not in question.
+
+**But once a PR is open, every push starts another CI run**, and two runs share one
+`rebuild-test`. This session produced the collision live: appending §13 to this report — a
+docs-only commit — spawned run **#304** while **#303** was still executing, and both then drove
+the same database.
+
+**Why that is worse than wasted minutes.** The suites are not read-only and they are not disjoint:
+
+- `m-capture-camera`'s `afterAll` deletes `files` rows and storage objects matching
+  **`file_name like 'shot%'`** for the fixture project — **that is the other run's in-flight
+  fixtures**, deleted mid-test.
+- `m-writes` creates and deletes PM-authored change orders on the fixture project; `desktop-payload`
+  reads them. §11 is a whole section about what one leftover row does to an assertion.
+- `workers: 1` exists precisely because concurrent access to this database breaks tests (CI #201).
+  Two CI runs re-create that concurrency at a level `workers: 1` cannot see or control.
+
+**And the failure mode is the campaign's own theme:** a collision produces a RED that is
+indistinguishable from a real failure. Cancelling was not available either — the Codespace
+`GITHUB_TOKEN` lacks `actions:write` and `POST /actions/runs/{id}/cancel` returns **403**, so an
+agent that starts a duplicate run cannot clean it up.
+
+**Proposed exception, for the ruling — the rule stands, this is a stated carve-out:**
+
+> **While a CI run on this branch is in progress, hold the push.** Keep committing every discrete
+> step, so nothing is lost to the box; batch the pushes and send them when the run reaches a
+> terminal state. If a push cannot wait, expect the run to be contaminated and re-run it rather
+> than reading it.
+
+**⚠️ The one asymmetry that makes this survivable, and it should be written into the rule:**
+**collisions cause false REDS, never false GREENS.** A green run under contention is still a valid
+green — nothing about interference makes a failing assertion pass. So a green may be acted on
+immediately; only a red needs the "was anything else running?" question asked first.
+
+---
+
+## 15 — CI #304: GREEN, and verified as green rather than reported as green
+
+**Run #304, `f853663`, `event: pull_request` — `completed / success`.** The first genuinely green
+CI on this work, and the first non-cancelled run on this branch at all.
+
+Read three ways rather than one, because "the notification said 0" has been wrong **five times**
+in this campaign:
+
+| signal | reading |
+| ------ | ------- |
+| every job and every step | `completed/success` — Lint & Type Check, and E2E (Playwright) |
+| `upload-artifact` step | **`skipped`** — it is `if: failure()`, so its not firing is independent of the conclusion field |
+| the tally in the log | **557 passed · 10 skipped · 0 failed** (24.6m), plus **1220** and **92** unit tests |
+
+**557 passed / 10 skipped is identical to the local run**, on a different machine against the same
+database. Both jobs green, and none of CI's five persistent failures remain.
+
+### The one flake, named rather than left in the tally
+
+```
+1 flaky
+  [chromium] › desktop-chat-switcher.spec.ts:62 › ND-34 — the switcher › each thread carries its own unread count
+```
+
+Passed on retry. **Not chased, and the reason is 14b:** #304's e2e job ran 00:59:18 → 01:27:03,
+and the duplicate run #303 was not cancelled until 01:25:40 — so **almost the entire run overlapped
+another suite driving the same database**, and an unread-COUNT assertion is exactly the shape a
+foreign run's chat writes would disturb. Diagnosing a single retry-passing flake out of a
+knowingly contaminated window would be guesswork dressed as analysis.
+
+**Recorded as open, for the next clean run to confirm or clear.** If it recurs on a solo run it is
+real and belongs to `desktop-chat-switcher`; if it does not, it was the collision.
+
+> ⚠️ And note the direction of that reasoning, because it is the one this whole campaign turns on:
+> contention can only manufacture a **red**. The green is trustworthy *despite* the overlap. The
+> flake is the only thing the overlap puts in doubt, and a flake is exactly what it would produce.
