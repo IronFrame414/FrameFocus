@@ -74,3 +74,29 @@ chased to a cause:
 
 **What the method still cannot see:** dynamic DDL built with `format()`/`EXECUTE` inside function
 bodies; two `RENAME` statements, not modelled; and anything applied outside the ledger.
+
+---
+
+## 3. What was done about it (2026-09-11)
+
+| Step | Outcome |
+| --- | --- |
+| Revert the CHECK | `20261610000000` **deleted entirely**, not amended — its other statement (`DROP NOT NULL`) was a no-op. Constraint dropped from rebuild-test and its ledger row removed, so tree and database stay in exact agreement: checks 231 → 230, latest migration `20261600000000` |
+| `#2-deliv` | **Withdrawn**, entry kept with both errors recorded |
+| `#3-deliv` | **Raised** — a multi-arm constraint written without counting the rows it governs, paired with `20261540000000` |
+| `senderFor()` | Stale `IS NOT NULL` comment corrected; it is the sentence that made a constraint look involved |
+| `s138-trial-deletion-run.live.ts` | Seeds a **non-auth** `email_logs` row on the doomed company and asserts it survives with `company_id` NULLED. If a CHECK of that shape returns, **the run itself fails**, not one assertion — the company DELETE aborts |
+| `npm run db:verify` | `scripts/db-replay-schema.py` + `scripts/db-verify.sql` |
+
+### `npm run db:verify`
+
+Replays all migration files and prints the fingerprint the tree should produce; the SQL companion
+prints the same six counts from a live database. **Its blind spots are in its own docstring**, and
+the fourth matters most:
+
+> **A constraint that is WRONG rather than missing reports perfectly clean.** It lives in a
+> migration, so tree and database agree while the behaviour is broken. That is exactly what
+> `#3-deliv` was. Only a test that performs the delete catches it.
+
+⚠️ **And its own history is the warning it carries:** the first five discrepancies it reported were
+all bugs in the parser. **A discrepancy from it is a question, not a finding.**
