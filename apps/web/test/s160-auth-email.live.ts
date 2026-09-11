@@ -158,6 +158,9 @@ async function sweep(): Promise<void> {
         .like('email_type', 'auth_%')
     ).error
   );
+  // C4's profile-less user. Its row carries NO company_id, so no company-scoped
+  // teardown anywhere can reach it — it has to be swept by address, here.
+  must('sweep orphan logs', (await admin.from('email_logs').delete().eq('recipient_email', ORPHAN_EMAIL)).error);
 }
 
 // ⚠️ [Email §1, S157] OPEN THE GATE for this file — and ONLY this file's
@@ -516,18 +519,40 @@ describeSend('S160-C — P1/P2: the send goes out branded, and it is logged', ()
     state.result = { data: { id: 'mock-resend-id' }, error: null };
   });
 
-  it('C4 — a user with NO profile still gets the email; only the LOG is skipped', async () => {
-    // `email_logs.company_id` is NOT NULL, so there is nothing to log against.
-    // The trade is deliberate and one-directional: an unsent email is a
-    // user-visible failure, an unlogged one is a bookkeeping gap.
-    //
-    // ⚠️ THE ADDRESS CHANGED [bounce guard, 2026-09-10]. Superseded value,
-    // quoted rather than silently swapped: `orphan@example.invalid`. The bounce
-    // guard refuses reserved domains inside `sendEmail()`, so the old value
-    // would make `outcome.sent` FALSE and this test would assert the opposite
-    // of what it is about. What C4 tests is that a MISSING PROFILE does not
-    // stop a send; the recipient's domain was never the subject. Deliverable
-    // (no MX on `qa-noreply.`) and the transport is mocked, so nothing moves.
+  // ⚠️ C4 INVERTED [2026-09-11], per the S157 rule — superseded assertions
+  // quoted rather than deleted.
+  //
+  //   it('C4 — a user with NO profile still gets the email; only the LOG is skipped', …)
+  //     expect(outcome.logged).toBe(false);
+  //     expect(data ?? [], 'a row was logged with no company').toHaveLength(0);
+  //
+  // That WAS the behaviour, and it was the defect: production held ZERO
+  // `auth_signup_confirmation` rows while confirmations were delivering,
+  // because `email_logs.company_id` could not be resolved inside the open
+  // signup transaction and the code skipped `logEmail()` rather than the send.
+  // The logging fix writes the row with a NULL company — legitimate, since
+  // `20261054000000` made the column nullable so a mail record outlives its
+  // tenant.
+  //
+  // ⚠️ AND THIS FILE COULD NOT TELL ME. C4 skips whenever `RESEND_API_KEY` is
+  // absent, which is the ruled S107 state, so it did not run when the
+  // behaviour changed under it — `#1-deliv` in a third guise: not the harness's
+  // sequencing this time, and not the environment, but a SKIP. A test that
+  // cannot run cannot object. Found only by forcing the suite to run with a
+  // deliberately-invalid placeholder key against the vi.mock'd transport.
+  it('C4 — a user with NO profile still gets the email, AND IT IS NOW LOGGED', async () => {
+    // `email_logs.company_id` is NOT NULL no longer. The trade this test used
+    // to describe — an unsent email is a user-visible failure, an unlogged one
+    // is a bookkeeping gap — no longer has to be made at all.
+    // ⚠️ SWEEP FIRST, DO NOT ASSUME AN EMPTY TABLE. This asserts a row COUNT
+    // against a live, shared, mutable table — and the count is only meaningful
+    // relative to a known start. A previous run that failed mid-test leaves its
+    // row behind (it did, which is how this was found), and the next run then
+    // fails on residue rather than on behaviour. Same class as the repo's
+    // "assertions that describe the freshly-seeded world and then test it
+    // forever against live data".
+    await admin.from('email_logs').delete().eq('recipient_email', ORPHAN_EMAIL);
+
     state.calls.length = 0;
     const orphan = randomUUID();
     const outcome = await handleAuthEmail(
@@ -536,27 +561,34 @@ describeSend('S160-C — P1/P2: the send goes out branded, and it is logged', ()
       SUPABASE_URL
     );
 
-    expect(outcome.sent, 'the email was dropped because it could not be logged').toBe(true);
-    expect(outcome.logged).toBe(false);
-    // ⚠️ ADDED [2026-09-10]. Until now "logged: false" was the ONLY trace, and
-    // it is true of a failed query and of an absent row alike — which is why
-    // zero `auth_signup_confirmation` rows on production could not be explained
-    // from the outside. The reason must survive to the caller.
-    expect(outcome.diagnosis, 'the skip left no explanation').toBeTruthy();
-    expect(outcome.diagnosis).toContain('send NOT logged');
-    expect(
-      outcome.diagnosis,
-      'the diagnosis does not distinguish an absent row from a failed query'
-    ).toMatch(/VISIBLE|FAILED/);
+    expect(outcome.sent, 'the email was dropped').toBe(true);
+    expect(outcome.logged, 'the send was NOT logged — the defect this fix closed').toBe(true);
     expect(state.calls, 'Resend was not called for the orphan').toHaveLength(1);
     // The platform fallback still sends from the ALIGNED domain.
     expect(state.calls[0].from).toContain(`@ezcontractorbinder.com`);
 
     const { data } = await admin
       .from('email_logs')
-      .select('id')
+      .select('id, company_id, email_type, metadata')
       .eq('recipient_email', ORPHAN_EMAIL);
-    expect(data ?? [], 'a row was logged with no company').toHaveLength(0);
+    const rows = (data ?? []) as Array<{
+      id: string;
+      company_id: string | null;
+      email_type: string;
+      metadata: Record<string, unknown>;
+    }>;
+    expect(rows, 'no row was logged for the profile-less user').toHaveLength(1);
+    expect(rows[0].company_id, 'a company was invented for a user who has none').toBeNull();
+    expect(rows[0].email_type).toBe('auth_recovery');
+    // The row says WHY it carries no tenant, so the question is answerable from
+    // the table without reading the source.
+    expect(rows[0].metadata.company_unresolved, 'the row does not say why').toBeTruthy();
+
+    // And the diagnosis still names it for the caller.
+    expect(outcome.diagnosis, 'the null-company send left no explanation').toBeTruthy();
+    expect(outcome.diagnosis).toContain('logged WITHOUT a company');
+
+    await admin.from('email_logs').delete().eq('id', rows[0].id);
   });
 
   it('C5 — an unrecognised action is REFUSED, never silently dropped', async () => {
