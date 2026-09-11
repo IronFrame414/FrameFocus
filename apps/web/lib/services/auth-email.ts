@@ -185,8 +185,21 @@ export function buildVerifyUrl(
  * The company whose identity this email goes out under, and whose `company_id`
  * the log row needs.
  *
- * ⚠️ `email_logs.company_id` IS NOT NULL [LIVE], which is why this is resolved
- * rather than defaulted.
+ * ⚠️ THE OLD REASON GIVEN HERE WAS STALE BY TWELVE DAYS. Quoted rather than
+ * deleted, because it is the sentence that made a later reader (me) believe a
+ * database constraint was involved in the missing-log defect:
+ *
+ *   "`email_logs.company_id` IS NOT NULL [LIVE], which is why this is resolved
+ *    rather than defaulted."
+ *
+ * It stopped being true on 2026-08-30. `20261054000000` (deletion sweep §3)
+ * dropped that NOT NULL and made the FK `ON DELETE SET NULL`, so a tenant's mail
+ * record outlives the tenant. The column has been nullable ever since, on BOTH
+ * databases (verified: `is_nullable = YES` on rebuild-test and production).
+ *
+ * So the sender is resolved here for the FROM LINE, not to satisfy a
+ * constraint — and the missing `email_logs` rows were caused by a CODE branch
+ * skipping `logEmail()`, never by a rejected INSERT.
  *
  * ⚠️ THE COMMENT THAT STOOD HERE WAS RIGHT ABOUT THE TRIGGER AND WRONG ABOUT
  * VISIBILITY. Quoted rather than deleted, because it is the reason nobody
@@ -715,17 +728,20 @@ export async function handleAuthEmail(
   // was nothing to put in it, so the audit trail was skipped rather than the
   // send.
   //
-  // `company_id` is now nullable for `auth_*` types ONLY (20261610000000,
-  // enforced by CHECK, not by convention). A public signup confirmation
-  // genuinely has no company: `handle_new_user()` is creating it inside the same
-  // uncommitted transaction, so there is no id to resolve rather than one that
-  // is hidden. Writing null says that; writing a sentinel would have lied in a
-  // tenancy column.
+  // `company_id` has been nullable since `20261054000000` (deletion sweep §3,
+  // 2026-08-30) — the FK is `ON DELETE SET NULL` so a mail record outlives its
+  // tenant. NOTHING had to change in the schema for this fix; the skip was a
+  // CODE branch, not a constraint. A public signup confirmation genuinely has no
+  // company: `handle_new_user()` is creating it inside the same uncommitted
+  // transaction, so there is no id to resolve rather than one that is hidden.
+  // Writing null says that; writing a sentinel would have lied in a tenancy
+  // column.
   //
   // A null-company row is invisible to every tenant — `email_logs_select_manager`
   // is `company_id = get_my_company_id()`, and `NULL = <uuid>` is NULL, not true
   // — and reachable only by the service role. That is the intended visibility
-  // for platform auth mail, not a hole.
+  // for platform auth mail, not a hole, and it is the same visibility a deleted
+  // tenant's surviving rows already have.
   const logId = await logEmail(admin, {
     company_id: logCompanyId,
     estimate_id: null,

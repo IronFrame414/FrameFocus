@@ -383,13 +383,21 @@ export type EmailType =
 
 export interface LogEmailInput {
   /**
-   * ⚠️ NULLABLE FOR `auth_*` TYPES ONLY [20261610000000]. A public signup
-   * confirmation is sent from inside the still-open signup transaction, where
-   * the company `handle_new_user()` is creating does not exist on any
-   * connection — so there is no id to resolve rather than one that is hidden.
-   * Every tenant-facing type still REQUIRES one, enforced by
-   * `email_logs_company_required_except_auth`, so passing null from a product
-   * sender fails loudly at INSERT instead of writing an unscoped row.
+   * ⚠️ NULLABLE, AND NOT BECAUSE OF THIS FEATURE. `email_logs.company_id` has
+   * been nullable since `20261054000000` (deletion sweep §3, 2026-08-30): the
+   * FK is `ON DELETE SET NULL` so a tenant's mail record OUTLIVES the tenant.
+   * That is a ruled, legally-reviewed behaviour.
+   *
+   * ⚠️ DO NOT ADD A CHECK REQUIRING A COMPANY FOR NON-AUTH TYPES. It was tried
+   * on 2026-09-11 and reverted before merge: a constraint of that shape
+   * contradicts `ON DELETE SET NULL` directly — deleting a company nulls every
+   * one of its `email_logs` rows, the non-auth ones then violate it, and the
+   * company DELETE aborts. Measured on rebuild-test: 1,389 rows, one company.
+   * `s138-trial-deletion-run.live.ts` now covers exactly this.
+   *
+   * A public signup confirmation legitimately has no company: the tenant is
+   * being created inside the same uncommitted transaction, so there is no id to
+   * resolve rather than one that is hidden. Passing null says that.
    */
   company_id: string | null;
   estimate_id: string | null;

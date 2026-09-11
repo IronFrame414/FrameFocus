@@ -149,28 +149,50 @@ Complete as of Session 40. All polish items closed. Module 4 build is unblocked.
   scope the "exactly one of project/estimate" rule to the categories it actually governs.
   Filed alongside #1-s106; do not fix in this branch. See `S106-report.md` production note.
 
-- **#2-deliv — REBUILD-TEST HAS DRIFTED FROM THE MIGRATION FILES, and the drift is in the exact
-  column this session was investigating [2026-09-11].** `email_logs.company_id` is declared
-  `NOT NULL` in `20260101000000_baseline_schema.sql:1159` and no migration in the tree ever drops
-  it — yet it was **already nullable on rebuild-test** before `20261610000000` ran.
+- **#2-deliv — ⚠️ WITHDRAWN. THE CLAIM WAS FALSE; THE ENTRY IS KEPT SO THE ERROR IS ON THE RECORD
+  [2026-09-11].** _Superseded claim, quoted rather than deleted:_ _"REBUILD-TEST HAS DRIFTED FROM
+  THE MIGRATION FILES, and the drift is in the exact column this session was investigating …
+  `email_logs.company_id` is declared `NOT NULL` … and no migration in the tree ever drops it."_
 
-  **Evidence, not inference:** the `database.ts` generated at commit `69d9bc1` (before that
-  migration) emits `company_id: string | null` for `email_logs`, while emitting a bare `string`
-  for every genuinely NOT NULL column in the same table — `email_type`, `recipient_email`,
-  `sender_email`, `subject`, `status`, `sent_at`, `created_at`, `id`. The generator is faithful;
-  the database had drifted. Two consecutive `db:types` runs across the schema change produced an
-  identical md5 (`f12ed72b…`), which is what surfaced it.
+  **A migration does drop it**, deliberately: `20261054000000_deletion_shell_unpinned.sql:26`,
+  2026-08-30, so a tenant's mail record outlives the tenant (`ON DELETE SET NULL`). A full replay
+  of all 223 migrations against both live catalogs found **zero drift** — every table, column,
+  NOT NULL, CHECK, UNIQUE and FK matches by name on rebuild-test AND production. Method and blind
+  spots: `docs/specs/schema-drift-investigation.md`.
 
-  ⚠️ **WHY IT MATTERS MORE THAN A STRAY CONSTRAINT.** `logEmail()` was skipped on production
-  *because* that column is NOT NULL there. On rebuild-test it is not — so **a live harness writing
-  a null-company auth log would simply have succeeded**, and no test run against rebuild-test could
-  ever have reproduced the production defect. This is `#1-deliv`'s shape in a second guise: the
-  environment, rather than the harness's sequencing, is what made the gap invisible.
+  **The two errors, because the method matters more than the fact:**
+  1. ⚠️ **A grep piped through `head -20` cut off before the file that drops it, and the truncated
+     output was read as complete.** Same class as reading a wrapper's exit code — see the root-cause
+     note on `#1-deliv`.
+  2. The generated `database.ts` was read as evidence of drift when it was simply correct.
 
-  **Owed:** (a) find out how it was lost — a manual `ALTER`, a restore, or a `db reset` from a
-  stale dump; (b) **sweep for other drifted constraints** rather than assuming this is the only
-  one, by diffing rebuild-test's `information_schema` against the migration tree; (c) decide
-  whether `supabase db diff` belongs in CI. Not swept in this branch.
+- **#3-deliv — A MULTI-ARM CONSTRAINT WRITTEN WITHOUT COUNTING THE ROWS IT WOULD GOVERN
+  [2026-09-11]. Paired with `20261540000000`, which is the same defect in the other direction.**
+
+  `20261610000000` added `CHECK (company_id IS NOT NULL OR email_type LIKE 'auth\_%')` to
+  `email_logs` — **a table whose FK is `ON DELETE SET NULL`.** The two contradict directly: deleting
+  a company nulls `company_id` on every one of its rows, the non-auth ones then violate the CHECK,
+  and **the company DELETE aborts.** `/api/cron/trial-deletion` is scheduled and live.
+  **Measured before reverting: 1,389 rows across 1 company on rebuild-test would have blocked that
+  company's deletion**; on production it would be every tenant that has ever sent mail.
+  `email_logs.company_id = YES` on production, so the unpinning is live there too.
+
+  ⚠️ **It was written while quoting `ON DELETE SET NULL`'s own migration in the comment above it.**
+  Reverted before merge; the migration was deleted entirely rather than amended, because its other
+  statement (`DROP NOT NULL`) was a no-op.
+
+  **The pairing, and why it is one finding.** `20261540000000` aborted on production against two
+  orphan `files` rows nobody had measured, because its three-arm CHECK's category list was modelled
+  on rebuild-test's data. This one would have aborted a tenant deletion against 1,389 rows nobody
+  had counted. **Neither is an environment problem** — the S183 replay proves the environments
+  agree. Both are the same habit: *a constraint reasoned about from the schema and never tested
+  against the rows.*
+
+  **Owed:** before adding any CHECK to a populated table, run the negation as a `SELECT count(*)`
+  first — and where the table has an `ON DELETE SET NULL` FK, run it again against the post-delete
+  state. `scripts/db-verify.mjs` does not catch this class and cannot: the constraint lives in a
+  migration, so the tree and the database agree perfectly while the behaviour is broken. Only a test
+  that performs the delete catches it — `s138-trial-deletion-run.live.ts` now does.
 
 - **#1-deliv — A LIVE TEST THAT DRIVES A HOOK, TRIGGER OR WEBHOOK HANDLER BY HAND CANNOT
   REPRODUCE ONE CALLED MID-TRANSACTION. Filed as a CLASS, not an incident [Josh, 2026-09-11].**
@@ -189,6 +211,13 @@ Complete as of Session 40. All polish items closed. Module 4 build is unblocked.
   > **The shape:** wherever correctness depends on WHEN a handler is called — inside a transaction,
   > before a commit, during another system's request — invoking it directly proves the opposite of
   > what it appears to. The greener the test, the more confidently the gap is held open.
+
+  > ⚠️ **ROOT CAUSE RECORDED ALONGSIDE [Josh, 2026-09-11]:** `#2-deliv` was filed on a grep piped
+  > through `head -20` that cut off before the file contradicting it. **Trusting truncated output as
+  > complete is the same class as reading a wrapper's exit code** — in both, the thing inspected is
+  > not the thing being judged. `head`, `tail`, `| head -N`, a truncated tool result and a summary
+  > line are all the same trap. If a conclusion is "X does not exist anywhere", the search that
+  > supports it must be unbounded, and its completeness checked (`| wc -l`) before it is believed.
 
   **Every direct-invocation test in this repo is suspect on the same grounds**, not wrong:
   `/api/auth/send-email` (GoTrue, the confirmed case), `/api/webhooks/resend` (Resend delivery
