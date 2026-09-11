@@ -14,7 +14,14 @@ import { GET, POST } from '@/app/api/email/unsubscribe/[token]/route';
 // Email §3 — the class-scoped unsubscribe, end to end: token → session-free
 // endpoint → store → the cron pre-check's primitive → sendEmail's backstop.
 // No mail moves in this file: the send gate is closed (or opened keyless), and
-// the only recipient is an @example.invalid probe that exists as DB rows only.
+// every recipient exists as DB rows only.
+//
+// ⚠️ TWO PROBE ADDRESSES SINCE THE BOUNCE GUARD [2026-09-10], and the split is
+// the point. `PROBE_EMAIL` is on `example.invalid` and is now refused by the
+// bounce guard BEFORE the consent check — which is asserted below. The consent
+// backstop therefore needs a DELIVERABLE address to reach it at all, and §3
+// mints one on `qa-noreply.ezcontractorbinder.com` (no MX, so a total failure
+// of the gate and the guard would still bounce rather than reach a person).
 // ============================================================================
 
 const PROBE_EMAIL = `QA-Unsub-Probe-${randomUUID()}@example.invalid`; // mixed case ON PURPOSE
@@ -175,9 +182,24 @@ describe('3 · the check the crons and sendEmail share', () => {
     ).toBe(false);
   });
 
-  it('⚠️ sendEmail BACKSTOP: refuses the suppressed recipient BEFORE touching a key', async () => {
-    // Gate open, key ABSENT: if the consent check ran after getResend() this
-    // would throw 'RESEND_API_KEY is not set' instead of returning the refusal.
+  // ⚠️ INVERTED AND SPLIT [bounce guard, 2026-09-10], per the S157 rule —
+  // quoted rather than deleted, because the superseded assertion is what names
+  // what changed.
+  //
+  //   it('⚠️ sendEmail BACKSTOP: refuses the suppressed recipient BEFORE touching a key', …)
+  //     to: PROBE_EMAIL,            // @example.invalid
+  //     expect(result.error).toMatch(/recipient has unsubscribed \(reminders\)/);
+  //
+  // `PROBE_EMAIL` is on `example.invalid`, and the bounce guard now refuses
+  // every reserved domain BEFORE the consent check. That assertion would have
+  // gone red — but the more interesting failure is the one it would have
+  // MASKED: had the two guards been ordered the other way, it would have kept
+  // passing while the bounce guard was never exercised at all.
+  //
+  // So the single case becomes two, and the ORDER is now asserted rather than
+  // incidental.
+
+  it('⚠️ the BOUNCE GUARD outranks consent — a reserved domain refuses first', async () => {
     process.env.EMAIL_SEND_ENABLED = 'true';
     delete process.env.RESEND_API_KEY;
 
@@ -189,6 +211,39 @@ describe('3 · the check the crons and sendEmail share', () => {
       unsubscribe: { companyId, scope: 'reminders' },
     });
     expect(result.messageId).toBeNull();
+    expect(result.error).toMatch(/undeliverable recipient/);
+    // The reason a caller logs must be the structural one, not the consent one.
+    expect(result.error).not.toMatch(/unsubscribed/);
+  });
+
+  it('⚠️ sendEmail BACKSTOP: refuses the suppressed recipient BEFORE touching a key', async () => {
+    // The original case, on a DELIVERABLE address so it still reaches the
+    // consent check. Gate open, key ABSENT: if the consent check ran after
+    // getResend() this would throw 'RESEND_API_KEY is not set' instead of
+    // returning the refusal.
+    process.env.EMAIL_SEND_ENABLED = 'true';
+    delete process.env.RESEND_API_KEY;
+
+    const deliverableProbe = `QA-Unsub-Probe-${randomUUID()}@qa-noreply.ezcontractorbinder.com`;
+    const { error: seedError } = await admin
+      .from('email_unsubscribes')
+      .insert({ company_id: companyId, email: deliverableProbe.toLowerCase(), scope: 'reminders' });
+    expect(seedError, 'could not seed the deliverable probe').toBeNull();
+
+    const result = await sendEmail({
+      from: 'Sabal Point Construction <bishop-contracting@ezcontractorbinder.com>',
+      to: deliverableProbe,
+      subject: 'suppressed probe',
+      react: null as never,
+      unsubscribe: { companyId, scope: 'reminders' },
+    });
+    expect(result.messageId).toBeNull();
     expect(result.error).toMatch(/recipient has unsubscribed \(reminders\)/);
+
+    await admin
+      .from('email_unsubscribes')
+      .delete()
+      .eq('company_id', companyId)
+      .eq('email', deliverableProbe.toLowerCase());
   });
 });

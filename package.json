@@ -14,7 +14,8 @@
     "test": "turbo run test",
     "clean": "turbo run clean",
     "db:push": "supabase db push && npm run db:types && npm run type-check",
-    "db:types": "bash scripts/db-types.sh"
+    "db:types": "bash scripts/db-types.sh",
+    "db:verify": "python3 scripts/db-replay-schema.py"
   },
   "devDependencies": {
     "prettier": "^3.4.0",

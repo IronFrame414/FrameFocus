@@ -34,7 +34,22 @@ vi.mock('@/lib/supabase-admin', () => ({
 }));
 
 const COMPANY_ID = '11111111-1111-1111-1111-111111111111';
-const RECIPIENT = 'client@example.invalid';
+// ⚠️ WAS `client@example.invalid`, CHANGED [bounce guard, 2026-09-10] — quoted
+// rather than silently swapped, because the OLD value was deliberate and its
+// reason has been superseded rather than forgotten.
+//
+// `.invalid` was chosen so that a broken transport mock could only ever bounce,
+// never reach a person. The bounce guard now refuses every reserved domain at
+// the chokepoint BEFORE the transport, so with the old value all ten traces
+// below would refuse before setting a Reply-To header and this file would
+// assert nothing — green tests measuring a code path they never reach.
+//
+// The safety property the old value provided is now STRUCTURAL and no longer
+// depends on the fixture: this address cannot escape because (a) the transport
+// is mocked, (b) the send gate default-denies outside Vercel production, and
+// (c) `qa-noreply.` has no MX, so even a total failure of (a) and (b) bounces
+// at SES rather than reaching an inbox.
+const RECIPIENT = 'client@qa-noreply.ezcontractorbinder.com';
 
 async function send(overrides: Record<string, unknown> = {}) {
   vi.resetModules();

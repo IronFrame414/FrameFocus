@@ -115,6 +115,112 @@ export function emailSendAllowed(env: NodeJS.ProcessEnv = process.env): SendGate
   };
 }
 
+// ===========================================================================
+// THE BOUNCE GUARD — RULED [Josh, deliverability session, 2026-09-10]
+// ===========================================================================
+// Refuse, at the chokepoint, any recipient on a domain that CANNOT EXIST.
+//
+// WHY THIS IS NOT A FIXTURE PROBLEM. 52 sends went to
+// `qa-client-a@example.invalid` — an RFC 2606 reserved TLD that can never
+// resolve — and every one of them is `status='sent'` in `email_logs` with a
+// real `resend_message_id`. Resend ACCEPTED them; the hard bounce happened
+// afterwards, at SES, where this platform could not see it. That was ~12% of
+// the domain's volume over the period, against an industry norm that treats
+// >2% as reputation-damaging, on a domain with no history to absorb it.
+//
+// The obvious fix — "stop putting .invalid in fixtures" — is the same class of
+// control that already failed here twice: a convention, binding only the code
+// that remembers it. The S126 stub-the-transport rule did not survive a
+// Playwright suite driving a real dev server, which is why the send gate above
+// exists. This is that lesson applied to the ADDRESS rather than the
+// ENVIRONMENT, at the same single call site, so a sender added later inherits
+// it instead of having to remember it.
+//
+// ⚠️ IT IS A RESERVED-LIST CHECK, NOT A LIVE DNS LOOKUP — RULED [Josh].
+// Resolving MX/A at send time would put a network call on the critical path of
+// every invoice, proposal and change order, and would fail CLOSED on a DNS
+// blip — silently stopping real client mail to fix a fixture problem. The
+// reserved list is static, has no false positives (these domains are reserved
+// by RFC precisely so they can never be delegated), and costs nothing.
+//
+// ⚠️ IT GUARDS THE RECIPIENT ONLY, NEVER Reply-To. A Reply-To is resolved from
+// company data (resolveCompanyReplyTo) and a useless one must never fail a
+// send — the resolver already degrades to no header at all rather than to a
+// failed send, and that ruling is not disturbed here.
+//
+// A REFUSAL IS LOUD AND IS NOT A SEND: sendEmail returns it as `error`, so
+// every existing caller writes an `email_logs` row with status 'failed' and
+// the reason in metadata — the same audit surface the send gate and the
+// consent check already use. No caller changes, and the refused address is
+// counted as a failure rather than as a send.
+export type RecipientDecision = { deliverable: true } | { deliverable: false; reason: string };
+
+/** RFC 2606 §2 (.test/.example/.invalid/.localhost) + RFC 6761. */
+const RESERVED_TLDS = [
+  'invalid',
+  'test',
+  'example',
+  'localhost',
+  // RFC 6762 mDNS. Not RFC 2606, included on the same reasoning [Josh]: it can
+  // never be an internet mailbox either.
+  'local',
+] as const;
+
+/** RFC 2606 §3 — reserved second-level names, and anything beneath them. */
+const RESERVED_DOMAINS = ['example.com', 'example.net', 'example.org'] as const;
+
+/**
+ * Pure, and exported so the decision table can be asserted without a
+ * transport — the shape `emailSendAllowed` uses, for the same reason.
+ *
+ * Deliberately NOT an RFC 5322 parser. Every caller passes a bare address
+ * (`sendEmail` hands Resend `to: [params.to]`), so this trims whitespace and a
+ * trailing `>` for safety and otherwise reads the substring after the last
+ * `@`. Anything it cannot find a domain in is undeliverable by definition and
+ * is refused under its own reason, never silently passed.
+ */
+export function recipientIsDeliverable(address: string): RecipientDecision {
+  const trimmed = address.trim().replace(/>$/, '').trim();
+  const at = trimmed.lastIndexOf('@');
+  // Each names what is ACTUALLY wrong — this string is what lands in
+  // email_logs.metadata and is the only thing that will explain the row later.
+  if (at === -1) {
+    return { deliverable: false, reason: `no @ in recipient address "${address}"` };
+  }
+  if (at === 0) {
+    return { deliverable: false, reason: `no local part in recipient address "${address}"` };
+  }
+  if (at === trimmed.length - 1) {
+    return { deliverable: false, reason: `no domain in recipient address "${address}"` };
+  }
+
+  // A trailing dot is a fully-qualified name and is the same domain.
+  const domain = trimmed.slice(at + 1).toLowerCase().replace(/\.$/, '');
+  if (domain === '') {
+    return { deliverable: false, reason: `no domain in recipient address "${address}"` };
+  }
+
+  const tld = domain.slice(domain.lastIndexOf('.') + 1);
+  if ((RESERVED_TLDS as readonly string[]).includes(tld)) {
+    return {
+      deliverable: false,
+      reason: `.${tld} is a reserved TLD (RFC 2606/6761) and can never resolve`,
+    };
+  }
+
+  // Suffix match: `mail.example.com` is as reserved as `example.com`.
+  for (const reserved of RESERVED_DOMAINS) {
+    if (domain === reserved || domain.endsWith(`.${reserved}`)) {
+      return {
+        deliverable: false,
+        reason: `${reserved} is a reserved domain (RFC 2606 §3) and can never resolve`,
+      };
+    }
+  }
+
+  return { deliverable: true };
+}
+
 let _resend: Resend | null = null;
 
 /** Lazy init — never instantiate at module load (Module 3H rule). */
@@ -261,10 +367,39 @@ export type EmailType =
   // `email_types.retention_warning` row lands in 20261053000000, same rule as
   // every member above: both halves or neither. One type for all three
   // emails; email_logs.metadata.kind tells them apart.
-  | 'retention_warning';
+  | 'retention_warning'
+  // Deliverability warming [Josh, 2026-09-10] — a low, steady, non-clockwork
+  // send to four inboxes Josh owns, so Gmail has volume it can score. The
+  // `email_types.warming` row lands in 20261590000000, in the SAME commit as
+  // this line. FIFTH time this rule is written down and it has been broken once
+  // (`mention`): the table half fails at RUNTIME, this half at COMPILE time, so
+  // one without the other ships silently. Both halves or neither.
+  //
+  // ⚠️ IT IS ITS OWN TYPE BECAUSE NO EXISTING TYPE COULD BE MADE INERT. Every
+  // other member of this union is defined by a record it points at, and warming
+  // mail points at nothing. Logging it as `proposal` or `invite` would also
+  // poison the one table the deliverability work has to read.
+  | 'warming';
 
 export interface LogEmailInput {
-  company_id: string;
+  /**
+   * ⚠️ NULLABLE, AND NOT BECAUSE OF THIS FEATURE. `email_logs.company_id` has
+   * been nullable since `20261054000000` (deletion sweep §3, 2026-08-30): the
+   * FK is `ON DELETE SET NULL` so a tenant's mail record OUTLIVES the tenant.
+   * That is a ruled, legally-reviewed behaviour.
+   *
+   * ⚠️ DO NOT ADD A CHECK REQUIRING A COMPANY FOR NON-AUTH TYPES. It was tried
+   * on 2026-09-11 and reverted before merge: a constraint of that shape
+   * contradicts `ON DELETE SET NULL` directly — deleting a company nulls every
+   * one of its `email_logs` rows, the non-auth ones then violate it, and the
+   * company DELETE aborts. Measured on rebuild-test: 1,389 rows, one company.
+   * `s138-trial-deletion-run.live.ts` now covers exactly this.
+   *
+   * A public signup confirmation legitimately has no company: the tenant is
+   * being created inside the same uncommitted transaction, so there is no id to
+   * resolve rather than one that is hidden. Passing null says that.
+   */
+  company_id: string | null;
   estimate_id: string | null;
   signing_session_id: string | null;
   // Signed-artifact spec §4.3 — CO email FKs (nullable; set only for CO emails).
@@ -409,6 +544,17 @@ export async function sendEmail(
     console.error(
       `[email-service] ${message} — to=${params.to} subject="${params.subject}"`
     );
+    return { messageId: null, error: message };
+  }
+
+  // The bounce guard, before consent and before the key. An address that can
+  // never receive mail should not cost a database round-trip to refuse, and
+  // "structurally undeliverable" is a stronger fact than "this person opted
+  // out" — so when both apply, this is the reason the log should carry.
+  const recipient = recipientIsDeliverable(params.to);
+  if (!recipient.deliverable) {
+    const message = `undeliverable recipient: ${recipient.reason}`;
+    console.error(`[email-service] ${message} — to=${params.to} subject="${params.subject}"`);
     return { messageId: null, error: message };
   }
 

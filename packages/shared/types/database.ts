@@ -1274,6 +1274,7 @@ export type Database = {
           default_tax_rate: number | null
           default_terms_sections: Json | null
           email: string | null
+          email_warming_enabled: boolean
           estimate_number_prefix: string
           estimate_number_sequence: number
           fixed_burden_per_hour: number | null
@@ -1358,6 +1359,7 @@ export type Database = {
           default_tax_rate?: number | null
           default_terms_sections?: Json | null
           email?: string | null
+          email_warming_enabled?: boolean
           estimate_number_prefix?: string
           estimate_number_sequence?: number
           fixed_burden_per_hour?: number | null
@@ -1442,6 +1444,7 @@ export type Database = {
           default_tax_rate?: number | null
           default_terms_sections?: Json | null
           email?: string | null
+          email_warming_enabled?: boolean
           estimate_number_prefix?: string
           estimate_number_sequence?: number
           fixed_burden_per_hour?: number | null
@@ -9917,6 +9920,7 @@ export type Database = {
         }[]
       }
       get_sub_bid_request: { Args: { p_token: string }; Returns: Json }
+      invited_signup_autoconfirm_installed: { Args: never; Returns: boolean }
       is_assigned_to_project: {
         Args: { p_project_id: string }
         Returns: boolean

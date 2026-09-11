@@ -149,6 +149,91 @@ Complete as of Session 40. All polish items closed. Module 4 build is unblocked.
   scope the "exactly one of project/estimate" rule to the categories it actually governs.
   Filed alongside #1-s106; do not fix in this branch. See `S106-report.md` production note.
 
+- **#2-deliv — ⚠️ WITHDRAWN. THE CLAIM WAS FALSE; THE ENTRY IS KEPT SO THE ERROR IS ON THE RECORD
+  [2026-09-11].** _Superseded claim, quoted rather than deleted:_ _"REBUILD-TEST HAS DRIFTED FROM
+  THE MIGRATION FILES, and the drift is in the exact column this session was investigating …
+  `email_logs.company_id` is declared `NOT NULL` … and no migration in the tree ever drops it."_
+
+  **A migration does drop it**, deliberately: `20261054000000_deletion_shell_unpinned.sql:26`,
+  2026-08-30, so a tenant's mail record outlives the tenant (`ON DELETE SET NULL`). A full replay
+  of all 223 migrations against both live catalogs found **zero drift** — every table, column,
+  NOT NULL, CHECK, UNIQUE and FK matches by name on rebuild-test AND production. Method and blind
+  spots: `docs/specs/schema-drift-investigation.md`.
+
+  **The two errors, because the method matters more than the fact:**
+  1. ⚠️ **A grep piped through `head -20` cut off before the file that drops it, and the truncated
+     output was read as complete.** Same class as reading a wrapper's exit code — see the root-cause
+     note on `#1-deliv`.
+  2. The generated `database.ts` was read as evidence of drift when it was simply correct.
+
+- **#3-deliv — A MULTI-ARM CONSTRAINT WRITTEN WITHOUT COUNTING THE ROWS IT WOULD GOVERN
+  [2026-09-11]. Paired with `20261540000000`, which is the same defect in the other direction.**
+
+  `20261610000000` added `CHECK (company_id IS NOT NULL OR email_type LIKE 'auth\_%')` to
+  `email_logs` — **a table whose FK is `ON DELETE SET NULL`.** The two contradict directly: deleting
+  a company nulls `company_id` on every one of its rows, the non-auth ones then violate the CHECK,
+  and **the company DELETE aborts.** `/api/cron/trial-deletion` is scheduled and live.
+  **Measured before reverting: 1,389 rows across 1 company on rebuild-test would have blocked that
+  company's deletion**; on production it would be every tenant that has ever sent mail.
+  `email_logs.company_id = YES` on production, so the unpinning is live there too.
+
+  ⚠️ **It was written while quoting `ON DELETE SET NULL`'s own migration in the comment above it.**
+  Reverted before merge; the migration was deleted entirely rather than amended, because its other
+  statement (`DROP NOT NULL`) was a no-op.
+
+  **The pairing, and why it is one finding.** `20261540000000` aborted on production against two
+  orphan `files` rows nobody had measured, because its three-arm CHECK's category list was modelled
+  on rebuild-test's data. This one would have aborted a tenant deletion against 1,389 rows nobody
+  had counted. **Neither is an environment problem** — the S183 replay proves the environments
+  agree. Both are the same habit: *a constraint reasoned about from the schema and never tested
+  against the rows.*
+
+  **Owed:** before adding any CHECK to a populated table, run the negation as a `SELECT count(*)`
+  first — and where the table has an `ON DELETE SET NULL` FK, run it again against the post-delete
+  state. `scripts/db-verify.mjs` does not catch this class and cannot: the constraint lives in a
+  migration, so the tree and the database agree perfectly while the behaviour is broken. Only a test
+  that performs the delete catches it — `s138-trial-deletion-run.live.ts` now does.
+
+- **#1-deliv — A LIVE TEST THAT DRIVES A HOOK, TRIGGER OR WEBHOOK HANDLER BY HAND CANNOT
+  REPRODUCE ONE CALLED MID-TRANSACTION. Filed as a CLASS, not an incident [Josh, 2026-09-11].**
+  `s160-auth-email.live.ts` A1/A2 asserted that P3 confirmed an invited user and suppressed their
+  confirmation email. **Both were green for eleven sessions over a feature that had never once
+  fired in production.** Measured 2026-09-10 21:41:04: `message: 'User not found'` — GoTrue's own
+  words — because the Send Email Hook is called DURING the signup request, before the `auth.users`
+  INSERT commits, and `updateUserById()` reaches GoTrue on a different connection.
+
+  **Why the test passed anyway, which is the transferable part:** the harness creates its user with
+  `admin.auth.admin.createUser()` and then calls `handleAuthEmail()` as a **separate, later step**.
+  By then the user is committed and the admin API can see them. **The harness's sequencing was
+  under test, not the product's.** Nothing was stubbed and nothing was wrong with the assertions —
+  the test simply could not construct the condition that breaks the code.
+
+  > **The shape:** wherever correctness depends on WHEN a handler is called — inside a transaction,
+  > before a commit, during another system's request — invoking it directly proves the opposite of
+  > what it appears to. The greener the test, the more confidently the gap is held open.
+
+  > ⚠️ **ROOT CAUSE RECORDED ALONGSIDE [Josh, 2026-09-11]:** `#2-deliv` was filed on a grep piped
+  > through `head -20` that cut off before the file contradicting it. **Trusting truncated output as
+  > complete is the same class as reading a wrapper's exit code** — in both, the thing inspected is
+  > not the thing being judged. `head`, `tail`, `| head -N`, a truncated tool result and a summary
+  > line are all the same trap. If a conclusion is "X does not exist anywhere", the search that
+  > supports it must be unbounded, and its completeness checked (`| wc -l`) before it is believed.
+
+  **Every direct-invocation test in this repo is suspect on the same grounds**, not wrong:
+  `/api/auth/send-email` (GoTrue, the confirmed case), `/api/webhooks/resend` (Resend delivery
+  events), `/api/webhooks/stripe`, and any `.live.ts` that imports a route module and calls its
+  `GET`/`POST` rather than issuing a request. **NOT SWEPT [Josh] — filed and named.**
+
+  **What a sweep should ask of each**, when one happens: does this handler read state that its
+  caller is concurrently writing? If yes, the direct-invocation test cannot see the failure, and the
+  cover has to come from somewhere else — an in-transaction assertion (a trigger, as the P3 fix
+  uses), an end-to-end exercise through the real caller, or an explicit note in the file that this
+  case is uncovered. **The third is a legitimate answer and far better than the present silence.**
+
+  Fixed for P3 specifically: `on_auth_user_created_autoconfirm` (20261600000000) moves the confirm
+  into the transaction; A1/A2 inverted with the superseded assertions quoted. Record:
+  `docs/specs/S160-auth-email-hook.md` §6a.
+
 - **#1-s106 — the invoicing→QuickBooks mapping must handle a NET-NEGATIVE line, now that
   one can originate upstream of invoicing.** S106 ruled a negative typed total legal on an
   estimate line (`estimate_line_rows.total_override` / `estimate_line_items.total_price_override`

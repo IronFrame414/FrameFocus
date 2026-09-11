@@ -51,6 +51,10 @@
     {
       "path": "/api/cron/trial-deletion",
       "schedule": "0 15 * * *"
+    },
+    {
+      "path": "/api/cron/email-warming",
+      "schedule": "*/15 13-22 * * 1-5"
     }
   ]
 }

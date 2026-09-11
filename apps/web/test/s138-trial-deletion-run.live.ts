@@ -31,7 +31,11 @@
  *   * executed instruments land in archived_documents before the originals go;
  *   * running twice is safe (deleted_at takes the company out of the walk);
  *   * the survivors survive (ai_tag_logs nulled, trial_emails, lifecycle
- *     stamp).
+ *     stamp);
+ *   * ⚠️ #3-deliv — a NON-AUTH `email_logs` row survives with `company_id`
+ *     NULLED. If a CHECK requiring a company for non-auth types is ever added
+ *     back, THE RUN ITSELF fails here rather than this one assertion, because
+ *     the company DELETE aborts. That is the intended blast radius.
  * ============================================================================
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
@@ -51,6 +55,8 @@ const EMAIL = 'josh+s138doomed@worthprop.com';
 let companyId = '';
 let userId = '';
 let aiLogId = '';
+/** #3-deliv — a NON-AUTH email_logs row on the doomed company. See its test. */
+let mailLogId = '';
 let sparedCompanyId = '';
 let doomedCoId = '';
 
@@ -257,6 +263,26 @@ beforeAll(async () => {
   if (logErr) throw new Error(`seed ai_tag_logs: ${logErr.message}`);
   aiLogId = (log as { id: string }).id;
 
+  // ⚠️ #3-deliv — A NON-AUTH email_logs ROW, SEEDED ON PURPOSE. `email_logs` is
+  // on the SURVIVES list ("record of mail sent to third parties"), so the sweep
+  // does not delete it; the `ON DELETE SET NULL` FK nulls its company_id when
+  // the companies row goes. `proposal` rather than an `auth_*` type is the whole
+  // point — see the assertion for what it guards.
+  const { data: mailLog, error: mailErr } = await admin
+    .from('email_logs')
+    .insert({
+      company_id: companyId,
+      email_type: 'proposal',
+      recipient_email: 'josh+s138doomed-client@worthprop.com',
+      sender_email: 'S138 Doomed Co <s138-doomed@ezcontractorbinder.com>',
+      subject: 'S138 doomed-company proposal',
+      status: 'sent',
+    })
+    .select('id')
+    .single();
+  if (mailErr) throw new Error(`seed email_logs: ${mailErr.message}`);
+  mailLogId = (mailLog as { id: string }).id;
+
   await admin
     .from('trial_lifecycle')
     .update({
@@ -452,6 +478,47 @@ describe('runTrialDeletion — executed, not described', () => {
     expect((data as { model: string }).model).toBe('gpt-4o-2024-08-06');
 
     await admin.from('ai_tag_logs').delete().eq('id', aiLogId);
+  });
+
+  // ==========================================================================
+  // #3-deliv [2026-09-11] — THE CONSTRAINT-VS-BEHAVIOUR GUARD.
+  // ==========================================================================
+  // This exists because of a bug that was written, measured and reverted before
+  // merge: a CHECK on `email_logs` requiring a company for every non-`auth_%`
+  // type. It reads as a sensible tenancy invariant and it is not — the table's
+  // FK is `ON DELETE SET NULL`, so deleting a company NULLS company_id on every
+  // one of its rows, the non-auth ones then violate the CHECK, and THE WHOLE
+  // COMPANY DELETE ABORTS. Measured at the time: 1,389 rows across 1 company on
+  // rebuild-test would have blocked that company's deletion; on production it
+  // would be every tenant that had ever sent mail, with the cron live.
+  //
+  // ⚠️ A SCHEMA COMPARISON CANNOT CATCH THIS AND NEVER WILL. The constraint
+  // lives in a migration, so the migration tree and the database agree
+  // perfectly while the behaviour is broken. `scripts/db-verify.mjs` reports
+  // clean. Only performing the delete catches it — which is what this does.
+  //
+  // Paired with `20261540000000`, which aborted on PRODUCTION against two orphan
+  // `files` rows nobody had measured. Same habit, opposite direction: a
+  // constraint reasoned about from the schema and never tested against rows.
+  it('⚠️ #3-deliv — a NON-AUTH email_logs row survives with company_id NULLED', async () => {
+    const { data } = await admin
+      .from('email_logs')
+      .select('id, company_id, email_type, subject')
+      .eq('id', mailLogId)
+      .maybeSingle();
+
+    expect(
+      data,
+      'the non-auth mail record was DELETED — email_logs is on the SURVIVES list; ' +
+        'a record of mail sent to a third party must outlive the tenant'
+    ).not.toBeNull();
+    expect(
+      (data as { company_id: string | null }).company_id,
+      'company_id was not nulled — the ON DELETE SET NULL FK from 20261054000000 is gone'
+    ).toBeNull();
+    expect((data as { email_type: string }).email_type).toBe('proposal');
+
+    await admin.from('email_logs').delete().eq('id', mailLogId);
   });
 
   it('⚠️ trial_emails survives — or the three-trial limit resets on deletion', async () => {

@@ -63,6 +63,8 @@ import {
 const OWNER = 'josh+test50@worthprop.com';
 const MARKER = 's160-auth';
 const INVITEE = `josh+${MARKER}-invitee@worthprop.com`;
+// C4's profile-less user. Deliberately NOT a reserved domain — see C4.
+const ORPHAN_EMAIL = 'orphan@qa-noreply.ezcontractorbinder.com';
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 
 let companyId: string;
@@ -156,6 +158,9 @@ async function sweep(): Promise<void> {
         .like('email_type', 'auth_%')
     ).error
   );
+  // C4's profile-less user. Its row carries NO company_id, so no company-scoped
+  // teardown anywhere can reach it — it has to be swept by address, here.
+  must('sweep orphan logs', (await admin.from('email_logs').delete().eq('recipient_email', ORPHAN_EMAIL)).error);
 }
 
 // ⚠️ [Email §1, S157] OPEN THE GATE for this file — and ONLY this file's
@@ -282,20 +287,92 @@ afterAll(async () => {
 // ============================================================================
 
 describeSend('S160-A — P3: invited users do not confirm their email', () => {
-  it('A1 — the invitee starts UNCONFIRMED, so A2 is not vacuous', async () => {
-    // ⚠️ `?? null`, because GoTrue's JS client OMITS the field when it is unset
-    // rather than returning null. Without the coalesce this reads `undefined`
-    // — and, worse, A2's `.not.toBeNull()` would then have PASSED on an
-    // `undefined` too, i.e. on a user who was never confirmed. Both halves are
-    // written against the value, not against its absence.
-    const { data } = await admin.auth.admin.getUserById(inviteeUserId);
-    expect(
-      data.user?.email_confirmed_at ?? null,
-      'the fixture was created already confirmed'
-    ).toBeNull();
+  // ⚠️ A1 AND A2 INVERTED [2026-09-10], per the S157 rule — superseded
+  // assertions quoted rather than deleted, because they name what changed.
+  //
+  //   it('A1 — the invitee starts UNCONFIRMED, so A2 is not vacuous', …)
+  //     expect(data.user?.email_confirmed_at ?? null).toBeNull();
+  //
+  //   it('A2 — a signup hook for the invitee confirms them and sends NOTHING', …)
+  //
+  // BOTH DESCRIBED A MECHANISM THAT NEVER WORKED IN PRODUCTION. The hook called
+  // `updateUserById()` to confirm, which cannot see a user inside the still-open
+  // signup transaction — measured 2026-09-10, `message: 'User not found'`. These
+  // passed only because the live fixture creates its user through
+  // `admin.auth.admin.createUser()` and then calls `handleAuthEmail()` as a
+  // SEPARATE, LATER step, by which time the user is committed. The harness's
+  // sequencing was the thing under test, not the product's.
+  //
+  // ⚠️ THAT IS THE LESSON WORTH KEEPING: a live test that drives a hook by hand
+  // cannot reproduce a hook called mid-transaction, and A1/A2 were green for
+  // eleven sessions over a feature that had never once fired.
+  //
+  // The confirm now happens in the `on_auth_user_created_autoconfirm` trigger
+  // (20261600000000), inside the insert — so it has ALREADY happened by the time
+  // `createUser` returns, and the hook's only job is to suppress the email.
+
+  it('A1 — the autoconfirm trigger is installed on THIS database', async () => {
+    // Feature detection, asserted rather than assumed: every assertion below is
+    // about a trigger, and a database without it would make them describe
+    // nothing. This is also the exact check the hook itself makes.
+    const { data, error } = await admin.rpc('invited_signup_autoconfirm_installed');
+    must('autoconfirm feature detection', error);
+    expect(data, 'migration 20261600000000 is not applied to this database').toBe(true);
   });
 
-  it('A2 — a signup hook for the invitee confirms them and sends NOTHING', async () => {
+  it('A1b — the invitee was confirmed AT INSERT, before any hook ran', async () => {
+    // `createUser` was called with `email_confirm: false` (see beforeAll), so a
+    // confirmed timestamp here can only have come from the trigger, in the
+    // transaction. Nothing in this file has called handleAuthEmail yet.
+    const { data } = await admin.auth.admin.getUserById(inviteeUserId);
+    const confirmedAt = data.user?.email_confirmed_at ?? null;
+    expect(
+      confirmedAt,
+      'the invited user was NOT auto-confirmed by the trigger — P3 is off'
+    ).toBeTypeOf('string');
+    expect(
+      Number.isNaN(Date.parse(confirmedAt as string)),
+      'email_confirmed_at is not a date'
+    ).toBe(false);
+  });
+
+  it('⚠️ A1c — and the trigger DISCRIMINATES: no invitation, no auto-confirm', async () => {
+    // Without this, A1b would pass against a trigger that confirmed EVERY new
+    // user — which would auto-confirm public signups and destroy address
+    // verification for the whole product. The dangerous way for A1b to be green.
+    const strayEmail = `josh+${MARKER}-stray-${randomUUID()}@worthprop.com`;
+    const { data: stray, error: strayErr } = await admin.auth.admin.createUser({
+      email: strayEmail,
+      password: 'FrameFocusTest!2026',
+      email_confirm: false,
+      user_metadata: { first_name: 'S160', last_name: 'Stray' },
+    });
+    must('stray createUser', strayErr);
+    if (!stray?.user) throw new Error('stray createUser returned no user and no error');
+    try {
+      const { data } = await admin.auth.admin.getUserById(stray.user.id);
+      expect(
+        data.user?.email_confirmed_at ?? null,
+        'a signup with NO invitation token was auto-confirmed — the trigger is too broad'
+      ).toBeNull();
+    } finally {
+      // The owner path gave this user a company and a profile; sweep both.
+      const { data: prof } = await admin
+        .from('profiles')
+        .select('id, company_id')
+        .eq('user_id', stray.user.id)
+        .maybeSingle();
+      if (prof) {
+        const pr = prof as { id: string; company_id: string };
+        await admin.from('company_members').delete().eq('profile_id', pr.id);
+        await admin.from('profiles').delete().eq('id', pr.id);
+        await admin.from('companies').delete().eq('id', pr.company_id);
+      }
+      await admin.auth.admin.deleteUser(stray.user.id);
+    }
+  });
+
+  it('A2 — the signup hook SUPPRESSES the email and says so', async () => {
     state.calls.length = 0;
     const outcome = await handleAuthEmail(
       admin as unknown as SupabaseClient<Database>,
@@ -308,15 +385,12 @@ describeSend('S160-A — P3: invited users do not confirm their email', () => {
     expect(outcome.error).toBeNull();
     expect(state.calls, 'Resend was called for an invited signup').toHaveLength(0);
 
-    // A real timestamp, not merely "not null" — see A1 for why that is the
-    // weaker assertion here.
-    const { data } = await admin.auth.admin.getUserById(inviteeUserId);
-    const confirmedAt = data.user?.email_confirmed_at ?? null;
-    expect(confirmedAt, 'the invited user was not confirmed').toBeTypeOf('string');
-    expect(
-      Number.isNaN(Date.parse(confirmedAt as string)),
-      'email_confirmed_at is not a date'
-    ).toBe(false);
+    // ⚠️ [Josh's condition, 2026-09-10] THE DIAGNOSIS IS THE TEST. After this
+    // ships, an invitation to a real person is read back through this field, so
+    // it must say plainly that P3 suppressed the mail.
+    expect(outcome.diagnosis, 'the suppression left no explanation').toBeTruthy();
+    expect(outcome.diagnosis).toContain('P3: SUPPRESSED');
+    expect(outcome.diagnosis).toContain(companyId);
   });
 
   it('A3 — and NOTHING was logged, because nothing was sent', async () => {
@@ -445,29 +519,76 @@ describeSend('S160-C — P1/P2: the send goes out branded, and it is logged', ()
     state.result = { data: { id: 'mock-resend-id' }, error: null };
   });
 
-  it('C4 — a user with NO profile still gets the email; only the LOG is skipped', async () => {
-    // `email_logs.company_id` is NOT NULL, so there is nothing to log against.
-    // The trade is deliberate and one-directional: an unsent email is a
-    // user-visible failure, an unlogged one is a bookkeeping gap.
+  // ⚠️ C4 INVERTED [2026-09-11], per the S157 rule — superseded assertions
+  // quoted rather than deleted.
+  //
+  //   it('C4 — a user with NO profile still gets the email; only the LOG is skipped', …)
+  //     expect(outcome.logged).toBe(false);
+  //     expect(data ?? [], 'a row was logged with no company').toHaveLength(0);
+  //
+  // That WAS the behaviour, and it was the defect: production held ZERO
+  // `auth_signup_confirmation` rows while confirmations were delivering,
+  // because `email_logs.company_id` could not be resolved inside the open
+  // signup transaction and the code skipped `logEmail()` rather than the send.
+  // The logging fix writes the row with a NULL company — legitimate, since
+  // `20261054000000` made the column nullable so a mail record outlives its
+  // tenant.
+  //
+  // ⚠️ AND THIS FILE COULD NOT TELL ME. C4 skips whenever `RESEND_API_KEY` is
+  // absent, which is the ruled S107 state, so it did not run when the
+  // behaviour changed under it — `#1-deliv` in a third guise: not the harness's
+  // sequencing this time, and not the environment, but a SKIP. A test that
+  // cannot run cannot object. Found only by forcing the suite to run with a
+  // deliberately-invalid placeholder key against the vi.mock'd transport.
+  it('C4 — a user with NO profile still gets the email, AND IT IS NOW LOGGED', async () => {
+    // `email_logs.company_id` is NOT NULL no longer. The trade this test used
+    // to describe — an unsent email is a user-visible failure, an unlogged one
+    // is a bookkeeping gap — no longer has to be made at all.
+    // ⚠️ SWEEP FIRST, DO NOT ASSUME AN EMPTY TABLE. This asserts a row COUNT
+    // against a live, shared, mutable table — and the count is only meaningful
+    // relative to a known start. A previous run that failed mid-test leaves its
+    // row behind (it did, which is how this was found), and the next run then
+    // fails on residue rather than on behaviour. Same class as the repo's
+    // "assertions that describe the freshly-seeded world and then test it
+    // forever against live data".
+    await admin.from('email_logs').delete().eq('recipient_email', ORPHAN_EMAIL);
+
     state.calls.length = 0;
     const orphan = randomUUID();
     const outcome = await handleAuthEmail(
       admin as unknown as SupabaseClient<Database>,
-      payloadFor(orphan, 'orphan@example.invalid', 'recovery'),
+      payloadFor(orphan, ORPHAN_EMAIL, 'recovery'),
       SUPABASE_URL
     );
 
-    expect(outcome.sent, 'the email was dropped because it could not be logged').toBe(true);
-    expect(outcome.logged).toBe(false);
+    expect(outcome.sent, 'the email was dropped').toBe(true);
+    expect(outcome.logged, 'the send was NOT logged — the defect this fix closed').toBe(true);
     expect(state.calls, 'Resend was not called for the orphan').toHaveLength(1);
     // The platform fallback still sends from the ALIGNED domain.
     expect(state.calls[0].from).toContain(`@ezcontractorbinder.com`);
 
     const { data } = await admin
       .from('email_logs')
-      .select('id')
-      .eq('recipient_email', 'orphan@example.invalid');
-    expect(data ?? [], 'a row was logged with no company').toHaveLength(0);
+      .select('id, company_id, email_type, metadata')
+      .eq('recipient_email', ORPHAN_EMAIL);
+    const rows = (data ?? []) as Array<{
+      id: string;
+      company_id: string | null;
+      email_type: string;
+      metadata: Record<string, unknown>;
+    }>;
+    expect(rows, 'no row was logged for the profile-less user').toHaveLength(1);
+    expect(rows[0].company_id, 'a company was invented for a user who has none').toBeNull();
+    expect(rows[0].email_type).toBe('auth_recovery');
+    // The row says WHY it carries no tenant, so the question is answerable from
+    // the table without reading the source.
+    expect(rows[0].metadata.company_unresolved, 'the row does not say why').toBeTruthy();
+
+    // And the diagnosis still names it for the caller.
+    expect(outcome.diagnosis, 'the null-company send left no explanation').toBeTruthy();
+    expect(outcome.diagnosis).toContain('logged WITHOUT a company');
+
+    await admin.from('email_logs').delete().eq('id', rows[0].id);
   });
 
   it('C5 — an unrecognised action is REFUSED, never silently dropped', async () => {
