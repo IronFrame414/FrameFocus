@@ -100,3 +100,99 @@ the fourth matters most:
 
 ⚠️ **And its own history is the warning it carries:** the first five discrepancies it reported were
 all bugs in the parser. **A discrepancy from it is a question, not a finding.**
+
+---
+
+## 4. Drift detection as a CRON ROUTE — PROPOSAL ONLY, nothing built
+
+**RULED [Josh, 2026-09-11]: it runs as a cron route using the service-role key production already
+has, NOT as a CI job with production credentials in GitHub Actions secrets.** A production
+credential in Actions is the shape S107 removed from a Codespace — an account-level secret that
+reappears on every rebuild and that nothing in the repo reads by name until one rename makes it
+live. The route needs no new credential at all.
+
+### 4a. What to fingerprint
+
+| Dimension | In? | Why |
+| --- | --- | --- |
+| tables, columns, NOT NULL | ✅ | what `db:verify` already replays |
+| CHECK, UNIQUE, FK (name + definition) | ✅ | definitions too, not just names — a CHECK can be *replaced* under the same name |
+| **RLS policies** | ✅ **highest value** | not in `db:verify`, and the most consequential thing that can vanish silently. This campaign's floors — Roster Visibility, Financial Visibility, the S121 CO read floor — are all policies. A dropped policy is a data leak with no error anywhere |
+| triggers | ✅ | `on_auth_user_created_autoconfirm` is load-bearing and is a trigger; its absence is invisible except as behaviour |
+| function bodies | ⚠️ **yes, but NORMALISED** | see below |
+| indexes, defaults, grants | ❌ | noisy, low consequence; revisit if a real incident points at them |
+
+> #### ⚠️ Function bodies: include them, but hash a COMMENT-STRIPPED, whitespace-collapsed form.
+>
+> **Measured this session:** comments DO survive a CLI `supabase db push` — the live body of
+> `autoconfirm_invited_signup` still contains its `SWALLOWED ON PURPOSE` banner. But MCP
+> `apply_migration` strips comments from function bodies. So the same function applied by the two
+> paths has two different texts, and a raw hash would report **permanent, unfixable drift** on every
+> MCP-applied function — noise that trains the reader to ignore the alert, which is worse than no
+> alert. Normalise first and the check becomes meaningful: 285 functions in `public`.
+
+### 4b. Where the baseline lives — the part that makes it *correctness* rather than *change*
+
+**Comparing against the previous run only detects change.** A schema wrong since the day it was
+built compares clean forever, and the first run after a hand-applied `ALTER` establishes the damage
+as the new normal.
+
+**The baseline must be the migration tree.** `npm run db:verify` already derives it. The proposal:
+commit its output as `apps/web/lib/schema-fingerprint.json`, regenerated as part of any migration
+commit, so it **ships inside the deployment** and the route compares live → tree with no database
+round-trip for the baseline and no second source of truth. A stale fingerprint then shows up as
+drift, which is the correct failure direction.
+
+### 4c. How it surfaces
+
+- **Always:** a `console.error` naming each difference (Vercel logs, greppable).
+- **On a clean → drifted EDGE only:** the existing internal-ops alert to `platform_admins`, the
+  `alertDeletionStopped()` shape — from `notices@`, and deliberately writing **no `email_logs` row**
+  (that table is the customer audit). Edge-triggered, because a persistent drift that mails daily
+  is a daily mail nobody reads, on the domain this whole session is trying to warm.
+- **Never** a tenant-visible notification. This is platform state.
+
+### 4d. Cost per run
+
+Six catalog aggregates plus one pass over 285 function bodies — all indexed system-catalog reads,
+comfortably **sub-second**, one Vercel invocation a day. Negligible against any budget. It is not a
+CI-time cost at all, which is the point of the ruling.
+
+### 4e. One route for both databases? **No.**
+
+A route deployed to production holds production's service-role key and cannot reach rebuild-test.
+Making it reach both would mean giving the production deployment a second database's credentials —
+reintroducing exactly the coupling the ruling removes. **Production only.** Rebuild-test drift is a
+human's `npm run db:verify` before a push, which costs two seconds and is where a person is already
+looking.
+
+### 4f. ⚠️ What it cannot catch — plainly
+
+1. **A statement hand-applied and reverted between runs.** A daily check sees the endpoints, never
+   the interval. Nothing short of DDL event triggers or log auditing closes this, and neither is
+   proposed.
+2. **Anything outside the window** — the same gap, stated the other way: drift introduced and undone
+   inside 24 hours is invisible.
+3. **A constraint that is WRONG rather than missing.** `#3-deliv` again: the CHECK was in the
+   migration, so tree and database agreed perfectly while tenant deletion was broken. **This is the
+   most important limitation, because it is the failure that actually happened**, and no
+   schema-comparison mechanism of any kind can see it.
+4. **Data-shaped failures** — the `20261540000000` class, where a constraint is valid until a row
+   violates it. Schema is identical; rows differ.
+5. Anything in the ❌ row of 4a.
+
+### 4g. A 15th cron entry — and my own S103 reasoning applies
+
+`vercel.json` now carries **14**. The S103 record is that a *malformed* entry failed a deploy with
+eleven migrations already on production; at S104 the conclusion drawn was to fold new work into an
+existing job.
+
+**That conclusion does not transfer, by its own terms.** S104 folded a QuickBooks backstop into the
+QuickBooks job — same domain, same blast radius, already metered. A schema fingerprint shares no
+domain with timesheets, exports or trash purges, and hiding it inside one means it stops silently
+when that job breaks — which is the exact failure mode a drift detector exists to prevent.
+
+So: **a 15th entry, `0 4 * * *`**, after the 03:30/03:45 housekeeping. The S103 risk is closed the
+way the warming entry closed it — `email-warming.test.ts` JSON-parses `vercel.json` and asserts
+every entry is well-formed. ⚠️ **That test asserts `toHaveLength(14)` and must move to 15 in the
+same commit**, or the guard that protects the file becomes the thing that blocks it.
