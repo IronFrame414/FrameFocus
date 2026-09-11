@@ -310,3 +310,47 @@ curl -s -o /dev/null -w '%{http_code}\n' https://ezcontractorbinder.com/api/cron
 
 That proves the route exists and the guard works; only the Vercel dashboard proves the value
 matches what Vercel sends.
+
+---
+
+## 7. CI — genuinely green on merged main
+
+Run **34548671279**, head `a5fef23e03563a6cb27800dc736235f86c1d62c1`, **`completed | success`** —
+verified from the API directly, not from a watcher's summary:
+
+| Job | Conclusion |
+| --- | --- |
+| Lint & Type Check | **success** |
+| E2E (Playwright) | **success** |
+
+### 7a. `cancel-in-progress` works — confirmed twice, by observation
+
+| Run | Commit | Outcome |
+| --- | --- | --- |
+| 34548505569 | `03d2a21` (the merge) | **cancelled** — both jobs |
+| 34548586747 | `4f27309` | **cancelled** — both jobs |
+| 34548671279 | `a5fef23` | **success** — both jobs |
+
+Each cancellation was superseded by a newer run of the same branch, which is precisely the
+behaviour `ci.yml` §14b documents and the property that makes it safe on `main`: the newer run
+tests a tree that INCLUDES the cancelled commit. **The #303/#304 collision — two runs driving one
+rebuild-test database at once — did not recur.**
+
+### 7b. ⚠️ AND THE WATCHER LIED ONCE, WHICH IS THE THIRD INSTANCE THIS SESSION
+
+The first monitor armed against `a5fef23` reported **`NO RUN FOUND — check whether CI triggered`**.
+**The run existed.** Its `node -e` had an unbalanced paren, so the script threw, the run id came
+back empty, and the not-found branch printed.
+
+**Same class as the other two, and that is the point of recording it:**
+
+| # | Instance | The thing inspected | The thing being judged |
+| --- | --- | --- | --- |
+| 1 | `#2-deliv` | a grep truncated by `head -20` | whether ANY migration drops a constraint |
+| 2 | the standing rule | a wrapper's / `echo`'s exit code | the command's exit code |
+| 3 | here | a watcher script that threw | whether CI triggered |
+
+In each, a *narrower or broken* signal was read as an answer to a *wider* question, and in each the
+failure was **silent and confident**. The re-armed monitor prints `PARSE ERROR` and `API ERROR`
+explicitly rather than falling through to a conclusion — **a watcher must distinguish "I looked and
+saw nothing" from "I could not look."**
