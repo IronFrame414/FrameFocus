@@ -241,3 +241,72 @@ zero `Failed to compile`.
 
 **Merged** `--no-ff` into `main` at `03d2a21`, twelve commits, **no conflicts**. Authorized by Josh
 for this branch only; `CLAUDE.md` unchanged and not edited.
+
+---
+
+## 6. Owed to production — statements for Josh to run
+
+⚠️ **Nothing in this section was run. Production was not touched at any point in this session**;
+every write went to rebuild-test, with the CLI link re-verified as `nmyphyhmfttxkdoposvf`
+immediately before each push.
+
+### 6a. Migrations owed, in order
+
+Production's ledger tip is `20261570000000`. Three files sit above it, and `supabase db push`
+applies them in numeric order:
+
+| # | File | What it does | Risk |
+| --- | --- | --- | --- |
+| 1 | `20261580000000_email_type_sub_bid_request.sql` | one `INSERT` into `email_types` | **None.** `ON CONFLICT DO NOTHING`; widening only, so the `20261540000000` trap cannot apply — there are no rows to fail. **Owed since S107** |
+| 2 | `20261590000000_email_warming.sql` | `email_types.warming` + `companies.email_warming_enabled BOOLEAN NOT NULL DEFAULT false` | **Low.** Column has a default, so no rewrite failure is possible on existing rows. Ships OFF |
+| 3 | `20261600000000_autoconfirm_invited_signup.sql` | the P3 trigger + its feature-detection function | **Low, and it is the consequential one.** From the moment it lands, invited users stop receiving a confirmation email. Its own body swallows errors so it can never break signup |
+
+`20261610000000` is **deliberately absent** — deleted before merge; see §3.
+
+**After pushing, confirm the fingerprint matches** (`npm run db:verify` locally, then
+`scripts/db-verify.sql` on production). Expected afterwards: **tables 123 · columns 1918 ·
+not_null 772 · checks 230 · uniques 42 · fks 566 · latest 20261600000000**.
+
+### 6b. The arming statement for the warming sender
+
+⚠️ **This is Josh's to run. It was not run here, and must not be.** Nothing sends until it is:
+`email_warming_enabled` is `false` for every company.
+
+```sql
+UPDATE public.companies
+SET email_warming_enabled = true
+WHERE slug IN ('worth-properties', 'h-h-signature-renovations');
+```
+
+Expect `UPDATE 2`. If it reports fewer, a slug carries a collision suffix (`-2`) — check with
+`SELECT slug FROM companies ORDER BY slug;` before re-running rather than guessing.
+
+**The off switch is the same statement with `false`.** It takes effect on the next cron tick, with
+no deploy — which is the whole reason it is a column and not an environment variable.
+
+### 6c. ⚠️ `CRON_SECRET` — I could not verify it, and here is why that matters
+
+**Unverifiable from here:** no Vercel CLI, no `VERCEL_TOKEN`. Check it in the Vercel dashboard →
+Settings → Environment Variables, for the **Production** environment.
+
+**Without it every warming tick 401s silently** — `route.ts` returns 401 when `CRON_SECRET` is
+unset OR when the header does not match, and a cron that 401s leaves no `email_logs` row and no
+user-visible symptom. It would look exactly like "the warming sender does nothing".
+
+**Indirect evidence it IS set:** fifteen cron routes read it, and retention warnings and trial-lock
+are live behaviours on production. But that is inference, not measurement.
+
+⚠️ **And "set" is not the whole check.** STATE.md records that a `CRON_SECRET` once **held a Resend
+API key** and broke the sync drain — an account-level Codespaces secret overriding `.env.local`
+and reappearing on every rebuild. So confirm it holds a cron secret, not some other credential.
+
+**A positive check after deploying**, which costs nothing:
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' https://ezcontractorbinder.com/api/cron/email-warming
+# 401 = route live and refusing unauthenticated callers (expected)
+# 404 = not deployed yet
+```
+
+That proves the route exists and the guard works; only the Vercel dashboard proves the value
+matches what Vercel sends.
