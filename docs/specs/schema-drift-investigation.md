@@ -196,3 +196,48 @@ So: **a 15th entry, `0 4 * * *`**, after the 03:30/03:45 housekeeping. The S103 
 way the warming entry closed it — `email-warming.test.ts` JSON-parses `vercel.json` and asserts
 every entry is well-formed. ⚠️ **That test asserts `toHaveLength(14)` and must move to 15 in the
 same commit**, or the guard that protects the file becomes the thing that blocks it.
+
+---
+
+## 5. Verification and merge [2026-09-11]
+
+**Static, printed exit lines read directly — on the BRANCH, then again on MERGED MAIN before pushing:**
+
+| Gate | branch | merged main |
+| --- | --- | --- |
+| `tsc --noEmit` | **0** | **0** |
+| `next lint` | **0** | **0** |
+| `next build` | **0** (`✓ Compiled successfully`) | **0** (`✓ Compiled successfully`) |
+| `vitest run` | **0** — 95 files / **1285 tests** | **0** — 95 files / **1285 tests** |
+
+Corroborated independently of the status each time: zero `FAIL`/`✘`/`×` lines, zero `Error:` lines,
+zero `Failed to compile`.
+
+**Live, against rebuild-test** (`assertRebuildTest()` printed
+`target nmyphyhmfttxkdoposvf — decoded from the key's own ref claim`):
+
+| Harness | Result | What it exercised |
+| --- | --- | --- |
+| all 46 applicable | **exit 0** — 45 passed, 1 skipped, **650 tests**, 0 failures | every harness touching `sendEmail`, `email_logs` or `@example.invalid` |
+| `s138-trial-deletion-run` | **14/14** | **a real company deleted**; `#3-deliv`'s guard exercised for real — the non-auth `email_logs` row survived with `company_id` NULLED |
+| `s160-auth-email` | **15/15** | the P3 rebuild end to end: trigger installed, invitee confirmed AT INSERT, trigger DISCRIMINATES, hook suppresses and says so |
+| `email-unsubscribe` | **9/9** | bounce guard outranks consent; consent backstop on a deliverable address |
+
+> ### ⚠️ `s160-auth-email` SKIPS WITHOUT `RESEND_API_KEY`, AND THAT HID A REGRESSION
+>
+> It skipped in the 46-file run — the ruled S107 state, since the key is kept out so a live run
+> cannot mail a real person. Running it required forcing the guard with a **deliberately-invalid
+> placeholder key** against its already-`vi.mock`'d transport, so no send capability was granted and
+> no network call could reach Resend.
+>
+> **Doing so found C4 red.** The logging fix had overturned it — `logged === false` and zero rows
+> was the behaviour being fixed — and it never objected, because it could not run. **`#1-deliv` in a
+> third guise: not the harness's sequencing, not the environment, but a SKIP. A test that cannot run
+> cannot object.** Inverted, with the superseded assertions quoted.
+>
+> The first inverted run then failed on **residue** from the run before it, which had aborted before
+> its cleanup. It now sweeps first, and the file's own `sweep()` reaches the row — which carries no
+> `company_id`, so no company-scoped teardown anywhere could have found it.
+
+**Merged** `--no-ff` into `main` at `03d2a21`, twelve commits, **no conflicts**. Authorized by Josh
+for this branch only; `CLAUDE.md` unchanged and not edited.
