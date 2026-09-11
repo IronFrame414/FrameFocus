@@ -149,6 +149,62 @@ Complete as of Session 40. All polish items closed. Module 4 build is unblocked.
   scope the "exactly one of project/estimate" rule to the categories it actually governs.
   Filed alongside #1-s106; do not fix in this branch. See `S106-report.md` production note.
 
+- **#2-deliv — REBUILD-TEST HAS DRIFTED FROM THE MIGRATION FILES, and the drift is in the exact
+  column this session was investigating [2026-09-11].** `email_logs.company_id` is declared
+  `NOT NULL` in `20260101000000_baseline_schema.sql:1159` and no migration in the tree ever drops
+  it — yet it was **already nullable on rebuild-test** before `20261610000000` ran.
+
+  **Evidence, not inference:** the `database.ts` generated at commit `69d9bc1` (before that
+  migration) emits `company_id: string | null` for `email_logs`, while emitting a bare `string`
+  for every genuinely NOT NULL column in the same table — `email_type`, `recipient_email`,
+  `sender_email`, `subject`, `status`, `sent_at`, `created_at`, `id`. The generator is faithful;
+  the database had drifted. Two consecutive `db:types` runs across the schema change produced an
+  identical md5 (`f12ed72b…`), which is what surfaced it.
+
+  ⚠️ **WHY IT MATTERS MORE THAN A STRAY CONSTRAINT.** `logEmail()` was skipped on production
+  *because* that column is NOT NULL there. On rebuild-test it is not — so **a live harness writing
+  a null-company auth log would simply have succeeded**, and no test run against rebuild-test could
+  ever have reproduced the production defect. This is `#1-deliv`'s shape in a second guise: the
+  environment, rather than the harness's sequencing, is what made the gap invisible.
+
+  **Owed:** (a) find out how it was lost — a manual `ALTER`, a restore, or a `db reset` from a
+  stale dump; (b) **sweep for other drifted constraints** rather than assuming this is the only
+  one, by diffing rebuild-test's `information_schema` against the migration tree; (c) decide
+  whether `supabase db diff` belongs in CI. Not swept in this branch.
+
+- **#1-deliv — A LIVE TEST THAT DRIVES A HOOK, TRIGGER OR WEBHOOK HANDLER BY HAND CANNOT
+  REPRODUCE ONE CALLED MID-TRANSACTION. Filed as a CLASS, not an incident [Josh, 2026-09-11].**
+  `s160-auth-email.live.ts` A1/A2 asserted that P3 confirmed an invited user and suppressed their
+  confirmation email. **Both were green for eleven sessions over a feature that had never once
+  fired in production.** Measured 2026-09-10 21:41:04: `message: 'User not found'` — GoTrue's own
+  words — because the Send Email Hook is called DURING the signup request, before the `auth.users`
+  INSERT commits, and `updateUserById()` reaches GoTrue on a different connection.
+
+  **Why the test passed anyway, which is the transferable part:** the harness creates its user with
+  `admin.auth.admin.createUser()` and then calls `handleAuthEmail()` as a **separate, later step**.
+  By then the user is committed and the admin API can see them. **The harness's sequencing was
+  under test, not the product's.** Nothing was stubbed and nothing was wrong with the assertions —
+  the test simply could not construct the condition that breaks the code.
+
+  > **The shape:** wherever correctness depends on WHEN a handler is called — inside a transaction,
+  > before a commit, during another system's request — invoking it directly proves the opposite of
+  > what it appears to. The greener the test, the more confidently the gap is held open.
+
+  **Every direct-invocation test in this repo is suspect on the same grounds**, not wrong:
+  `/api/auth/send-email` (GoTrue, the confirmed case), `/api/webhooks/resend` (Resend delivery
+  events), `/api/webhooks/stripe`, and any `.live.ts` that imports a route module and calls its
+  `GET`/`POST` rather than issuing a request. **NOT SWEPT [Josh] — filed and named.**
+
+  **What a sweep should ask of each**, when one happens: does this handler read state that its
+  caller is concurrently writing? If yes, the direct-invocation test cannot see the failure, and the
+  cover has to come from somewhere else — an in-transaction assertion (a trigger, as the P3 fix
+  uses), an end-to-end exercise through the real caller, or an explicit note in the file that this
+  case is uncovered. **The third is a legitimate answer and far better than the present silence.**
+
+  Fixed for P3 specifically: `on_auth_user_created_autoconfirm` (20261600000000) moves the confirm
+  into the transaction; A1/A2 inverted with the superseded assertions quoted. Record:
+  `docs/specs/S160-auth-email-hook.md` §6a.
+
 - **#1-s106 — the invoicing→QuickBooks mapping must handle a NET-NEGATIVE line, now that
   one can originate upstream of invoicing.** S106 ruled a negative typed total legal on an
   estimate line (`estimate_line_rows.total_override` / `estimate_line_items.total_price_override`

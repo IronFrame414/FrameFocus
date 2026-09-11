@@ -382,7 +382,16 @@ export type EmailType =
   | 'warming';
 
 export interface LogEmailInput {
-  company_id: string;
+  /**
+   * ⚠️ NULLABLE FOR `auth_*` TYPES ONLY [20261610000000]. A public signup
+   * confirmation is sent from inside the still-open signup transaction, where
+   * the company `handle_new_user()` is creating does not exist on any
+   * connection — so there is no id to resolve rather than one that is hidden.
+   * Every tenant-facing type still REQUIRES one, enforced by
+   * `email_logs_company_required_except_auth`, so passing null from a product
+   * sender fails loudly at INSERT instead of writing an unscoped row.
+   */
+  company_id: string | null;
   estimate_id: string | null;
   signing_session_id: string | null;
   // Signed-artifact spec §4.3 — CO email FKs (nullable; set only for CO emails).

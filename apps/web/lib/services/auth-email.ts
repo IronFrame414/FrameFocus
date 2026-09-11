@@ -335,6 +335,116 @@ export async function invitedCompanyFor(
   return inv.company_id;
 }
 
+// ===========================================================================
+// THE AUTH-EMAIL RATE CAP — RULED [Josh, 2026-09-11]
+// ===========================================================================
+// ⚠️ REPLACING A BOUND THAT WAS SILENTLY REMOVED. While GoTrue was the sender,
+// Supabase enforced `rate_limit_email_sent` = 2 per hour, PROJECT-WIDE. Turning
+// on the Send Email Hook moved sending into this application and that limit
+// stopped binding — and NOTHING replaced it. The effective cap became the Resend
+// plan quota, shared with every invoice, proposal and the warming sender, which
+// is the wrong thing to exhaust and the wrong place to discover it.
+//
+// TWO CEILINGS, because one number cannot do both jobs:
+//
+//   · PER ADDRESS, PER HOUR — the realistic loop: a retry storm on one account,
+//     or a signup form hammered.
+//   · PROJECT-WIDE, PER HOUR — the blast radius. GoTrue's limit was project-wide;
+//     removing it with only a per-address cap leaves nothing between a bug that
+//     enumerates addresses and the Resend quota.
+//
+// ⚠️ THREE IS NOT TWO, AND THE DIFFERENCE IS DELIBERATE [Josh]. A person
+// legitimately retrying a password reset — "did that send?", check spam, try
+// again — must not be stopped by the mechanism meant to stop a loop.
+//
+// ⚠️ AND `auth_recovery` IS EXEMPT FROM THE GLOBAL CEILING [Josh]. A
+// platform-wide incident must never take away the way back in. A recovery email
+// is somebody's only route to their own account, and a global counter is a
+// shared resource they cannot influence or even see — being refused because
+// other users are busy is not a trade this product makes. The PER-ADDRESS cap
+// still applies to recovery, because that one IS about their own behaviour.
+//
+// ON EXCEEDING: refuse the send, WRITE THE email_logs ROW as 'failed' with the
+// reason, and still return 2xx. A throttled auth email must be visible in the
+// same table as everything else — invisibility is the defect this whole session
+// has been unpicking.
+export const AUTH_RATE_PER_ADDRESS_HOURLY = 3;
+export const AUTH_RATE_GLOBAL_HOURLY = 50;
+/** Exempt from the GLOBAL ceiling only; the per-address cap still applies. */
+const GLOBAL_CEILING_EXEMPT: ReadonlySet<EmailType> = new Set(['auth_recovery']);
+
+export type RateDecision = { allowed: true } | { allowed: false; reason: string };
+
+/**
+ * Pure, so the policy can be asserted without a database — the shape
+ * `emailSendAllowed` and `recipientIsDeliverable` already use.
+ */
+export function authRateDecision(
+  emailType: EmailType,
+  sentToAddressThisHour: number,
+  sentGloballyThisHour: number
+): RateDecision {
+  if (sentToAddressThisHour >= AUTH_RATE_PER_ADDRESS_HOURLY) {
+    return {
+      allowed: false,
+      reason: `rate cap: ${sentToAddressThisHour} auth emails to this address in the last hour (limit ${AUTH_RATE_PER_ADDRESS_HOURLY})`,
+    };
+  }
+  if (GLOBAL_CEILING_EXEMPT.has(emailType)) return { allowed: true };
+  if (sentGloballyThisHour >= AUTH_RATE_GLOBAL_HOURLY) {
+    return {
+      allowed: false,
+      reason: `rate cap: ${sentGloballyThisHour} auth emails platform-wide in the last hour (limit ${AUTH_RATE_GLOBAL_HOURLY})`,
+    };
+  }
+  return { allowed: true };
+}
+
+/**
+ * Counts this hour's auth mail, from `email_logs`.
+ *
+ * ⚠️ THIS IS WHY THE LOGGING FIX HAD TO LAND FIRST. Before 20261610000000,
+ * signup confirmations wrote NO ROW, so a counter reading this table would have
+ * seen zero of them however many went out — a cap that counted everything except
+ * the highest-volume thing it was capping.
+ *
+ * ⚠️ `status` IS NOT FILTERED. A refused or failed send still means the send
+ * path ran; counting only successes would let a failing loop retry forever at
+ * full speed, which is the exact shape this exists to stop.
+ *
+ * FAILS OPEN, and that is the ruled trade: if the count cannot be read, the
+ * email goes. An unsent password reset is a person locked out of their account;
+ * an uncapped hour is a bill. The console line names it either way.
+ */
+async function authRateCounts(
+  admin: SupabaseClient<Database>,
+  recipientEmail: string
+): Promise<{ address: number; global: number } | null> {
+  const since = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+  const [addressRes, globalRes] = await Promise.all([
+    admin
+      .from('email_logs')
+      .select('id', { count: 'exact', head: true })
+      .like('email_type', 'auth\\_%')
+      .ilike('recipient_email', recipientEmail)
+      .gte('created_at', since),
+    admin
+      .from('email_logs')
+      .select('id', { count: 'exact', head: true })
+      .like('email_type', 'auth\\_%')
+      .gte('created_at', since),
+  ]);
+
+  if (addressRes.error || globalRes.error) {
+    console.error('auth email hook: rate-cap count failed; allowing the send', {
+      route: 'POST /api/auth/send-email',
+      message: addressRes.error?.message ?? globalRes.error?.message,
+    });
+    return null;
+  }
+  return { address: addressRes.count ?? 0, global: globalRes.count ?? 0 };
+}
+
 /**
  * Is the in-transaction autoconfirm trigger actually installed?
  *
@@ -526,6 +636,23 @@ export async function handleAuthEmail(
   );
 
   const { sender, reason: senderReason } = await senderFor(admin, payload.user.id);
+
+  // ⚠️ THE LOG'S COMPANY IS RESOLVED SEPARATELY FROM THE SENDER'S, and the
+  // order is deliberate [2026-09-10].
+  //
+  // `senderFor()` reads `profiles`, which on SIGNUP is inside the still-open
+  // transaction and therefore invisible — that is the whole defect. The
+  // INVITATION, by contrast, was committed before the user ever clicked: in the
+  // measured case, 21:40:45 against a profile at 21:41:04, nineteen seconds
+  // earlier. So an invited signup that falls through to sending — exactly the
+  // case we most want a record of, because it means P3 declined to suppress —
+  // now logs against a real tenant.
+  //
+  // Falls back to the sender's company for every already-committed action
+  // (recovery, magic link, email change, reauthentication), which is where it
+  // has always come from.
+  const logCompanyId =
+    sender?.companyId ?? (action === 'signup' ? await invitedCompanyFor(admin, payload.user) : null);
   // The platform fallback exists only for the case with no resolvable company.
   // It is a real, verified address on the same domain, so alignment holds even
   // here; what is lost is the tenant's name on the From line.
@@ -541,7 +668,27 @@ export async function handleAuthEmail(
 
   let messageId: string | null = null;
   let error: string | null = null;
-  try {
+  let rateRefusal: string | null = null;
+
+  // The cap runs AFTER the sender and subject are resolved, so a refused send
+  // still writes a log row that looks like every other one — same type, same
+  // From, same subject, status 'failed'. A throttled email that logged a
+  // different shape would be invisible to whoever is looking for it.
+  const counts = await authRateCounts(admin, payload.user.email);
+  if (counts) {
+    const decision = authRateDecision(emailType, counts.address, counts.global);
+    if (!decision.allowed) rateRefusal = decision.reason;
+  }
+
+  if (rateRefusal) {
+    error = rateRefusal;
+    console.error('auth email hook: REFUSED by the rate cap', {
+      route: 'POST /api/auth/send-email',
+      user_id: payload.user.id,
+      email_action_type: actionRaw,
+      reason: rateRefusal,
+    });
+  } else try {
     const result = await sendEmail({
       from,
       to: payload.user.email,
@@ -560,28 +707,47 @@ export async function handleAuthEmail(
   }
 
   // ── P2 ────────────────────────────────────────────────────────────────────
-  let logged = false;
-  if (sender) {
-    const id = await logEmail(admin, {
-      company_id: sender.companyId,
-      estimate_id: null,
-      signing_session_id: null,
-      resend_message_id: messageId,
-      email_type: emailType,
-      recipient_email: payload.user.email,
-      sender_email: from,
-      subject,
-      status: error ? 'failed' : 'sent',
-      metadata: { email_action_type: actionRaw, user_id: payload.user.id },
-    });
-    logged = id !== null;
-  } else {
-    // Named, because "no row appeared" must never be the only symptom again.
-    // ⚠️ AND NOW IT NAMES WHICH REASON. Before 2026-09-10 this line said only
-    // "no company for user", which is true of a failed query and of an absent
-    // row alike — so the one question worth asking could not be answered from
-    // it.
-    console.error('auth email hook: no company for user; send NOT logged', {
+  //
+  // ⚠️ ALWAYS LOGGED SINCE 2026-09-10. This was `if (sender) { … } else {
+  // console.error(…) }`, and on SIGNUP the else branch ran every single time —
+  // production held ZERO `auth_signup_confirmation` rows while confirmations
+  // were demonstrably delivering. `email_logs.company_id` was NOT NULL and there
+  // was nothing to put in it, so the audit trail was skipped rather than the
+  // send.
+  //
+  // `company_id` is now nullable for `auth_*` types ONLY (20261610000000,
+  // enforced by CHECK, not by convention). A public signup confirmation
+  // genuinely has no company: `handle_new_user()` is creating it inside the same
+  // uncommitted transaction, so there is no id to resolve rather than one that
+  // is hidden. Writing null says that; writing a sentinel would have lied in a
+  // tenancy column.
+  //
+  // A null-company row is invisible to every tenant — `email_logs_select_manager`
+  // is `company_id = get_my_company_id()`, and `NULL = <uuid>` is NULL, not true
+  // — and reachable only by the service role. That is the intended visibility
+  // for platform auth mail, not a hole.
+  const logId = await logEmail(admin, {
+    company_id: logCompanyId,
+    estimate_id: null,
+    signing_session_id: null,
+    resend_message_id: messageId,
+    email_type: emailType,
+    recipient_email: payload.user.email,
+    sender_email: from,
+    subject,
+    status: error ? 'failed' : 'sent',
+    metadata: {
+      email_action_type: actionRaw,
+      user_id: payload.user.id,
+      // Why the row carries no tenant, in the row itself — so the question is
+      // answerable from the table without reading this file.
+      ...(logCompanyId ? {} : { company_unresolved: senderReason }),
+    },
+  });
+  const logged = logId !== null;
+
+  if (!logCompanyId) {
+    console.error('auth email hook: logged WITHOUT a company', {
       route: 'POST /api/auth/send-email',
       user_id: payload.user.id,
       email_action_type: actionRaw,
@@ -590,7 +756,12 @@ export async function handleAuthEmail(
   }
 
   const diagnosis =
-    [p3Diagnosis, sender ? null : `send NOT logged — ${senderReason}`]
+    [
+      p3Diagnosis,
+      rateRefusal ? `NOT SENT — ${rateRefusal}` : null,
+      logCompanyId ? null : `logged WITHOUT a company — ${senderReason}`,
+      sender ? null : `From fell back to no-reply@ — ${senderReason}`,
+    ]
       .filter(Boolean)
       .join('; ') || null;
 
