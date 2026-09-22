@@ -1035,3 +1035,99 @@ set) and that git history keeps it, acceptable only because it is revoked and pu
 ⚠️ **This report had quoted the same value itself** (Phase 1, D3a entry) — redacted there too.
 A repo-wide grep for `sb_publishable_` followed by 6+ key characters, excluding `node_modules`,
 `.next` and `.git`, now returns **nothing**.
+
+### D3c — `apps/web/.env.local.example` — **content delivered here for Josh to paste (Q11 → A)**
+
+⚠️ **I cannot read or write that path** (denied by this session's permissions), so per the ruling
+the complete file is below. **Josh: replace the whole file with this block.**
+
+**Count, re-measured:** the app now reads **29** variables, not 28 — S108 C2 added
+`SCHEMA_DRIFT_COMPANY_ID`. **27 are declared** below; the other two (`NODE_ENV`, `VERCEL_ENV`) are
+set by the platform and named in the closing comment, as is the script-only `DB_VERIFY_OUT`.
+`NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` (in today's file, read by nothing) is dropped, and
+`NEXT_PUBLIC_APP_URL`'s pre-rebrand value goes with every other value.
+
+**Audit 7 — no value that looks like a key, proved by grep** over the scratch copy of exactly this
+content: assignments carrying any value **0** of 27; a pattern for JWTs (`eyJ`), `sb_publishable_`/
+`sb_secret_`, Stripe `sk_`/`pk_`/`whsec_`/`price_`, Resend `re_`, and any 32+ character token →
+**0 matches, `KEYGREP_EXIT=1`**. (The first draft said "the `eyJ…` keys" in a comment and matched
+its own grep; reworded rather than exempted.)
+
+```dotenv
+# apps/web/.env.local.example — every variable the app reads. NO VALUES, EVER.
+# Rebuilt S108 (D3c). Copy to apps/web/.env.local and fill in. .env.local is
+# gitignored and does NOT survive a Codespace rebuild.
+#
+# ⚠️ THIS CODESPACE TALKS TO REBUILD-TEST, NEVER PRODUCTION. Every value below
+# comes from rebuild-test (ref nmyphyhmfttxkdoposvf) or a sandbox.
+
+# ── Supabase ─────────────────────────────────────────────────────────────────
+# From the REBUILD-TEST project → Settings → API Keys → the LEGACY tab (the
+# JWT-format keys). The new-format keys were revoked on 2026-09-21.
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_ANON_KEY=
+SUPABASE_SERVICE_ROLE_KEY=
+# Personal access token for the Management API. Read by scripts/ only
+# (live-sql.mjs, db-fingerprint.mjs, db-ledger-check.py, db-function-sync.py).
+SUPABASE_ACCESS_TOKEN=
+
+# ── App origin ───────────────────────────────────────────────────────────────
+# Builds every outbound link and the QuickBooks redirect URI. No trailing slash.
+NEXT_PUBLIC_APP_URL=
+
+# ── Stripe (test mode) ───────────────────────────────────────────────────────
+STRIPE_SECRET_KEY=
+STRIPE_WEBHOOK_SECRET=
+STRIPE_PRICE_STARTER=
+STRIPE_PRICE_PROFESSIONAL=
+STRIPE_PRICE_BUSINESS=
+# Kill switch [S99]: `true` skips billing enforcement in middleware. Leave unset.
+DISABLE_BILLING_ENFORCEMENT=
+
+# ── Email (Resend) ───────────────────────────────────────────────────────────
+# ⚠️ RESEND_API_KEY IS DELIBERATELY ABSENT FROM CODESPACES [S107 ruling]. Email
+# only sends from a Vercel production deployment (the S126 gate). Leave it empty.
+RESEND_API_KEY=
+RESEND_SIGNING_SECRET=
+# Kill switch: `false` = nobody sends, anywhere; `true` = this process sends
+# (a supervised non-prod send); unset = only VERCEL_ENV=production sends.
+EMAIL_SEND_ENABLED=
+# Supabase Auth "Send Email" hook secret (/api/auth/send-email).
+SEND_EMAIL_HOOK_SECRET=
+# HMAC secret for one-click unsubscribe tokens.
+UNSUBSCRIBE_TOKEN_SECRET=
+
+# ── Web Push ─────────────────────────────────────────────────────────────────
+NEXT_PUBLIC_VAPID_PUBLIC_KEY=
+VAPID_PRIVATE_KEY=
+# A mailto: or https: contact URI.
+VAPID_SUBJECT=
+
+# ── QuickBooks Online ────────────────────────────────────────────────────────
+# The SANDBOX app's keys. Sandbox realm 9341457813274121 — the realm is NOT an
+# env var: it arrives on Intuit's callback and is stored on companies.qb_realm_id.
+QBO_CLIENT_ID=
+QBO_CLIENT_SECRET=
+# ⚠️ Anything other than exactly `production` means SANDBOX, silently (config.ts).
+QBO_ENVIRONMENT=
+
+# ── OpenAI ───────────────────────────────────────────────────────────────────
+# Photo auto-tagging (GPT-4o vision) and site-visit voice transcription.
+OPENAI_API_KEY=
+
+# ── Cron ─────────────────────────────────────────────────────────────────────
+# Bearer secret every /api/cron/* route requires.
+CRON_SECRET=
+# S108 C2: the company whose Owner is notified of schema drift, by ID (not slug).
+# Unset is supported: drift is still reported in the response and the log.
+SCHEMA_DRIFT_COMPANY_ID=
+
+# ── Tests only ───────────────────────────────────────────────────────────────
+# Playwright sign-in identity (e2e/auth.setup.ts). Defaults to the crew QA user.
+E2E_EMAIL=
+E2E_PASSWORD=
+
+# ── Set by the platform — do NOT set these by hand ───────────────────────────
+# NODE_ENV (Next.js), VERCEL_ENV (Vercel: production | preview | development).
+# DB_VERIFY_OUT is an optional output-path override for `npm run db:verify`.
+```
