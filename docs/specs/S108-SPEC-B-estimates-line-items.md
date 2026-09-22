@@ -331,6 +331,16 @@ estimates and money), or offer a manual per-line switch.
 
 **ASK-B5** — On FILL-B1: if the trash button is shared, enlarge it everywhere or only on line items.
 
+> **ANSWERED BY MEASUREMENT [S108]: it is NOT shared.** `smallButton`/`dangerButton` are
+> module-local to `items-tab.tsx`. Enlarging it changes only this screen, so the question is moot.
+> Raised in Phase 2 only to confirm Josh agrees with retiring it.
+
+**ASK-B6 — NEW [raised by CC from FILL-B8].** `change_order_line_rows` carries the **same**
+`labor_unit IN ('hours','days')` CHECK, and both CO editors hard-code that union in TypeScript.
+Ruling #6 is written for estimates. CLAUDE.md's **PARITY ruling [S122]** says a feature on two
+surfaces is one feature — and a contractor who bills demo by the square foot will bill a *change* to
+that demo the same way. Does `sq_ft` land on change-order labor rows in the same pass?
+
 ---
 
 ## AUDIT — before Spec B builds
