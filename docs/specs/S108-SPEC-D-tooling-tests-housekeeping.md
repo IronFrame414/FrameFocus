@@ -22,6 +22,33 @@ save: a two-line edit produced a 77-line diff, and `STATE.md` a 98/88 diff. It w
 ⚠️ **`TECH_DEBT.md` is already Prettier-unclean on `main`** — do not reformat it; that buries every
 future diff.
 
+> **MEASURED [S108].** The formatter is the **VS Code Prettier extension**, turned on by a
+> **committed repo file**: `.devcontainer/devcontainer.json` → `customizations.vscode.settings` sets
+> `"editor.defaultFormatter": "esbenp.prettier-vscode"` and `"editor.formatOnSave": true`, and lists
+> the extension under `extensions`.
+> **`.vscode/settings.json` does NOT exist** (the directory is absent) — but `.gitignore:27-29`
+> ignores `.vscode/*` while explicitly un-ignoring `settings.json` and `extensions.json`, so creating
+> it is the mechanism the repo already anticipates, **and it is the one that takes effect without a
+> rebuild** (workspace settings override the machine settings a devcontainer seeds).
+> **No `.prettierignore` exists.** **No CI step runs Prettier over `.md` or anything else** —
+> `grep -in "prettier|format"` over `.github/workflows/ci.yml` returns one unrelated prose line.
+>
+> **Damage measured on scratch copies; no repo file was reformatted.**
+> `npx prettier --write`: `CLAUDE.md` **4** lines, `STATE.md` **6**, **`TECH_DEBT.md` 295** —
+> confirming it is already Prettier-unclean on `main`, exactly as warned. **Not touched.**
+> The live failure reproduced: a **one-line** edit to `CLAUDE.md`'s Technology Stack table whose cell
+> is **wider than the current column** → **34 changed lines**, every row re-padded.
+> *(⚠️ My first attempt measured 6 and also showed Prettier rewriting a `typescript` fence's quotes —
+> both artefacts of running on a copy in `/tmp`, **outside the repo, where `.prettierrc` does not
+> apply**. Re-run with `--config .prettierrc`. Recorded: it is the named failure class.)*
+>
+> **Proposed fix, two parts.** (i) `.vscode/settings.json` with a language-scoped
+> `"[markdown]": { "editor.formatOnSave": false }` — the actual ask. (ii) a `.prettierignore`
+> containing `*.md`, because **(i) cannot be proved from a terminal** and (ii) can: after it,
+> `npx prettier --write CLAUDE.md` is a no-op, which is a measurable audit result rather than an
+> assertion about an editor.
+
+
 **D1b — A pre-push hook running `next build`.** Type-check passed and the build failed twice, and
 both shipped (a client component importing a server module; a shared constant in a route file).
 
@@ -29,6 +56,25 @@ both shipped (a client component importing a server module; a shared constant in
 `next build` takes minutes — a hook would add that to every push. And CI now runs on every branch
 push (ruled S107, `cancel-in-progress`). State: does CI already run `next build` on branch pushes?
 How long does a local build take? Then ASK-D1.
+
+> **MEASURED [S108]. The premise is already satisfied by CI, and the cost is large.**
+> `.github/workflows/ci.yml` triggers `on: push: branches: ['**']` — every branch — with
+> `concurrency` + `cancel-in-progress`. Job `check` runs type-check, lint and vitest and does **not**
+> build. Job **`e2e` runs `next build` as its own step** — `:295-296`, `- name: Build (production)` /
+> `run: npm run build`, working-directory `apps/web` — with **no `if:` and no `needs:`**, so it runs
+> on every branch push unconditionally. Its own comment records why it is a separate step (`#135`:
+> a compile error must fail with the compiler's output, not as a webServer timeout).
+>
+> **Local cold build, measured this session:** `rm -rf .next && npm run build` →
+> **`BUILD_EXIT_LINE=0`, `WALL_SECONDS=227`** (3 m 47 s). Corroborated independently by
+> `.next/BUILD_ID` present, 250 route-manifest lines, and `✓ Compiled successfully`.
+> *(⚠️ The first timing run wrapped the build in `/usr/bin/time`, which is **not installed**; the
+> task notification reported "exit code 0" while the **printed** line said `BUILD_EXIT_LINE=127` and
+> no build had run. Read the printed line — the named failure class again.)*
+>
+> **So a pre-push hook would add ~3m47s to every push**, and the standing unattended rule pushes
+> after **every commit**, to duplicate a gate CI already applies to the same commit. → **ASK-D1.**
+
 
 **D1c — A migration-vs-ledger check.** The ledger lied twice in S104.
 
@@ -38,12 +84,55 @@ MCP-signature rows (name prefix ≠ version), rows with no matching file, files 
 ordered-version md5 fingerprint used against production in S104. Extend it to cover what is missing.
 If it does not exist, build it.
 
+> **MEASURED [S108]. `npm run db:verify` exists and does NOT check the ledger — at all.**
+> A full-text grep for `ledger|schema_migrations|duplicate|md5` over `scripts/db-replay-schema.py`
+> returns **only the two docstring lines naming the ledger as a BLIND SPOT**
+> (*"3. ANYTHING APPLIED OUTSIDE THE LEDGER — a hand-run `ALTER` in the dashboard SQL editor, or MCP
+> `apply_migration`, which writes no ledger row."*). It fingerprints tables, columns, NOT NULL,
+> CHECK, UNIQUE and FK from the migration FILES. **The ledger check must be built.**
+>
+> **Baseline measured on rebuild-test**, so the new check starts from a known-clean state:
+> `supabase_migrations.schema_migrations` = **222 rows, 222 distinct versions, 0 null names, 0 rows
+> whose name is not a `2026%` version** (no MCP-signature rows). Ordered-version md5
+> **`d0d8670294d11ffa303e2d26341f46e4`** — **identical** to the md5 of the 222 filenames on disk;
+> files-not-in-ledger and ledger-not-in-files are both empty.
+>
+> **What to build, extending `db:verify` rather than duplicating it:** duplicate versions · rows whose
+> `name` prefix ≠ `version` (the MCP signature) · rows with no matching file · files with no row ·
+> the ordered-version md5. Exit non-zero on any, and print the offending versions, not a count.
+
+
 **D1d — Install `gh` in the devcontainer.** Not via `apt` — that vanishes on rebuild, like Claude
 Code does.
 
 **FILL-D1d** — The devcontainer feature to use, and ⚠️ **what `gh` can actually do here**: the
 Codespace token returned **403 on the Actions cancel API** in S107 (no `actions:write`). State what
 it can read and what it cannot. ⚠️ **The devcontainer applies on REBUILD, not restart.**
+
+> **MEASURED [S108].** `gh` is **not installed** (`command not found`). Devcontainer feature:
+> **`ghcr.io/devcontainers/features/github-cli:1`**. ⚠️ Applies on **rebuild**, not restart.
+>
+> **What the token can actually do.** `GITHUB_TOKEN` is present (length checked only — **the value
+> was never printed**, and no `echo $VAR`). `x-oauth-scopes` on `GET /user` is **empty**, i.e. a
+> fine-grained Codespaces token, not a classic scoped PAT. Probed by HTTP status, token passed in a
+> header:
+>
+> | call | result |
+> | --- | --- |
+> | `GET /repos/{owner}/{repo}` | **200** |
+> | `GET /repos/.../actions/runs` | **200** |
+> | `GET /repos/.../actions/workflows` | **200** |
+> | `GET /repos/.../pulls` | **200** |
+> | `GET /repos/.../issues` | **200** |
+> | `GET /repos/.../branches/main/protection` | **403** |
+> | `GET /repos/.../actions/secrets` | **403** |
+>
+> Consistent with S107's measured **403 on the Actions cancel API**.
+> **What `gh` buys: `gh run list` / `gh run view` / `gh run watch`** — precisely the tool the standing
+> "quiet period until the run is green" rule needs, which is currently done by polling the REST API
+> by hand. **What it cannot do: cancel a run, read branch protection, read or write secrets.**
+> Creating a PR was **not probed**, because probing it would create one.
+
 
 ---
 
@@ -65,6 +154,31 @@ opposite of what it appears to.** Suspects recorded: `/api/auth/send-email`,
 call-timing, and one of: **covered / uncovered / cannot be covered from vitest.** "Uncovered" is a
 legitimate answer. Fix what is cheap; file the rest. **Do not weaken an assertion to make it pass.**
 
+
+
+
+> **MEASURED [S108]. Every suspect classified. The class has one member and it is already fixed.**
+> The question asked of each is `#1-deliv`'s own: *does this handler read state that its caller is
+> concurrently writing?*
+>
+> | test | asserts | timing-dependent? | verdict |
+> | --- | --- | --- | --- |
+> | `auth-email-hook-signature-headers.test.ts` | `/api/auth/send-email` accepts `webhook-*` **and** `svix-*`; neither → 400 | No — pure request shape | **covered** |
+> | `s160-auth-email.live.ts` A1/A2 | P3 auto-confirm | **was the defect** | **covered — already fixed.** A1/A2 inverted to assert the *trigger* `on_auth_user_created_autoconfirm`, superseded lines quoted, **plus A1c**, a discriminating control ("no invitation, no auto-confirm") so A1b cannot pass against a trigger that confirms everyone |
+> | `webhook-resend.live.ts` | delivered/opened/bounced stamping, rank monotonicity, bad sig → 401, **unknown id → 200** | **Yes** — a Resend event can beat our own `logEmail()` INSERT | **covered**: case 6 *is* that race, asserted |
+> | `card-signup-webhook.test.ts` (`/api/stripe/webhook`) | `mode:setup` sets `payment_method_on_file` | No — Stripe calls out-of-band | **covered for handler logic; the event SHAPE is uncovered and the file ALREADY SAYS SO** ("MOCK-VERIFIED, NOT ROUND-TRIP-VERIFIED… Josh must confirm the real event"). That is the explicit note `#1-deliv` asks for, already present |
+> | `s107-estimate-files-route-order.test.ts` | session read precedes the admin client | No — ordering inside one request | **covered**, and `:102` is a MIRROR case so it is not vacuous |
+> | `s107-bid-request-send-order.test.ts` | floor precedes service-role client; origin guard precedes send | No | **covered** |
+> | `email-unsubscribe.live.ts` | token roundtrip, one-click idempotence, forged token writes nothing, bounce guard outranks consent | No | **covered** |
+> | `s146-generate-route.live.ts` | lien-release arms, route floor, caller cannot choose type | No | **covered** |
+> | `s174-selections-email.live.ts`, `s175-stage6`, `s175-stage7` | selection release/offer/spec-sheet/portal pick+sign | No | **covered** |
+> | `signed-url-error-contract.test.ts` | 403 vs 500 stay distinguishable, cause logged | No | **covered** |
+>
+> **Nothing was weakened to reach this.** Nothing remaining is timing-dependent; the one declared gap
+> (`card-signup-webhook`'s event shape) is Josh's to close in Stripe test mode and is already
+> recorded in the file itself.
+
+
 ---
 
 ## D3 — Housekeeping
@@ -82,6 +196,16 @@ invariant trigger functions (possibly more).
 defining migration file after comment normalisation. ⚠️ **"Latest" matters** — a function redefined
 in five migrations must be re-synced from the fifth. Re-apply via `supabase db push`-equivalent from
 the file, never MCP, rebuild-test only. Verify by hash after.
+
+> **⚠️ NOT YET FILLED — this is the one FILL that needs a live per-function comparison, and it is
+> Phase 3 work rather than Phase 1 measurement.** The instrument is built and proved: the
+> quote-parity normaliser specified in Spec C FILL-C3 is exactly what this needs, and running it
+> per-function against each function's **latest** defining migration file is the comparison.
+> Measured groundwork done this session: **285 functions** in `public`, **267,630 bytes** of
+> definition text, **80** bodies containing `--`, and **1** function (`qb_vault_put`) where a `--`
+> sits inside a string literal and would be mis-normalised by the naive strip.
+> Building C's normaliser first and reusing it here is why C builds before D.
+
 
 **D3c — `apps/web/.env.local.example` is stale.** It documents Stripe only. The app reads 28
 variables. Rebuild it: every variable name the app reads, **no values**, grouped, with a comment on

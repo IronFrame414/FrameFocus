@@ -59,6 +59,28 @@ Reply-To resolves through `resolveCompanyReplyTo()`: company email, then owner p
 
 **FILL-C1** — Confirm line 370 and every other place warming mail sets or inherits Reply-To.
 
+> **MEASURED [S108].** `warming-email.ts:370` **confirmed** — `replyToCompanyId: company.id`, and it
+> is the **only** place warming mail sets or inherits a Reply-To. Sole caller:
+> `app/api/cron/email-warming/route.ts`. `sendEmail()` prefers an explicit `params.replyTo` over
+> `replyToCompanyId` (`email-service.ts:588-596`), so the fix is a one-line substitution **at the
+> call site** — the shared resolver is untouched, which is why no other email type can be affected
+> by construction. `resolveCompanyReplyTo()` (`:501-529`) is `companies.email` → owner profile
+> email → null, so `h-h-signature-renovations` (company email NULL) resolves to the owner's personal
+> Gmail exactly as the spec states.
+>
+> **Comments that move with the code — three, not two:**
+> 1. `warming-email.ts:365-368` — the "replying is more useful than opening" note.
+> 2. `lib/email/templates/warming-email.tsx:25-26` — repeats the `replyToCompanyId` claim.
+> 3. ⚠️ **`email-service.ts:56-60`, which Spec C did not name.** The `SUPPORT_REPLY_TO` docstring
+>    asserts the sending domain *"has no inbox — so a Reply-To on the domain would silently eat
+>    replies."* The Spaceship catch-all makes that **false**, and it is the exact sentence a future
+>    reader would cite to reject this ruling. Correcting it is part of C1.
+>
+> **Recommended address:** pass `replyTo: from` — i.e. reuse `buildSenderAddress()`'s own output, so
+> From and Reply-To are provably the same string rather than two constructions that could drift.
+> This satisfies the ruling exactly (`<slug>@ezcontractorbinder.com`). See ASK-C1.
+
+
 ---
 
 ## C2 — Schema drift detection, as a cron route
@@ -88,29 +110,163 @@ Reply-To resolves through `resolveCompanyReplyTo()`: company email, then owner p
 baseline lives, how it surfaces, cost per run, one route or two)? Does `npm run db:verify` exist on
 `main`? Quote both, or say they are absent.
 
+> **MEASURED [S108]. Two answers, and they differ.**
+>
+> **(a) The cron-route proposal is ABSENT.** `grep -in "cron"` and
+> `grep -in "drift|fingerprint|db:verify|replay"` over `docs/sessions/S107-report.md` (438 lines)
+> and `docs/specs/S107-spec.md` both return **nothing**; a control grep on the same files proved
+> they could fire. `S107-live-suite-repair.md` mentions "cron" only inside test names. **There is
+> nothing to quote. The design is new work in S108** and is set out under FILL-C3 to FILL-C8.
+>
+> **(b) `npm run db:verify` DOES exist on `main`**, landed in `536a43e`. Quoted:
+> `package.json:18` — `"db:verify": "python3 scripts/db-replay-schema.py"`, with the companion
+> `scripts/db-verify.sql`. It replays the migration FILES and fingerprints tables, columns,
+> NOT NULL, CHECK, UNIQUE and FK. Its own docstring states the gap this route must close:
+> *"5. FUNCTION BODIES, RLS POLICIES, TRIGGERS, INDEXES, DEFAULTS, GRANTS. Out of scope."*
+> ⚠️ Its output file `scripts/.db-expected.json` is **gitignored** (`.gitignore:72`) — so the
+> committed baseline FILL-C4 asks for does not exist yet.
+>
+> **⚠️ CORRECTION TO THE "Established by S107" BLOCK ABOVE.** It records *"all 223 migration files"*
+> and *"231 CHECK"*. Both are **pre-revert** figures: `2e7c4e6` deleted `20261610000000` outright
+> and dropped its constraint and ledger row from rebuild-test (*"checks 231 -> 230, latest migration
+> 20261600000000"*). Re-measured this session, **both sides, and they agree exactly**:
+>
+> | | replay of **222** files | live rebuild-test |
+> | --- | --- | --- |
+> | tables | 123 | 123 |
+> | columns | 1918 | 1918 |
+> | NOT NULL | 772 | 772 |
+> | CHECK | **230** | **230** |
+> | UNIQUE | 42 | 42 |
+> | FK | 566 | 566 |
+> | latest ledger version | — | `20261600000000` |
+>
+> **Zero drift on rebuild-test, measured rather than claimed.** The ledger also matches the files
+> exactly: 222 rows, 222 distinct versions, 0 MCP-signature rows, ordered-version md5
+> `d0d8670294d11ffa303e2d26341f46e4` on both sides.
+
+
 **FILL-C3** — ⚠️ **What to fingerprint:** NOT NULL, CHECK (by definition text), UNIQUE, FK, RLS
 policies (by definition text), triggers, and function bodies. **MCP `apply_migration` strips comments
 from function bodies** — state how bodies are normalised so a comment-strip is not drift but a changed
 statement is.
+
+> **MEASURED [S108].** Fingerprint **four dimensions**, each as a count plus an md5 over a stably
+> ordered rendering, so a mismatch names the dimension:
+> `pg_policies` (definition text: `cmd`, `roles`, `qual`, `with_check`) · `pg_get_triggerdef()` ·
+> `pg_get_functiondef()` (normalised, below) · `pg_get_constraintdef()` for `c`/`u`/`f`/`p`.
+> Live counts on rebuild-test: policies **363**, triggers **268**, functions **285**,
+> constraints **961**. Total function-definition text **267,630 bytes**, largest body 10,911.
+>
+> **⚠️ NORMALISATION — and the naive answer is measurably wrong.** Stripping every `--` to
+> end-of-line, then collapsing whitespace, makes an MCP comment-strip look identical while a changed
+> statement still differs. But measured against the live catalog by **counting single quotes before
+> the `--` on each line** (odd ⇒ inside a string literal):
+>
+> - `--` that is a real comment: **391 occurrences**
+> - `--` **inside a string literal: 2 occurrences, in 1 function — `qb_vault_put`**, both in `RAISE`
+>   message text (`'… for company % -- a company row still points at this secret …'`).
+>
+> A naive strip truncates those two messages, so an edit to the text after the `--` would be
+> **invisible to the detector**. **So: strip a line comment only when the quote count before it on
+> that line is even.** Block comments: **0 function bodies contain `/*`**, so that arm is untested in
+> practice and must be written defensively rather than relied on.
+>
+> *(Recorded because it is this campaign's named failure class: my first probe used `'[^']*--` and
+> reported 80/80 — a false positive, since any earlier quote anywhere in the body satisfies it.)*
+
 
 **FILL-C4** — ⚠️ **Where the baseline lives.** Comparing to the previous run detects change, not
 correctness. Propose: baseline = the fingerprint computed from the migration files at build time
 (committed), compared against the live fingerprint. State how the baseline is regenerated when a
 migration lands, so a legitimate push doesn't alarm.
 
+> **MEASURED + PROPOSED [S108].** Comparing a run to the previous run detects change, not
+> correctness — agreed, and that is why the baseline is **committed, not remembered**.
+>
+> **The baseline is a committed JSON file, `scripts/.db-fingerprint.json`**, holding the four counts
+> and four md5s. ⚠️ It **cannot** be derived by replaying the migration files the way `db:verify`
+> does: `db-replay-schema.py` is a regex DDL parser, and policy bodies, trigger definitions and
+> function bodies are not reconstructible that way (its docstring says so, and its own history — five
+> reported discrepancies that were all parser bugs — is the warning). **So the baseline is generated
+> from rebuild-test**, which is legitimate *only because* the table in FILL-C2 proves rebuild-test and
+> the migration tree are in exact agreement on every dimension `db:verify` CAN check. That agreement
+> is the baseline's warrant and must be re-asserted whenever it is regenerated.
+>
+> **Regeneration when a migration lands:** `npm run db:fingerprint` (new) writes the file from the
+> linked project, refusing any ref that is not rebuild-test — the same guard `scripts/live-sql.mjs`
+> already applies. The rule is: **`db push` to rebuild-test, then `db:verify` must still show exact
+> agreement, then re-fingerprint, and commit the JSON in the SAME commit as the migration.** A
+> legitimate push that forgets the last step alarms once — which is the correct failure direction.
+> ⚠️ `.gitignore:72` must **not** be extended to the new file.
+
+
 **FILL-C5** — ⚠️ **The 15th cron.** `vercel.json` has 14 entries. S103: a malformed entry failed a
 deploy with eleven migrations already on production. The S107 test that parses `vercel.json` must
 pin the new entry's path and schedule too. Alternatively fold into an existing cron — **state why or
 why not**, per the S104 reasoning (fold only when the domain and blast radius are shared).
 
+> **MEASURED [S108]. A FIFTEENTH CRON, not a fold — and the reasoning is the S104 test applied, not
+> waived.** `apps/web/vercel.json` (note: **not** repo root) holds exactly **14** entries, confirmed
+> by parsing it. S104's rule is *fold only when the domain and blast radius are shared* — and schema
+> drift shares neither with any of the fourteen. Folding it into, say, `qb-sync` would hide a
+> platform-integrity check inside a tenant integration that **stops silently when that integration
+> breaks**, which is the failure the check exists to catch. The route's own neighbour,
+> `/api/cron/email-warming`, records the identical reasoning for the fourteenth.
+>
+> **The S103 risk is closed by a TEST, not by avoiding the file.** `apps/web/test/email-warming.test.ts`
+> already `JSON.parse`s `vercel.json` in CI and pins **both** the warming entry's path and schedule
+> **and** that the other thirteen exist with well-formed five-field schedules (`:36-66`). The new
+> entry — `/api/cron/schema-drift`, `0 11 * * *` — is pinned the same way, and the "other thirteen"
+> assertion becomes "other fourteen".
+
+
 **FILL-C6** — How it surfaces. `notify()` exists; propose a type. Owner only.
+
+> **MEASURED + PROPOSED [S108].** `notify()` exists (`lib/notify/notify.ts:163`) and a new type
+> needs **three registries moved together**, which the union's own comment spells out: the
+> `NotificationType` union (`:76-107`), the `notifications_type_check` CHECK (migration), and
+> `email_types`/`EmailType` **only if it is emailed**. Proposed: **`schema_drift`, in-app + push
+> only, NOT emailed** — matching the `selection_approved` / `po_item_missing` / `qb_sync_blocked`
+> precedents, so no `email_types` row and no second CHECK widening.
+>
+> ⚠️ **But `notify()` is TENANT-scoped and schema drift is not.** It takes a `companyId` and writes
+> per-recipient rows for that company's people. Notifying "Owner only" therefore means **every
+> tenant's owner**, and a contractor cannot act on — and should not see — a platform-integrity
+> alert. `platform_admins` exists as a table but has no `profiles` row for `notify()` to write to.
+> **This is a genuine design fork and is raised as ASK-C2**, with the drift detail (which object
+> changed) kept out of any tenant-visible body regardless of which arm is chosen.
+
 
 **FILL-C7** — Cost per run against production on MICRO compute (dedicated 2-core, 1 GB). Schedule:
 daily is likely enough.
 
+> **MEASURED, not estimated [S108].** The full four-dimension fingerprint query returned in
+> **0.536 s wall, including the network round-trip from this Codespace**, against rebuild-test on
+> MICRO. It reads `pg_catalog` only — **no tenant table is touched, so cost does not grow with row
+> count** and is identical on production. **Schedule: daily, `0 11 * * *`** (07:00 EDT — before the
+> working day, and off the 13:00/14:00 cluster the other crons already occupy).
+
+
 **FILL-C8** — ⚠️ **State plainly what it cannot catch:** a statement hand-applied and reverted
 between runs; anything inside a function built with dynamic SQL; data drift (it checks schema, not
 rows).
+
+> **MEASURED [S108]. What it cannot catch, stated plainly:**
+> 1. **A statement hand-applied and reverted between runs.** The fingerprint is a daily snapshot; a
+>    change made and undone inside 24 h leaves no trace in it.
+> 2. **Anything inside a function built with dynamic SQL** (`format()` / `EXECUTE`). The function
+>    BODY is fingerprinted, so an edit to the body is caught — but DDL that body *executes* at
+>    runtime is not attributable to it.
+> 3. **Data drift.** It checks schema, never rows. `#3-deliv`'s class — a constraint that is
+>    **wrong rather than missing** — appears in both the tree and the database and reports perfectly
+>    clean. Only a test that performs the operation catches that (`s138-trial-deletion-run.live.ts`).
+> 4. **A `--` inside a string literal in a function body**, if the normaliser is written naively.
+>    Measured: 2 such lines exist today, both in `qb_vault_put`. FILL-C3 specifies the quote-parity
+>    strip that closes this.
+> 5. **Indexes, defaults and grants** — deliberately out of scope for this pass, as they are for
+>    `db:verify`. Named so the omission is a decision, not an oversight.
+
 
 ---
 
