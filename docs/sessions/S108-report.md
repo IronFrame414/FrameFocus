@@ -1168,3 +1168,47 @@ Verified first rather than trusted: entry headings across all three files top ou
 greps return 304 and 210, which are CI run numbers inside prose, not entries), and no branch on
 origin allocates #158 as an entry. Bare number on a branch, by Josh's explicit instruction — the
 #157 precedent — with the authority **advanced to #159 in the same commit**. Nothing renumbered.
+
+### D2a — `#157`, the `desktop-chat-switcher` flake — ⚠️ **FIRST ATTEMPT CONTAMINATED BY MY OWN PUSHES; discarded**
+
+I ran the file "solo" — one dev server via `scripts/e2e-preflight.sh`, `--project=chromium
+--workers=1`, no local suite running. **Printed `PW_EXIT_LINE=0`, and that line is a mask:**
+`3 passed, 2 flaky` — `:31` (ordering: PROJECT_TEST listed above QA_A) and `:88` (PROJECT_TEST's
+unread already `0`) **failed on first attempt** and passed on retry. `:62`, #157's own test, passed
+first time. (`retries: 1` locally; a retry restarts the worker, which **re-runs `beforeAll` and
+reseeds**, so a pass-on-retry proves nothing about the first attempt.)
+
+**Then I checked the Actions API, which I should have done BEFORE the run.** CI run
+`35715351774` — triggered by my own push of the Spec C merge to `feature/s108` — was
+**`in_progress` for the entire window**, and its Playwright job drives the same rebuild-test and
+tears down / reseeds **these same two projects**. My D-branch commits had queued more runs
+(`cancel-in-progress` cancelled most, but one was running). **So this was not a solo run on an idle
+database; it was exactly the run-against-run collision #157 describes, created by me.** Both
+first-attempt failures are the collision's fingerprint (another process reseeding PROJECT_TEST
+after my seed; another process's owner session reading it). **Result discarded as evidence either
+way.** And it cuts the other way too: **CI run `35715351774` may carry a false red that I
+manufactured** — contention makes false reds, never false greens (#157's own asymmetry). Its result
+is checked below rather than assumed.
+
+**The rule this teaches, stated for the next session:** "idle rebuild-test" means **no CI run
+queued or in progress on ANY branch**, checked by API immediately before the run, **and no push
+until it finishes** — because under "push after every commit" the session itself is the most
+likely second consumer. Redone below under exactly that condition.
+
+### D2a — `#157` DECIDED on a genuinely idle database — **contention, not a defect. CLOSED.**
+
+Redone under exactly the rule written above:
+- B's in-progress work **stashed**, so the tree under test was D's alone; dev server restarted on it
+  through `scripts/e2e-preflight.sh` (pid 42227, bound 3000).
+- **`ACTIVE_RUNS 0`** on the Actions API immediately before, and **`ACTIVE_RUNS_AFTER 0`** after.
+  No push in between. The two CI runs I had triggered both finished first — and both **green**
+  (`35715351774` feature/s108, `35715904649` feature/s108-d-tooling), so my earlier overlapping
+  run did NOT manufacture a red in either.
+- `npx playwright test e2e/desktop-chat-switcher.spec.ts --project=chromium --workers=1
+  --retries=0` → **`PW_EXIT_LINE=0`, `5 passed (1.0m)`, every test on its FIRST attempt**, `:62`
+  (#157's own) included. `--retries=0` so no pass can hide behind a retry.
+
+**Verdict:** #157 was run-against-run contention. The evidence is two-sided — the idle run is clean,
+and the contaminated run earlier reproduced the collision fingerprint on the same file's `:31` and
+`:88`. **#157 moved to `TECH_DEBT_CLOSED.md`** with this evidence (48 lines out of OPEN, full text in
+git history); #150's bullet gets a one-line pointer, since this is evidence FOR #150's class.
