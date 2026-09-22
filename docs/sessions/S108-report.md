@@ -1131,3 +1131,14 @@ E2E_PASSWORD=
 # NODE_ENV (Next.js), VERCEL_ENV (Vercel: production | preview | development).
 # DB_VERIFY_OUT is an optional output-path override for `npm run db:verify`.
 ```
+
+### D3d — STATE.md stale rows — **verified and corrected** (8-line diff; no reflow, formatter off)
+
+| row | S107 state | now |
+| --- | --- | --- |
+| Send Email Hook | ✅ already correct — **ON [LIVE, 2026-09-10]**, superseded `Off` quoted | unchanged |
+| Custom SMTP | ❌ still read `None` as a live fact | marked **historical**, moot while the Hook is ON |
+| Auth email rate limit | ❌ still read *"2 per hour, project-wide … while GoTrue is the sender"* | **3/address/hour · 50/project/hour · `auth_recovery` exempt from the 50 only** — values read from `auth-email.ts:384-387`, not the spec; superseded text quoted |
+
+Also annotated the blockquote under the table whose *"nothing else has replaced it"* was true on
+2026-09-10 and stopped being true the next day.
