@@ -1267,3 +1267,41 @@ exactly the movement the two migrations predict. `db:functions`: **289/289 exact
    line item and it belonged to a SENT change order, so the insert tripped the immutability trigger
    instead of the CHECK under test. Scoped to `change_orders.status = 'draft'` — ordering alone
    would only have made the wrong pick stable.
+
+### B, UI half — **built; proven by screenshot and by the gate below**
+
+- **Items tab** (`items-tab.tsx`): header "Price" → **"Cost"** (the markup/margin header untouched,
+  per the ruling); category header = **filled indigo "Add Items"**, outlined **"+ Subcategory"**
+  (shortened), outlined **"+ Add Line" — KEPT, the ruling beats the mockup**, and a **red-outlined
+  square line-icon trash** (lucide `Trash2`) replacing the 🗑 emoji at all four sites; heavier
+  weight and larger text. Module-local styles only — no other screen changes (FILL-B1/ASK-B5).
+- **Metrics card** (`EstimateHealthStrip`): stacked small-caps labels over large mono figures —
+  Your cost · Client price · **Profit (green; red if negative)** · Margin, the target note beneath
+  it, and "Find a line…" inside the card on the right. Same derivation as Details, unchanged.
+- **"N pts under target"**: `marginTargetGap()` in `lib/estimate-health.ts`, used by BOTH the strip
+  and the Details bar, so "on target" (ASK-B1) reads identically on both. Absent when no target is
+  set. Stale "no target exists" comments corrected in both files, superseded text quoted.
+- **Drag-reorder**: a grab handle FAR LEFT of every line (`GripVertical`), native HTML5 DnD from
+  the handle only; drop onto a line = land before it, adopting its category/subcategory; dashed
+  "drop at the end of …" zones per category/subcategory appear only while dragging; a category
+  header is also a drop target. **Keyboard/touch alternative:** the handle is a focusable button;
+  ↑/↓ move one step in display order (crossing categories), announced via an `aria-live` region.
+  Handles hide while "Find a line…" filters (neighbours would be invisible). Writes go through the
+  ONE atomic RPC; order is renumbered estimate-globally in display order (the proposal and billing
+  read one global `sort_order`).
+- **Square foot**: the unit select on estimate labor rows, the desktop CO builder, and — new — the
+  **mobile CO editor's add-row form** all render the ONE shared list (`laborUnits`/`laborUnitLabels`
+  in `packages/shared`). The mobile CO editor previously offered no unit at all. **ASK-B2:**
+  switching a row to sq ft BLANKS a rate that still equals the hourly prefill (row then reads
+  unpriced); a rate the user typed is kept.
+
+**Audit 7 — before/after, the LIVE screen on rebuild-test, owner, estimate `202994aa…`
+("Condo Renovation"), committed to `docs/design/screenshots/`:**
+`S108-B-before-desktop.png`, `S108-B-after-desktop.png`, `S108-B-before-phone.png` (400px),
+`S108-B-after-phone.png`. Captured by the same script against the same dev server, the UI files
+stashed for "before". Desktop horizontal overflow **0 → 0 px**.
+⚠️ **Phone width, stated plainly:** overflow **594 px before, 588 after**. The whole desktop shell
+(fixed sidebar, wide rows table) does not fit 400px, and the line name collides with the TOTAL
+figure — **identically in the before capture**, so neither is introduced by B. The new buttons
+wrap and stay tappable. This is a `/dashboard` screen at phone width — TECH_DEBT #101's territory,
+not fixed here.

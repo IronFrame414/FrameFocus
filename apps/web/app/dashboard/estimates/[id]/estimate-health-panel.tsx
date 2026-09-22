@@ -9,8 +9,11 @@
 //   · Coverage check — scope is estimate-level JSONB, categories are rows; no
 //     FK, no shared key. Matching free-typed names would produce confident
 //     wrong answers. NOT BUILT AS DESIGNED (§8.10.3).
-//   · The target-margin bar — no target exists (§6b.2). Health renders margin
-//     as a number, never against a target.
+//   · [S108 B] _Superseded, quoted: "The target-margin bar — no target exists
+//     (§6b.2). Health renders margin as a number, never against a target."_
+//     The target exists (`companies.margin_target_percent`, 20261110000000).
+//     The Details tab renders the bar; the Items-tab strip below renders the
+//     "N pts under target" note. Both word it through marginTargetGap().
 //   · View tracking — BUILT (P3, proposal-view-tracking-spec): proposal_views
 //     rows written by the signing page via service role; `viewed_at` stamped
 //     on the first counted view; status 'viewed' retired unused. "Opens"
@@ -20,7 +23,7 @@
 
 import { useEffect, useState } from 'react';
 import type { TabProps } from './estimate-builder';
-import { computeEstimateHealth } from '@/lib/estimate-health';
+import { computeEstimateHealth, marginTargetGap } from '@/lib/estimate-health';
 import {
   getProposalViewStats,
   type ProposalViewStats,
@@ -130,9 +133,29 @@ export function EstimateHealthCard({ data }: Pick<TabProps, 'data'>) {
   );
 }
 
-/** The Items tab's compact strip (the mockup's live cost/price/margin line) —
- *  the SAME derivation as the Details card, never a second implementation. */
-export function EstimateHealthStrip({ data }: Pick<TabProps, 'data'>) {
+/** The Items tab's metrics card — the SAME derivation as the Details card,
+ *  never a second implementation.
+ *
+ *  [S108 Spec B ruling #4] Restyled as the design's card: stacked small-caps
+ *  labels over large figures — Your cost · Client price · **Profit** (new to
+ *  the strip, not to the code: EstimateHealthCard already shows it) · Margin,
+ *  with the "N pts under target" note beneath the margin and the "Find a line…"
+ *  box on the right (passed in as `trailing`, since the filter state belongs to
+ *  the Items tab).
+ *
+ *  ⚠️ FLOOR (FILL-B3): only Owner, Admin and the authoring PM can SELECT an
+ *  estimate at all (estimates_select_authenticated), and all three are entitled
+ *  to the cost basis — so no role reaches this card and is shown a false
+ *  Profit. Asserted live in s108-line-items.live.ts. */
+export function EstimateHealthStrip({
+  data,
+  marginTarget = null,
+  trailing,
+}: Pick<TabProps, 'data'> & {
+  /** companies.margin_target_percent — null means "no comparison", by ruling. */
+  marginTarget?: number | null;
+  trailing?: React.ReactNode;
+}) {
   const { estimate, lineItems, rows } = data;
   const health = computeEstimateHealth({
     grandTotal: estimate.grand_total,
@@ -140,53 +163,89 @@ export function EstimateHealthStrip({ data }: Pick<TabProps, 'data'>) {
     lineItems,
     rows,
   });
+  const gap = marginTargetGap(health.marginPercent, marginTarget);
 
-  const cell: React.CSSProperties = { display: 'flex', gap: '0.375rem', alignItems: 'baseline' };
-  const label: React.CSSProperties = { fontSize: '0.6875rem', color: color.mutedAlt };
+  const label: React.CSSProperties = {
+    fontFamily: font.mono,
+    fontSize: '0.6875rem',
+    fontWeight: 600,
+    letterSpacing: '0.06em',
+    textTransform: 'uppercase',
+    color: color.mutedAlt,
+    marginBottom: '0.3rem',
+  };
+  const figure: React.CSSProperties = {
+    fontFamily: font.mono,
+    fontSize: '1.375rem',
+    fontWeight: 700,
+    color: color.navy,
+    lineHeight: 1.1,
+  };
+  const marginColor =
+    health.marginPercent === null
+      ? color.faint
+      : health.marginPercent < 0
+        ? color.danger
+        : gap?.direction === 'under'
+          ? color.warning
+          : gap?.direction === 'over'
+            ? color.success
+            : color.navy;
 
   return (
     <div
       data-testid="est-health-strip"
       style={{
         display: 'flex',
-        gap: '1.5rem',
-        alignItems: 'baseline',
+        alignItems: 'center',
+        gap: '2rem',
         flexWrap: 'wrap',
         border: `1px solid ${color.cardBorder}`,
-        borderRadius: '9px',
-        padding: '0.5rem 0.875rem',
+        borderRadius: '14px',
+        padding: '1rem 1.25rem',
         marginBottom: '1rem',
-        backgroundColor: color.tableHeadBg,
+        backgroundColor: color.cardBg,
       }}
     >
-      <span style={cell}>
-        <span style={label}>Your cost</span>
-        <span style={monoValue}>{fmtMoney(health.cost)}</span>
-      </span>
-      <span style={cell}>
-        <span style={label}>Client price</span>
-        <span style={monoValue}>{fmtMoney(health.price)}</span>
-      </span>
-      <span style={cell}>
-        <span style={label}>Margin</span>
-        <span
-          style={{
-            ...monoValue,
-            color:
-              health.marginPercent === null
-                ? color.faint
-                : health.marginPercent < 0
-                  ? color.danger
-                  : color.navy,
-          }}
+      <div>
+        <div style={label}>Your cost</div>
+        <div style={figure}>{fmtMoney(health.cost)}</div>
+      </div>
+      <div>
+        <div style={label}>Client price</div>
+        <div style={figure}>{fmtMoney(health.price)}</div>
+      </div>
+      <div>
+        <div style={label}>Profit</div>
+        <div
+          data-testid="est-health-profit"
+          style={{ ...figure, color: health.profit < 0 ? color.danger : color.success }}
         >
-          {health.marginPercent === null ? '—' : `${health.marginPercent}%`}
-        </span>
-      </span>
+          {fmtMoney(health.profit)}
+        </div>
+      </div>
+      <div style={{ borderLeft: `1px solid ${color.cardBorder}`, paddingLeft: '2rem', alignSelf: 'stretch', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+        <div style={label}>Margin</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+          <span style={{ ...figure, color: marginColor }}>
+            {health.marginPercent === null ? '—' : `${health.marginPercent}%`}
+          </span>
+          {/* ASK-B1 — absent with no target; "on target" at parity. */}
+          {gap && (
+            <span
+              data-testid="est-health-target-note"
+              style={{ fontSize: '0.75rem', fontWeight: 600, lineHeight: 1.2, maxWidth: '6.5rem', color: marginColor }}
+            >
+              {gap.direction === 'on' ? 'on target' : `${gap.label} target`}
+            </span>
+          )}
+        </div>
+      </div>
+      {trailing && <div style={{ marginLeft: 'auto' }}>{trailing}</div>}
       {health.unpricedRowCount + health.flatLinesMissingCost > 0 && (
-        <span style={{ fontSize: '0.75rem', color: color.warning }}>
+        <div style={{ flexBasis: '100%', fontSize: '0.75rem', color: color.warning }}>
           {health.unpricedRowCount + health.flatLinesMissingCost} unpriced — cost is understated
-        </span>
+        </div>
       )}
     </div>
   );
