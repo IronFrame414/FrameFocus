@@ -2,6 +2,9 @@
 
 **CC PREPARES. JOSH EXECUTES. CC runs NOTHING in this file against production.**
 
+**Status: READY [S108 Phase 3].** The runbook is the first section below; the FILLs after it are the
+reference it was built from.
+
 For every item: CC writes the exact statement, command, or click path; the verification query;
 and what a correct result looks like. Josh runs it, attended, one at a time.
 
@@ -32,6 +35,257 @@ like.
 deploys to production, and S108 adds migrations production does not have — **so the migrations in
 step 1 go FIRST, and the merge in step 2 SECOND.** CC merges each spec branch into **`feature/s108`**
 only.
+
+
+---
+
+# ▶ THE RUNBOOK — Josh runs this top to bottom, attended, one step at a time [S108 Phase 3]
+
+**Prepared by CC. Nothing in it has been run against production.** Every SQL block below is
+read-only unless its heading says **WRITE**. Every column it names was checked against the live
+rebuild-test schema on 2026-09-22 (one error in the original E1 query — `email_types.name` — is
+corrected: the column is `email_type`).
+
+**Where to run SQL:** Supabase dashboard → the **production** project (`jwkcknyuyvcwcdeskrmz`) →
+SQL Editor. ⚠️ **The SQL Editor is for the READ-ONLY checks and the one-line UPDATEs only. Never
+paste a migration file into it** (S104: the clipboard silently truncated two files and left ledger
+rows for work that never ran). Migrations go through `supabase db push` in STEP 1.
+
+## STEP 0 — Before anything: production row counts (read-only)
+
+Run each block and keep the output. Each says what correct looks like; **stop if it does not**.
+
+```sql
+-- 0.1  The ledger tip. EXPECT: 20261570000000 — the file just below the three owed
+--      deliverability migrations (S107's record: production lacks exactly 580/590/600).
+--      CC could not check this; it has no production access by design. If it is
+--      anything else, STOP: STEP 1's dry-run list will not be the eight below.
+SELECT max(version) FROM supabase_migrations.schema_migrations;
+
+-- 0.2  Notification types in use. EXPECT: every value is one of
+--      mention, assignment, incident, signed, reminders_exhausted, discrepancy,
+--      timesheet_ready, daily_log_missing, still_clocked_in, contract_signed,
+--      punch_assigned, low_stock, trial_warning, selection_approved, selection_denied,
+--      po_item_missing, qb_sync_blocked.
+--      Two S108 migrations re-create notifications_type_check; a value outside that
+--      list would make them ABORT. Any other value → STOP and report it.
+SELECT type, count(*) FROM notifications GROUP BY 1 ORDER BY 1;
+
+-- 0.3  (B) Labor units in use. A WIDENING check governs none of them — this proves it.
+--      EXPECT: only NULL, 'hours', 'days' in both.
+SELECT 'estimate' AS t, labor_unit, count(*) FROM estimate_line_rows
+ WHERE row_type = 'labor' GROUP BY 1, 2
+UNION ALL
+SELECT 'change_order', labor_unit, count(*) FROM change_order_line_rows
+ WHERE row_type = 'labor' GROUP BY 1, 2 ORDER BY 1, 2;
+
+-- 0.4  (B, FILL-B9) Labor rows entered as hours that are really square feet.
+--      INFORMATION ONLY — DO NOT MIGRATE THEM (ASK-B4 → A).
+SELECT count(*) AS hours_rows,
+       count(*) FILTER (WHERE coalesce(quantity, 0) > 40) AS qty_over_40
+  FROM estimate_line_rows WHERE row_type = 'labor' AND labor_unit = 'hours';
+
+-- 0.5  (B) Lines whose category belongs to a DIFFERENT estimate. EXPECT: 0.
+--      The containment trigger governs FUTURE writes only — a non-zero count does not
+--      block the migration, but those rows would refuse a later category change. Report it.
+SELECT count(*) FROM estimate_line_items li
+  JOIN estimate_categories c ON c.id = li.category_id
+ WHERE c.estimate_id <> li.estimate_id;
+
+-- 0.6  (A) Estimate statuses. The widened CHECK governs none. EXPECT: no 'site_visit'.
+SELECT status, count(*) FROM estimates GROUP BY 1 ORDER BY 2 DESC;
+
+-- 0.7  (A) THE 20261610000000 SHAPE — understood, not merely run. EXPECT already_null = 0.
+--      S108 ships NO constraint pairing status with estimate_number; this is the count
+--      that any future such constraint would have to be written against.
+SELECT count(*) AS total, count(*) FILTER (WHERE estimate_number IS NULL) AS already_null
+  FROM estimates;
+```
+
+## STEP 1 — Apply every owed migration with ONE `supabase db push`
+
+**The owed list — eight files, in this order:**
+
+| # | file | what it does to production | reversible? |
+| --- | --- | --- | --- |
+| 1 | `20261580000000_email_type_sub_bid_request` | one `email_types` row | delete the row |
+| 2 | `20261590000000_email_warming` | one `email_types` row; `companies.email_warming_enabled` (default **false**) | drop column / delete row |
+| 3 | `20261600000000_autoconfirm_invited_signup` | ⚠️ **user-visible at once: invited users stop receiving a confirmation email** (P3) | `DROP TRIGGER on_auth_user_created_autoconfirm ON auth.users` |
+| 4 | `20261620000000_schema_fingerprint` | two functions; re-creates `notifications_type_check` + `schema_drift` | drop functions; restore CHECK |
+| 5 | `20261630000000_labor_unit_sq_ft` | widens two labor-unit CHECKs | re-narrow (only if no sq_ft rows exist) |
+| 6 | `20261640000000_line_item_containment_and_reorder` | one trigger; one INVOKER RPC | drop both |
+| 7 | `20261650000000_site_visit` | `site_visit` status; `estimate_number` nullable; the immutability trigger amended; four `site_visit_*` tables + `ai_transcription_logs`; ten RPCs; re-creates `notifications_type_check` + `site_visit_recorded` | see the migration header — additive except the two trigger/CHECK restatements |
+| 8 | `20261660000000_ai_transcription_logs_detachable` | that log's `company_id` nullable, FK `ON DELETE CASCADE` — identical to `ai_tag_logs`, so tenant deletion can detach it | re-add NOT NULL (only while no detached rows exist) |
+
+`20261610000000` **does not exist** and is not owed (deleted outright in `2e7c4e6`).
+
+**In the Codespace terminal, in the repo root, on `feature/s108` (NOT main):**
+
+```bash
+git fetch origin && git checkout feature/s108 && git pull --ff-only
+cat supabase/.temp/linked-project.json          # 1. what is linked NOW (expect rebuild-test)
+npx supabase link --project-ref jwkcknyuyvcwcdeskrmz   # 2. link PRODUCTION (asks for the DB password)
+cat supabase/.temp/linked-project.json          # 3. CONFIRM it now says jwkcknyuyvcwcdeskrmz
+npx supabase db push --dry-run                  # 4. EXPECT exactly the 8 files above, in order
+npx supabase db push                            # 5. apply — answer y
+npx supabase link --project-ref nmyphyhmfttxkdoposvf   # 6. RE-LINK REBUILD-TEST, always
+cat supabase/.temp/linked-project.json          # 7. CONFIRM nmyphyhmfttxkdoposvf
+```
+
+⚠️ If step 4 lists anything other than those eight, **stop** — production has drifted from the
+ledger and the S104 lesson applies. If step 5 fails part-way, **still do step 6**, then report the
+printed output; do not retry blind.
+
+**Verify the OBJECTS, not the ledger (production SQL Editor, read-only):**
+
+```sql
+SELECT max(version) FROM supabase_migrations.schema_migrations;          -- EXPECT 20261660000000
+SELECT email_type FROM email_types
+ WHERE email_type IN ('sub_bid_request', 'warming') ORDER BY 1;          -- EXPECT 2 rows
+SELECT column_default FROM information_schema.columns
+ WHERE table_schema = 'public' AND table_name = 'companies'
+   AND column_name = 'email_warming_enabled';                             -- EXPECT 1 row: false
+SELECT tgname FROM pg_trigger WHERE tgname IN
+  ('on_auth_user_created_autoconfirm', 'estimate_line_items_containment');  -- EXPECT 2 rows
+SELECT proname FROM pg_proc WHERE proname IN
+  ('schema_fingerprint', 'reorder_estimate_lines', 'create_site_visit',
+   'promote_site_visit', 'site_visit_access')  ORDER BY 1;                -- EXPECT 5 rows
+SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public'
+   AND table_name IN ('site_visits', 'site_visit_notes', 'site_visit_measurements',
+                      'site_visit_voice_notes', 'ai_transcription_logs'); -- EXPECT 5
+SELECT pg_get_constraintdef(oid) FROM pg_constraint
+ WHERE conname = 'estimates_status_check';                               -- EXPECT includes site_visit
+SELECT is_nullable FROM information_schema.columns
+ WHERE table_name = 'estimates' AND column_name = 'estimate_number';     -- EXPECT YES
+SELECT pg_get_constraintdef(oid) FROM pg_constraint
+ WHERE conname = 'notifications_type_check';        -- EXPECT includes schema_drift AND site_visit_recorded
+SELECT is_nullable FROM information_schema.columns
+ WHERE table_name = 'ai_transcription_logs' AND column_name = 'company_id';  -- EXPECT YES
+SELECT schema_fingerprint();                        -- keep the output — see STEP 2's note
+```
+
+## STEP 2 — Merge `feature/s108` into `main` and push (THIS deploys to production)
+
+Only after STEP 1 verified. From the repo root:
+
+```bash
+git checkout main && git pull --ff-only && git merge --no-ff feature/s108 -m "merge: S108 — email+drift, tooling, estimates line items, site visit" && git push origin main
+```
+
+Then wait for the Vercel deployment to go **Ready** before STEPS 3–5.
+
+**Two variables to set in Vercel → Project → Settings → Environment Variables (Production):**
+- `SCHEMA_DRIFT_COMPANY_ID` = Worth Properties' company id, from
+  `SELECT id FROM companies WHERE slug = 'worth-properties';`. Unset is supported (drift is still
+  reported in the cron's response and log); set, the Owner is notified in-app + push.
+- `OPENAI_API_KEY` — **confirm it is present** (photo tagging already uses it); site-visit voice
+  transcription needs it. Nothing to add if it is.
+
+⚠️ **The first daily drift run on production may report `functions` drift.** The baseline is
+rebuild-test's catalogue, whose function bodies S108 re-synced to the migration files (D3b). If any
+production body was ever deployed through MCP or the SQL Editor it will differ textually. Compare the
+`schema_fingerprint()` output kept in STEP 1 with `scripts/.db-fingerprint.json`: equal `n` with a
+different `functions.md5` is that case, not a schema change. Report it; do not "fix" production by
+hand.
+
+## STEP 3 — Arm the warming sender, and confirm the first send (including the FOLDER)
+
+Preconditions: STEP 1 and STEP 2 done (Reply-To fix C1 is deployed); `CRON_SECRET` already set.
+
+**Have the off-switch ready BEFORE arming (WRITE):**
+```sql
+UPDATE companies SET email_warming_enabled = false;   -- every company, no WHERE
+```
+**Arm ONE company (WRITE):**
+```sql
+UPDATE companies SET email_warming_enabled = true WHERE slug = 'worth-properties';
+```
+The cron fires `*/15 13-22 * * 1-5` UTC and most ticks deliberately send nothing (~12/company/week),
+so the first send may be hours away — correct behaviour. Then:
+```sql
+SELECT created_at, recipient_email, sender_email, subject, status, resend_message_id,
+       delivered_at, opened_at, metadata
+  FROM email_logs WHERE email_type = 'warming' ORDER BY created_at DESC LIMIT 20;
+```
+**Correct:** `status = 'sent'`, `resend_message_id` set, `sender_email =
+'Worth Properties <worth-properties@ezcontractorbinder.com>'`. `delivered_at` appearing proves the
+Resend webhook repoint.
+
+⚠️ **WHICH INBOX, WHICH FOLDER.** Open the mailbox in that row's `recipient_email` — never a guess.
+**Check Spam/Junk explicitly.** "Arrived" and "arrived in spam" are different results; record which.
+Then **reply to it**: the reply goes to `worth-properties@ezcontractorbinder.com`, catch-all
+forwarded to `EZContractorBinder@gmail.com` — a reply arriving THERE (not in the owner's personal
+inbox) is the end-to-end proof of C1.
+
+## STEP 4 — The P3 real-invite check, then the sub bid-request real send
+
+**4a. P3.** Sign in to production as the Worth Properties Owner → Team → invite an address you
+control at a role below Admin → accept and complete signup from that inbox.
+- **Correct:** NO "confirm your email" message arrives; the new user signs straight in.
+- **Where to read the result:** it is a LOG line, not a response body and not `email_logs` (when P3
+  suppresses, nothing is sent, so nothing is logged). Vercel → the deployment → Runtime Logs →
+  filter `/api/auth/send-email`. ⚠️ **Vercel shows GMT-4**: 17:41 on screen is 21:41 UTC.
+- **Expected text:** the diagnosis contains **`P3: SUPPRESSED`**. A "NOT suppressed" line names the
+  precondition that failed (no invitation matched, token did not resolve, different tenant) — **a
+  result to report, not a failure to retry**: that user simply got the confirmation email, as
+  before.
+
+**4b. Sub bid-request.** (`20261580000000` must already be applied — STEP 1 — or the mail sends
+and its log row is silently lost.)
+1. Production → Subcontractors → New, in Worth Properties, email **`JSBishop14@gmail.com`**.
+2. A **draft** estimate → Bidding → add that sub → **Send bid request**.
+3. Open the mail in that inbox (check Spam), follow the link, **upload a real file**.
+4. Back in the app: the estimate's **Files** tab shows it.
+```sql
+SELECT created_at, email_type, recipient_email, status, resend_message_id
+  FROM email_logs WHERE email_type = 'sub_bid_request' ORDER BY created_at DESC LIMIT 5;
+SELECT created_at, file_name, file_size, estimate_id, project_id
+  FROM files WHERE estimate_id IS NOT NULL ORDER BY created_at DESC LIMIT 5;
+```
+**Correct:** one `sent` row with a message id; one `files` row with `estimate_id` set and
+**`project_id` NULL**.
+
+## STEP 5 — Field checklists (a real phone, a real jobsite)
+
+Record for every row: **the phone, the OS version, and what actually appeared.** A pass is "what
+the right-hand column says happened, happened" — never "no error was seen".
+
+### 5a. Burst photos (the E5 table below, unchanged)
+⚠️ The true burst path is the **library picker with multiple**; the in-app camera is one-per-tap by
+design. Use the E5 table in this file.
+
+### 5b. Site visit (S108 Spec A) — as a CREW MEMBER, then as the Owner
+
+| # | do this | the phone / desk should show |
+| --- | --- | --- |
+| 1 | Crew: Field → **Site visits** → Record a site visit; new contact + new address | lands on the visit; the office (Owner/Admin/PMs) gets a "Site visit recorded" notification |
+| 2 | Add a **condition** and a **scope** note | they appear under SEPARATE headings |
+| 3 | Add a measurement 12 × 14 | reads **168 sq ft**; the section total updates |
+| 4 | Add two **blockers**; tick one | "1 blocker still open"; the ticked one is struck through |
+| 5 | Add 5+ photos from the library | all appear; none silently dropped |
+| 6 | **Airplane mode ON**, add 2 photos | "saved on this phone — upload when signal returns"; a "waiting for signal" count |
+| 7 | Airplane mode OFF | the count drains to 0 on its own; the photos appear once, not twice |
+| 8 | Record a **30-second voice note** with a saw running nearby | audio plays back; a transcript appears; misheard words can be edited |
+| 9 | Record one **in Spanish** | the transcript is **in Spanish** — no translation |
+| 10 | Airplane mode ON, record a voice note | held on the phone; transcribed after signal returns |
+| 11 | Start recording and leave it running | it **stops itself at 10:00** and is saved (the cap) |
+| 12 | Owner, desktop: Estimates → "Site visits waiting to be priced" → the visit → **Create estimate from this visit** | it becomes a Draft with the NEXT estimate number; no number was used by the visit |
+| 13 | Crew again, same visit | still reads every note/photo/transcript; **cannot add or edit** anything; sees NO dollar figure anywhere |
+| 14 | Crew: record a throwaway visit, then Owner abandons it | it leaves the list; no estimate number was consumed |
+
+
+## AFTER THE RUNBOOK — also Josh's, unordered, listed so none is lost
+
+- **Paste `apps/web/.env.local.example`** — the full content is in `docs/sessions/S108-report.md`
+  under "D3c" (CC's session cannot read or write that path). 27 variables, no values.
+- **Rebuild the Codespace** when convenient — `gh` (devcontainer feature) and Claude Code
+  (post-create) only appear after a REBUILD, not a restart (D1d / ASK-D2).
+- **QuickBooks production connect** — prerequisites in E6 below; the connect is its own session.
+- **E7** — rotate the two Resend keys; decide the three old tenants (read-only census query in E7).
+
+---
+
+# Reference — the FILLs the runbook was built from
 
 ---
 
@@ -66,6 +320,8 @@ stop receiving a confirmation email.**
 > **Object verification — verify the OBJECT, not the ledger row:**
 > ```sql
 > SELECT name FROM email_types WHERE name IN ('sub_bid_request','warming');   -- expect 2 rows
+> -- ⚠️ [S108 Phase 3] WRONG — the column is `email_type`, not `name`; this line would ERROR.
+> -- Quoted, not deleted. The runbook above uses the corrected query.
 > SELECT column_name, column_default FROM information_schema.columns
 >  WHERE table_schema='public' AND table_name='companies'
 >    AND column_name='email_warming_enabled';                                  -- expect 1 row, default false

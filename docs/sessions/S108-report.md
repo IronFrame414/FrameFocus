@@ -1486,3 +1486,25 @@ failure. No `language`, no `prompt`, and never `/audio/translations`.
 | `e2e/m-site-visit-voice.spec.ts` (real screen, real route, Chromium fake mic) | **`PW_EXIT_LINE=0`, 2 passed**, `VOICE_E2E transcript_status=done`: one voice note, an `audio/*` file row with bytes, one cost row |
 
 Fixtures swept (0 left). **Voice is finished; nothing about it is deferred.**
+
+---
+
+## A merged; Spec E finished — the last commit before the final CI run
+
+- A's CI run **`35729690489` @ `a36c89c9` — green on both jobs** (Playwright included, with the new
+  `m-site-visit` and `m-site-visit-voice` specs); the overlapping `feature/s108` run
+  `35727723051` @ `df8daae9` also **green**. CI idle (`ACTIVE 0`) before merging.
+- `feature/s108-a-site-visit` merged `--no-ff` → **`cbf7bc22`** (tree byte-identical to A's tip).
+  Gate on the merged tree: **`TSC 0 · LINT 0 · BUILD 0` (BUILD_ID) · `VITEST 0` — 97 files, 1313
+  tests.**
+- **Spec E is a runbook now**, first section of `S108-SPEC-E-production-and-attended.md`: STEP 0
+  read-only production counts (each with its expected answer and a stop condition) → STEP 1 the
+  **eight** owed migrations by ONE `supabase db push`, link checked before and re-linked after,
+  object-level verification → STEP 2 the single merge-to-main command, plus two Vercel variables →
+  STEP 3 warming arming with the off-switch first, and which inbox AND which folder → STEP 4 the P3
+  real invite (where the log line is, GMT-4) and the sub bid-request real send → STEP 5 the burst and
+  site-visit field checklists → an unordered list of Josh's other items.
+  Every column the runbook's SQL names was checked against the live schema; **the original E1 query
+  (`email_types.name`) would have errored — the column is `email_type`**, corrected and the wrong
+  line quoted in place. The expected production tip was also corrected (560 → **570**, since
+  `20261570000000` exists) and marked as unverifiable by CC.
