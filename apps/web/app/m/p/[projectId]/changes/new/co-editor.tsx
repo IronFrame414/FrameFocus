@@ -14,12 +14,19 @@ import {
   type ChangeOrderLineItemWithRows,
   type ChangeOrderLineRow,
   type ChangeOrderWithChildren,
+  type CoLaborUnit,
   type CoRowType,
 } from '@/lib/services/change-orders-client';
+import {
+  laborUnitLabel,
+  laborUnitLabels,
+  laborUnits,
+} from '@framefocus/shared/validation/estimate-items';
 import { SetMobileHeader } from '../../../../mobile-header';
 import { formatMoney } from '../../../../mobile-ui';
 import {
   ErrorNotice,
+  FieldLabel,
   OfflineNotice,
   PrimaryButton,
   SecondaryButton,
@@ -556,7 +563,7 @@ function RowBlock({
                 inputMode="decimal"
               />
               <TextField
-                label={`Quantity (${row.labor_unit ?? 'hours'})`}
+                label={`Quantity (${laborUnitLabel(row.labor_unit)})`}
                 value={quantity}
                 onChange={(v) => setQuantity(moneyInput(v))}
                 testId="m-co-row-quantity"
@@ -650,6 +657,10 @@ function NewRowForm({
   const [quantity, setQuantity] = useState('');
   const [unitCost, setUnitCost] = useState('');
   const [amount, setAmount] = useState('');
+  // S108 ASK-B6 — PARITY with the desktop CO builder, which has always offered
+  // a labor unit. This screen previously offered none (every new labor row was
+  // 'hours'), so a square-foot change was not recordable from a phone at all.
+  const [laborUnit, setLaborUnit] = useState<CoLaborUnit>('hours');
 
   const ready =
     name.trim() !== '' &&
@@ -674,13 +685,28 @@ function NewRowForm({
             required
           />
           <TextField
-            label="Hours"
+            label={`Quantity (${laborUnitLabels[laborUnit]})`}
             value={quantity}
             onChange={(v) => setQuantity(moneyInput(v))}
             testId="m-co-new-row-quantity"
             inputMode="decimal"
             required
           />
+          <div className="mt-[14px]">
+            <FieldLabel>Unit</FieldLabel>
+            <select
+              data-testid="m-co-new-row-labor-unit"
+              value={laborUnit}
+              onChange={(e) => setLaborUnit(e.target.value as CoLaborUnit)}
+              className="h-[48px] w-full rounded-[12px] border border-m6m-border bg-m6m-card px-[12px] text-[15px] text-m6m-navy"
+            >
+              {laborUnits.map((u) => (
+                <option key={u} value={u}>
+                  {laborUnitLabels[u]}
+                </option>
+              ))}
+            </select>
+          </div>
         </>
       ) : rowType === 'material' || rowType === 'allowance' ? (
         <>
@@ -735,6 +761,7 @@ function NewRowForm({
                 // 'each', sub/other opt-in. Passing null here would override a
                 // default with an invalid value on a NOT NULL column.
                 rate: rowType === 'labor' ? num(rate) : null,
+                ...(rowType === 'labor' ? { labor_unit: laborUnit } : {}),
                 quantity:
                   rowType === 'labor' || rowType === 'material' || rowType === 'allowance'
                     ? num(quantity)

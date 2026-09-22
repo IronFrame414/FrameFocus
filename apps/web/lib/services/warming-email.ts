@@ -364,10 +364,40 @@ export async function runEmailWarming(
         from,
         to,
         subject,
-        // Reply-To resolves to the SENDING COMPANY [Josh]: a reply must be a
-        // real reply to a real address, because a reply is the signal that
-        // counts for most and the copy asks for one.
-        replyToCompanyId: company.id,
+        // ⚠️ REPLY-TO IS THE `from` VALUE ITSELF, NOT A RESOLVED ADDRESS.
+        // RULED [Josh, S108 C1 / ASK-C1 -> A].
+        //
+        // WHAT THIS REPLACES, quoted rather than deleted: this call used to pass
+        // `replyToCompanyId: company.id`, which resolves through
+        // resolveCompanyReplyTo() — companies.email, then the OWNER's profile
+        // email. For `h-h-signature-renovations`, whose companies.email is NULL,
+        // that resolved to a REAL PERSON's personal Gmail: a friend of Josh's who
+        // never asked for warming mail. Arming the sender would have mailed him.
+        // For `worth-properties` it resolved to a DIFFERENT DOMAIN, so a reply
+        // built no engagement for ezcontractorbinder.com — the one thing the
+        // whole exercise exists to build.
+        //
+        // WHY `from` AND NOT A SEPARATELY BUILT SLUG ADDRESS. Both would produce
+        // `<slug>@ezcontractorbinder.com` today. Passing the SAME STRING makes
+        // From and Reply-To provably one mailbox rather than two constructions
+        // that can drift — if buildSenderAddress() ever changes shape, this
+        // follows it for free instead of silently disagreeing with it.
+        //
+        // WHY A REPLY IS NOW WORTH ASKING FOR, which was NOT true when this
+        // sender was written: ezcontractorbinder.com has INBOUND mail — Spaceship
+        // catch-all forwarding to EZContractorBinder@gmail.com. Before that, a
+        // Reply-To on the domain would have silently eaten every reply. So the
+        // copy's "replying is more useful than opening" is now literally true: a
+        // reply to this address is inbound engagement Gmail attributes to the
+        // domain, and it actually arrives somewhere.
+        //
+        // ⚠️ NO OTHER EMAIL TYPE CHANGES. This is a call-site override, not a
+        // change to resolveCompanyReplyTo(), so real client mail (proposals,
+        // invoices, change orders, the three reminder crons) still resolves to
+        // the company's own settings email exactly as before. sendEmail()
+        // prefers an explicit `replyTo` over `replyToCompanyId`, which is why
+        // one line here is the whole change.
+        replyTo: from,
         react: WarmingEmail({ body, preview: subject }),
         // ⚠️ NO `unsubscribe`. RULED [Josh]: skip List-Unsubscribe. The ruled
         // scope is the recurring CLIENT class (reminder, co_reminder,

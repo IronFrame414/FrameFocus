@@ -1,0 +1,17 @@
+{
+  // S108 D1a — markdown is NEVER formatted on save in this repo.
+  //
+  // The devcontainer turns on Prettier format-on-save for every file
+  // (.devcontainer/devcontainer.json). On markdown that re-pads every table
+  // on each save: a one-line edit to one cell of CLAUDE.md's Technology Stack
+  // table measured 34 changed lines (S108), a two-line edit earlier produced a
+  // 77-line diff, and TECH_DEBT.md is already 295 lines Prettier-unclean on
+  // main. A diff that size buries the real change.
+  //
+  // This file takes effect WITHOUT a rebuild (workspace settings override the
+  // machine settings the devcontainer seeds). `.prettierignore` backs it up for
+  // anything that runs Prettier outside the editor.
+  "[markdown]": {
+    "editor.formatOnSave": false
+  }
+}

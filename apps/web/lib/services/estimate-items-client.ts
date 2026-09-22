@@ -84,6 +84,15 @@ export async function getCompanyDefaultLaborRate(): Promise<number | null> {
   return data?.default_labor_rate ?? null;
 }
 
+/** S108 Spec B #4 — the company margin target the Items-tab strip compares
+ *  against. Nullable by ruling: unset means "no comparison", never 0. RLS
+ *  returns the caller's own company row only. */
+export async function getCompanyMarginTarget(): Promise<number | null> {
+  const supabase = createClient();
+  const { data } = await supabase.from('companies').select('margin_target_percent').maybeSingle();
+  return data?.margin_target_percent ?? null;
+}
+
 // ── Categories ──
 
 export type CreateCategoryInput = Pick<
@@ -255,6 +264,25 @@ export async function updateEstimateLineItem(
   if (!data || data.length === 0) {
     return { success: false, error: 'Line item not found or estimate not editable' };
   }
+  return { success: true };
+}
+
+/** S108 Spec B #5 — apply a drag/keyboard reorder in ONE transaction.
+ *  `moves` comes from planLineMove() (lib/estimate-line-order.ts). The RPC is
+ *  SECURITY INVOKER: RLS (draft only; a PM only their own draft) and the
+ *  containment trigger are the authority, and it raises rather than silently
+ *  updating nothing when RLS filters a row out. */
+export async function reorderEstimateLines(
+  estimateId: string,
+  moves: Array<{ id: string; category_id: string; subcategory_id: string | null; sort_order: number }>
+): Promise<Result> {
+  if (moves.length === 0) return { success: true };
+  const supabase = createClient();
+  const { error } = await supabase.rpc('reorder_estimate_lines', {
+    p_estimate_id: estimateId,
+    p_moves: moves,
+  });
+  if (error) return { success: false, error: error.message };
   return { success: true };
 }
 

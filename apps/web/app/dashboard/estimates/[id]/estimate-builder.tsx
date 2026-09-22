@@ -35,6 +35,7 @@ import EstimateFilesTab from './estimate-files-tab';
 import { ReviewSendSheet } from './review-send-sheet';
 import { useConfirm } from '@/components/confirm/confirm-provider';
 import { color } from '@/lib/theme';
+import { requireEstimateNumber } from '@/lib/estimate-number';
 
 export type BuilderRole = 'owner' | 'admin' | 'project_manager';
 
@@ -412,7 +413,7 @@ export function EstimateBuilder({
             {estimate.status !== 'accepted' && (
               <ConvertToProject
                 estimateId={estimate.id}
-                estimateNumber={estimate.estimate_number}
+                estimateNumber={requireEstimateNumber(estimate)}
                 status={estimate.status}
                 projectId={estimate.project_id}
                 variant="button"
@@ -424,7 +425,7 @@ export function EstimateBuilder({
         {/* Post-signature conversion prompt (5A §8; also shows the converted link) */}
         <ConvertToProject
           estimateId={estimate.id}
-          estimateNumber={estimate.estimate_number}
+          estimateNumber={requireEstimateNumber(estimate)}
           status={estimate.status}
           projectId={estimate.project_id}
           variant="banner"
@@ -707,7 +708,7 @@ export function EstimateBuilder({
         <CloneModal
           sourceId={estimate.id}
           sourceName={estimate.name}
-          sourceNumber={estimate.estimate_number}
+          sourceNumber={requireEstimateNumber(estimate)}
           onClose={() => setCloneOpen(false)}
         />
       )}

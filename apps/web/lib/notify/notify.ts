@@ -106,7 +106,23 @@ export type NotificationType =
   // payment account, a GL account name, or an answer to a customer-name
   // conflict. Owner/Admin only; the body carries `last_error` verbatim, which
   // can contain money. CHECK value in 20261410000000.
-  | 'qb_sync_blocked';
+  | 'qb_sync_blocked'
+  // S108 C2 — the daily schema-drift check found the live catalogue no longer
+  // matching the committed fingerprint. CHECK value in 20261620000000, same
+  // commit. In-app + push only; not emailed, so `email_types` is deliberately
+  // untouched.
+  //
+  // ⚠️ NOT TENANT DATA, AND THE RECIPIENT IS NOT "every Owner" [Josh, S108
+  // FILL-C6]. notify() is tenant-scoped and schema drift is not: a contractor
+  // can neither act on a platform-integrity alert nor should be shown one. The
+  // route resolves ONE company BY ID and writes to that Owner alone, and the
+  // body carries NO drift detail — which dimension moved is read from the
+  // route's response and the server log, never from a row a tenant can see.
+  | 'schema_drift'
+  // S108 Spec A, ASK-A4 — a site visit was recorded; Owner, Admin and every
+  // PM are told. CHECK value in the site-visit migration, same commit.
+  // In-app + push only; not emailed, so `email_types` is untouched.
+  | 'site_visit_recorded';
 
 export interface NotifyParams {
   admin: SupabaseClient<Database>;

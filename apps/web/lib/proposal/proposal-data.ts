@@ -8,6 +8,7 @@ import {
   type RowType,
 } from '@framefocus/shared/utils/estimate-totals';
 import { proposalFormatShowsCost } from '@framefocus/shared/utils/proposal-format';
+import { requireEstimateNumber } from '@/lib/estimate-number';
 
 const ROW_TYPES: readonly RowType[] = ['labor', 'material', 'subcontractor', 'other', 'allowance'];
 
@@ -365,7 +366,7 @@ export async function getProposalData(
     },
     estimate: {
       id: estimate.id,
-      number: estimate.estimate_number,
+      number: requireEstimateNumber(estimate),
       version: derivedVersion,
       name: estimate.name,
       status: estimate.status,

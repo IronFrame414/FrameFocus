@@ -1,0 +1,1532 @@
+# S108 — Session report
+
+**Branch base:** `feature/s108` @ `f1b2de1` (five specs + four mockups committed there, not on `main`).
+**`main`:** `ad4e9b8`.
+**Started:** 2026-09-22.
+
+This file is appended after every step and pushed. Assume the Codespace dies without warning.
+
+---
+
+## Phase 1 — Analyze (read-only)
+
+### Step 0 — Orientation
+
+- Confirmed on `feature/s108`, tip `f1b2de1`, working tree clean.
+- Five specs present and read in full:
+  - `docs/specs/S108-SPEC-A-site-visit.md` (178 lines)
+  - `docs/specs/S108-SPEC-B-estimates-line-items.md` (141)
+  - `docs/specs/S108-SPEC-C-email-and-drift.md` (136)
+  - `docs/specs/S108-SPEC-D-tooling-tests-housekeeping.md` (123)
+  - `docs/specs/S108-SPEC-E-production-and-attended.md` (82)
+- Four mockups present in `docs/design/mockups/`.
+
+---
+
+### Step 1 — Spec C measured
+
+**Tooling guard checked first:** `cat supabase/.temp/linked-project.json` →
+`{"ref":"nmyphyhmfttxkdoposvf","name":"framefocus-rebuild-test",...}`. Every live read below went
+through `scripts/live-sql.mjs`, which is read-only (rejects any write keyword) and refuses any ref
+other than `nmyphyhmfttxkdoposvf`. **No production read or write.**
+
+#### C1 — warming Reply-To
+
+- **Confirmed `apps/web/lib/services/warming-email.ts:370`** — `replyToCompanyId: company.id`, the
+  only place warming mail sets Reply-To. Sole caller: `apps/web/app/api/cron/email-warming/route.ts`.
+- `sendEmail()` (`email-service.ts:588-596`) prefers an explicit `params.replyTo` over
+  `replyToCompanyId`, so the fix is a one-line substitution at the call site — no change to the
+  shared resolver, therefore no other email type can be affected by construction.
+- `resolveCompanyReplyTo()` (`email-service.ts:501-529`) is `companies.email` → owner profile email
+  → null. `h-h-signature-renovations` has `companies.email` NULL, so warming today resolves to the
+  owner's personal Gmail. **Defect confirmed as specified.**
+- Two comments also state the old behaviour and must move with the code:
+  `warming-email.ts:365-368` and `apps/web/lib/email/templates/warming-email.tsx:25-26`.
+- ⚠️ **A third comment is now factually stale and Spec C did not name it.**
+  `email-service.ts:56-60` (the `SUPPORT_REPLY_TO` docstring) asserts the sending domain
+  *"has no inbox — so a Reply-To on the domain would silently eat replies."* The Spaceship catch-all
+  makes that false, and it is the exact sentence a future reader would cite to reject C1's ruling.
+  Correcting it is part of C1.
+
+#### C2 — drift detection
+
+- **FILL-C2, first half: the cron-route proposal does NOT exist.** `grep -in "cron"` and
+  `grep -in "drift|fingerprint|db:verify|replay"` over `docs/sessions/S107-report.md` (438 lines)
+  and `docs/specs/S107-spec.md` return **nothing**; both greps were proved able to fire by a control
+  grep on the same files. `docs/sessions/S107-live-suite-repair.md` mentions "cron" only as test
+  names. **The design is new work in S108.**
+- **FILL-C2, second half: `npm run db:verify` DOES exist on `main`** — `package.json:18`
+  `"db:verify": "python3 scripts/db-replay-schema.py"`, landed in `536a43e`, with the companion
+  `scripts/db-verify.sql`. It replays the migration files and fingerprints tables, columns,
+  NOT NULL, CHECK, UNIQUE, FK. Its own docstring lists what it cannot see:
+  *"FUNCTION BODIES, RLS POLICIES, TRIGGERS, INDEXES, DEFAULTS, GRANTS. Out of scope."*
+- ⚠️ **`scripts/.db-expected.json` is GITIGNORED** (`.gitignore:72`). The baseline FILL-C4 asks for
+  ("committed") does not exist as a committed artefact today.
+
+**Measured, both sides, this session:**
+
+| dimension | replay of 222 migration files | live rebuild-test |
+| --- | --- | --- |
+| tables | 123 | 123 |
+| columns | 1918 | 1918 |
+| NOT NULL | 772 | 772 |
+| CHECK | **230** | **230** |
+| UNIQUE | 42 | 42 |
+| FK | 566 | 566 |
+| latest ledger version | — | `20261600000000` |
+
+**Exact agreement. Zero drift on rebuild-test, measured rather than claimed.**
+
+⚠️ **Correction to Spec C's "Established by S107" block.** It records *"all 223 migration files"*
+and *"231 CHECK"*. Both are pre-revert figures. `2e7c4e6` deleted `20261610000000` outright and
+dropped its constraint and ledger row from rebuild-test (*"checks 231 -> 230, latest migration
+20261600000000"*). The file count is **222** and the CHECK count is **230**. Spec C and Spec E
+(FILL-E1) corrected.
+
+**The dimensions the drift route must add**, counted live on rebuild-test:
+RLS policies **363**, triggers **268**, functions **285**, indexes 525, constraints (c/u/f/p) **961**.
+Total `pg_get_functiondef` text: **267,630 bytes**, largest single body 10,911 bytes.
+
+**Cost (FILL-C7), measured not estimated.** A single catalog query computing four md5 digests over
+policies + triggers + function bodies + constraints returned in **0.536 s wall including the
+round-trip from this Codespace**. It reads `pg_catalog` only — no tenant table is touched, so cost
+does not grow with row count.
+
+**⚠️ FILL-C3, comment normalisation — the naive answer is measurably wrong.** Stripping every `--`
+to end-of-line is the obvious normaliser. Measured against the live catalog by counting single
+quotes before the `--` on each line (odd = inside a literal):
+
+- `--` that is a real comment: **391 occurrences**
+- `--` that sits **inside a string literal: 2 occurrences, in 1 function — `qb_vault_put`**, both in
+  `RAISE` message text (`'... for company % -- a company row still points at this secret ...'`).
+
+A naive strip truncates those two messages, so an edit to the text after the `--` would be
+**invisible to the detector**. The normaliser must strip a line comment only when the quote count
+before it on that line is even. (My first probe for this used `'[^']*--`, which reported 80/80 — a
+false positive, because any earlier quote anywhere in the body satisfies it. Re-measured with quote
+parity. Recorded because it is this campaign's named failure class.)
+
+---
+
+### Step 2 — Spec D measured
+
+#### D1a — the markdown formatter
+
+- **The formatter is the VS Code Prettier extension, configured by a COMMITTED repo file:**
+  `.devcontainer/devcontainer.json` → `customizations.vscode.settings` sets
+  `"editor.defaultFormatter": "esbenp.prettier-vscode"` and `"editor.formatOnSave": true`, and lists
+  `esbenp.prettier-vscode` in `extensions`.
+- **`.vscode/settings.json` does NOT exist** (`.vscode/` is absent). `.gitignore:27-29` ignores
+  `.vscode/*` but explicitly un-ignores `settings.json` and `extensions.json` — so creating it is
+  the mechanism the repo already anticipates. It is also the one that takes effect **without a
+  rebuild**: workspace settings override the machine settings a devcontainer seeds.
+- **No `.prettierignore` exists.** `.prettierrc` is 5 lines (`printWidth: 100`).
+- **No CI step runs Prettier over `.md` or anything else** — `grep -in "prettier|format"` over
+  `.github/workflows/ci.yml` returns one unrelated prose line.
+
+**Damage measured, not assumed** (all on scratch copies; no repo file reformatted):
+
+| file | `npx prettier --write` changes |
+| --- | --- |
+| `CLAUDE.md` | 4 lines |
+| `STATE.md` | 6 lines |
+| **`TECH_DEBT.md`** | **295 lines** |
+
+`TECH_DEBT.md` is confirmed Prettier-unclean on `main`, exactly as Spec D warns. **Not reformatted.**
+
+The live failure mode reproduced: a **one-line** edit to the `CLAUDE.md` Technology Stack table
+whose cell is wider than the current column → **34 changed lines** (every row re-padded).
+⚠️ My first attempt at this measured 6 lines and also showed Prettier rewriting a `typescript`
+fence's quotes — both artefacts of running on a copy in `/tmp`, **outside the repo, where
+`.prettierrc` does not apply**. Re-run with `--config .prettierrc`. Recorded because it is the
+named failure class.
+
+#### D1b — the pre-push `next build` hook
+
+⚠️ **The premise is already satisfied by CI.** `.github/workflows/ci.yml`:
+
+- `on: push: branches: ['**']` — every branch, plus `concurrency` with `cancel-in-progress`.
+- Job `check` runs type-check, lint, vitest. **No build.**
+- Job **`e2e` runs `next build` as its own step** — line 295, `- name: Build (production)` /
+  `run: npm run build`, working-directory `apps/web`. **No `if:`, no `needs:`** — it runs on every
+  branch push, unconditionally. Its own comment records why it is a separate step (`#135`).
+
+So a pre-push hook would duplicate a check that already gates every push. Local build timing is
+being measured in this session and is reported in the ASK. → **ASK-D1.**
+
+#### D1c — `db:verify` and the ledger
+
+`npm run db:verify` exists and is **schema-only**. Its docstring: *"FUNCTION BODIES, RLS POLICIES,
+TRIGGERS, INDEXES, DEFAULTS, GRANTS. Out of scope."* A full-text grep for
+`ledger|schema_migrations|duplicate|md5` over `scripts/db-replay-schema.py` returns **only the two
+docstring lines naming the ledger as a BLIND SPOT**. **It does not check the ledger at all.**
+
+Measured on rebuild-test this session:
+
+- `supabase_migrations.schema_migrations`: **222 rows**, 222 distinct versions, **0 null names**,
+  **0 rows whose name is not a `2026%` version** (no MCP-signature rows).
+- Ordered-version md5: **`d0d8670294d11ffa303e2d26341f46e4`** — **identical** to the md5 of the 222
+  migration filenames on disk. Files-not-in-ledger: none. Ledger-not-in-files: none.
+
+So the ledger check has to be **built**, and rebuild-test is a clean baseline to build it against.
+
+#### D1d — `gh`
+
+- **`gh` is not installed** (`command not found`). Devcontainer feature:
+  `ghcr.io/devcontainers/features/github-cli:1`. ⚠️ Applies on **rebuild**, not restart.
+- `GITHUB_TOKEN` is present (length reported only, **value never printed**). `x-oauth-scopes` on
+  `GET /user` is **empty** — a fine-grained Codespaces token, not a classic scoped PAT.
+
+Probed by HTTP status, token passed in a header and never echoed:
+
+| call | result |
+| --- | --- |
+| `GET /repos/{owner}/{repo}` | **200** |
+| `GET /repos/.../actions/runs` | **200** |
+| `GET /repos/.../actions/workflows` | **200** |
+| `GET /repos/.../pulls` | **200** |
+| `GET /repos/.../issues` | **200** |
+| `GET /repos/.../branches/main/protection` | **403** |
+| `GET /repos/.../actions/secrets` | **403** |
+
+Consistent with S107's measured **403 on the Actions cancel API**. **What `gh` buys here:
+`gh run list` / `gh run view` / `gh run watch`** — which is exactly the tool the standing "quiet
+period until the run is green" rule needs. **What it cannot do: cancel a run, read branch
+protection, read or write secrets.** Creating a PR was **not probed** (it would create one).
+
+#### D2b — the directly-invoked-handler class, every suspect classified
+
+The question `#1-deliv` says to ask of each: *does this handler read state that its caller is
+concurrently writing?*
+
+| test | asserts | timing-dependent? | verdict |
+| --- | --- | --- | --- |
+| `auth-email-hook-signature-headers.test.ts` | `/api/auth/send-email` accepts `webhook-*` AND `svix-*`, refuses neither → 400 | No — pure request-shape | **covered** |
+| `s160-auth-email.live.ts` A1/A2 | P3 auto-confirm | **Was the defect** | **covered — already fixed**: A1/A2 inverted to assert the *trigger* (`on_auth_user_created_autoconfirm`) with the superseded lines quoted, plus **A1c**, a discriminating control ("no invitation, no auto-confirm") |
+| `webhook-resend.live.ts` | delivered/opened/bounced stamping, rank monotonicity, bad sig → 401, **unknown id → 200** | Yes — a Resend event can beat our own `logEmail()` INSERT | **covered**: case 6 is exactly that race, and it is asserted |
+| `card-signup-webhook.test.ts` (`/api/stripe/webhook`) | `mode:setup` sets `payment_method_on_file` | No — Stripe calls out-of-band | **covered for handler logic; event SHAPE uncovered — and the file already says so** in its header ("MOCK-VERIFIED, NOT ROUND-TRIP-VERIFIED… Josh must confirm the real event"). This is the explicit note `#1-deliv` asks for, already present. |
+| `s107-estimate-files-route-order.test.ts` | session read precedes the admin client | No — ordering inside one request | **covered**, and line 102 is a MIRROR case so the assertion is not vacuous |
+| `s107-bid-request-send-order.test.ts` | floor precedes service-role client; origin guard precedes send | No | **covered** |
+| `email-unsubscribe.live.ts` | token roundtrip, one-click idempotence, forged token writes nothing, bounce guard outranks consent | No | **covered** |
+| `s146-generate-route.live.ts` | lien-release arms, route floor, caller cannot choose type | No | **covered** |
+| `s174-selections-email.live.ts`, `s175-stage6`, `s175-stage7` | selection release/offer/spec-sheet/portal pick+sign | No | **covered** |
+| `signed-url-error-contract.test.ts` | 403 vs 500 kept distinguishable, cause logged | No | **covered** |
+
+**Result: the class has exactly one member, and it is already fixed.** No suspect remaining is
+timing-dependent; one (`card-signup-webhook`) has a declared shape gap that is Josh's to close in
+Stripe test mode. Nothing was weakened to reach this.
+
+#### D3a — the committed key
+
+`docs/sessions/context2.md:12` — line number in the spec is **correct**. It carries a partial
+publishable key (value redacted at D3a — revoked 2026-09-21) alongside
+`https://jwkcknyuyvcwcdeskrmz.supabase.co`, which `STATE.md:38` confirms is **production**. Nine
+other files mention `sb_publishable` generically; this is the only committed value.
+
+#### D3c — `.env.local.example`
+
+Current content (11 lines, read via `git show`): Supabase URL/anon key, six Stripe values,
+`NEXT_PUBLIC_APP_URL=https://frame-focus-eight.vercel.app` — the **pre-rebrand** domain.
+
+**The app reads exactly 28 distinct variables — the spec's figure is confirmed exactly.** Measured
+over `app/`, `lib/`, `components/`, `middleware.ts`, `test/`, `e2e/`, `packages/`, `scripts/`:
+
+`CRON_SECRET, DISABLE_BILLING_ENFORCEMENT, E2E_EMAIL, E2E_PASSWORD, EMAIL_SEND_ENABLED,
+NEXT_PUBLIC_APP_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY, NEXT_PUBLIC_SUPABASE_URL,
+NEXT_PUBLIC_VAPID_PUBLIC_KEY, NODE_ENV, OPENAI_API_KEY, QBO_CLIENT_ID, QBO_CLIENT_SECRET,
+QBO_ENVIRONMENT, RESEND_API_KEY, RESEND_SIGNING_SECRET, SEND_EMAIL_HOOK_SECRET,
+STRIPE_PRICE_BUSINESS, STRIPE_PRICE_PROFESSIONAL, STRIPE_PRICE_STARTER, STRIPE_SECRET_KEY,
+STRIPE_WEBHOOK_SECRET, SUPABASE_ACCESS_TOKEN, SUPABASE_SERVICE_ROLE_KEY,
+UNSUBSCRIBE_TOKEN_SECRET, VAPID_PRIVATE_KEY, VAPID_SUBJECT, VERCEL_ENV`
+
+⚠️ My first sweep returned **42** because it included `apps/web/.next`, the build output — Next.js
+internals (`__NEXT_*`, `NEXT_OTEL_*`) and the bundled `resend` package's own variables. Re-scoped to
+source. Same failure class again; recorded.
+
+- **`NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` is in the example file and the app never reads it** — a
+  stale entry to drop, not a variable to document.
+- ⚠️ **BLOCKER: I cannot read or write `apps/web/.env.local.example` with my tools** — the path is
+  denied by this session's permission settings (both Read and Bash `cat` refused; the content above
+  came from `git show HEAD:…`). Writing the rebuilt file is likely to be refused the same way. Noted
+  for Phase 2; I will attempt it in Phase 3 and, if refused, deliver the exact file content for Josh
+  to paste.
+
+#### E6, measured early because the files were open
+
+- **`QBO_REALM_ID` is NOT read from the environment anywhere.** The realm arrives on Intuit's
+  callback and is stored as `companies.qb_realm_id` (unique index `idx_companies_qb_realm_id`);
+  requests build it from `conn.realmId` (`client.ts:77`).
+- Production path reads **`QBO_CLIENT_ID`, `QBO_CLIENT_SECRET`, `QBO_ENVIRONMENT`**, plus
+  `NEXT_PUBLIC_APP_URL` for the redirect.
+- ⚠️ **`QBO_ENVIRONMENT` fails to SANDBOX, silently.** `config.ts:65` —
+  `process.env.QBO_ENVIRONMENT === 'production' ? 'production' : 'sandbox'`. A typo, or the variable
+  being absent, points production at `sandbox-quickbooks.api.intuit.com` with no error.
+- API host: `https://quickbooks.api.intuit.com` (prod) vs `https://sandbox-quickbooks.api.intuit.com`.
+  OAuth hosts are the same for both (`appcenter.intuit.com`, `oauth.platform.intuit.com`).
+- Redirect URI is computed, not configured: `config.ts:121-124` →
+  `${NEXT_PUBLIC_APP_URL without trailing slash}/api/quickbooks/callback`.
+- `QBO_SCOPE = 'com.intuit.quickbooks.accounting'` — accounting only, with the irreversibility
+  warning already in the file.
+
+---
+
+### Step 3 — Spec B measured
+
+**FILL-B0** — `main` = `ad4e9b8`; working branch `feature/s108` @ `f1b2de1`; tree clean.
+
+**FILL-B1 — the components, and the trash is NOT shared.**
+
+| piece | file |
+| --- | --- |
+| category header, line card, row table, all buttons | `app/dashboard/estimates/[id]/items-tab.tsx` (1443 lines) |
+| metrics strip | `EstimateHealthStrip`, `app/dashboard/estimates/[id]/estimate-health-panel.tsx:135` |
+| the strip's arithmetic | `lib/estimate-health.ts` → `computeEstimateHealth()` |
+| Add Items sheet | `app/dashboard/estimates/[id]/add-items-sheet.tsx` |
+
+- `smallButton` (`:56`) and `dangerButton` (`:64`) are **module-local `const`s in `items-tab.tsx`,
+  not exported.** `co-builder.tsx` defines its own, separately named `dangerButtonStyle`.
+  **→ ASK-B5 answers itself: enlarging the trash here changes NO other screen.**
+- The trash is the emoji **`🗑`** at four sites (`:631`, `:838`, `:1066`, `:1204`) — which is why
+  live renders it small and orange-ish. The design shows a red-outlined square with a line-icon
+  trash. `lucide-react` is already a dependency.
+- ⚠️ **`EstimateHealthStrip` is used by `items-tab.tsx` and nowhere else** (single import site,
+  `:1226`). The Details page uses a **different** component, `EstimateHealthCard` (`:63`). So
+  restyling the strip does **not** touch the out-of-scope Details layout. The comment at
+  `items-tab.tsx:1221` ("one implementation, two surfaces") refers to the shared *derivation*
+  (`computeEstimateHealth`), not the component — worth not misreading.
+
+**FILL-B2 — test coupling: effectively none, and that cuts both ways.**
+The only hits for `"Price"` are `s175-stage6-spec-sheet.live.ts:609` and
+`s175-spec-sheet-template.test.tsx:163`, which assert the word is **absent** from a *specifications
+sheet PDF* — a different document, unaffected by renaming a table header. **No test and no e2e spec
+references `Add Subcategory`, `+ Add Line`, or any of the three `open-add-items-*` testids.**
+**→ Nothing to update, and nothing covers this screen today. Say so plainly rather than claiming the
+suite protects it.**
+
+**FILL-B3 — the metrics strip and the Floor: no exposure, measured.**
+`estimates_select_authenticated` = `company_id = get_my_company_id() AND (role IN (owner, admin) OR
+(role = 'project_manager' AND created_by = auth.uid()))`, and
+`estimate_line_items_select_authenticated` requires an `EXISTS` on `estimates`.
+**Foreman, crew, subcontractor and client cannot SELECT an estimate row at all**, so they cannot
+reach the Line Items tab or receive any figure in its payload. The only three identities that reach
+it — Owner, Admin, authoring PM — are all entitled to the cost basis. **No role can reach the tab
+and be denied the cost basis, so Profit cannot render a false figure for anyone.** No Floor work is
+required; a live test asserting the negative is worth adding so this stays true.
+
+**FILL-B4 — "N pts under target": already shipped, and its rules are already ruled.**
+`companies.margin_target_percent` **exists** — numeric, **nullable, no default**, `CHECK (NULL OR
+0..100)`, migration `20261110000000`. `details-tab.tsx:522-546` already renders the comparison:
+
+- **NULL target → the block does not render at all.** The code says so: *"Renders ONLY when a
+  company target is set (nullable; unset = no comparison, per the ruling)."* → the strip's note is
+  simply absent.
+- **Above target →** `` `${Math.abs(gapPts).toFixed(1)} pts over` `` in green `#1f8f4e`.
+- **Under →** the same in red `#c0362c`. The design's "10 pts under target" matches.
+- **Markup mode is NOT excluded.** `health.marginPercent` is `profit/price` regardless of
+  `pricing_mode`, and the target is margin-denominated by design — `details-tab.tsx:355` says
+  *"30% margin target takes a 43% markup."* **So "pts" is computed in markup mode too, against the
+  margin.**
+- **The only genuinely unruled case is exact parity**, where the shipped expression yields
+  `"0.0 pts over"`. → **ASK-B1**, narrowed to that one case.
+
+⚠️ **Stale comment found:** `estimate-health-panel.tsx:13-14` and `lib/estimate-health.ts:15-16`
+both say *"The ⚠️ target-margin bar is DEFERRED (§6b.2 — no target exists)"*. The target **does**
+exist and has since `20261110000000`. Correcting both is part of B.
+
+**FILL-B5 — drag-reorder mechanics: the column exists; the DB guard does not.**
+- `sort_order` is present on `estimate_categories`, `estimate_line_items` **and**
+  `estimate_line_rows` — `integer NOT NULL, no default`. **No migration is needed for ordering.**
+- **No unique index on `sort_order`** on any of the three, so duplicates are legal and a reorder is
+  a plain integer UPDATE with no two-phase shuffle.
+- A cross-category move writes **`estimate_line_items.category_id`** (and should null/retarget
+  `subcategory_id`). `UpdateLineItemInput` already permits `category_id`, `subcategory_id` and
+  `sort_order`, so **no new service function is needed.**
+- Readers that depend on category membership: **`convert_estimate_to_project()` sets
+  `project_budget_items.cost_code` from `c.name` — the CATEGORY name** (verified against the LIVE
+  function body, not a migration file). It reads the category at conversion time, so a move before
+  conversion is correct and a move after conversion cannot retro-change a project.
+- **Atomicity:** a reorder within one category is N UPDATEs of one integer; a cross-category move is
+  one UPDATE (`category_id` + `sort_order`) plus renumbering of the two affected lists. Because
+  duplicates are legal, a partially-applied renumber degrades to a wrong *order*, never to a
+  constraint violation or lost row. A single RPC would still be better; see the migration below.
+
+> ⚠️ **FINDING — a real hole that Spec B's cross-category drag would make reachable.**
+> `estimate_line_items_update_manager`'s **`WITH CHECK` is only** `company_id = get_my_company_id()
+> AND role IN (owner, admin, project_manager)`. It does **not** verify that the NEW `category_id`
+> (or `subcategory_id`, or `estimate_id`) belongs to the same estimate. `USING` is strong — it
+> blocks non-draft and another PM's draft — so the *source* row is protected, but the *destination*
+> is unchecked. There is **no trigger** on `estimate_line_items` enforcing it (only
+> `no_override_with_rows`, `set_updated_by`, `updated_at`) and **no composite FK** — the FK is a
+> plain `category_id → estimate_categories(id) ON DELETE CASCADE`.
+> **Today nothing in the UI writes `category_id` after creation, so the hole is latent. Spec B's
+> drag-across-categories is exactly the feature that makes it a live path.** Per stop rule 4 and
+> CLAUDE.md's *"authority belongs in the database"*, B must ship a migration that closes it.
+
+**FILL-B6 — which estimates can be reordered: enforced at the database, already.**
+`estimate_line_items_update_manager`'s **`USING`** requires the parent estimate to satisfy
+`e.status = 'draft' AND (role IN (owner, admin) OR e.created_by = auth.uid())`.
+**A reorder of a SENT estimate and a PM's reorder of another PM's draft are both refused by RLS,
+with no new code.** Reorder is an ordinary UPDATE and inherits both gates. `estimates_z_immutability`
+sits on `estimates`, not the lines — the line freeze is the RLS clause above.
+
+**FILL-B7 — the font is a SYSTEM-WIDE ruled token; the difference is the mockup's.**
+`app/layout.tsx:2-19` loads **Barlow** (`--font-barlow`, all UI text) and **IBM Plex Mono**
+(`--font-plex-mono`, all numbers and micro-labels) through `next/font/google`, *"ui-01 §S2 — the two
+1a families … (no other mechanism existed)"*. The live capture is unmistakably Barlow (narrow
+letterforms); the design mockup's wider grotesque is its own tool's default. **Changing the family
+would repaint every screen in the product against a ruled token, on the evidence of a mockup.**
+→ **ASK-B3, recommending no change.** Ruling #3's *"heavier weight and larger text"* is per-component
+and is in scope regardless.
+
+**FILL-B8 — square foot and labor math: measured end to end, and it is clean.**
+
+| machine | what it does with a labor row | unit-safe? |
+| --- | --- | --- |
+| `computeRowCost` / `rowCostBasis` | `rate × quantity` | ✅ unit-agnostic |
+| non-fixed instruments (cost-plus, T&M) | `deriveFlatLaborSell(quantity, rate)` = `quantity × rate`, **no markup, no tax, no burden** | ✅ |
+| fixed price | ordinary markup path on `rate × quantity`; labor is never taxed | ✅ |
+| `convert_estimate_to_project()` (live body) | `COALESCE(r.rate,0) * COALESCE(r.quantity,0)` | ✅ |
+| **`companies.fixed_burden_per_hour`** | read **only** by `expenses.ts:205` against `time_clock_sessions` (`burden_source='company_fixed'`), plus settings/team preview screens. **It never touches `estimate_line_rows`.** | ✅ **the spec's central worry does not arise** |
+| **`instrument_rates` `tm_labor_hourly` / `cost_plus_labor_hourly`** | consumed by **7D invoicing** to bill approved TIMESHEET hours (`invoices-shared.ts:233-236`). Estimate labor deliberately bypasses them — `change-order-totals-server.ts:56-58`: *"labor bills FLAT at the row's own rate under `flat_rate_labor` (S97)"* | ✅ |
+| `companies.default_labor_rate` | prefills `rate` on a NEW labor row (`items-tab.tsx:337`) | ⚠️ a $/hr default prefilled into a sq-ft row is a **wrong default, not a wrong total** → **ASK-B2** |
+| budget-vs-actuals | **`project_budget_items` has NO quantity column** — `committed_amount`, `actual_amount` and `budgeted_amount` only | ✅ **no unit ever crosses into the comparison; it is dollars to dollars** |
+
+**The unit column:** `estimate_line_rows.labor_unit text NULL`, with
+`estimate_line_rows_labor_unit_check CHECK (labor_unit IS NULL OR labor_unit IN ('hours','days'))`.
+**Adding `'sq_ft'` needs a migration.** `estimate_line_rows_type_columns` already forces a labor row
+to leave `unit_of_measure`/`unit_cost` NULL, so sq ft must ride `labor_unit` — correct by
+construction. The **material** `unit_of_measure` CHECK already contains `'sq_ft'` and
+`UNIT_LABELS.sq_ft = 'Sq Ft'` already exists, so the label needs no new string.
+
+> ⚠️ **FINDING — `change_order_line_rows` carries the SAME `hours`/`days` CHECK**
+> (`change_order_line_rows_labor_unit_check`, `20260704215000:183`), and `co-builder.tsx:1088,1119`
+> hard-codes the `'hours' | 'days'` union in TypeScript, as does the mobile CO editor. Ruling #6 is
+> written for estimates. CLAUDE.md's **PARITY ruling [S122]** says a feature on two surfaces is one
+> feature — and a contractor who bills demo by the square foot will bill a *change* to that demo the
+> same way. **→ new ASK-B6: does `sq_ft` land on change-order labor rows in the same pass?**
+
+> ⚠️ **Naming correction owed:** `deriveFlatLaborSell(hours: number, hourlyRate: number)`
+> (`estimate-totals.ts:217`) is a plain product and its parameter names assert an hours-only world
+> that this change ends. Rename to `(quantity, rate)`.
+
+**FILL-B9 — hours-as-square-feet rows.** Confirmed **visible in the LIVE capture itself**: "Tile
+Floor Demolition" `$3.00 × 2365 hours` and "Wood Floor Installation" `$3.00 × 2150 hours`.
+On **rebuild-test** (reference only): **27** labor rows with `labor_unit='hours'`, of which **12**
+have quantity > 40, across 23 lines and 12 estimates. **The production count is Josh's to run** —
+query in Spec E. **No migration touches these rows.**
+
+**FILL-B10 — accessibility and mobile.** **No drag-and-drop library is installed and there is no
+reorder precedent in the app** (`grep` for `draggable`/`onDragStart` finds only a photo-viewer pan
+gesture). So this is built from scratch with native events and **no new dependency**. Native HTML5
+DnD has **no keyboard path and no touch support in mobile Safari**, so the handle must also be a
+focusable button with ArrowUp/ArrowDown (and an `aria-live` announcement) — that is the keyboard
+alternative, and it doubles as the touch fallback. The Items tab is a `/dashboard` (desktop) screen;
+the restyled buttons still must not overflow at 400px.
+
+**FILL-B11 — migrations (rebuild-test only; production counts in Spec E):**
+1. widen `estimate_line_rows_labor_unit_check` to `('hours','days','sq_ft')` — **a widening CHECK
+   governs no existing row**, so it cannot abort on data; the count is still supplied.
+2. close the `WITH CHECK` hole above so a line's `category_id`/`subcategory_id`/`estimate_id` must
+   stay inside its own estimate.
+3. (conditional on ASK-B6) the same widening on `change_order_line_rows_labor_unit_check`.
+
+---
+
+### Step 4 — Spec A measured
+
+**FILL-A0** — `main` = `ad4e9b8`; branch `feature/s108` @ `f1b2de1`; tree clean.
+
+**FILL-A1 — `estimates` has 67 columns.** Money-bearing, and **every one of them is on the row a
+SELECT grant would ship**:
+
+| column | populated at INSERT? |
+| --- | --- |
+| `subtotal`, `tax_total`, `discount_total`, `grand_total` | **yes — `NOT NULL DEFAULT 0`** |
+| `tax_rate`, `subcontractor_markup_percent`, `material_markup_percent`, `labor_markup_percent` | nullable, no DB default — written by the create path |
+| `discount_type`, `discount_amount`, `retainage_percent`, `deposit_percent`, `projected_value` | nullable, no default |
+| `pricing_mode` | **yes — `NOT NULL DEFAULT 'markup'`** |
+| `contract_type` | **yes — `NOT NULL DEFAULT 'fixed_price'`** |
+| `proposal_pricing_level` | **yes — `NOT NULL DEFAULT 'lump_sum'`** |
+
+Also defaulted at INSERT: `company_id` (`get_my_company_id()`), `created_by`/`updated_by`
+(`auth.uid()`), **`created_by_role` (`get_my_role()`)**, `status` (`'draft'`), `version_number`,
+`expiration_days` (30), `include_client_contract`, `also_send_to`, and `estimate_number` — see A3.
+
+**FILL-A2 — `estimates_status_check` holds exactly nine values:** `draft, review, sent, viewed,
+accepted, declined, expired, converted, voided`. A tenth needs a migration.
+`EstimateStatus` (`estimates-client.ts:10-25`) mirrors them.
+
+⚠️ **There is a compile-time forcing function, and it is worth relying on.** Two **total**
+`Record<EstimateStatus, …>` maps exist — `STATUS_LABELS` and `STATUS_COLORS`
+(`app/dashboard/estimates/labels.ts:7,20`). Adding the union member makes **both fail to compile**
+until they are filled. Every other reader is a runtime `status === …` test and must be named by
+hand. Named, with what each does with a new value:
+
+| reader | test | behaviour with `site_visit` |
+| --- | --- | --- |
+| list `getEstimates()` `estimates-client.ts:237-241` | `is_deleted = false` **only** | ⚠️ **a site visit WOULD appear in the estimates list** — the one reader that needs an explicit exclusion |
+| list-row money `estimates-list.tsx:239` | renders `grand_total` | would print `$0.00` |
+| metrics — win rate `estimates/page.tsx:47-51` | cohort requires `sent_at` non-null | ✅ excluded (a visit is never sent) |
+| metrics — expiring soon `:56-60` | `status === 'sent'` | ✅ excluded |
+| Before You Send / send `api/proposals/send` | reads `status`, then freezes | ✅ unreachable — no send control on a visit |
+| resend `api/proposals/resend` | `status` | ✅ |
+| sign `signing-service.ts` | `estimate.status !== 'sent'` → refuse | ✅ |
+| submit-for-review / approve `estimates-client.ts` | `current.status !== 'draft'` / `!== 'review'` | ✅ refuse, correctly |
+| convert `convert_estimate_to_project()` | operates on accepted | ✅ |
+| reminders + expiry cron `estimate-reminders.ts:100,131-133` | `.eq('status','sent')` | ✅ |
+| projects page `projects/page.tsx:79` | `.eq('status','accepted')` | ✅ |
+| deletion sweep / QuickBooks | no estimate-status branch found | ✅ |
+
+**So exactly one aggregate needs changing, and it is the LIST, not a total.** FILL-A11's warning
+about inflating pipeline totals is measurably a non-issue: **there is no pipeline dollar total** —
+the strip is Win rate, cohort size and Expiring soon, all `sent`-gated.
+
+**FILL-A3 — `estimate_number`: assigned at INSERT by a column default, and it BURNS a sequence.**
+`estimate_number text NOT NULL DEFAULT next_estimate_number()`. **Not unique** — only the non-unique
+`idx_estimates_estimate_number`; the only unique indexes on the table are `estimates_pkey` and the
+partial `estimates_supersedes_once`. `next_estimate_number()` (SECURITY DEFINER plpgsql, live body
+read) does `UPDATE companies SET estimate_number_sequence = estimate_number_sequence + 1 …
+RETURNING`, so **an abandoned visit created the ordinary way would consume a client-visible number**
+— precisely what the RULED line forbids. Assigning at promotion requires: **drop NOT NULL** (never
+fails on existing data), keep the default for the ordinary create path, have the site-visit path
+pass `estimate_number => NULL` explicitly, and call `next_estimate_number()` at promotion.
+⚠️ Any CHECK pairing `status` with `estimate_number IS NULL` must be **row-counted on production
+first** — this is the exact shape of `20261610000000`.
+
+**FILL-A4 — what a foreman and a crew member can do today: nothing, on every table.**
+
+| table | foreman / crew today |
+| --- | --- |
+| `estimates` | **no SELECT** (`estimates_select_authenticated` = owner/admin, or PM-own), **no INSERT** (`estimates_insert_manager` = owner/admin/PM), **no UPDATE**, and **no DELETE policy exists for anyone** |
+| `estimate_categories` / `estimate_line_items` / `estimate_line_rows` | SELECT needs `EXISTS` on `estimates` → nothing; writes are owner/admin/PM on a **draft** they own |
+| `files` for an ESTIMATE file | ⚠️ `files_insert_non_client` **does list `foreman` and `crew_member`** — but then requires **`project_id IS NOT NULL` AND `can_view_project(project_id)`**. An estimate file is `project_id IS NULL`. `files_select_non_client` imposes the same. **So they can neither insert nor read one.** `files_delete_owner_admin` is owner/admin only. |
+| `contacts` | ⚠️ **they ALREADY read the whole company list** — `contacts_select_authenticated` excludes only `subcontractor` and `client`. INSERT is owner/admin/PM. |
+| `contact_addresses` | same shape: `_select_scoped` excludes only sub/client; INSERT/UPDATE/DELETE owner/admin/PM |
+
+**FILL-A5 — a money-free crew INSERT. Measured, then proposed; NOT picked.**
+`INSERT … RETURNING` through PostgREST needs SELECT, and **RLS is row-level: a SELECT grant on
+`estimates` ships all 67 columns**, including the four NOT NULL money totals. Adding crew to
+`estimates_select_*` therefore cannot meet the RULED "NO access to money", now or after promotion.
+Three candidates, measured against the schema above:
+
+1. **A `SECURITY DEFINER` RPC (`create_site_visit(...) RETURNS uuid`).** Needs **no SELECT policy at
+   all** — an RPC returns its own value, so the `INSERT … RETURNING` problem disappears. It can also
+   create the contact and address in the same call, which means **no widening of
+   `contacts_insert_authorized` and no new read surface** (and FILL-A10's worry is moot anyway,
+   since crew already read every contact). ⚠️ Per CLAUDE.md the function must be **SQL** where the
+   RLS-bypass matters, or plpgsql with the documented care.
+2. **A column-safe view** (`site_visits_mine`) with its own policy. Postgres 15+ honours
+   `security_invoker`; a non-invoker view owned by a privileged role bypasses RLS, which is a second
+   mechanism to get wrong. Weaker than (1) and does not solve INSERT.
+3. **Notes and photos kept OFF the estimate row entirely** — see A6. **This is not an alternative to
+   (1); it is the other half of the answer**, and it is what makes the POST-promotion read safe.
+
+**Recommendation: (1) + (3) together.** Neither alone satisfies the ruling. **This does NOT
+contradict the RULED shape** — the estimate row is still the site visit; the crew member simply
+never SELECTs it.
+
+**FILL-A6 — where the notes live. They cannot live on the estimate row.**
+Scope lives on `estimates.scope_summary` / `scope_sections` (jsonb) today. If conditions,
+measurements, blockers and transcripts join them there, then "the recorder keeps READ access to
+their notes" **means granting SELECT on a row carrying `grand_total`** — the ruling's own
+prohibition. So they must live in **their own table(s) keyed by `estimate_id`, with no money
+column**, e.g. `site_visit_notes(estimate_id, kind ∈ {condition, scope, measurement, blocker},
+body, …)` plus a transcript/audio table. The recorder's post-promotion read is then a policy on
+**that** table (`created_by = auth.uid()`), and the estimate row is never exposed. Photos are
+`files` rows with `estimate_id` — already a nullable column that exists.
+
+**FILL-A7 — the S106 estimate-files route.** Both halves confirmed by reading it:
+- **GET floor** = a session `SELECT` on `estimates` (`route.ts:40-45`), then the **admin** client.
+- **POST floor** = session read **plus** `est.status === 'draft' && (owner/admin || created_by === user.id)` (`:107-113`).
+- Its own header states the reason: *"THE ROUTE IS THE ONLY ACCESS CONTROL … If the session read is
+  wrong, skipped, or bypassed, a caller reaches any estimate's files in the company, and four of the
+  company-level rows are contracts."*
+- **A crew member fails BOTH gates** — they cannot SELECT any estimate, and `site_visit` is not
+  `draft`. So: the edit gate must admit `status === 'site_visit' && created_by === user.id`, **and**
+  the floor must stop being "can you SELECT the estimate" for this case, because that is the thing
+  FILL-A5 says must never be granted. The floor becomes **"did you record this visit"**, read from
+  the money-free side table — which keeps the route as the only access control.
+- `ALLOWED_MIME` must gain audio types for A9; `MAX_SIZE` is already 25 MB.
+- ⚠️ The S107 route-floor test must still fail if the admin client moves above the session read —
+  `s107-estimate-files-route-order.test.ts` is that test, and its MIRROR case (`:102`) keeps it
+  non-vacuous. **It must be extended, not replaced.**
+
+**FILL-A8 — reuse, and the project-less problem.**
+- `app/m/capture-store.tsx` — `hold(file, projectId: string | null)` (`:54`, `:105`) **already
+  accepts a null project**. Reusable as-is.
+- ⚠️ `app/m/offline-sync.tsx:51` types one queue payload's `project_id: string` — **not nullable**.
+  That is the seam to widen.
+- **§7a is not weakened, and does not need to be.** `files_insert_non_client` refuses a
+  `project_id IS NULL` row for foreman/crew, and it should keep refusing: the site-visit photo does
+  not go through the session client at all, it goes through the **route** (A7), which uses the admin
+  client after its own floor. The policy is untouched.
+- `ContactAddressPicker` (`app/dashboard/estimates/contact-address-picker.tsx`) and inline contact
+  create (`#147`/`#148`) exist and are reusable; contact creation by crew rides the RPC (A5).
+
+**FILL-A9 — voice. Nothing exists; this is entirely new.**
+The only OpenAI use in the repo is `gpt-4o` **vision** in `ai-tagging.ts`. There is no transcription
+call anywhere (`grep` for `whisper|transcri|audio|speech` over `lib/` returns one unrelated comment
+in `legal-docs.ts`).
+- **Storage:** bucket `project-files`, `public=false`, **`allowed_mime_types` is NULL** (so audio is
+  permitted at the bucket; the ROUTE's allowlist is the gate). Path convention already established
+  and safe: `{company_id}/estimates/{estimateId}/{uuid}-{safeName}` — real UUIDs, so the
+  angle-bracket Storage trap cannot arise.
+- **Model / size / price:** OpenAI's audio endpoint caps uploads at **25 MB**, which matches the
+  route's existing `MAX_SIZE` exactly. **⚠️ I have NOT verified the model list or per-minute price
+  this session — there is nothing in the repo to measure them against, and I will not assert a
+  figure I did not check.** To be confirmed against OpenAI's current pricing before build, and
+  logged per the Module 3H rule (`ai_*_logs`, log `response.model` not the alias, cost row on
+  failure too).
+- **Offline:** record to the existing IndexedDB store, upload on reconnect, transcribe server-side
+  after the upload — so weak signal costs a delay, never the audio.
+
+**FILL-A10 — contact creation by crew.** Answered above: **granting it exposes nothing new,
+because foreman and crew already SELECT every contact and every contact address in the company.**
+The S131 Roster Floor excluded only `subcontractor` and `client`. Recommended anyway to route
+creation through the A5 RPC so no policy changes at all.
+
+**FILL-A11 — aggregates.** Only the estimates **list** (`getEstimates`) counts a site visit today.
+No pipeline dollar total exists. Full table under FILL-A2.
+
+**FILL-A12 — migrations this spec requires** (rebuild-test only; production counts in Spec E):
+1. widen `estimates_status_check` with `'site_visit'` — a widening CHECK governs no existing row.
+2. `ALTER estimates ALTER COLUMN estimate_number DROP NOT NULL` — cannot fail on data.
+3. new `site_visit_*` table(s) + policies + the standard `updated_at`/`updated_by` triggers and the
+   three column defaults (CLAUDE.md per-tenant checklist).
+4. the `create_site_visit` RPC (+ any promote/update RPC), with `REVOKE EXECUTE … FROM public` and
+   an explicit `GRANT` to `authenticated`.
+5. a `files` policy or route change per A7 — **route preferred, policy untouched.**
+⚠️ **Any CHECK tying `status` to `estimate_number` is deferred until Josh runs the production count.**
+
+---
+
+## Phase 1 — COMPLETE
+
+**All 49 FILL markers are filled in place, by measurement. None deleted, no spec restructured.**
+Two are answered "not filled, and why", in one line each, as the specs require:
+
+- **FILL-A9** (voice model + cost per minute) — nothing in this repo to measure it against; it must
+  be confirmed against OpenAI's current model and pricing pages at build time.
+- **FILL-D3b** (comment-stripped functions on rebuild-test) — it needs the per-function normaliser
+  that Spec C FILL-C3 specifies, so it is Phase 3 work that runs after C builds. Groundwork measured:
+  285 functions, 267,630 bytes, 80 bodies containing `--`, 1 (`qb_vault_put`) where a `--` sits
+  inside a string literal.
+
+**One new ASK raised by measurement:** **ASK-B6** — `change_order_line_rows` carries the same
+`hours`/`days` CHECK as estimates, and the PARITY ruling [S122] says one feature, both surfaces.
+
+**Nothing found contradicts a RULED line.** The closest call was Spec A's FILL-A5 ("if the only
+safe answer contradicts the RULED shape, STOP"): it does not. A site visit can remain an estimate
+row while a crew member never SELECTs it, via an RPC plus money-free side tables.
+
+**Three instrument errors caught and re-measured during this phase, all the same named class —
+recorded because catching them is the point:**
+1. A task notification reported "exit code 0" for a build whose **printed** line was
+   `BUILD_EXIT_LINE=127` (`/usr/bin/time` is not installed; no build ran).
+2. A Prettier reflow measured on a copy in `/tmp` — **outside the repo, so `.prettierrc` never
+   applied**; it also mis-showed Prettier rewriting a TypeScript fence.
+3. An env-var sweep returning 42 variables because it included `apps/web/.next`, the build output.
+   The real figure is 28 — exactly what Spec D claimed.
+   A fourth: a `'[^']*--` probe reported 80/80 function bodies had a comment inside a literal; the
+   correct quote-parity measurement is **2 lines in 1 function**.
+
+**Phase 2 questions issued. Session stopped, awaiting Josh.**
+---
+
+## Phase 2 — RULED. All 20 answered by Josh, written into the specs.
+
+| Q | ruling |
+| --- | --- |
+| Q1 | **A** — category-ownership guard as a **trigger** in Spec B; its header must say it governs **future writes only** |
+| Q2 | **A** — widen both CO CHECKs and both CO editors. PARITY [S122] |
+| Q3 | **A + 2 conditions** — recorder predicate applies **only while the estimate is a site visit**; after promotion the recorder keeps READ and **loses upload**. Extend the S107 route-order test with the mirror case and **prove by sabotage** |
+| — | 223→222 / 231→230 correction **accepted**; `20261610000000` is **not owed** |
+| Q4 | **A** — Reply-To = `buildSenderAddress()`'s exact output |
+| Q5 | **A** — committed `scripts/.db-fingerprint.json`, `npm run db:fingerprint`, same commit as any migration |
+| Q6 | **A** — notify the Owner of Worth Properties only, **keyed by company id not slug**, no drift detail in the body |
+| Q7 | **A** — 15th cron `/api/cron/schema-drift`, `0 11 * * *`; extend the `vercel.json` parse test |
+| Q8 | **A** — drop the pre-push hook |
+| Q9 | **A** — Claude Code install in post-create, alongside the `gh` feature |
+| Q10 | **C** — generalise the existing exit-status section. ⚠️ `CLAUDE.md` editable **for this change only** |
+| Q11 | **A** — full `.env.local.example` content in this report; Josh pastes it |
+| Q12 | **A** — "on target" |
+| Q13 | **A** — no `rate` prefill for sq ft |
+| Q14 | **A** — no font change; do the per-component weight/size work |
+| Q15 | **A** — leave existing hours-as-sq-ft rows alone |
+| Q16 | moot, confirmed |
+| Q17 | **A** — SECURITY DEFINER RPC, no SELECT policy, money-free `site_visit_*` tables |
+| Q18 | all six as recommended |
+| Q19 | **CHANGED** — CC does **not** merge to `main`; merge each spec branch into `feature/s108` |
+| Q20 | **CHANGED** — build voice **now**, as the **last** piece of Spec A |
+
+### Voice — ruled, and FILL-A9 is now measurable
+`OPENAI_API_KEY` is in `apps/web/.env.local`. ⚠️ Never printed, echoed or logged; presence checked
+without printing. Model proven by one real call on a short clip, name recorded; per-minute price
+stated only if verifiable, otherwise marked unverified. Server-side transcription after storage;
+offline hold like photos; **10-minute cap refused before upload**; **spoken language kept, no
+translation**; audio and transcript both kept, original audio never altered; recorder edits the
+transcript until promotion, owner/admin/PM after; a failed transcription surfaces on the phone with
+a retry and never loses the audio; transcripts are money-free and live in `site_visit_*`.
+
+### Merge sequence for every spec branch (into `feature/s108`, never `main`)
+clean tree → branch pushed → `--no-ff` → **stop on conflicts** → `next build` **and** the unit suite
+**on the MERGED `feature/s108`** → only then push. **Never push a red branch.**
+Final: one green CI run on `feature/s108` with no pushes during it.
+
+---
+
+## ⚠️ What the DEPLOYED code does on production TODAY, without the three migrations
+
+`main` = `ad4e9b8` is deployed. `20261580000000`, `20261590000000` and `20261600000000` are **not**
+on production. Measured from the deployed source and from the constraint definitions; **no
+production query was run.**
+
+### 1. The warming cron — ERRORS ON EVERY TICK, and returns HTTP 200 while doing it
+
+`runEmailWarming()` begins with
+`admin.from('companies').select('id, name, slug').eq('email_warming_enabled', true)`.
+**`companies.email_warming_enabled` is added by `20261590000000` and by nothing else** — so on
+production the column does not exist and PostgREST answers `42703 column … does not exist`.
+
+The code reads that error rather than discarding it (`warming-email.ts:305-316`), pushes
+`"companies query failed: …"` into `outcome.errors`, logs
+`[warming] companies query failed` and **returns early**. The route then answers
+**HTTP 200 with that errors array** (`app/api/cron/email-warming/route.ts:44-48`).
+
+| | |
+| --- | --- |
+| **Frequency** | `*/15 13-22 * * 1-5` = **40 ticks per weekday, ~200 per week** |
+| **Is anything sent?** | **No.** It returns before the send loop. Nothing is mailed, nothing is logged, no quota is consumed |
+| **Is it erroring?** | **Yes — every single tick**, one `console.error` line each |
+| **Does Vercel flag it?** | **No.** The route returns 200, so the cron shows as succeeding |
+| **Any tenant impact?** | **None.** No mail, no data written |
+
+⚠️ **So it is failing loudly in the logs and silently in the dashboard.** That is the design
+working as intended — the error is read, not swallowed — but it means **~200 error lines a week
+will keep accumulating until `20261590000000` lands.** Nothing is broken by it and no cleanup is
+owed; it simply stops the moment the migration is applied.
+
+### 2. The sub bid-request log — THE MAIL SENDS AND THE LOG ROW IS SILENTLY LOST
+
+`email_logs.email_type` is a **foreign key**, not a CHECK:
+`email_logs_email_type_fkey FOREIGN KEY (email_type) REFERENCES email_types(email_type) ON DELETE RESTRICT`.
+`20261580000000` is what inserts the `sub_bid_request` row. Without it the INSERT fails `23503`.
+
+And the failure is swallowed twice over:
+- `logEmail()` (`email-service.ts:448-451`) logs `email_logs insert failed: …` and **returns `null`**.
+- The send route **does not check the return value** — `await logEmail(admin, {…})`, result discarded
+  (`bid-requests/[requestId]/send/route.ts:168`).
+
+| | |
+| --- | --- |
+| **Does the email send?** | **Yes.** `sendEmail()` runs first and succeeds |
+| **Is it logged?** | **No.** The row is rejected by the FK |
+| **Does the user see an error?** | **No.** The route returns success |
+| **Trace** | one Vercel line: `email_logs insert failed: …` |
+
+⚠️ **This is why Spec E orders `20261580000000` BEFORE the E4 real send.** Sending first would mail
+a real subcontractor a real request the platform holds no record of.
+
+### 3. P3 feature detection — OFF, CORRECTLY, AND IT SAYS SO
+
+`autoconfirmTriggerInstalled()` calls `admin.rpc('invited_signup_autoconfirm_installed')`.
+**That function is defined by `20261600000000` itself**, so on production the RPC does not exist and
+PostgREST answers "function not found".
+
+The code **fails safe by design** (`auth-email.ts:462-484`): on any error it logs
+`auth email hook: autoconfirm feature-detection failed; assuming absent` and **returns `false`**,
+whose documented meaning is *"sends the confirmation email — the behaviour that shipped before this
+mechanism existed."*
+
+| | |
+| --- | --- |
+| **Is P3 active?** | **No** |
+| **What happens to an invited user?** | They receive the confirmation email — **the pre-P3 behaviour, unchanged** |
+| **Is it erroring?** | One log line **per invited signup**, not per tick |
+| **Is it wrong?** | **No.** This is the fail-safe arm working. The diagnosis will read `P3: NOT suppressed — the in-transaction autoconfirm trigger is NOT installed` |
+
+### Summary for Josh
+
+**Nothing on production is broken, and nothing needs urgent action.** Two of the three degrade
+exactly as designed (P3 fails safe; the warming cron refuses to send). The **one thing worth
+knowing** is that the warming cron writes an error line **40 times a weekday** and Vercel will not
+show it, because the route returns 200 — and the **one thing to be careful about** is that a sub
+bid-request sent today mails a real person while leaving no record, so `20261580000000` must land
+before E4.
+
+---
+
+## Phase 3 — SPEC C — BUILT
+
+Branch `feature/s108-c-email-drift`, cut from `feature/s108`.
+
+### C1 — warming Reply-To — **built and proven**
+
+`warming-email.ts:400` now passes `replyTo: from` (ASK-C1 → A). Three comments corrected with the
+superseded text quoted, including `email-service.ts`'s `SUPPORT_REPLY_TO` docstring, which asserted
+the sending domain *"has no inbox"* — the sentence a future reader would have cited to reject this
+ruling.
+
+- `s108-warming-reply-to.live.ts` — **6 cases, 6 passed, printed exit 0**, against rebuild-test.
+- **Row count exercised: 2 seeded companies, 2 sends captured.** Case 0 asserts that count so cases
+  1–3 cannot pass on an empty array.
+- Case 2 is the NULL-company-email case, built through `handle_new_user`'s real OWNER PATH because
+  `profiles.user_id` is NOT NULL + UNIQUE + FK to `auth.users`.
+- Case 4 is the counterfactual: the shared resolver still returns the owner's off-domain address,
+  proving no other email type moved.
+- **PROVEN BY SABOTAGE:** reverting line 400 to `replyToCompanyId` → **printed exit 1, "3 failed |
+  3 passed"** (cases 1, 2, 3 red). Reverted; re-run **printed exit 0, 6 passed**.
+
+### C2 — schema drift — **built and proven**
+
+**Migration `20261620000000_schema_fingerprint.sql`, applied to rebuild-test.**
+`supabase db push` **printed exit 0**. Verified **by object, not by ledger row**:
+`schema_fingerprint` exists with `prosecdef = true`, `strip_sql_line_comments` exists and is
+`IMMUTABLE`, and `notifications_type_check` genuinely contains `schema_drift`. Ledger row
+`20261620000000 / schema_fingerprint` present; `max(version)` now `20261620000000`.
+
+- **The quote-parity normaliser is in the migration**, not a naive strip — the measured reason is in
+  its header (391 real comments vs **2 `--` inside a string literal, both in `qb_vault_put`**).
+- **`npm run db:fingerprint`** (`scripts/db-fingerprint.mjs`) regenerates the baseline. It
+  **refuses to write** unless `db:verify`'s replay and the live catalogue still agree on all six
+  replayable dimensions — that agreement is the baseline's only warrant, so it is re-asserted every
+  time rather than assumed. It also refuses any project that is not rebuild-test.
+- Baseline committed: policies **363**, triggers **268**, functions **287**, constraints **961**,
+  latest migration `20261620000000`. Policy and trigger digests match the ad-hoc query I ran in
+  Phase 1 **exactly** (`5cb7274…`, `d1c987c…`) — an independent cross-check that the SQL function
+  agrees with the query it was derived from.
+- `/api/cron/schema-drift` — 15th cron, `0 11 * * *`. `vercel.json` now has 15 entries; the parse
+  test pins the new path **and** its schedule, bumps the length assertion to 15, and adds a
+  duplicate-path check that nothing had before.
+- `s108-schema-drift.live.ts` — **8 cases, 8 passed, printed exit 0**.
+  **⚠️ THE DETECTOR WAS SEEN TO FIRE.** Case 3 creates a real throwaway table with a real CHECK on
+  rebuild-test and requires the route to report it; case 4 drops it and requires zero again.
+  Verified afterwards that **0 probe tables remain** and the live constraints digest is **byte-equal
+  to the committed baseline** (`4c9fced86ea83df80f1eab2d350e381a`, n=961).
+  Case 3 also asserts the report is **specific** — a new table must not light up policies or
+  functions. Cases 6–8 cover the pure comparison so no dimension is silently unwired.
+
+### Two deviations, both deliberate, both flagged
+
+1. **⚠️ The baseline is written to TWO paths.** Josh ruled `scripts/.db-fingerprint.json`; it is
+   written there **and** to `apps/web/lib/schema-fingerprint-baseline.json`, which is the copy the
+   route imports. **Vercel's serverless bundle contains only files traced from inside `apps/web`**,
+   so a route reading `../../scripts/…` works in the Codespace and returns ENOENT in production —
+   the worst possible failure for a drift detector, because the catch would read as "no drift". One
+   script writes both in one pass.
+2. **⚠️ The notify target is `process.env.SCHEMA_DRIFT_COMPANY_ID`, not a hardcoded UUID.** Josh
+   ruled "keyed by company id, not slug", and it is — but **I do not have the production company id
+   and will not invent one.** A wrong literal would resolve no owner and report "no owner profile"
+   every day while looking like it worked. **Unset is a supported state**: the route still runs,
+   still compares, still reports in its response and log, and says so in `notes`. Case 5 asserts
+   exactly that. **Spec E gives Josh the query for the id and the variable to set.**
+
+### ⚠️ Two things went wrong building C, both worth recording
+
+**1. `next build` failed where `tsc --noEmit` passed — the exact class D1b names.**
+The first cut put `compareFingerprints` and `runSchemaDrift` in `route.ts`. Type-check was clean;
+the build failed with **`"compareFingerprints" is not a valid Route export field`** — a Next.js
+route file may only export a fixed set of names. The loop moved to
+`apps/web/lib/services/schema-drift.ts` and the route became the auth gate, which is the split every
+cron in this repo already uses. **This is the strongest possible argument for ASK-D1's answer being
+right: CI builds every branch, so this would have been caught regardless — but only because the
+build runs somewhere.**
+⚠️ **And the task notification reported "exit code 0" over a build whose printed line was
+`BUILD_EXIT_LINE=1`.** Second time this session. The printed line is the only thing read.
+
+**2. I violated my own standing rule and produced a false red.** I ran the full unit suite while a
+`next build` was running. `s160-auth-email.test.tsx` failed on a **5-second timeout**, which looks
+exactly like a real failure. Re-run with nothing else running: **95 files, 1286 tests, all passed,
+printed exit 0.** The other failure in that run — `s123-still-clocked-in.test.ts` — was **real**: an
+exact allowlist of migrations that restate `notifications_type_check`. **Extended, not weakened**,
+with the sixth entry stating in writing that the drift route emits `schema_drift` and never
+`still_clocked_in` — which is the price that list charges, deliberately.
+
+### Spec C — final verification, all printed exit lines
+
+| check | result |
+| --- | --- |
+| `tsc --noEmit` | **`TSC_EXIT_LINE=0`** |
+| `next build` (cold, `.next` removed) | **`BUILD_EXIT_LINE=0`** · BUILD_ID present · 251 manifest lines · `/api/cron/schema-drift` listed |
+| unit suite, isolated | **`VITEST_EXIT_LINE=0`** · **95 files, 1286 tests, 0 failed** |
+| `s108-warming-reply-to.live.ts` | **`VITEST_EXIT_LINE=0`** · 6/6 · **2 companies, 2 sends** |
+| `s108-schema-drift.live.ts` | **`VITEST_EXIT_LINE=0`** · 8/8 · detector **seen to fire** and return to zero |
+| rebuild-test left clean | 0 probe tables; constraints digest byte-equal to the committed baseline |
+
+**Untested, stated plainly:** the cron route's **HTTP layer** (the `CRON_SECRET` gate) is not
+exercised by a test — the harness drives `runSchemaDrift` directly, which is the right instrument
+for the loop but proves nothing about the 401. It matches the fourteen existing crons, none of which
+test their gate either. And **nothing has run against production**, so the drift detector has never
+seen the database it was built for.
+
+---
+
+## Resumed after a Codespace restart — Spec C MERGED into `feature/s108`
+
+Grounded against git first: `feature/s108` @ `92703ca7`, `feature/s108-c-email-drift` @ `a66bba7b`,
+both pushed, tree clean — exactly as the handoff said.
+
+- **CI on `a66bba7b`: run `35675907464`, conclusion `success`** — every step, including
+  `Build (production)`, `Run Playwright tests`, `Type check`, `Lint web`, `Unit tests (vitest)`.
+  Read from the Actions API per step, not from a summary.
+- **Spec C audit:** items 1, 3, 4 are proven above (sabotage on C1, the detector seen to fire on C2,
+  `vercel.json` parse test pins the 15th entry). Item 2 — "no other email type's Reply-To changed" —
+  is cases 4 and 5 of `s108-warming-reply-to.live.ts`, which pin the **shared resolver every other
+  email type calls** (owner fallback for NULL company email; `companies.email` when set). Item 5:
+  nothing touched production.
+- **Merged `--no-ff` → `98d056e3`.** Gate run on the MERGED tree, sequentially, nothing else running:
+
+| check | printed line |
+| --- | --- |
+| `tsc --noEmit` | `TSC_EXIT_LINE=0` |
+| `next lint` | `LINT_EXIT_LINE=0` |
+| `next build` (cold, `.next` removed) | `BUILD_EXIT_LINE=0`, `.next/BUILD_ID` present |
+| unit suite | `VITEST_EXIT_LINE=0` — **95 files, 1286 tests passed** |
+
+Pushed `92703ca7..98d056e3`. **Spec C: built, proven, merged.**
+
+---
+
+## Phase 3 — SPEC D — branch `feature/s108-d-tooling`, cut from `feature/s108` @ `98d056e3`
+
+### D1a — markdown format-on-save OFF — **built and proven**
+
+- `.vscode/settings.json` (new, trackable — `.gitignore:28` un-ignores it):
+  `"[markdown]": { "editor.formatOnSave": false }`. Takes effect **without a rebuild**.
+- `.prettierignore` (new): `*.md` — the part that can be proved from a terminal.
+
+**Audit 2, measured — a one-line edit to a table cell deliberately WIDER than its column, in
+`CLAUDE.md`'s Technology Stack table** (the Phase 1 probe), then Prettier:
+
+| step | `git diff --stat CLAUDE.md` |
+| --- | --- |
+| after the one-line edit | `1 insertion(+), 1 deletion(-)` |
+| after `npx prettier --write CLAUDE.md` (`PRETTIER_EXIT=0`) | **`1 insertion(+), 1 deletion(-)` — unchanged** |
+| **CONTROL** — same, with `--ignore-path /dev/null` (`CONTROL_PRETTIER_EXIT=0`) | **`16 insertions(+), 16 deletions(-)`** — the reflow, so the instrument can fire |
+
+`CLAUDE.md` restored with `git checkout` afterwards; `git diff --stat` empty. (A first attempt on a
+`STATE.md` row moved only 3 lines in the control because that column is already enormous — too weak
+a control, so it was redone on the table Phase 1 used.)
+⚠️ **The editor half — "save no longer reflows" — cannot be proved from a terminal.** The settings
+file is the mechanism; the ignore file is the provable backstop.
+
+### D1b — pre-push `next build` hook — **DROPPED, per ASK-D1 → A.** Nothing built.
+CI's `e2e` job already runs `next build` as its own ungated step on every branch push; C's own
+build failure (`"compareFingerprints" is not a valid Route export field`) is the live example.
+
+### D1d + ASK-D2 — `gh` and Claude Code survive a rebuild — **built; untestable until a rebuild**
+
+`.devcontainer/devcontainer.json`: `"features": { "ghcr.io/devcontainers/features/github-cli:1": {} }`
+and `postCreateCommand` → `npm install && npm install -g @anthropic-ai/claude-code`. The file is
+JSONC; parsed after stripping `//` lines → `PARSE_EXIT=0`, both keys present.
+⚠️ **Applies on REBUILD, not restart** — `gh` is still absent in this running Codespace, and will
+stay absent until Josh rebuilds. The token's measured limits are recorded in the file itself.
+
+### D1c — the migration-vs-ledger check — **built and proven by sabotage**
+
+`scripts/db-ledger-check.py` (new), `npm run db:ledger`, and **`npm run db:verify` now runs the
+schema replay AND the ledger check.** It checks, printing offending versions rather than a count:
+duplicate versions · versions not 14 digits · **MCP-signature rows** (name prefix ≠ version — the
+S104b definition verbatim) · ledger rows with no file · **files with no row BELOW the tip** (a
+skipped file) · a row whose name does not match its file · and the **ordered-version md5**
+(`md5(string_agg(version, ',' ORDER BY version))`, the S104 fingerprint) for ledger, files and the
+shared set. Files **above** the tip are printed as PENDING and do not fail — that is production's
+normal state before an attended push. Refuses any project but rebuild-test; production's ledger is
+checked by exporting it and passing `--ledger-json`.
+
+**Against live rebuild-test** (`npm run db:verify` → `DBVERIFY_EXIT=0`):
+```
+tables 123 · columns 1918 · NOT NULL 772 · check 230 · unique 42 · fk 566     (replay)
+ledger rows 223 · migration files 223 · tip 20261620000000
+ordered md5, ledger : 8c0372e538b44e7d77c31afae18d18d5
+ordered md5, files  : 8c0372e538b44e7d77c31afae18d18d5
+LEDGER CLEAN.
+```
+**Independent cross-check:** `ls *.sql | sed 's/_.*//' | paste -sd, | md5sum` in the shell gives
+`8c0372e538b44e7d77c31afae18d18d5` — the same value, by a different instrument. (Phase 1's
+`d0d8670…` was the 222-file figure, before C2 added `20261620000000`.)
+
+**Audit 3 — sabotage on SCRATCH COPIES of the exported ledger, never the real one:**
+
+| sabotage | printed exit | named |
+| --- | --- | --- |
+| none (the export itself) | `LEDGER_EXIT=0` | clean |
+| duplicate a row | `LEDGER_EXIT=1` | DUPLICATE versions: 1 |
+| add an MCP-style row `20260922123456 -> 20261620000000_schema_fingerprint` | `LEDGER_EXIT=1` | MCP-signature rows: 1 **and** ledger row with no file: 1 |
+| add a ledger row with no file (`20261630000000`) | `LEDGER_EXIT=1` | ledger rows with NO matching file: `20261630000000` |
+| delete a MID-tree row (`20261100000000`) | `LEDGER_EXIT=1` | files with no row BELOW the tip: 1 |
+| delete the TIP row (production's shape) | `LEDGER_EXIT=0` | PENDING: 1 — correct, not a finding |
+| rename a row | `LEDGER_EXIT=1` | ledger NAME does not match its file: 1 |
+| a 7-digit version | `LEDGER_EXIT=1` | version NOT 14 digits: 1 |
+
+⚠️ **What it cannot catch, in its docstring:** a ledger row for work that was truncated — S104's
+actual failure. A row is a row. Only reading the objects catches that (the replay, and C2's
+fingerprint).
+
+### D3b — rebuild-test's function bodies re-synced to their LATEST files — **built and proven by hash**
+
+**New tool: `scripts/db-function-sync.py`** (`npm run db:functions`). Check mode is read-only;
+`--apply` re-runs the latest file's exact `CREATE` statement, **extracted from the file
+programmatically — never a clipboard**, via the Management API query endpoint against rebuild-test
+only (the same endpoint `live-sql.mjs` uses; **not MCP**). It refuses any other project in both
+modes. "Latest" is load-bearing: files are read in version order and the last `CREATE` wins — and
+the tree has **no `ALTER FUNCTION` at all** (grep, 0 hits), so that last `CREATE` fully defines both
+body and config.
+
+**FILL-D3b, measured — 287 live functions:**
+
+| class | count | meaning |
+| --- | --- | --- |
+| exact | **253** | byte-equal to the latest file body |
+| comments | **32** | equal after comment-strip + whitespace collapse — the MCP signature |
+| **reformat** | **2** | ⚠️ **not in the spec's list of suspects.** `enforce_no_rows_on_override_line` and `qb_vault_put`: the deployed text has `( SELECT` → `(SELECT` and **adjacent string literals merged** (`'… a ' 'company …'` → one literal). Postgres concatenates those, so behaviour is identical — but it is not the file's text |
+| real drift | **0** | |
+
+The comment-stripped 32 include all four the spec named — `convert_estimate_to_project`,
+`set_winning_bid`, and the two line-total invariant functions (`enforce_no_rows_on_override_line` is
+one; it was *reformatted* as well) — plus 29 more: `handle_new_user`, `get_my_company_id`,
+`get_my_role`, `is_platform_admin`, `update_updated_at`, the QB enqueue family, and others.
+`create_safety_incident` has **two live overloads, both legitimately in the tree** (two files, two
+signatures, no DROP); the tool pairs overloads by signature rather than calling them drift.
+
+⚠️ **Why the 2 reformatted bodies mattered more than the 32.** C2's fingerprint strips comments and
+collapses whitespace, so the 32 never affected it — but it does **not** re-join literals. So the
+committed C2 baseline encoded MCP's reformatting, and **production, deployed by `db push` from the
+files, would have reported function drift every day for bodies nobody changed.** Re-syncing
+rebuild-test and regenerating the baseline removes that false alarm before it ever fires.
+
+**Two problems hit while applying, both handled, one with a residual:**
+1. **Baseline-schema functions are plain `CREATE FUNCTION`** (a `pg_dump`), which fails on an
+   existing function → HTTP 400 on the 11th statement (`get_my_company_id`). The tool now rewrites
+   only the leading keyword to `CREATE OR REPLACE`; body and config untouched. It also now prints
+   Postgres's own error body, which the first run swallowed.
+2. ⚠️ **A `CREATE OR REPLACE` resets `SECURITY DEFINER` and `SET search_path` to whatever the
+   statement says.** The post-check would only have caught a change *after* it happened, so a
+   **pre-flight** was added: any function whose file config differs from its live config is class
+   `CONFIG` and is never applied. Across all 287 it agrees — **179 with a `SET`, 259 definers, 28
+   invokers** — and two controls (search_path removed; definer flipped, on a copy of
+   `handle_new_user`'s live row) each return `CONFIG: 1`, so the arm can fire.
+   ⚠️ **RESIDUAL, stated plainly:** the **first 10** functions were re-applied by the first run,
+   *before* this pre-flight existed, and their prior config was held only in that run's memory,
+   which the HTTP 400 discarded. Their config now equals their files'. The evidence it was not
+   changed is indirect: the tree has no `ALTER FUNCTION`, so the only source of a function's config
+   is its `CREATE` statement, and these were MCP deployments of that same statement. Not proven by
+   a before/after snapshot. The 10: `allocate_invoice_number`, `compute_member_coi_expiry`,
+   `convert_estimate_to_project`, `enforce_companies_qb_scope`,
+   `enforce_company_members_payment_default`, `enforce_expense_payment_account`,
+   `enforce_expenses_column_scope`, `enforce_invoice_void_authority`,
+   `enforce_invoices_column_scope`, `enforce_profiles_self_column_scope`.
+
+**Result:** `--apply` → `SYNC_APPLY_EXIT=0`, *"re-synced 24; config and grants unchanged on every
+one"*; then **287 exact, 0 comments, 0 reformat, 0 drift, 0 config.** (10 + 24 = 34.)
+**Audit 6 — every listed function's hash matches its latest file:** yes, all 287, byte-equal.
+
+**C2 baseline regenerated** (`npm run db:fingerprint` → `FP_EXIT=0`; it re-asserted replay/live
+agreement on all six dimensions before writing). **Only the functions digest moved**
+(`b20b30ed…` → `4f075aba…`); policies `5cb72748…`, triggers `d1c987c4…`, constraints `4c9fced8…`
+byte-identical. `s108-schema-drift.live.ts` against the new baseline: **`VITEST_EXIT_LINE=0`, 8/8**,
+detector still seen to fire and return to zero.
+
+### D3a — the committed production key — **done**
+
+`docs/sessions/context2.md:12`: the partial `sb_publishable_…` value replaced with a note that it
+was **revoked on 2026-09-21** (revoking the production `sb_secret_` key took the whole new-format
+set) and that git history keeps it, acceptable only because it is revoked and publishable.
+⚠️ **This report had quoted the same value itself** (Phase 1, D3a entry) — redacted there too.
+A repo-wide grep for `sb_publishable_` followed by 6+ key characters, excluding `node_modules`,
+`.next` and `.git`, now returns **nothing**.
+
+### D3c — `apps/web/.env.local.example` — **content delivered here for Josh to paste (Q11 → A)**
+
+⚠️ **I cannot read or write that path** (denied by this session's permissions), so per the ruling
+the complete file is below. **Josh: replace the whole file with this block.**
+
+**Count, re-measured:** the app now reads **29** variables, not 28 — S108 C2 added
+`SCHEMA_DRIFT_COMPANY_ID`. **27 are declared** below; the other two (`NODE_ENV`, `VERCEL_ENV`) are
+set by the platform and named in the closing comment, as is the script-only `DB_VERIFY_OUT`.
+`NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` (in today's file, read by nothing) is dropped, and
+`NEXT_PUBLIC_APP_URL`'s pre-rebrand value goes with every other value.
+
+**Audit 7 — no value that looks like a key, proved by grep** over the scratch copy of exactly this
+content: assignments carrying any value **0** of 27; a pattern for JWTs (`eyJ`), `sb_publishable_`/
+`sb_secret_`, Stripe `sk_`/`pk_`/`whsec_`/`price_`, Resend `re_`, and any 32+ character token →
+**0 matches, `KEYGREP_EXIT=1`**. (The first draft said "the `eyJ…` keys" in a comment and matched
+its own grep; reworded rather than exempted.)
+
+```dotenv
+# apps/web/.env.local.example — every variable the app reads. NO VALUES, EVER.
+# Rebuilt S108 (D3c). Copy to apps/web/.env.local and fill in. .env.local is
+# gitignored and does NOT survive a Codespace rebuild.
+#
+# ⚠️ THIS CODESPACE TALKS TO REBUILD-TEST, NEVER PRODUCTION. Every value below
+# comes from rebuild-test (ref nmyphyhmfttxkdoposvf) or a sandbox.
+
+# ── Supabase ─────────────────────────────────────────────────────────────────
+# From the REBUILD-TEST project → Settings → API Keys → the LEGACY tab (the
+# JWT-format keys). The new-format keys were revoked on 2026-09-21.
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_ANON_KEY=
+SUPABASE_SERVICE_ROLE_KEY=
+# Personal access token for the Management API. Read by scripts/ only
+# (live-sql.mjs, db-fingerprint.mjs, db-ledger-check.py, db-function-sync.py).
+SUPABASE_ACCESS_TOKEN=
+
+# ── App origin ───────────────────────────────────────────────────────────────
+# Builds every outbound link and the QuickBooks redirect URI. No trailing slash.
+NEXT_PUBLIC_APP_URL=
+
+# ── Stripe (test mode) ───────────────────────────────────────────────────────
+STRIPE_SECRET_KEY=
+STRIPE_WEBHOOK_SECRET=
+STRIPE_PRICE_STARTER=
+STRIPE_PRICE_PROFESSIONAL=
+STRIPE_PRICE_BUSINESS=
+# Kill switch [S99]: `true` skips billing enforcement in middleware. Leave unset.
+DISABLE_BILLING_ENFORCEMENT=
+
+# ── Email (Resend) ───────────────────────────────────────────────────────────
+# ⚠️ RESEND_API_KEY IS DELIBERATELY ABSENT FROM CODESPACES [S107 ruling]. Email
+# only sends from a Vercel production deployment (the S126 gate). Leave it empty.
+RESEND_API_KEY=
+RESEND_SIGNING_SECRET=
+# Kill switch: `false` = nobody sends, anywhere; `true` = this process sends
+# (a supervised non-prod send); unset = only VERCEL_ENV=production sends.
+EMAIL_SEND_ENABLED=
+# Supabase Auth "Send Email" hook secret (/api/auth/send-email).
+SEND_EMAIL_HOOK_SECRET=
+# HMAC secret for one-click unsubscribe tokens.
+UNSUBSCRIBE_TOKEN_SECRET=
+
+# ── Web Push ─────────────────────────────────────────────────────────────────
+NEXT_PUBLIC_VAPID_PUBLIC_KEY=
+VAPID_PRIVATE_KEY=
+# A mailto: or https: contact URI.
+VAPID_SUBJECT=
+
+# ── QuickBooks Online ────────────────────────────────────────────────────────
+# The SANDBOX app's keys. Sandbox realm 9341457813274121 — the realm is NOT an
+# env var: it arrives on Intuit's callback and is stored on companies.qb_realm_id.
+QBO_CLIENT_ID=
+QBO_CLIENT_SECRET=
+# ⚠️ Anything other than exactly `production` means SANDBOX, silently (config.ts).
+QBO_ENVIRONMENT=
+
+# ── OpenAI ───────────────────────────────────────────────────────────────────
+# Photo auto-tagging (GPT-4o vision) and site-visit voice transcription.
+OPENAI_API_KEY=
+
+# ── Cron ─────────────────────────────────────────────────────────────────────
+# Bearer secret every /api/cron/* route requires.
+CRON_SECRET=
+# S108 C2: the company whose Owner is notified of schema drift, by ID (not slug).
+# Unset is supported: drift is still reported in the response and the log.
+SCHEMA_DRIFT_COMPANY_ID=
+
+# ── Tests only ───────────────────────────────────────────────────────────────
+# Playwright sign-in identity (e2e/auth.setup.ts). Defaults to the crew QA user.
+E2E_EMAIL=
+E2E_PASSWORD=
+
+# ── Set by the platform — do NOT set these by hand ───────────────────────────
+# NODE_ENV (Next.js), VERCEL_ENV (Vercel: production | preview | development).
+# DB_VERIFY_OUT is an optional output-path override for `npm run db:verify`.
+```
+
+### D3d — STATE.md stale rows — **verified and corrected** (8-line diff; no reflow, formatter off)
+
+| row | S107 state | now |
+| --- | --- | --- |
+| Send Email Hook | ✅ already correct — **ON [LIVE, 2026-09-10]**, superseded `Off` quoted | unchanged |
+| Custom SMTP | ❌ still read `None` as a live fact | marked **historical**, moot while the Hook is ON |
+| Auth email rate limit | ❌ still read *"2 per hour, project-wide … while GoTrue is the sender"* | **3/address/hour · 50/project/hour · `auth_recovery` exempt from the 50 only** — values read from `auth-email.ts:384-387`, not the spec; superseded text quoted |
+
+Also annotated the blockquote under the table whose *"nothing else has replaced it"* was true on
+2026-09-10 and stopped being true the next day.
+
+### ASK-D3 → C — CLAUDE.md's exit-status section GENERALISED — **done, and nothing else in CLAUDE.md touched**
+
+The heading becomes *"The thing inspected must be the thing being judged — exit statuses first"*,
+the old heading quoted. A new lead paragraph names the class and lists its seven forms, each with
+its real instance: a wrapper's status (this session's two notification-vs-printed-line mismatches),
+truncated output (`#2-deliv`'s `head -20`), a script that threw and fell through, an absent tool, a
+cached result (Turbo, `download()`), the wrong scope (Prettier in `/tmp`; the `.next` env sweep),
+and a probe that cannot fail (zero rows; the `'[^']*--` regex). The four numbered exit-status rules
+and the CI paragraph are **unchanged**. `git diff --stat CLAUDE.md` → **22 insertions, 1 deletion,
+all inside that one section** — made with the markdown formatter already off (D1a), so no table
+reflowed.
+
+### Added by Josh during D — **#158, Spanish translation for field employees → `TECH_DEBT_IDEAS.md`**
+
+A deferred **decision**, filed under a new "Filed S108" heading: why it is recorded now (the S108
+voice ruling keeps the spoken language, and must not be read later as translation having been
+rejected), the four candidate surfaces (a)–(d), the three sub-decisions per surface (original kept
+beside it · who edits which · per-user language preference), and that `OPENAI_API_KEY` already
+exists, with (d) falling under *AI drafts, humans approve*.
+
+**Number:** taken from the authority at the top of `TECH_DEBT.md`, which said next free = **#158**.
+Verified first rather than trusted: entry headings across all three files top out at **#157** (raw
+greps return 304 and 210, which are CI run numbers inside prose, not entries), and no branch on
+origin allocates #158 as an entry. Bare number on a branch, by Josh's explicit instruction — the
+#157 precedent — with the authority **advanced to #159 in the same commit**. Nothing renumbered.
+
+### D2a — `#157`, the `desktop-chat-switcher` flake — ⚠️ **FIRST ATTEMPT CONTAMINATED BY MY OWN PUSHES; discarded**
+
+I ran the file "solo" — one dev server via `scripts/e2e-preflight.sh`, `--project=chromium
+--workers=1`, no local suite running. **Printed `PW_EXIT_LINE=0`, and that line is a mask:**
+`3 passed, 2 flaky` — `:31` (ordering: PROJECT_TEST listed above QA_A) and `:88` (PROJECT_TEST's
+unread already `0`) **failed on first attempt** and passed on retry. `:62`, #157's own test, passed
+first time. (`retries: 1` locally; a retry restarts the worker, which **re-runs `beforeAll` and
+reseeds**, so a pass-on-retry proves nothing about the first attempt.)
+
+**Then I checked the Actions API, which I should have done BEFORE the run.** CI run
+`35715351774` — triggered by my own push of the Spec C merge to `feature/s108` — was
+**`in_progress` for the entire window**, and its Playwright job drives the same rebuild-test and
+tears down / reseeds **these same two projects**. My D-branch commits had queued more runs
+(`cancel-in-progress` cancelled most, but one was running). **So this was not a solo run on an idle
+database; it was exactly the run-against-run collision #157 describes, created by me.** Both
+first-attempt failures are the collision's fingerprint (another process reseeding PROJECT_TEST
+after my seed; another process's owner session reading it). **Result discarded as evidence either
+way.** And it cuts the other way too: **CI run `35715351774` may carry a false red that I
+manufactured** — contention makes false reds, never false greens (#157's own asymmetry). Its result
+is checked below rather than assumed.
+
+**The rule this teaches, stated for the next session:** "idle rebuild-test" means **no CI run
+queued or in progress on ANY branch**, checked by API immediately before the run, **and no push
+until it finishes** — because under "push after every commit" the session itself is the most
+likely second consumer. Redone below under exactly that condition.
+
+### D2a — `#157` DECIDED on a genuinely idle database — **contention, not a defect. CLOSED.**
+
+Redone under exactly the rule written above:
+- B's in-progress work **stashed**, so the tree under test was D's alone; dev server restarted on it
+  through `scripts/e2e-preflight.sh` (pid 42227, bound 3000).
+- **`ACTIVE_RUNS 0`** on the Actions API immediately before, and **`ACTIVE_RUNS_AFTER 0`** after.
+  No push in between. The two CI runs I had triggered both finished first — and both **green**
+  (`35715351774` feature/s108, `35715904649` feature/s108-d-tooling), so my earlier overlapping
+  run did NOT manufacture a red in either.
+- `npx playwright test e2e/desktop-chat-switcher.spec.ts --project=chromium --workers=1
+  --retries=0` → **`PW_EXIT_LINE=0`, `5 passed (1.0m)`, every test on its FIRST attempt**, `:62`
+  (#157's own) included. `--retries=0` so no pass can hide behind a retry.
+
+**Verdict:** #157 was run-against-run contention. The evidence is two-sided — the idle run is clean,
+and the contaminated run earlier reproduced the collision fingerprint on the same file's `:31` and
+`:88`. **#157 moved to `TECH_DEBT_CLOSED.md`** with this evidence (48 lines out of OPEN, full text in
+git history); #150's bullet gets a one-line pointer, since this is evidence FOR #150's class.
+
+---
+
+## Phase 3 — SPEC B — branch `feature/s108-b-line-items`, cut from `feature/s108` @ `8e3bec0f`
+
+### Spec D merged first
+`feature/s108-d-tooling` merged `--no-ff` → **`8e3bec0f`**. Gate on the MERGED tree, dev server
+stopped by PID first so a cold build could not collide with it: **`TSC_EXIT_LINE=0`,
+`LINT_EXIT_LINE=0`, `BUILD_EXIT_LINE=0` (BUILD_ID present), `VITEST_EXIT_LINE=0` — 95 files,
+1286 tests.** Pushed. D's last CI run (`35715904649` @ `44a02488`) green; its final commit
+`4dcc146b` changed only markdown, all of which the local unit run above already exercised.
+
+### B, database half — **built and proven live**
+
+**Migrations, applied to rebuild-test by `supabase db push` (`DBPUSH_EXIT=0`), CLI link checked
+first (`nmyphyhmfttxkdoposvf`), the ledger check listing exactly these two as PENDING:**
+- `20261630000000_labor_unit_sq_ft` — widens BOTH `estimate_line_rows_labor_unit_check` and
+  `change_order_line_rows_labor_unit_check` to `hours · days · sq_ft` (ASK-B6 → A, PARITY).
+- `20261640000000_line_item_containment_and_reorder` — the containment trigger (ASK Q1 → A; header
+  says **future writes only**) + `reorder_estimate_lines()` (SECURITY INVOKER, one transaction,
+  raises 42501 where RLS would silently update nothing).
+
+**Verified by object:** both CHECK definitions read back with `sq_ft`; trigger
+`estimate_line_items_containment BEFORE INSERT OR UPDATE OF estimate_id, category_id,
+subcategory_id`; `reorder_estimate_lines` `prosecdef=false`, ACL `authenticated` + `service_role`
+only — **no `anon`, no PUBLIC**. Ledger: 225 rows, `LEDGER CLEAN`.
+⚠️ The trigger ALSO makes `estimate_id` immutable on UPDATE — FILL-B5's hole was wider than the
+category: the policy's WITH CHECK never re-checked `estimate_id` either, so a line could have been
+moved into another estimate.
+
+**Fingerprint regenerated** (replay/live agreement re-asserted first): triggers 268→**269**,
+functions 287→**289**, constraints 961 (definitions changed, count not), policies unchanged —
+exactly the movement the two migrations predict. `db:functions`: **289/289 exact**.
+`db:types`: +4 lines (the RPC signature). `tsc` → `TSC_EXIT_LINE=0`.
+
+**Tests:**
+- `s108-line-items.test.ts` (unit) — **14/14, `VITEST_EXIT_LINE=0`**: sq-ft cost/sell/budget/actual
+  with stated inputs ($3 × 2,365 = $7,095.00; profit $1,773.75 at the LIVE capture's $8,868.75);
+  the reorder plan; "on target" at parity including gaps that ROUND to zero.
+- `s108-line-items.live.ts` — **17/17, `VITEST_EXIT_LINE=0`**, against rebuild-test:
+  sq_ft accepted on BOTH row tables and `weeks` still refused on both; containment refuses a
+  foreign category, a foreign subcategory and an estimate move, and does NOT refuse a rename;
+  reorder succeeds for the owner across categories and for the authoring PM, and is **refused at
+  the database** (42501) for a SENT estimate and for another user's draft, **with the rows proven
+  unchanged**; a refused move rolls back the moves before it; anon cannot execute it; **FILL-B3:
+  foreman and crew receive 0 estimates and 0 lines while the owner reads 3 and 8 of the same.**
+  Sweep verified: 0 fixture estimates, 0 fixture CO rows left.
+
+**Two test defects of my own, fixed, both named classes:**
+1. `created_by_role` is NOT NULL with a `get_my_role()` default — NULL under the service role —
+   so admin-built fixtures must pass it.
+2. ⚠️ **CLAUDE.md's `.limit(1)` rule, category 2, hit in my own new test.** A3 took an arbitrary CO
+   line item and it belonged to a SENT change order, so the insert tripped the immutability trigger
+   instead of the CHECK under test. Scoped to `change_orders.status = 'draft'` — ordering alone
+   would only have made the wrong pick stable.
+
+### B, UI half — **built; proven by screenshot and by the gate below**
+
+- **Items tab** (`items-tab.tsx`): header "Price" → **"Cost"** (the markup/margin header untouched,
+  per the ruling); category header = **filled indigo "Add Items"**, outlined **"+ Subcategory"**
+  (shortened), outlined **"+ Add Line" — KEPT, the ruling beats the mockup**, and a **red-outlined
+  square line-icon trash** (lucide `Trash2`) replacing the 🗑 emoji at all four sites; heavier
+  weight and larger text. Module-local styles only — no other screen changes (FILL-B1/ASK-B5).
+- **Metrics card** (`EstimateHealthStrip`): stacked small-caps labels over large mono figures —
+  Your cost · Client price · **Profit (green; red if negative)** · Margin, the target note beneath
+  it, and "Find a line…" inside the card on the right. Same derivation as Details, unchanged.
+- **"N pts under target"**: `marginTargetGap()` in `lib/estimate-health.ts`, used by BOTH the strip
+  and the Details bar, so "on target" (ASK-B1) reads identically on both. Absent when no target is
+  set. Stale "no target exists" comments corrected in both files, superseded text quoted.
+- **Drag-reorder**: a grab handle FAR LEFT of every line (`GripVertical`), native HTML5 DnD from
+  the handle only; drop onto a line = land before it, adopting its category/subcategory; dashed
+  "drop at the end of …" zones per category/subcategory appear only while dragging; a category
+  header is also a drop target. **Keyboard/touch alternative:** the handle is a focusable button;
+  ↑/↓ move one step in display order (crossing categories), announced via an `aria-live` region.
+  Handles hide while "Find a line…" filters (neighbours would be invisible). Writes go through the
+  ONE atomic RPC; order is renumbered estimate-globally in display order (the proposal and billing
+  read one global `sort_order`).
+- **Square foot**: the unit select on estimate labor rows, the desktop CO builder, and — new — the
+  **mobile CO editor's add-row form** all render the ONE shared list (`laborUnits`/`laborUnitLabels`
+  in `packages/shared`). The mobile CO editor previously offered no unit at all. **ASK-B2:**
+  switching a row to sq ft BLANKS a rate that still equals the hourly prefill (row then reads
+  unpriced); a rate the user typed is kept.
+
+**Audit 7 — before/after, the LIVE screen on rebuild-test, owner, estimate `202994aa…`
+("Condo Renovation"), committed to `docs/design/screenshots/`:**
+`S108-B-before-desktop.png`, `S108-B-after-desktop.png`, `S108-B-before-phone.png` (400px),
+`S108-B-after-phone.png`. Captured by the same script against the same dev server, the UI files
+stashed for "before". Desktop horizontal overflow **0 → 0 px**.
+⚠️ **Phone width, stated plainly:** overflow **594 px before, 588 after**. The whole desktop shell
+(fixed sidebar, wide rows table) does not fit 400px, and the line name collides with the TOTAL
+figure — **identically in the before capture**, so neither is introduced by B. The new buttons
+wrap and stay tappable. This is a `/dashboard` screen at phone width — TECH_DEBT #101's territory,
+not fixed here.
+
+### B — new e2e coverage for a screen nothing drove — **proven by sabotage**
+
+`e2e/desktop-line-items-s108.spec.ts` (own fixture: 1 draft estimate, 2 categories, 3 lines, swept
+after): asserts the ruled buttons per category (**"+ Add Line" ×2 present**, "+ Subcategory" ×2,
+old "+ Add Subcategory" ×0, trash ×2, Profit visible), then focuses a handle, presses ↓, and reads
+the result **from the database**: the line moved into the next category and the global order is
+`a1, a2, b1`. **`PW_EXIT_LINE=0`, 1 passed.** Sabotage — the keyboard handler short-circuited →
+**`SABOTAGE_PW_EXIT_LINE=1`, 1 failed**; reverted (`git diff` empty) → **`REVERTED_PW_EXIT_LINE=0`**.
+
+### B — CI run `35720702042` RED — ⚠️ three concurrent runs on one database; re-run alone
+
+`Lint & Type Check` **success**; `E2E (Playwright)` **failure: 2 failed, 1 flaky, 524 passed**:
+- `m-photos.spec.ts:212` / `:236` — `fixture punch link: … violates foreign key
+  punch_list_items_punch_list_id_fkey`, then `fixture hardDelete could not remove projects …
+  files_project_id_fkey — a dependent row from a previous run is still attached`.
+- `m-writes.spec.ts:541` (D-60) — expected 2 list options, received **3**; the test's own message:
+  *"either the fixture project gained a list or a previous run did not clean up (TECH_DEBT #144)"*.
+
+**None touches a B code path** (punch lists and the photo gallery). Read against the Actions API:
+this run executed **while `35720037343` (feature/s108) and `35719580487` (feature/s108-d-tooling)
+were ALSO running Playwright on rebuild-test** — three suites, one database, all triggered by my
+pushes within a few minutes of each other. Two `E2E List … / E2E CList …` punch lists stamped
+11:46 today were on the fixture project afterwards. Both suites clean their own fixtures at the
+START of a run (`m-writes` `beforeAll` pre-clean; `m-photos` hard-delete + re-seed), so the state
+self-heals; nothing was hand-deleted. `35720037343` (feature/s108, same suites, same window) came
+back **green** — contention produces reds non-deterministically, never greens.
+
+**The #157 lesson, one level up:** `cancel-in-progress` is per-BRANCH. Pushing to three branches in
+quick succession runs three suites at once. **From here: one branch's CI at a time, and no push to a
+second branch until the first run has finished.** Re-run: this commit, pushed only once every other
+run is complete, with no rebuild-test writes from this session until it finishes.
+
+**D's final run `35719580487` @ `4dcc146b` (a markdown-only commit) was ALSO red in the same window:**
+3 failed / 3 flaky / 553 passed in **40.0 min** (a normal run is ~23 min — load), failures in
+`desktop-chat-switcher :31 :62` (**#157's exact signature**), `desktop-selections :282 :306`,
+`m-photos :892`. A markdown commit cannot change e2e behaviour; this is the contention window.
+The merged `feature/s108` run `35720037343` @ `8e3bec0f` — which **contains all of D** and ran the
+same suites in the same window — is **green**. D stands merged on that evidence.
+
+---
+
+## Phase 3 — SPEC A — branch `feature/s108-a-site-visit`, cut from `feature/s108` @ `df8daae9`
+
+### B merged first
+`feature/s108-b-line-items` merged `--no-ff` → **`df8daae9`** after its SOLO CI run
+**`35723727160` green on both jobs**. Gate on the merged tree (byte-identical to B's tip):
+`TSC_EXIT_LINE=0`, `LINT_EXIT_LINE=0`, `BUILD_EXIT_LINE=0` (BUILD_ID present),
+`VITEST_EXIT_LINE=0` — **96 files, 1300 tests**. Pushed.
+
+### A — everything except voice — **built and proven live**
+
+**Migration `20261650000000_site_visit.sql`**, `supabase db push` → `DBPUSH_EXIT=0`, first time,
+link checked (`nmyphyhmfttxkdoposvf`), ledger showing it as the one PENDING file. Verified by object:
+four `site_visit_*` tables + `ai_transcription_logs`, **RLS on, exactly one SELECT policy each and
+NO write policy** (every write is an RPC — ASK-A8), the two standard triggers on each side table;
+**ten RPCs, all SECURITY DEFINER, none executable by `anon` or PUBLIC**; `estimates_status_check`
+with `site_visit`; `estimate_number` nullable; `notifications_type_check` with
+`site_visit_recorded`. Fingerprint regenerated (replay/live agreement re-asserted): policies 368,
+triggers 277, functions 303, latest `20261650000000`; `db:functions` **303/303 exact**.
+
+⚠️ **A FINDING FILL-A2 MISSED — its reader table listed only application code.**
+`enforce_estimate_immutability` (a database trigger) treats every status other than draft/review as
+a SENT document: any edit to a site visit would have raised, and **promotion (site_visit → draft)
+would have been refused as "a sent estimate cannot be returned to draft"**. The migration re-states
+the trigger verbatim from its latest file (`20261330000000`) plus two marked arms: nothing enters
+`site_visit` from another status, and a site visit is editable and may leave only to `draft`. Swept
+for other database readers of `estimates.status` (functions and policies): every one refuses a
+non-draft status, which is correct for a visit (no lines, bids or estimate files through them).
+Also corrected: the list reader is `listEstimates()`, not `getEstimates()`.
+
+**The floor, as built (ASK-A1/A2 → A):** foreman/crew get NOTHING on `estimates`. They create and
+edit through `create_site_visit` / `save_site_visit_note` / `save_site_visit_measurement` /
+`update_site_visit` / `abandon_site_visit`, which return ids only; they READ the money-free
+`site_visit_*` rows they created. `site_visit_access()` (SQL definer) is the one write rule:
+office any time; the recorder only while the estimate IS a site visit. The files route and (later)
+the voice route share one session-only decision, `lib/site-visits/access.ts`.
+
+**Nullable `estimate_number` rippled to exactly 7 compile errors** — every one a path reachable only
+for a numbered estimate. All go through `requireEstimateNumber()`, which THROWS rather than printing
+a blank number on a client document. The eighth error was the offline page's total label map — the
+new queue entity, caught by the compiler as designed.
+
+**`s108-site-visit.live.ts` — 17/17, `VITEST_EXIT_LINE=0`, on REAL crew/foreman/sub/PM/owner
+sessions.** The audit-6 claim, with counts so nothing passes on zero rows:
+- **BEFORE promotion:** the crew session reads **0** estimate rows while the row exists (admin
+  count 1), and reads **1 visit, 3 notes, 1 measurement, 0 voice notes — no money key on any row**
+  (checked against every money column FILL-A1 lists). Creating the visit left the company's
+  estimate-number sequence **unchanged**.
+- **AFTER the owner promotes** (draft, real number, sequence **+1 exactly**): the crew session
+  STILL reads **0** estimate rows and STILL reads its 3 notes / 1 measurement / 1 visit, no money
+  key — and has **lost every write** (note, measurement, upload refused; files floor says
+  `canUpload:false`, `ownFilesOnly:true`).
+- A different crew-level user (the foreman) reads 0 and is refused writes; a subcontractor cannot
+  create a visit; the crew member cannot promote (ASK-A3); a second promotion is refused; nothing can
+  turn an estimate back into a site visit; an abandoned visit is soft-deleted with no number; the
+  office notification row is written (`site_visit_recorded`), then removed.
+- Sweep verified: **0** fixture estimates, contacts, notifications left.
+
+**Q3 condition 2 — the route-order test EXTENDED, with a mirror, PROVEN BY SABOTAGE.**
+`s107-estimate-files-route-order.test.ts` gains the recorder arm: no visit → 404, abandoned →
+404, promoted → POST 403 — each asserting the admin client was **never reached** — plus TWO mirrors
+(still-a-visit POST, promoted GET) that must reach it. **12/12, exit 0.** Sabotage — one
+`getSupabaseAdmin()` call above the floor in both handlers → **`SABOTAGE_VITEST_EXIT_LINE=1`,
+8 failed / 4 passed**: every "never reached" case red, including all 3 new recorder cases, every
+mirror green. Reverted (0 sabotage lines left) → **12/12, `REVERTED_VITEST_EXIT_LINE=0`**.
+
+**UI (one shared record component, PARITY):** `/m/site-visits` (list), `/m/site-visits/new`
+(existing-or-new contact and address), `/m/site-visits/[id]` (photos, conditions, scope,
+measurements with computed sq ft, checkable blockers); desktop `/dashboard/estimates/site-visits/[id]`
+renders the SAME `SiteVisitRecord` plus Promote / Abandon; open visits appear in a panel ABOVE the
+estimates list and never in it; the builder redirects a site visit to its record; the Field page
+gains a "Site visits" entry OUTSIDE the project grid (m-hubs pins that grid at 4). Photos that fail
+to upload are held in the offline queue (new entity `site_visit_media` — a deliberate, ruled
+widening of M6M's queued set) and replayed with the same id; the files route accepts a client id
+so a replay lands one row. `lint` clean.
+
+### A — the gate caught a real defect: tenant deletion — **fixed, migration + walk**
+
+A's first gate: `TSC 0 · LINT 0 · BUILD 0` (all five site-visit routes in the manifest) but
+**`VITEST_EXIT_LINE=1` — 1 failed / 1306 passed**: `lib/trial/deletion-census.test.ts` —
+*"Tables with company_id in NEITHER the walk NOR SURVIVES … ai_transcription_logs,
+site_visit_measurements, site_visit_notes, site_visit_voice_notes, site_visits"*. Deleting a
+company would have left site-visit rows standing — **the existing census test did exactly its job.**
+
+- The four `site_visit_*` tables are tenant data → added to `COMPANY_TABLES` before `estimates`.
+- `ai_transcription_logs` is OUR AI spend → `SURVIVES` + `detachSurvivors()` nulls its
+  `company_id`, the ruled `ai_tag_logs` treatment [S137 Q1]. ⚠️ **That exposed a second defect in
+  my own migration:** its `company_id` was NOT NULL with a NO ACTION FK, so the detach would have
+  FAILED and the company row could never be deleted. **`20261660000000_ai_transcription_logs_detachable`**
+  makes it nullable with an `ON DELETE CASCADE` FK — identical to `ai_tag_logs`, verified by object
+  (`is_nullable YES`, `confdeltype c`). `db push` → `DBPUSH_EXIT=0`.
+
+Re-run: `TSC_EXIT_LINE=0`; unit suite **`VITEST_EXIT_LINE=0` — 96 files, 1307 tests**;
+`s138-trial-deletion-run.live.ts` (the real walk against rebuild-test) **14/14, exit 0**.
+⚠️ Stated plainly: that test's doomed tenant holds no site-visit rows, so it proves the walk still
+completes, not that it deletes site-visit rows — the table accounting is the census test's.
+Fingerprint regenerated (constraints n=1000, latest `20261660000000`).
+
+### A — the real UI, end to end — `e2e/m-site-visit.spec.ts` — **proven by sabotage**
+
+As the crew identity at 402px: Field → **Site visits** → Record → existing contact, address later →
+lands on `/m/site-visits/<id>` → adds a condition (1 row) and a 12 × 14 measurement (button
+previews and row shows **168 sq ft**) → the `site_visit_recorded` notification exists. Then the
+**Owner** opens the desktop page, **Create estimate from this visit** → confirm → lands on the
+builder; the row reads `draft` with a number. Then the **crew member again**: promoted banner shown,
+the note and measurement still read, **no add controls, no photo input, and no `$` anywhere in the
+record**. **`PW_EXIT_LINE=0`, 2 passed** (setup + this). Sabotage — `canWrite` forced true on the
+phone page → **`SABOTAGE_PW_EXIT_LINE=1`** (the write control reappeared); reverted (diff empty) →
+**`REVERTED_PW_EXIT_LINE=0`**. Fixtures swept: 0 `S108A-E2E` estimates left.
+
+### A — VOICE NOTES, the last piece — **built and proven, unit + live + real UI**
+
+**Model: `gpt-4o-transcribe`** — chosen from the models this key lists (GET /v1/models, key never
+printed; the transcription-capable ones present: `gpt-4o-transcribe`, `gpt-4o-mini-transcribe`,
+`gpt-transcribe`, `whisper-1`), and **proven by one real call on short clips** (TTS-generated, so
+the words are known): English came back verbatim including "LVP" and "12x14"; **Spanish came back
+in Spanish**, not translated. **Price $0.006/minute** — read from OpenAI's pricing page
+(developers.openai.com/api/docs/pricing, "Transcription models", 2026-09-22) through a summarising
+fetch, i.e. verified against the authoritative page but read by a tool, stated as such.
+⚠️ The transcription response carries **no `model` field**, so the Module 3H rule "log the
+RESOLVED model" cannot be met: the REQUESTED id is logged, and the code says so.
+
+**As built:** the phone records with MediaRecorder (webm/opus, or mp4 on iOS), **stops itself at
+10:00**, and **refuses a longer recording before upload** (a backgrounded tab can let the mic run
+past the timer); a failed upload is **held in the offline queue** with its id. The route
+`/api/site-visits/[id]/voice` shares the files route's floor (`resolveEstimateFileAccess`, session
+only, before the admin client), refuses >600 s and >25 MB again, **stores the audio first** (a
+`files` row nothing ever rewrites), then transcribes server-side; a failure answers 200 with
+`failed` and the phone offers **Try again** (`/api/site-visits/voice/[voiceId]/transcribe`, same
+floor). `transcript_machine` keeps what the model said; `transcript` is the editable copy and a
+retry never overwrites a human edit. A cost row lands in `ai_transcription_logs` on success AND
+failure. No `language`, no `prompt`, and never `/audio/translations`.
+
+| proof | result |
+| --- | --- |
+| `s108-voice.test.ts` (unit) | **6/6, `VITEST_EXIT_LINE=0`** — the cap is 600 on phone and server; 600 allowed, 600.1 refused, 0 refused; codec params stripped; iOS mp4 accepted; non-audio refused; ruled model and price |
+| `s108-voice.live.ts` (rebuild-test + real OpenAI, ≈ $0.001) | **5/5, `LIVE_VITEST_EXIT_LINE=0`** — garbage audio → `failed`, reason stored, cost row `success=false`, **stored audio byte-identical afterwards**; retry on the real clip → `done`, **Spanish words present, English absent**, cost row at (6.5 s / 60) × $0.006; recorder edits pre-promotion and `transcript_machine` untouched; a re-transcription does not overwrite the edit; after promotion the **recorder is refused (42501), the owner may edit**, and the recorder still reads it |
+| `e2e/m-site-visit-voice.spec.ts` (real screen, real route, Chromium fake mic) | **`PW_EXIT_LINE=0`, 2 passed**, `VOICE_E2E transcript_status=done`: one voice note, an `audio/*` file row with bytes, one cost row |
+
+Fixtures swept (0 left). **Voice is finished; nothing about it is deferred.**
+
+---
+
+## A merged; Spec E finished — the last commit before the final CI run
+
+- A's CI run **`35729690489` @ `a36c89c9` — green on both jobs** (Playwright included, with the new
+  `m-site-visit` and `m-site-visit-voice` specs); the overlapping `feature/s108` run
+  `35727723051` @ `df8daae9` also **green**. CI idle (`ACTIVE 0`) before merging.
+- `feature/s108-a-site-visit` merged `--no-ff` → **`cbf7bc22`** (tree byte-identical to A's tip).
+  Gate on the merged tree: **`TSC 0 · LINT 0 · BUILD 0` (BUILD_ID) · `VITEST 0` — 97 files, 1313
+  tests.**
+- **Spec E is a runbook now**, first section of `S108-SPEC-E-production-and-attended.md`: STEP 0
+  read-only production counts (each with its expected answer and a stop condition) → STEP 1 the
+  **eight** owed migrations by ONE `supabase db push`, link checked before and re-linked after,
+  object-level verification → STEP 2 the single merge-to-main command, plus two Vercel variables →
+  STEP 3 warming arming with the off-switch first, and which inbox AND which folder → STEP 4 the P3
+  real invite (where the log line is, GMT-4) and the sub bid-request real send → STEP 5 the burst and
+  site-visit field checklists → an unordered list of Josh's other items.
+  Every column the runbook's SQL names was checked against the live schema; **the original E1 query
+  (`email_types.name`) would have errored — the column is `email_type`**, corrected and the wrong
+  line quoted in place. The expected production tip was also corrected (560 → **570**, since
+  `20261570000000` exists) and marked as unverifiable by CC.
+
+---
+
+## FINAL — `feature/s108` @ `6bea70e5`, one green CI run with no pushes during it
+
+**Run `35734335559`: `Lint & Type Check` success, `E2E (Playwright)` success** — 13:34:17 → 14:08:05
+UTC, the only run active (`ACTIVE 0` before and after), branch tip unchanged throughout. This
+entry is pushed AFTER that run, and is markdown only.
+
+| spec | state |
+| --- | --- |
+| **C** email + drift | **built and proven** — merged `98d056e3` |
+| **D** tooling, tests, housekeeping | **built and proven** — merged `8e3bec0f`. Untestable until Josh rebuilds: `gh` + Claude Code in the devcontainer. `.env.local.example` content delivered for Josh to paste. #157 decided and CLOSED; #158 filed |
+| **B** estimates line items | **built and proven** — merged `df8daae9` after a SOLO green run |
+| **A** site visit | **built and proven, voice included** — merged `cbf7bc22`. Not yet: a real phone on a real jobsite (Spec E STEP 5b) |
+| **E** production runbook | **ready** — nothing in it executed; nothing touched production |
+
+**Not merged to `main`** (Josh's ruling): production lacks eight migrations, and Spec E STEP 1 must
+run before STEP 2's merge.
+
+**Real-money spend this session (OpenAI, test only):** the voice probe (two ~6 s transcriptions + two
+TTS clips), `s108-voice.live.ts` (three transcription calls), two e2e voice runs — cents in total.

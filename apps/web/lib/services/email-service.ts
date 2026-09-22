@@ -55,11 +55,22 @@ export const SENDING_DOMAIN = 'ezcontractorbinder.com';
 
 /**
  * Where PLATFORM mail tells the reader to reply [Josh, deletion-sweep
- * session]. The sending domain is verified in Resend for SENDING only — it
- * has no inbox — so a Reply-To on the domain would silently eat replies the
- * ruled copy promises are read ("Questions? Reply to this email"). This is
- * the monitored box, and it is also the contact address the published terms
- * and privacy policy name.
+ * session]. This is the monitored box, and it is also the contact address the
+ * published terms and privacy policy name.
+ *
+ * ⚠️ ITS ORIGINAL JUSTIFICATION IS NO LONGER TRUE, AND IS CORRECTED RATHER
+ * THAN QUIETLY DROPPED [S108]. _Superseded text:_ "The sending domain is
+ * verified in Resend for SENDING only — it HAS NO INBOX — so a Reply-To on the
+ * domain would silently eat replies the ruled copy promises are read."
+ * `ezcontractorbinder.com` now HAS inbound mail: Spaceship catch-all
+ * forwarding to this same Gmail box, verified with a live test message. So a
+ * Reply-To on the domain no longer eats anything — and the warming sender
+ * deliberately uses one (see warming-email.ts, S108 C1).
+ *
+ * THIS CONSTANT STILL STANDS, for a different and better reason: platform mail
+ * should name a stable, human-monitored address rather than a per-tenant slug
+ * that only exists because a company row does. Do not "simplify" it to a
+ * domain address on the strength of the catch-all.
  *
  * PLATFORM mail only. Tenant-facing mail (proposals, invoices, COs) resolves
  * Reply-To to the COMPANY via resolveCompanyReplyTo() — a client's reply must

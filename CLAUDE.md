@@ -255,7 +255,28 @@ push rule.
 spec amendment land together — not that a half-built feature is committed to bank progress. The
 unit is what would still be worth having if the next step never ran.
 
-### Reading the exit status of a command — **MANDATORY [moved from TECH_DEBT #137, S122]**
+### The thing inspected must be the thing being judged — exit statuses first — **MANDATORY [moved from TECH_DEBT #137, S122; generalised S108, Josh ASK-D3 → C]**
+
+_Previous heading, quoted: "Reading the exit status of a command"._ The exit-status rules below are
+the most frequent case of a wider class, which this campaign hit well over six times: **the evidence
+read belonged to something other than what was being judged.** An exit status is one instrument;
+every instrument can be pointed at the wrong thing. Before stating a result, name what produced the
+evidence and confirm it is the thing in question:
+
+- **A wrapper's status** — `tail`, `echo`, `/usr/bin/time`, a task-notification summary. Rules 1–2
+  below. (S108: a notification reported "exit code 0" twice over printed lines reading
+  `BUILD_EXIT_LINE=127` — `time` was not installed, no build ran — and `BUILD_EXIT_LINE=1`.)
+- **Truncated output** — a grep through `head -20` that stopped before the line contradicting it
+  (`#2-deliv`). Count, or read to the end.
+- **A script that threw and fell through** to a conclusion printed by the code after the failure.
+- **An absent tool** — `dig`, `gh`, `time`. "No output" from a missing command is not "no result".
+- **A cached result** — a Turbo cache hit reported as a build; a cached `download()`. A cache hit
+  is not a run.
+- **The wrong scope** — Prettier run on a copy in `/tmp`, outside the repo, where `.prettierrc` does
+  not apply; an env-var sweep that included `.next` build output (42 names instead of 28). S108.
+- **A probe that cannot fail** — a test passing on zero rows, or a regex that matches everything
+  (`'[^']*--` reported 80/80 bodies; the quote-parity truth was 1). **State row counts, and run a
+  control that must fire.**
 
 **A status is only evidence if it belongs to the process being judged.** Five instances in two
 sessions (S106–S107) all had one root cause: the status read belonged to a _different_ process than

@@ -68,6 +68,57 @@ export type Database = {
           },
         ]
       }
+      ai_transcription_logs: {
+        Row: {
+          audio_seconds: number | null
+          company_id: string | null
+          created_at: string | null
+          error_message: string | null
+          estimated_cost_usd: number | null
+          id: string
+          model: string
+          success: boolean
+          voice_note_id: string | null
+        }
+        Insert: {
+          audio_seconds?: number | null
+          company_id?: string | null
+          created_at?: string | null
+          error_message?: string | null
+          estimated_cost_usd?: number | null
+          id?: string
+          model: string
+          success: boolean
+          voice_note_id?: string | null
+        }
+        Update: {
+          audio_seconds?: number | null
+          company_id?: string | null
+          created_at?: string | null
+          error_message?: string | null
+          estimated_cost_usd?: number | null
+          id?: string
+          model?: string
+          success?: boolean
+          voice_note_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_transcription_logs_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_transcription_logs_voice_note_id_fkey"
+            columns: ["voice_note_id"]
+            isOneToOne: false
+            referencedRelation: "site_visit_voice_notes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       archived_documents: {
         Row: {
           amounts: Json | null
@@ -3703,7 +3754,7 @@ export type Database = {
           discount_amount: number | null
           discount_total: number
           discount_type: string | null
-          estimate_number: string
+          estimate_number: string | null
           expiration_days: number
           expires_at: string | null
           grand_total: number
@@ -3772,7 +3823,7 @@ export type Database = {
           discount_amount?: number | null
           discount_total?: number
           discount_type?: string | null
-          estimate_number?: string
+          estimate_number?: string | null
           expiration_days?: number
           expires_at?: string | null
           grand_total?: number
@@ -3841,7 +3892,7 @@ export type Database = {
           discount_amount?: number | null
           discount_total?: number
           discount_type?: string | null
-          estimate_number?: string
+          estimate_number?: string | null
           expiration_days?: number
           expires_at?: string | null
           grand_total?: number
@@ -8526,6 +8577,318 @@ export type Database = {
           },
         ]
       }
+      site_visit_measurements: {
+        Row: {
+          area_name: string
+          company_id: string
+          created_at: string | null
+          created_by: string | null
+          deleted_at: string | null
+          estimate_id: string
+          id: string
+          is_deleted: boolean | null
+          length_ft: number
+          notes: string | null
+          sort_order: number
+          square_feet: number | null
+          updated_at: string | null
+          updated_by: string | null
+          width_ft: number
+        }
+        Insert: {
+          area_name: string
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          deleted_at?: string | null
+          estimate_id: string
+          id?: string
+          is_deleted?: boolean | null
+          length_ft: number
+          notes?: string | null
+          sort_order?: number
+          square_feet?: number | null
+          updated_at?: string | null
+          updated_by?: string | null
+          width_ft: number
+        }
+        Update: {
+          area_name?: string
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          deleted_at?: string | null
+          estimate_id?: string
+          id?: string
+          is_deleted?: boolean | null
+          length_ft?: number
+          notes?: string | null
+          sort_order?: number
+          square_feet?: number | null
+          updated_at?: string | null
+          updated_by?: string | null
+          width_ft?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "site_visit_measurements_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "site_visit_measurements_estimate_id_fkey"
+            columns: ["estimate_id"]
+            isOneToOne: false
+            referencedRelation: "estimates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      site_visit_notes: {
+        Row: {
+          body: string
+          company_id: string
+          created_at: string | null
+          created_by: string | null
+          deleted_at: string | null
+          estimate_id: string
+          id: string
+          is_deleted: boolean | null
+          kind: string
+          resolved: boolean
+          resolved_at: string | null
+          resolved_by: string | null
+          sort_order: number
+          updated_at: string | null
+          updated_by: string | null
+        }
+        Insert: {
+          body: string
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          deleted_at?: string | null
+          estimate_id: string
+          id?: string
+          is_deleted?: boolean | null
+          kind: string
+          resolved?: boolean
+          resolved_at?: string | null
+          resolved_by?: string | null
+          sort_order?: number
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Update: {
+          body?: string
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          deleted_at?: string | null
+          estimate_id?: string
+          id?: string
+          is_deleted?: boolean | null
+          kind?: string
+          resolved?: boolean
+          resolved_at?: string | null
+          resolved_by?: string | null
+          sort_order?: number
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "site_visit_notes_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "site_visit_notes_estimate_id_fkey"
+            columns: ["estimate_id"]
+            isOneToOne: false
+            referencedRelation: "estimates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      site_visit_voice_notes: {
+        Row: {
+          company_id: string
+          created_at: string | null
+          created_by: string | null
+          deleted_at: string | null
+          duration_seconds: number
+          estimate_id: string
+          file_id: string | null
+          id: string
+          is_deleted: boolean | null
+          transcribed_at: string | null
+          transcript: string | null
+          transcript_edited_at: string | null
+          transcript_edited_by: string | null
+          transcript_error: string | null
+          transcript_language: string | null
+          transcript_machine: string | null
+          transcript_model: string | null
+          transcript_status: string
+          updated_at: string | null
+          updated_by: string | null
+        }
+        Insert: {
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          deleted_at?: string | null
+          duration_seconds: number
+          estimate_id: string
+          file_id?: string | null
+          id?: string
+          is_deleted?: boolean | null
+          transcribed_at?: string | null
+          transcript?: string | null
+          transcript_edited_at?: string | null
+          transcript_edited_by?: string | null
+          transcript_error?: string | null
+          transcript_language?: string | null
+          transcript_machine?: string | null
+          transcript_model?: string | null
+          transcript_status?: string
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Update: {
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          deleted_at?: string | null
+          duration_seconds?: number
+          estimate_id?: string
+          file_id?: string | null
+          id?: string
+          is_deleted?: boolean | null
+          transcribed_at?: string | null
+          transcript?: string | null
+          transcript_edited_at?: string | null
+          transcript_edited_by?: string | null
+          transcript_error?: string | null
+          transcript_language?: string | null
+          transcript_machine?: string | null
+          transcript_model?: string | null
+          transcript_status?: string
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "site_visit_voice_notes_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "site_visit_voice_notes_estimate_id_fkey"
+            columns: ["estimate_id"]
+            isOneToOne: false
+            referencedRelation: "estimates"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "site_visit_voice_notes_file_id_fkey"
+            columns: ["file_id"]
+            isOneToOne: false
+            referencedRelation: "files"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      site_visits: {
+        Row: {
+          company_id: string
+          contact_address_id: string | null
+          contact_id: string | null
+          created_at: string | null
+          created_by: string | null
+          deleted_at: string | null
+          estimate_id: string
+          id: string
+          is_deleted: boolean | null
+          promoted_at: string | null
+          promoted_by: string | null
+          title: string
+          updated_at: string | null
+          updated_by: string | null
+          visited_at: string
+        }
+        Insert: {
+          company_id?: string
+          contact_address_id?: string | null
+          contact_id?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          deleted_at?: string | null
+          estimate_id: string
+          id?: string
+          is_deleted?: boolean | null
+          promoted_at?: string | null
+          promoted_by?: string | null
+          title: string
+          updated_at?: string | null
+          updated_by?: string | null
+          visited_at?: string
+        }
+        Update: {
+          company_id?: string
+          contact_address_id?: string | null
+          contact_id?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          deleted_at?: string | null
+          estimate_id?: string
+          id?: string
+          is_deleted?: boolean | null
+          promoted_at?: string | null
+          promoted_by?: string | null
+          title?: string
+          updated_at?: string | null
+          updated_by?: string | null
+          visited_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "site_visits_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "site_visits_contact_address_id_fkey"
+            columns: ["contact_address_id"]
+            isOneToOne: false
+            referencedRelation: "contact_addresses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "site_visits_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "site_visits_estimate_id_fkey"
+            columns: ["estimate_id"]
+            isOneToOne: true
+            referencedRelation: "estimates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       subcontractor_compliance_documents: {
         Row: {
           company_id: string
@@ -9678,6 +10041,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      abandon_site_visit: {
+        Args: { p_estimate_id: string }
+        Returns: undefined
+      }
       allocate_invoice_number: {
         Args: { p_company_id: string }
         Returns: string
@@ -9851,6 +10218,25 @@ export type Database = {
             }
             Returns: string
           }
+      create_site_visit: {
+        Args: {
+          p_contact_address_id?: string
+          p_contact_id?: string
+          p_new_address?: Json
+          p_new_contact?: Json
+          p_title: string
+          p_visited_at?: string
+        }
+        Returns: string
+      }
+      delete_site_visit_measurement: {
+        Args: { p_measurement_id: string }
+        Returns: undefined
+      }
+      delete_site_visit_note: {
+        Args: { p_note_id: string }
+        Returns: undefined
+      }
       edit_purchase_order_line: {
         Args: {
           p_budget_item_id?: string
@@ -9960,6 +10346,7 @@ export type Database = {
         Args: { p_project_id: string }
         Returns: boolean
       }
+      promote_site_visit: { Args: { p_estimate_id: string }; Returns: string }
       prune_proposal_views: { Args: never; Returns: number }
       qb_enqueue: {
         Args: {
@@ -10043,6 +10430,10 @@ export type Database = {
         }
         Returns: Json
       }
+      reorder_estimate_lines: {
+        Args: { p_estimate_id: string; p_moves: Json }
+        Returns: number
+      }
       revert_invoice_settlement: {
         Args: { p_invoice_id: string }
         Returns: undefined
@@ -10057,6 +10448,28 @@ export type Database = {
         }
         Returns: Json
       }
+      save_site_visit_measurement: {
+        Args: {
+          p_area_name: string
+          p_estimate_id: string
+          p_length_ft: number
+          p_measurement_id: string
+          p_notes?: string
+          p_width_ft: number
+        }
+        Returns: string
+      }
+      save_site_visit_note: {
+        Args: {
+          p_body: string
+          p_estimate_id: string
+          p_kind: string
+          p_note_id: string
+          p_resolved?: boolean
+        }
+        Returns: string
+      }
+      schema_fingerprint: { Args: never; Returns: Json }
       seed_default_tags: { Args: { p_company_id: string }; Returns: undefined }
       seed_file_categories: {
         Args: { p_company_id: string }
@@ -10116,6 +10529,8 @@ export type Database = {
         Args: { p_profile_id: string }
         Returns: boolean
       }
+      site_visit_access: { Args: { p_estimate_id: string }; Returns: string }
+      strip_sql_line_comments: { Args: { p_src: string }; Returns: string }
       submit_delivery_check_in: {
         Args: { p_delivery_id: string }
         Returns: undefined
@@ -10163,6 +10578,14 @@ export type Database = {
         Returns: undefined
       }
       unlock_trial_company: { Args: { p_company_id: string }; Returns: number }
+      update_site_visit: {
+        Args: { p_estimate_id: string; p_title: string; p_visited_at?: string }
+        Returns: undefined
+      }
+      update_voice_note_transcript: {
+        Args: { p_transcript: string; p_voice_note_id: string }
+        Returns: undefined
+      }
       void_estimate: {
         Args: { p_estimate_id: string; p_reason: string }
         Returns: undefined

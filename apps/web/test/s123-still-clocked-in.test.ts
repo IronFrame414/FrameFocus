@@ -84,12 +84,27 @@ describe('§3j — the spec premise that turned out to be false', () => {
     // CHECK necessarily names every type. Left as an exact list anyway: it is
     // cheap, and it has forced five separate authors to state in writing that
     // their migration does not emit this notification.
+    //
+    // 20261620000000 (S108 C2) re-creates it a SIXTH time, to add
+    // `schema_drift`. Same category, same reason, and stated here because that
+    // is the price of the list: its only emitter is
+    // app/api/cron/schema-drift/route.ts, which emits THAT type and never
+    // still_clocked_in. That route is also the only notify() caller in the repo
+    // whose recipient is a single Owner resolved from an env-configured company
+    // id rather than from the event's own tenant — it is a platform-integrity
+    // alert, not tenant data — so it could not emit a per-project notification
+    // like this one even by accident.
     expect(hits.sort(), `unexpected still-clocked-in producers: ${hits.join(', ')}`).toEqual([
       'supabase/migrations/20260905000000_notifications_core.sql',
       'supabase/migrations/20260918000000_trial_lifecycle.sql',
       'supabase/migrations/20261027000000_selection_notifications.sql',
       'supabase/migrations/20261045000000_po_item_missing_notification.sql',
       'supabase/migrations/20261410000000_qb_sync_blocked_notification.sql',
+      'supabase/migrations/20261620000000_schema_fingerprint.sql',
+      // S108 Spec A re-creates it a SEVENTH time, to add `site_visit_recorded`.
+      // Its only emitter is lib/notify/site-visit-notify.ts, called by the
+      // /api/site-visits route; it emits THAT type and never still_clocked_in.
+      'supabase/migrations/20261650000000_site_visit.sql',
     ]);
   });
 });

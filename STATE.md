@@ -374,9 +374,9 @@ correct restore prints one line instead:
 | --------------------------- | ------------------------------------------------------------------------------------------- |
 | Email provider              | ✅ Enabled                                                                                  |
 | Email confirmation          | ✅ Enabled (`mailer_autoconfirm: false`) — **and it must stay on** [S160, see below]        |
-| Custom SMTP                 | ❌ **None** (`smtp_host: null`) [LIVE, S159] — which is why S160 built the Send Email Hook  |
+| Custom SMTP                 | _Historical [S108 D3d]:_ ❌ None (`smtp_host: null`) [LIVE, S159] — the reason S160 built the Send Email Hook. **Moot while the Hook is ON:** GoTrue no longer sends, so SMTP is never consulted |
 | Send Email Hook             | ✅ **ON** [LIVE, 2026-09-10] — evidence below; supersedes the S160 `Off` row                 |
-| Auth email rate limit       | **2 per hour, project-wide** (`rate_limit_email_sent`) while GoTrue is the sender           |
+| Auth email rate cap         | **3 per address per hour · 50 per project per hour · `auth_recovery` exempt from the 50 ONLY** — enforced inside the Send Email Hook (`auth-email.ts` `AUTH_RATE_PER_ADDRESS_HOURLY` / `AUTH_RATE_GLOBAL_HOURLY`) [RULED Josh 2026-09-11; corrected here S108 D3d]. _Superseded row, quoted:_ _"Auth email rate limit — **2 per hour, project-wide** (`rate_limit_email_sent`) while GoTrue is the sender"_ — that limit stopped binding when the Hook took over sending |
 | Site URL                    | `https://EZContractorBinder.com` — **corrected S160**; the old value below was stale        |
 | Redirect URLs               | `https://frame-focus-eight.vercel.app/auth/callback`, `http://localhost:3000/auth/callback` |
 | Automatic RLS on new tables | ✅ Enabled                                                                                  |
@@ -402,6 +402,10 @@ correct restore prints one line instead:
 > `Auth email rate limit — 2 per hour, project-wide … while GoTrue is the sender` both describe a
 > world where GoTrue sends. It does not. **The rate limit no longer binds**, and nothing else has
 > replaced it: auth email volume is now limited only by Resend.
+>
+> ✅ **[S108 D3d] Both rows corrected in the table above.** The "nothing else has replaced it"
+> sentence was true on 2026-09-10 and is not now: the auth rate cap RULED 2026-09-11 replaced it
+> (3/address/hour, 50/project/hour, `auth_recovery` exempt from the global ceiling only).
 >
 > ⚠️ **AND `auth_signup_confirmation` HAS ZERO ROWS while the mail is being delivered.** Signup
 > confirmations take a branch in `auth-email.ts` that skips `logEmail()` entirely — the same

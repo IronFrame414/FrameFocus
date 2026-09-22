@@ -13,6 +13,19 @@
 
 ## Closed Tech Debt
 
+- **#157 ✅ CLOSED [S108, 2026-09-22]** — `desktop-chat-switcher.spec.ts:62` (CI #304) was
+  **run-against-run contention on the shared `rebuild-test`, not a defect in the per-thread unread
+  count.** Decided exactly as the entry said it would be — one solo run on an idle database:
+  `--project=chromium --workers=1 --retries=0`, **no CI run queued or in progress on any branch
+  immediately before and after (checked by API)**, dev server restarted on the tree under test →
+  **`PW_EXIT_LINE=0`, 5/5 passed on first attempt, `:62` included.** The converse was ALSO observed,
+  by accident: an earlier S108 run overlapped a CI run this session had itself triggered, and `:31`
+  (ordering) and `:88` (the other thread's unread) failed first attempt with exactly the collision
+  fingerprint, then passed on retry. ⚠️ **What it teaches, recorded in the S108 report:** under
+  "push after every commit" the session itself is the likeliest second consumer — "idle" means no
+  CI run anywhere, checked immediately before, and no push until the run ends. #150 (cross-shard)
+  is untouched. Full entry text in git history (the commit before this closure).
+
 - **#3-7gqb ✅ CLOSED [feature/7g-quickbooks; S182]** — retainage RELEASE does not reach QuickBooks.
   ⚠️ **Closed by REMOVING the question, not by answering it.** The blocker was an allocation problem:
   `retainage_releases` is UNIQUE per project while many invoices may each withhold, so "which QB

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
+import { resolveEstimateFileAccess } from '@/lib/site-visits/access';
 
 // S106 Part C [RULED Josh, Option A] — the estimate Files route.
 //
@@ -14,6 +15,17 @@ import { getSupabaseAdmin } from '@/lib/supabase-admin';
 // read is wrong, skipped, or bypassed, a caller reaches any estimate's files in the
 // company, and four of the company-level rows are contracts. The session read is the floor;
 // it is never optional and the admin client is never used before it passes.
+//
+// [S108 Spec A, Q3 → A] THE FLOOR GAINED A SECOND ARM — "did you record this visit".
+// A foreman or crew member who records a site visit can never SELECT its estimate (the
+// row carries money), so the S106 floor would lock them out of their own photos. The
+// decision now lives in `resolveEstimateFileAccess()` (lib/site-visits/access.ts), shared
+// with the voice route, and is STILL made entirely on the session before the admin client:
+//   · office arm   — unchanged, plus owner/admin/PM may attach to a site visit;
+//   · recorder arm — from the money-free `site_visits` table: READ their own files,
+//     before and after promotion; UPLOAD only while it is still a site visit.
+// §7a is untouched: `files_insert_non_client` still refuses a project-less row for
+// foreman and crew. Their photo does not go through that policy at all.
 
 const BUCKET = 'project-files';
 const MAX_SIZE = 25 * 1024 * 1024; // 25 MB — enforced HERE, in the route, not at the bucket.
@@ -25,8 +37,8 @@ const ALLOWED_MIME = new Set([
   'image/heif',
 ]);
 
-// GET — list an estimate's files. VIEW rights (ASK-C.1): the caller need only be able to
-// SELECT the estimate through their session.
+// GET — list an estimate's files. VIEW rights: the office arm sees every file; the
+// recorder arm sees only the files THEY uploaded.
 export async function GET(_req: Request, { params }: { params: { id: string } }) {
   const estimateId = params.id;
   const supabase = await createClient();
@@ -35,28 +47,26 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
 
-  // THE FLOOR — read the estimate through the SESSION client. RLS decides visibility;
-  // null means blocked OR nonexistent, and the caller gets the same 404 either way (no
-  // existence oracle).
-  const { data: est } = await supabase
-    .from('estimates')
-    .select('id, company_id')
-    .eq('id', estimateId)
-    .single();
-  if (!est) return NextResponse.json({ error: 'Estimate not found' }, { status: 404 });
+  // THE FLOOR — session reads only. A null answer (blocked OR nonexistent) is the same
+  // 404 either way (no existence oracle).
+  const access = await resolveEstimateFileAccess(supabase, user.id, estimateId);
+  if (!access.ok) return NextResponse.json({ error: access.error }, { status: access.status });
 
   const admin = getSupabaseAdmin();
-  const { data: files, error } = await admin
+  let q = admin
     .from('files')
     .select('id, file_name, file_path, file_size, mime_type, category, created_at')
     .eq('estimate_id', estimateId)
-    .eq('company_id', est.company_id)
+    .eq('company_id', access.companyId)
     .eq('is_deleted', false)
     .order('created_at', { ascending: false });
+  if (access.ownFilesOnly) q = q.eq('created_by', user.id);
+  const { data: files, error } = await q;
   if (error) {
     console.error('[GET /api/estimates/[id]/files] list failed', {
       check: 'admin files select by estimate_id (route is the floor; session read passed)',
       estimateId,
+      mode: access.mode,
       message: error.message,
     });
     return NextResponse.json({ error: 'Could not list files' }, { status: 500 });
@@ -64,7 +74,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
 
   // Signed URLs, admin-generated — the ordinary /api/files/signed-url route uses the
   // SESSION client and is blocked on these project_id-NULL rows, same as the list. The
-  // route already proved the caller can see the estimate, so signing here is in-scope.
+  // route already proved the caller can see these rows, so signing here is in-scope.
   const withUrls = await Promise.all(
     (files ?? []).map(async (f) => {
       const { data: signed } = await admin.storage
@@ -76,9 +86,10 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
   return NextResponse.json({ files: withUrls });
 }
 
-// POST — upload a file to an estimate. EDIT rights (ASK-C.1): owner/admin any DRAFT, PM own
-// DRAFT — mirrors `estimates_update_manager`. Service role bypasses RLS, so the route
-// enforces this itself.
+// POST — upload a file to an estimate. EDIT rights: owner/admin any DRAFT, PM own DRAFT
+// (mirrors `estimates_update_manager`); owner/admin/PM on a SITE VISIT; and the recorder
+// of a site visit while it is still one. Service role bypasses RLS, so the route enforces
+// this itself — BEFORE the admin client exists.
 export async function POST(req: Request, { params }: { params: { id: string } }) {
   const estimateId = params.id;
   const supabase = await createClient();
@@ -87,28 +98,16 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
 
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('company_id, role')
-    .eq('user_id', user.id)
-    .eq('is_deleted', false)
-    .single();
-  if (!profile) return NextResponse.json({ error: 'Profile not found' }, { status: 403 });
-
-  // THE FLOOR + EDIT check. Session read scopes to the caller's company and their
-  // visible estimates; then the draft/authorship rule is enforced here.
-  const { data: est } = await supabase
-    .from('estimates')
-    .select('id, company_id, status, created_by')
-    .eq('id', estimateId)
-    .single();
-  if (!est) return NextResponse.json({ error: 'Estimate not found' }, { status: 404 });
-
-  const isOwnerAdmin = profile.role === 'owner' || profile.role === 'admin';
-  const canEdit = est.status === 'draft' && (isOwnerAdmin || est.created_by === user.id);
-  if (!canEdit) {
+  const access = await resolveEstimateFileAccess(supabase, user.id, estimateId);
+  if (!access.ok) return NextResponse.json({ error: access.error }, { status: access.status });
+  if (!access.canUpload) {
     return NextResponse.json(
-      { error: 'You cannot attach files to this estimate (edit rights required on a draft you own).' },
+      {
+        error:
+          access.mode === 'recorder'
+            ? 'This visit is now an estimate — new photos are closed. Yours stay readable.'
+            : 'You cannot attach files to this estimate (edit rights required on a draft you own).',
+      },
       { status: 403 }
     );
   }
@@ -126,11 +125,24 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       { status: 400 }
     );
   }
+  // [S108] Optional client-generated id: an offline-queue replay lands ONE row.
+  const rawId = form.get('id');
+  const clientId = typeof rawId === 'string' && /^[0-9a-f-]{36}$/i.test(rawId) ? rawId : null;
 
   const admin = getSupabaseAdmin();
-  const uniqueId = crypto.randomUUID();
+  if (clientId) {
+    const { data: already } = await admin
+      .from('files')
+      .select('id, file_name, file_size, mime_type, category, created_at')
+      .eq('id', clientId)
+      .eq('estimate_id', estimateId)
+      .maybeSingle();
+    if (already) return NextResponse.json({ file: already });
+  }
+
+  const uniqueId = clientId ?? crypto.randomUUID();
   const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
-  const storagePath = `${est.company_id}/estimates/${estimateId}/${uniqueId}-${safeName}`;
+  const storagePath = `${access.companyId}/estimates/${estimateId}/${uniqueId}-${safeName}`;
   const bytes = Buffer.from(await file.arrayBuffer());
 
   const { error: uploadError } = await admin.storage
@@ -147,7 +159,8 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   const { data: row, error: insertError } = await admin
     .from('files')
     .insert({
-      company_id: est.company_id,
+      ...(clientId ? { id: clientId } : {}),
+      company_id: access.companyId,
       project_id: null,
       estimate_id: estimateId,
       category: 'other',

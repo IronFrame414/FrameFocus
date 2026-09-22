@@ -16,6 +16,7 @@ import { isEmailUnsubscribed } from '@/lib/services/email-unsubscribe';
 import { notify } from '@/lib/notify/notify';
 import { getManagerNotifyRecipients } from '@/lib/notify/recipients';
 import { isFinalReminderStep } from '@framefocus/shared/utils/reminders';
+import { requireEstimateNumber } from '@/lib/estimate-number';
 
 // Spec 2 (4J) — daily Vercel Cron. Two passes:
 //   1. Reminders: fire step N when reminder_count = N-1 AND
@@ -191,7 +192,7 @@ export async function runEstimateReminders(
     const variables: TemplateVariables = {
       company_name: company.name,
       contact_name: session.recipient_name ?? 'there',
-      estimate_number: estimate.estimate_number,
+      estimate_number: requireEstimateNumber(estimate),
       estimate_name: estimate.name,
       signing_link: signingUrl,
       expiration_date: estimate.expires_at

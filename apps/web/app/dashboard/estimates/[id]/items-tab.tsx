@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { GripVertical, Plus, Trash2 } from 'lucide-react';
 import {
   DiscountType,
   EstimateCategory,
@@ -21,7 +22,9 @@ import {
   deleteEstimateLineRow,
   deleteEstimateSubcategory,
   getCompanyDefaultLaborRate,
+  getCompanyMarginTarget,
   recalculateEstimateTotals,
+  reorderEstimateLines,
   updateEstimateCategory,
   updateEstimateLineItem,
   updateEstimateLineRow,
@@ -35,7 +38,12 @@ import {
   type InstrumentRateType,
 } from '@/lib/services/instrument-rates-client';
 import type { CostCatalogItem } from '@/lib/services/cost-catalog-client';
-import { materialUnitsOfMeasure } from '@framefocus/shared/validation/estimate-items';
+import {
+  laborUnitLabels,
+  laborUnits,
+  materialUnitsOfMeasure,
+} from '@framefocus/shared/validation/estimate-items';
+import { planLineMove, stepDestination, type LineDestination } from '@/lib/estimate-line-order';
 import {
   backsolveMarkupPercent,
   computeRowCost,
@@ -61,7 +69,82 @@ const smallButton: React.CSSProperties = {
   borderRadius: '0.25rem',
   cursor: 'pointer',
 };
-const dangerButton: React.CSSProperties = { ...smallButton, color: '#c0362c' };
+
+// S108 Spec B ruling #3 — the design's button set: heavier weight and larger
+// text than live. Module-local, like smallButton — nothing outside this file
+// imports them (FILL-B1 / ASK-B5), so no other screen changes.
+const actionBase: React.CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: '0.35rem',
+  padding: '0.45rem 0.85rem',
+  fontSize: '0.8125rem',
+  fontWeight: 700,
+  lineHeight: 1.2,
+  borderRadius: '8px',
+  cursor: 'pointer',
+  whiteSpace: 'nowrap',
+};
+/** Filled indigo — the category header's "Add Items". */
+const primaryButton: React.CSSProperties = {
+  ...actionBase,
+  color: '#fff',
+  backgroundColor: '#3b4ae0',
+  border: '1px solid #3b4ae0',
+};
+/** Outlined — "+ Subcategory", "+ Add Line". */
+const secondaryButton: React.CSSProperties = {
+  ...actionBase,
+  fontWeight: 600,
+  color: '#0f1729',
+  backgroundColor: '#fff',
+  border: '1px solid #d5dae4',
+};
+/** Ghost indigo — the in-section / in-subcategory "Add items". */
+const ghostButton: React.CSSProperties = {
+  ...actionBase,
+  fontWeight: 600,
+  color: '#3b4ae0',
+  backgroundColor: '#f2f4ff',
+  border: '1px solid #dbe0fb',
+};
+
+/** The red-outlined square trash (ruling #2). Replaces the 🗑 emoji, which
+ *  rendered small and orange-tinted. `size` is the square's edge in px. */
+function TrashButton({
+  label,
+  onClick,
+  size = 32,
+}: {
+  label: string;
+  onClick: () => void;
+  size?: number;
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      onClick={onClick}
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        width: `${size}px`,
+        height: `${size}px`,
+        flexShrink: 0,
+        padding: 0,
+        color: '#c0362c',
+        backgroundColor: '#fff',
+        border: '1px solid #f1c4bf',
+        borderRadius: '8px',
+        cursor: 'pointer',
+      }}
+    >
+      <Trash2 size={Math.round(size * 0.47)} strokeWidth={2} aria-hidden />
+    </button>
+  );
+}
 const rowLabel: React.CSSProperties = { color: '#7b8699', fontSize: '0.8125rem' };
 const selectStyle: React.CSSProperties = {
   padding: '0.125rem 0.25rem',
@@ -149,7 +232,118 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
 
   useEffect(() => {
     getCompanyDefaultLaborRate().then(setDefaultLaborRate);
+    getCompanyMarginTarget().then(setMarginTarget);
   }, []);
+
+  // S108 Spec B #4 — the strip's "N pts under target" note. null = no target.
+  const [marginTarget, setMarginTarget] = useState<number | null>(null);
+
+  // ── S108 Spec B #5 — drag-reorder of LINES, within and across categories ──
+  // Native HTML5 drag-and-drop (no library is installed; FILL-B10), started
+  // ONLY from the grab handle. Native DnD has no keyboard path and no touch
+  // support in mobile Safari, so the handle is also a focusable button that
+  // ArrowUp/ArrowDown move one step — the keyboard AND touch alternative —
+  // announced through the aria-live region below.
+  //
+  // The plan is pure (lib/estimate-line-order.ts) and the write is ONE atomic
+  // RPC; authority stays in the database (RLS + the containment trigger).
+  const [draggingLineId, setDraggingLineId] = useState<string | null>(null);
+  const [dropKey, setDropKey] = useState<string | null>(null);
+  const [announcement, setAnnouncement] = useState('');
+  const reorderEnabled = canEdit && !findQ; // a filtered list would hide neighbours
+
+  function containerName(categoryId: string, subcategoryId: string | null): string {
+    const cat = categories.find((c) => c.id === categoryId)?.name ?? 'category';
+    if (!subcategoryId) return cat;
+    const sub = subcategories.find((x) => x.id === subcategoryId)?.name ?? 'subcategory';
+    return `${cat} › ${sub}`;
+  }
+
+  async function moveLine(lineId: string, dest: LineDestination) {
+    let moves;
+    try {
+      moves = planLineMove(categories, subcategories, lineItems, lineId, dest);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not move that line');
+      return;
+    }
+    if (moves.length === 0) return;
+    // Order only — no pricing input changes, so no recalculation.
+    const r = await mutate(() => reorderEstimateLines(estimate.id, moves), false);
+    if (!r.success) {
+      setError(r.error || 'Could not move that line');
+      return;
+    }
+    const name = lineItems.find((l) => l.id === lineId)?.name ?? 'Line';
+    setAnnouncement(`Moved ${name} to ${containerName(dest.categoryId, dest.subcategoryId)}.`);
+  }
+
+  function onHandleKeyDown(e: React.KeyboardEvent, lineId: string) {
+    if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
+    e.preventDefault();
+    const dest = stepDestination(
+      categories,
+      subcategories,
+      lineItems,
+      lineId,
+      e.key === 'ArrowUp' ? 'up' : 'down'
+    );
+    if (!dest) {
+      setAnnouncement(e.key === 'ArrowUp' ? 'Already first.' : 'Already last.');
+      return;
+    }
+    void moveLine(lineId, dest);
+  }
+
+  /** Drop-target props for anything that accepts a dragged line. */
+  function dropTarget(key: string, dest: LineDestination) {
+    if (!reorderEnabled) return {};
+    return {
+      onDragOver: (e: React.DragEvent) => {
+        if (!draggingLineId || dest.beforeLineId === draggingLineId) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        if (dropKey !== key) setDropKey(key);
+      },
+      onDragLeave: () => {
+        if (dropKey === key) setDropKey(null);
+      },
+      onDrop: (e: React.DragEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const id = draggingLineId;
+        setDraggingLineId(null);
+        setDropKey(null);
+        if (id) void moveLine(id, dest);
+      },
+    };
+  }
+
+  /** The "drop at the end of this list" strip, shown only while dragging. */
+  function endDropZone(categoryId: string, subcategoryId: string | null) {
+    if (!draggingLineId) return null;
+    const key = `end:${categoryId}:${subcategoryId ?? ''}`;
+    return (
+      <div
+        data-testid={`line-drop-end-${subcategoryId ?? categoryId}`}
+        {...dropTarget(key, { categoryId, subcategoryId, beforeLineId: null })}
+        style={{
+          height: '28px',
+          marginBottom: '10px',
+          borderRadius: '10px',
+          border: `1.5px dashed ${dropKey === key ? '#3b4ae0' : '#d5dae4'}`,
+          background: dropKey === key ? '#f2f4ff' : 'transparent',
+          fontSize: '0.72rem',
+          color: '#8792a8',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        Drop here to move to the end of {containerName(categoryId, subcategoryId)}
+      </div>
+    );
+  }
 
   // S97 corrected ruling: companies.default_labor_rate is the default CHARGE
   // rate. On a NON-FIXED instrument a new labor row's rate defaults from the
@@ -470,16 +664,36 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
             value={row.labor_unit ?? 'hours'}
             disabled={!canEdit}
             onChange={async (e) => {
+              const unit = e.target.value as LaborUnit;
+              // S108 ASK-B2 → A: NO rate prefill for square feet. A new labor
+              // row is prefilled with an HOURLY rate (company default, or the
+              // instrument's labor rate on a non-fixed contract). Carried onto
+              // a per-square-foot row it is a wrong number nobody typed, so a
+              // switch to sq ft BLANKS a rate that still equals that prefill —
+              // the row then reads as unpriced, which is honest. A rate the
+              // user entered themselves is kept.
+              const prefill = nonFixed ? laborRateInForce : defaultLaborRate;
+              const blankRate =
+                unit === 'sq_ft' && prefill != null && row.rate != null && Number(row.rate) === Number(prefill);
               const r = await mutate(
-                () => updateEstimateLineRow(row.id, { labor_unit: e.target.value as LaborUnit }),
+                () =>
+                  updateEstimateLineRow(
+                    row.id,
+                    blankRate ? { labor_unit: unit, rate: null } : { labor_unit: unit }
+                  ),
                 true
               );
               if (!r.success) setError(r.error || 'Save failed');
             }}
             style={selectStyle}
           >
-            <option value="hours">hours</option>
-            <option value="days">days</option>
+            {/* S108 #6 — the SHARED list (hours · days · sq ft), the same one
+                both change-order editors offer (PARITY, ASK-B6). */}
+            {laborUnits.map((u) => (
+              <option key={u} value={u}>
+                {laborUnitLabels[u]}
+              </option>
+            ))}
           </select>
         </span>
       );
@@ -617,19 +831,15 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
         </td>
         <td style={{ padding: '0.25rem 0.5rem' }}>
           {canEdit && (
-            <button
-              type="button"
-              aria-label="Delete row"
-              title="Delete row"
+            <TrashButton
+              label="Delete row"
+              size={28}
               onClick={async () => {
                 if (!(await confirm(`Remove ${ROW_TYPE_LABELS[row.row_type]} row "${row.name}"?`))) return;
                 const r = await mutate(() => deleteEstimateLineRow(row.id), true);
                 if (!r.success) setError(r.error || 'Delete failed');
               }}
-              style={dangerButton}
-            >
-              🗑
-            </button>
+            />
           )}
         </td>
       </tr>
@@ -689,9 +899,21 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
     // #5 — a section printing at $0 is tinted amber whole-card.
     const isUnpriced = Number(line.total_price) === 0;
 
+    // S108 #5 — the card is a drop target: a dragged line lands BEFORE it,
+    // adopting this card's category and subcategory.
+    const beforeKey = `before:${line.id}`;
+    const isDropBefore = dropKey === beforeKey;
+    const isDragging = draggingLineId === line.id;
+
     return (
       <div
         key={line.id}
+        data-line-card={line.id}
+        {...dropTarget(beforeKey, {
+          categoryId: line.category_id,
+          subcategoryId: line.subcategory_id,
+          beforeLineId: line.id,
+        })}
         style={{
           // 9b — Section card geometry (mockup: radius 14, padding 16).
           borderRadius: '14px',
@@ -699,8 +921,13 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
           marginBottom: '10px',
           // #5 — amber tint for an unpriced section, else the plain white card.
           border: isUnpriced ? '1.5px solid #f5cf8f' : '1px solid #e4e8ef',
-          boxShadow: isUnpriced ? '0 0 0 4px rgba(245,165,36,.09)' : undefined,
+          boxShadow: isDropBefore
+            ? '0 -3px 0 0 #3b4ae0'
+            : isUnpriced
+              ? '0 0 0 4px rgba(245,165,36,.09)'
+              : undefined,
           backgroundColor: isUnpriced ? '#fffdf7' : '#fff',
+          opacity: isDragging ? 0.45 : 1,
         }}
       >
         {/* Line header */}
@@ -723,7 +950,46 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
               flexWrap: 'wrap',
             }}
           >
-            <span style={{ fontWeight: 600, fontSize: '0.9375rem' }}>
+            {/* S108 #5 — the grab handle, FAR LEFT. Drag it, or focus it and use
+                ↑/↓ (the keyboard and touch alternative). */}
+            {reorderEnabled && (
+              <button
+                type="button"
+                draggable
+                data-testid={`line-handle-${line.id}`}
+                aria-label={`Move line ${line.name}. Drag, or press Up or Down arrow.`}
+                title="Drag to reorder — or focus and press ↑ / ↓"
+                onKeyDown={(e) => onHandleKeyDown(e, line.id)}
+                onDragStart={(e) => {
+                  setDraggingLineId(line.id);
+                  e.dataTransfer.effectAllowed = 'move';
+                  e.dataTransfer.setData('text/plain', line.id);
+                  const card = (e.currentTarget as HTMLElement).closest('[data-line-card]');
+                  if (card) e.dataTransfer.setDragImage(card, 24, 24);
+                }}
+                onDragEnd={() => {
+                  setDraggingLineId(null);
+                  setDropKey(null);
+                }}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: '24px',
+                  height: '28px',
+                  marginLeft: '-6px',
+                  padding: 0,
+                  border: 'none',
+                  borderRadius: '6px',
+                  background: 'transparent',
+                  color: '#9aa4b8',
+                  cursor: 'grab',
+                }}
+              >
+                <GripVertical size={18} aria-hidden />
+              </button>
+            )}
+            <span style={{ fontWeight: 700, fontSize: '1rem' }}>
               <InlineText
                 value={line.name}
                 disabled={!canEdit}
@@ -824,19 +1090,16 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
               </button>
             )}
             {canEdit && (
-              <button
-                type="button"
-                aria-label="Delete section"
-                title="Delete section"
-                onClick={async () => {
-                  if (!(await confirm(`Delete line "${line.name}"?`))) return;
-                  const result = await mutate(() => deleteEstimateLineItem(line.id), true);
-                  if (!result.success) setError(result.error || 'Delete failed');
-                }}
-                style={{ ...dangerButton, marginLeft: '0.375rem' }}
-              >
-                🗑
-              </button>
+              <span style={{ marginLeft: '0.5rem', display: 'inline-flex', verticalAlign: 'middle' }}>
+                <TrashButton
+                  label="Delete section"
+                  onClick={async () => {
+                    if (!(await confirm(`Delete line "${line.name}"?`))) return;
+                    const result = await mutate(() => deleteEstimateLineItem(line.id), true);
+                    if (!result.success) setError(result.error || 'Delete failed');
+                  }}
+                />
+              </span>
             )}
           </div>
         </div>
@@ -864,7 +1127,9 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
             <tr style={{ fontSize: '0.6875rem', color: '#7b8699', textAlign: 'left', borderBottom: '1px solid #e4e8ef' }}>
               <th style={{ padding: '0.25rem 0.5rem' }}>Type</th>
               <th style={{ padding: '0.25rem 0.5rem' }}>Name</th>
-              <th style={{ padding: '0.25rem 0.5rem' }}>Price</th>
+              {/* S108 ruling #1 — "Price" → "Cost": the column is the unit COST
+                  (rate / unit cost / amount), before markup; the sell is Total. */}
+              <th style={{ padding: '0.25rem 0.5rem' }}>Cost</th>
               <th style={{ padding: '0.25rem 0.5rem' }}>Qty</th>
               <th style={{ padding: '0.25rem 0.5rem', textAlign: 'right' }}>{modeNoun} %</th>
               <th style={{ padding: '0.25rem 0.5rem', textAlign: 'center' }}>Tax</th>
@@ -899,9 +1164,9 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
               <button
                 type="button"
                 onClick={() => openAddItems({ lineItemId: line.id })}
-                style={{ ...smallButton, color: '#3b4ae0', borderColor: '#dbe0fb', background: '#f2f4ff' }}
+                style={primaryButton}
               >
-                + Add items
+                <Plus size={15} aria-hidden /> Add items
               </button>
             )}
           </div>
@@ -925,9 +1190,9 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
                 type="button"
                 data-testid={`open-add-items-section-${line.id}`}
                 onClick={() => openAddItems({ lineItemId: line.id })}
-                style={{ ...smallButton, color: '#3b4ae0', borderColor: '#dbe0fb', background: '#f2f4ff' }}
+                style={ghostButton}
               >
-                + Add items
+                <Plus size={14} aria-hidden /> Add items
               </button>
             )}
             {canEdit && addRowDropdown(line.id)}
@@ -975,7 +1240,10 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
 
   function addLineButton(categoryId: string, subcategoryId: string | null) {
     return (
-      <button type="button" onClick={() => addLine(categoryId, subcategoryId)} style={smallButton}>
+      // ⚠️ "+ Add Line" STAYS [RULED]. The design mockup omits it; its removal
+      // was requested and WITHDRAWN — Josh wants material and labor rows
+      // together in one line. The ruling wins over the mockup.
+      <button type="button" onClick={() => addLine(categoryId, subcategoryId)} style={secondaryButton}>
         + Add Line
       </button>
     );
@@ -1040,16 +1308,14 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
                   type="button"
                   data-testid={`open-add-items-sub-${sub.id}`}
                   onClick={() => openAddItems({ lineItemId: lines[0].id })}
-                  style={{ ...smallButton, color: '#3b4ae0', borderColor: '#dbe0fb', background: '#f2f4ff' }}
+                  style={ghostButton}
                 >
-                  + Add items
+                  <Plus size={14} aria-hidden /> Add items
                 </button>
               )}
               {addLineButton(sub.category_id, sub.id)}
-              <button
-                type="button"
-                aria-label="Delete subcategory"
-                title="Delete subcategory"
+              <TrashButton
+                label="Delete subcategory"
                 onClick={async () => {
                   if (
                     !(await confirm(
@@ -1061,14 +1327,12 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
                   const result = await mutate(() => deleteEstimateSubcategory(sub.id), true);
                   if (!result.success) setError(result.error || 'Delete failed');
                 }}
-                style={dangerButton}
-              >
-                🗑
-              </button>
+              />
             </div>
           )}
         </div>
         {lines.map(lineItemBlock)}
+        {endDropZone(sub.category_id, sub.id)}
       </div>
     );
   }
@@ -1104,12 +1368,18 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
         {/* #1 — full-width TINTED category bar; identity on the left, actions
             right-aligned. */}
         <div
+          {...dropTarget(`head:${category.id}`, {
+            categoryId: category.id,
+            subcategoryId: null,
+            beforeLineId: null,
+          })}
           style={{
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'center',
             gap: '0.75rem',
             flexWrap: 'wrap',
+            outline: dropKey === `head:${category.id}` ? '2px solid #3b4ae0' : undefined,
             margin: isCollapsed ? '-16px' : '-16px -16px 12px',
             padding: '10px 16px',
             background: '#eef1f6',
@@ -1171,23 +1441,24 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
                   when the category has a section to receive them; the sheet
                   pre-targets that section (adjustable in step 2). */}
               {lineItems.some((l) => l.category_id === category.id) && (
+                // S108 ruling #3 — the FILLED indigo primary.
                 <button
                   type="button"
                   data-testid={`open-add-items-${category.id}`}
                   onClick={() => openAddItems({ categoryId: category.id })}
-                  style={{ ...smallButton, color: '#3b4ae0', borderColor: '#dbe0fb', background: '#f2f4ff' }}
+                  style={primaryButton}
                 >
-                  + Add items
+                  <Plus size={15} aria-hidden /> Add Items
                 </button>
               )}
-              <button type="button" onClick={() => addSubcategory(category.id)} style={smallButton}>
-                + Add Subcategory
+              {/* S108 ruling #3 — shortened from "+ Add Subcategory"; outlined secondary. */}
+              <button type="button" onClick={() => addSubcategory(category.id)} style={secondaryButton}>
+                + Subcategory
               </button>
               {addLineButton(category.id, null)}
-              <button
-                type="button"
-                aria-label="Delete category"
-                title="Delete category"
+              <TrashButton
+                label="Delete category"
+                size={34}
                 onClick={async () => {
                   if (
                     !(await confirm(
@@ -1199,16 +1470,14 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
                   const result = await mutate(() => deleteEstimateCategory(category.id), true);
                   if (!result.success) setError(result.error || 'Delete failed');
                 }}
-                style={dangerButton}
-              >
-                🗑
-              </button>
+              />
             </div>
           )}
         </div>
         {!isCollapsed && (
           <>
             {directLines.map(lineItemBlock)}
+            {endDropZone(category.id, null)}
             {subs.map(subcategoryBlock)}
           </>
         )}
@@ -1221,24 +1490,31 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
       {/* Step 9 — the live cost/price/margin strip (same derivation as the
           Details Health card; one implementation, two surfaces). 9b (§2): the
           "Find a line…" box sits beside it — the strip itself is NOT rebuilt. */}
-      <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'stretch', marginBottom: '0.75rem' }}>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <EstimateHealthStrip data={data} />
-        </div>
-        <input
-          value={findQuery}
-          onChange={(e) => setFindQuery(e.target.value)}
-          placeholder="Find a line…"
-          aria-label="Find a line"
-          style={{
-            width: '200px',
-            alignSelf: 'center',
-            padding: '9px 12px',
-            borderRadius: '9px',
-            border: '1px solid #d5dae4',
-            fontSize: '13px',
-          }}
-        />
+      {/* S108 ruling #4 — the design's metrics card, "Find a line…" inside it
+          on the right. The card is still the SAME derivation as Details. */}
+      <EstimateHealthStrip
+        data={data}
+        marginTarget={marginTarget}
+        trailing={
+          <input
+            value={findQuery}
+            onChange={(e) => setFindQuery(e.target.value)}
+            placeholder="Find a line…"
+            aria-label="Find a line"
+            style={{
+              width: '220px',
+              maxWidth: '100%',
+              padding: '10px 12px',
+              borderRadius: '10px',
+              border: '1px solid #d5dae4',
+              fontSize: '14px',
+            }}
+          />
+        }
+      />
+      {/* S108 #5 — where keyboard reorders are announced. */}
+      <div aria-live="polite" data-testid="line-reorder-status" style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)' }}>
+        {announcement}
       </div>
 
       {/* 9b — the aggregate unpriced/no-cap banner. Read-only derivation from

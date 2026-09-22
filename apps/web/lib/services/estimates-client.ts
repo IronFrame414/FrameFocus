@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase-browser';
+import type { LaborUnitValue } from '@framefocus/shared/validation/estimate-items';
 import type { Database } from '@framefocus/shared/types/database';
 import { recalculateEstimateTotals } from '@/lib/services/estimate-items-client';
 import type { SupabaseClient } from '@supabase/supabase-js';
@@ -8,6 +9,8 @@ import { applied, DISCARDED } from './mutation-result';
 // generator; re-narrow them to the literal unions per CLAUDE.md.
 
 export type EstimateStatus =
+  // [S108 Spec A] a site visit IS an estimate, in a status before draft.
+  | 'site_visit'
   | 'draft'
   | 'review'
   | 'sent'
@@ -185,7 +188,8 @@ type EstimateFileRow = Database['public']['Tables']['estimate_files']['Row'];
 /** [S170] 'allowance' added (allowances-selections-spec §2). */
 export type RowType = 'labor' | 'material' | 'subcontractor' | 'other' | 'allowance';
 
-export type LaborUnit = 'hours' | 'days';
+/** S108 — 'sq_ft' added; derived from the shared list so it cannot drift. */
+export type LaborUnit = LaborUnitValue;
 
 export type MaterialUnitOfMeasure =
   | 'each'
@@ -238,6 +242,9 @@ export async function listEstimates(filters?: ListEstimatesFilters): Promise<Est
     .from('estimates')
     .select('*')
     .eq('is_deleted', false)
+    // [S108 Spec A, FILL-A2] A site visit has no number and $0 totals; it is
+    // listed in its own section, never among estimates.
+    .neq('status', 'site_visit')
     .order('created_at', { ascending: false });
 
   if (filters?.status) {

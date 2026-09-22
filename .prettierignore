@@ -1,0 +1,4 @@
+# S108 D1a — markdown is hand-formatted in this repo. Prettier re-pads every
+# table on save (a one-line CLAUDE.md edit → 34-line diff) and TECH_DEBT.md is
+# already 295 lines Prettier-unclean on main. See .vscode/settings.json.
+*.md

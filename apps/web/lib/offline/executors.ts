@@ -31,6 +31,8 @@ export function makeExecutors(
       id: string;
       daily_log_id: string | null;
     }) => Promise<{ success: boolean; error?: string }>;
+    /** [S108 Spec A] site-visit photo/voice, through the routes. */
+    uploadSiteVisitMedia?: (payload: Record<string, unknown>) => Promise<{ success: boolean; error?: string }>;
   }
 ): Executors {
   return {
@@ -112,6 +114,12 @@ export function makeExecutors(
       };
       const result = await deps.uploadPhoto(p);
       if (!result.success) throw new Error(result.error ?? 'photo upload failed');
+    },
+
+    async uploadSiteVisitMedia(entry: QueueEntry) {
+      if (!deps.uploadSiteVisitMedia) throw new Error('no site-visit uploader wired');
+      const result = await deps.uploadSiteVisitMedia(entry.payload);
+      if (!result.success) throw new Error(result.error ?? 'site-visit upload failed');
     },
   };
 }
