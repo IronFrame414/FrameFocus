@@ -1421,3 +1421,25 @@ gains a "Site visits" entry OUTSIDE the project grid (m-hubs pins that grid at 4
 to upload are held in the offline queue (new entity `site_visit_media` — a deliberate, ruled
 widening of M6M's queued set) and replayed with the same id; the files route accepts a client id
 so a replay lands one row. `lint` clean.
+
+### A — the gate caught a real defect: tenant deletion — **fixed, migration + walk**
+
+A's first gate: `TSC 0 · LINT 0 · BUILD 0` (all five site-visit routes in the manifest) but
+**`VITEST_EXIT_LINE=1` — 1 failed / 1306 passed**: `lib/trial/deletion-census.test.ts` —
+*"Tables with company_id in NEITHER the walk NOR SURVIVES … ai_transcription_logs,
+site_visit_measurements, site_visit_notes, site_visit_voice_notes, site_visits"*. Deleting a
+company would have left site-visit rows standing — **the existing census test did exactly its job.**
+
+- The four `site_visit_*` tables are tenant data → added to `COMPANY_TABLES` before `estimates`.
+- `ai_transcription_logs` is OUR AI spend → `SURVIVES` + `detachSurvivors()` nulls its
+  `company_id`, the ruled `ai_tag_logs` treatment [S137 Q1]. ⚠️ **That exposed a second defect in
+  my own migration:** its `company_id` was NOT NULL with a NO ACTION FK, so the detach would have
+  FAILED and the company row could never be deleted. **`20261660000000_ai_transcription_logs_detachable`**
+  makes it nullable with an `ON DELETE CASCADE` FK — identical to `ai_tag_logs`, verified by object
+  (`is_nullable YES`, `confdeltype c`). `db push` → `DBPUSH_EXIT=0`.
+
+Re-run: `TSC_EXIT_LINE=0`; unit suite **`VITEST_EXIT_LINE=0` — 96 files, 1307 tests**;
+`s138-trial-deletion-run.live.ts` (the real walk against rebuild-test) **14/14, exit 0**.
+⚠️ Stated plainly: that test's doomed tenant holds no site-visit rows, so it proves the walk still
+completes, not that it deletes site-visit rows — the table accounting is the census test's.
+Fingerprint regenerated (constraints n=1000, latest `20261660000000`).

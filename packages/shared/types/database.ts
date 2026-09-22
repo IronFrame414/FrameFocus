@@ -71,7 +71,7 @@ export type Database = {
       ai_transcription_logs: {
         Row: {
           audio_seconds: number | null
-          company_id: string
+          company_id: string | null
           created_at: string | null
           error_message: string | null
           estimated_cost_usd: number | null
@@ -82,7 +82,7 @@ export type Database = {
         }
         Insert: {
           audio_seconds?: number | null
-          company_id: string
+          company_id?: string | null
           created_at?: string | null
           error_message?: string | null
           estimated_cost_usd?: number | null
@@ -93,7 +93,7 @@ export type Database = {
         }
         Update: {
           audio_seconds?: number | null
-          company_id?: string
+          company_id?: string | null
           created_at?: string | null
           error_message?: string | null
           estimated_cost_usd?: number | null

@@ -77,6 +77,8 @@ export const SURVIVES: Record<string, string> = {
   // Our spend, not their data. Handled specially: company_id is NULLED so the
   // financial trail survives without the tenant linkage [Josh, S137 Q1].
   ai_tag_logs: 'our AI spend — company_id nulled instead',
+  // [S108 Spec A] the same, for site-visit voice transcription (20261660000000).
+  ai_transcription_logs: 'our AI spend — company_id nulled instead',
   // Platform staff are not tenant data.
   platform_admins: 'not tenant data',
   // The job's own bookkeeping. Cleared at the end, not mid-walk.
@@ -360,6 +362,9 @@ export const COMPANY_TABLES: string[] = [
   // proposal_views cascades with estimates (20261052); listed anyway so the
   // walk stays explicit about every company-scoped table it owns.
   'proposal_views',
+  // Site visits (S108 Spec A) — money-free children of an estimate; they cascade
+  // with it, and are listed so the walk stays explicit about every table it owns.
+  'site_visit_voice_notes', 'site_visit_measurements', 'site_visit_notes', 'site_visits',
   'estimate_subcategories', 'estimate_categories', 'estimate_files', 'estimates',
   // Selections (20261026+) — added by the Q4 ruling; their absence was §3a of
   // deletion-sweep-analysis.md (selections FK projects/cost_catalog/
@@ -542,6 +547,11 @@ export async function detachSurvivors(
   await admin
     .from('ai_tag_logs')
     .update({ company_id: null as unknown as string })
+    .eq('company_id', companyId);
+  // [S108 Spec A] voice-note transcription spend — the same ruling.
+  await admin
+    .from('ai_transcription_logs')
+    .update({ company_id: null })
     .eq('company_id', companyId);
 }
 
