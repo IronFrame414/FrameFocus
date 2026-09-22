@@ -1305,3 +1305,12 @@ stashed for "before". Desktop horizontal overflow **0 → 0 px**.
 figure — **identically in the before capture**, so neither is introduced by B. The new buttons
 wrap and stay tappable. This is a `/dashboard` screen at phone width — TECH_DEBT #101's territory,
 not fixed here.
+
+### B — new e2e coverage for a screen nothing drove — **proven by sabotage**
+
+`e2e/desktop-line-items-s108.spec.ts` (own fixture: 1 draft estimate, 2 categories, 3 lines, swept
+after): asserts the ruled buttons per category (**"+ Add Line" ×2 present**, "+ Subcategory" ×2,
+old "+ Add Subcategory" ×0, trash ×2, Profit visible), then focuses a handle, presses ↓, and reads
+the result **from the database**: the line moved into the next category and the global order is
+`a1, a2, b1`. **`PW_EXIT_LINE=0`, 1 passed.** Sabotage — the keyboard handler short-circuited →
+**`SABOTAGE_PW_EXIT_LINE=1`, 1 failed**; reverted (`git diff` empty) → **`REVERTED_PW_EXIT_LINE=0`**.
