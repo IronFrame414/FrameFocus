@@ -858,3 +858,29 @@ exercised by a test — the harness drives `runSchemaDrift` directly, which is t
 for the loop but proves nothing about the 401. It matches the fourteen existing crons, none of which
 test their gate either. And **nothing has run against production**, so the drift detector has never
 seen the database it was built for.
+
+---
+
+## Resumed after a Codespace restart — Spec C MERGED into `feature/s108`
+
+Grounded against git first: `feature/s108` @ `92703ca7`, `feature/s108-c-email-drift` @ `a66bba7b`,
+both pushed, tree clean — exactly as the handoff said.
+
+- **CI on `a66bba7b`: run `35675907464`, conclusion `success`** — every step, including
+  `Build (production)`, `Run Playwright tests`, `Type check`, `Lint web`, `Unit tests (vitest)`.
+  Read from the Actions API per step, not from a summary.
+- **Spec C audit:** items 1, 3, 4 are proven above (sabotage on C1, the detector seen to fire on C2,
+  `vercel.json` parse test pins the 15th entry). Item 2 — "no other email type's Reply-To changed" —
+  is cases 4 and 5 of `s108-warming-reply-to.live.ts`, which pin the **shared resolver every other
+  email type calls** (owner fallback for NULL company email; `companies.email` when set). Item 5:
+  nothing touched production.
+- **Merged `--no-ff` → `98d056e3`.** Gate run on the MERGED tree, sequentially, nothing else running:
+
+| check | printed line |
+| --- | --- |
+| `tsc --noEmit` | `TSC_EXIT_LINE=0` |
+| `next lint` | `LINT_EXIT_LINE=0` |
+| `next build` (cold, `.next` removed) | `BUILD_EXIT_LINE=0`, `.next/BUILD_ID` present |
+| unit suite | `VITEST_EXIT_LINE=0` — **95 files, 1286 tests passed** |
+
+Pushed `92703ca7..98d056e3`. **Spec C: built, proven, merged.**
