@@ -673,3 +673,84 @@ clean tree → branch pushed → `--no-ff` → **stop on conflicts** → `next b
 **on the MERGED `feature/s108`** → only then push. **Never push a red branch.**
 Final: one green CI run on `feature/s108` with no pushes during it.
 
+---
+
+## ⚠️ What the DEPLOYED code does on production TODAY, without the three migrations
+
+`main` = `ad4e9b8` is deployed. `20261580000000`, `20261590000000` and `20261600000000` are **not**
+on production. Measured from the deployed source and from the constraint definitions; **no
+production query was run.**
+
+### 1. The warming cron — ERRORS ON EVERY TICK, and returns HTTP 200 while doing it
+
+`runEmailWarming()` begins with
+`admin.from('companies').select('id, name, slug').eq('email_warming_enabled', true)`.
+**`companies.email_warming_enabled` is added by `20261590000000` and by nothing else** — so on
+production the column does not exist and PostgREST answers `42703 column … does not exist`.
+
+The code reads that error rather than discarding it (`warming-email.ts:305-316`), pushes
+`"companies query failed: …"` into `outcome.errors`, logs
+`[warming] companies query failed` and **returns early**. The route then answers
+**HTTP 200 with that errors array** (`app/api/cron/email-warming/route.ts:44-48`).
+
+| | |
+| --- | --- |
+| **Frequency** | `*/15 13-22 * * 1-5` = **40 ticks per weekday, ~200 per week** |
+| **Is anything sent?** | **No.** It returns before the send loop. Nothing is mailed, nothing is logged, no quota is consumed |
+| **Is it erroring?** | **Yes — every single tick**, one `console.error` line each |
+| **Does Vercel flag it?** | **No.** The route returns 200, so the cron shows as succeeding |
+| **Any tenant impact?** | **None.** No mail, no data written |
+
+⚠️ **So it is failing loudly in the logs and silently in the dashboard.** That is the design
+working as intended — the error is read, not swallowed — but it means **~200 error lines a week
+will keep accumulating until `20261590000000` lands.** Nothing is broken by it and no cleanup is
+owed; it simply stops the moment the migration is applied.
+
+### 2. The sub bid-request log — THE MAIL SENDS AND THE LOG ROW IS SILENTLY LOST
+
+`email_logs.email_type` is a **foreign key**, not a CHECK:
+`email_logs_email_type_fkey FOREIGN KEY (email_type) REFERENCES email_types(email_type) ON DELETE RESTRICT`.
+`20261580000000` is what inserts the `sub_bid_request` row. Without it the INSERT fails `23503`.
+
+And the failure is swallowed twice over:
+- `logEmail()` (`email-service.ts:448-451`) logs `email_logs insert failed: …` and **returns `null`**.
+- The send route **does not check the return value** — `await logEmail(admin, {…})`, result discarded
+  (`bid-requests/[requestId]/send/route.ts:168`).
+
+| | |
+| --- | --- |
+| **Does the email send?** | **Yes.** `sendEmail()` runs first and succeeds |
+| **Is it logged?** | **No.** The row is rejected by the FK |
+| **Does the user see an error?** | **No.** The route returns success |
+| **Trace** | one Vercel line: `email_logs insert failed: …` |
+
+⚠️ **This is why Spec E orders `20261580000000` BEFORE the E4 real send.** Sending first would mail
+a real subcontractor a real request the platform holds no record of.
+
+### 3. P3 feature detection — OFF, CORRECTLY, AND IT SAYS SO
+
+`autoconfirmTriggerInstalled()` calls `admin.rpc('invited_signup_autoconfirm_installed')`.
+**That function is defined by `20261600000000` itself**, so on production the RPC does not exist and
+PostgREST answers "function not found".
+
+The code **fails safe by design** (`auth-email.ts:462-484`): on any error it logs
+`auth email hook: autoconfirm feature-detection failed; assuming absent` and **returns `false`**,
+whose documented meaning is *"sends the confirmation email — the behaviour that shipped before this
+mechanism existed."*
+
+| | |
+| --- | --- |
+| **Is P3 active?** | **No** |
+| **What happens to an invited user?** | They receive the confirmation email — **the pre-P3 behaviour, unchanged** |
+| **Is it erroring?** | One log line **per invited signup**, not per tick |
+| **Is it wrong?** | **No.** This is the fail-safe arm working. The diagnosis will read `P3: NOT suppressed — the in-transaction autoconfirm trigger is NOT installed` |
+
+### Summary for Josh
+
+**Nothing on production is broken, and nothing needs urgent action.** Two of the three degrade
+exactly as designed (P3 fails safe; the warming cron refuses to send). The **one thing worth
+knowing** is that the warming cron writes an error line **40 times a weekday** and Vercel will not
+show it, because the route returns 200 — and the **one thing to be careful about** is that a sub
+bid-request sent today mails a real person while leaving no record, so `20261580000000` must land
+before E4.
+
