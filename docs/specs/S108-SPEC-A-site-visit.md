@@ -479,3 +479,34 @@ do it, and where does it appear afterward.
    failure.
 7. Every migration named, with its production row count. Josh applies them.
 8. Anything still unknown that the build needs.
+
+---
+
+## BUILD RESULTS [S108 Phase 3] — branch `feature/s108-a-site-visit`
+
+Evidence for every line: `docs/sessions/S108-report.md` → "SPEC A".
+
+### Corrections to the FILLs above, found at build (FILL-A13 addendum)
+
+| the FILL said | measured at build |
+| --- | --- |
+| FILL-A2's reader table — application code only | ❌ **incomplete: a DATABASE trigger reads the status.** `enforce_estimate_immutability` treats every status but draft/review as a sent document — a site visit would have been un-editable and **promotion refused**. Amended in `20261650000000` (verbatim + two marked arms). All other DB readers (functions, policies) refuse non-draft, which is correct for a visit |
+| "list `getEstimates()`" | ❌ the function is **`listEstimates()`** — it is the one given the exclusion |
+| FILL-A9 model / price "NOT FILLED" | ✅ **filled:** `gpt-4o-transcribe`, proven by a real call; **$0.006/min** from OpenAI's pricing page (2026-09-22). The response has no `model` field — the requested id is logged |
+| (not in any FILL) nullable `estimate_number` | exactly **7** compile-time consumers, all numbered-estimate paths → `requireEstimateNumber()` (throws, never blanks) |
+| (not in any FILL) tenant deletion | the census test caught the new tables; site-visit tables join the walk; `ai_transcription_logs` survives detached, which required `20261660000000` (its `company_id` had been NOT NULL) |
+
+### The audit
+
+| audit | result |
+| --- | --- |
+| 1–2. FILLs / ASKs | all filled and ruled; corrections above |
+| 3. no RULED line contradicted | ✅ a visit IS an estimate row (`status='site_visit'`); numbered at promotion; any internal role records; recorder keeps READ and loses writes at promotion; conditions and scope are separate kinds; audio + transcript both kept |
+| 4. A5 / A6 | ✅ SECURITY DEFINER RPCs, no SELECT on `estimates` for foreman/crew, money-free `site_visit_*` tables |
+| 5. every FILL-A2 reader handles the status | ✅ compile-forced maps filled; the list excludes; the builder redirects; reminders/proposal/signing reachable only when numbered (and would now throw loudly); the immutability trigger amended |
+| 6. **money on the wire** | ✅ `s108-site-visit.live.ts` 17/17 on a real crew session: **0 estimate rows** before AND after promotion while the row exists; reads 1 visit / 3 notes / 1 measurement with **no money key on any row**; loses every write after promotion; sequence untouched until promotion (+1 exactly). Route floor extended with a mirror, **proven by sabotage** (8 red / 4 green; reverted 12/12). UI e2e proven by sabotage |
+| 7. migrations + production counts | `20261650000000_site_visit`, `20261660000000_ai_transcription_logs_detachable` — counts and verification in Spec E's runbook |
+| 8. still unknown | nothing the build needs. **Field-tested on a real phone: NOT YET** — Spec E STEP 5b |
+
+**Voice (the ruled LAST piece): finished** — unit 6/6, live 5/5 against the real endpoint, and a
+real-screen e2e through the route. Nothing about it is deferred.
