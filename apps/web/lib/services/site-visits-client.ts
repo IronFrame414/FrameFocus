@@ -143,3 +143,30 @@ export async function uploadSiteVisitPhoto(estimateId: string, file: Blob, fileN
   const body = (await res.json().catch(() => ({}))) as { error?: string };
   return { success: false, error: body.error ?? `Upload failed (${res.status})` };
 }
+
+/** A voice note: stored first, transcribed after (voice ruling). A failed
+ *  transcription is still a SUCCESSFUL upload — the audio is kept. */
+export async function uploadVoiceNote(
+  estimateId: string,
+  audio: Blob,
+  durationSeconds: number,
+  id: string
+): Promise<{ success: boolean; transcriptStatus?: string; error?: string }> {
+  const form = new FormData();
+  form.set('file', new File([audio], `voice-${id}`, { type: audio.type || 'audio/webm' }));
+  form.set('duration_seconds', String(durationSeconds));
+  form.set('id', id);
+  const res = await fetch(`/api/site-visits/${estimateId}/voice`, { method: 'POST', body: form });
+  const body = (await res.json().catch(() => ({}))) as { transcript_status?: string; error?: string };
+  if (!res.ok) return { success: false, error: body.error ?? `Upload failed (${res.status})` };
+  return { success: true, transcriptStatus: body.transcript_status };
+}
+
+export async function retryTranscription(voiceNoteId: string): Promise<{ success: boolean; error?: string }> {
+  const res = await fetch(`/api/site-visits/voice/${voiceNoteId}/transcribe`, { method: 'POST' });
+  const body = (await res.json().catch(() => ({}))) as { transcript_status?: string; error?: string };
+  if (!res.ok || body.transcript_status !== 'done') {
+    return { success: false, error: body.error ?? 'Transcription failed — the recording is saved. Try again.' };
+  }
+  return { success: true };
+}

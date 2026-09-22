@@ -1455,3 +1455,34 @@ the note and measurement still read, **no add controls, no photo input, and no `
 record**. **`PW_EXIT_LINE=0`, 2 passed** (setup + this). Sabotage — `canWrite` forced true on the
 phone page → **`SABOTAGE_PW_EXIT_LINE=1`** (the write control reappeared); reverted (diff empty) →
 **`REVERTED_PW_EXIT_LINE=0`**. Fixtures swept: 0 `S108A-E2E` estimates left.
+
+### A — VOICE NOTES, the last piece — **built and proven, unit + live + real UI**
+
+**Model: `gpt-4o-transcribe`** — chosen from the models this key lists (GET /v1/models, key never
+printed; the transcription-capable ones present: `gpt-4o-transcribe`, `gpt-4o-mini-transcribe`,
+`gpt-transcribe`, `whisper-1`), and **proven by one real call on short clips** (TTS-generated, so
+the words are known): English came back verbatim including "LVP" and "12x14"; **Spanish came back
+in Spanish**, not translated. **Price $0.006/minute** — read from OpenAI's pricing page
+(developers.openai.com/api/docs/pricing, "Transcription models", 2026-09-22) through a summarising
+fetch, i.e. verified against the authoritative page but read by a tool, stated as such.
+⚠️ The transcription response carries **no `model` field**, so the Module 3H rule "log the
+RESOLVED model" cannot be met: the REQUESTED id is logged, and the code says so.
+
+**As built:** the phone records with MediaRecorder (webm/opus, or mp4 on iOS), **stops itself at
+10:00**, and **refuses a longer recording before upload** (a backgrounded tab can let the mic run
+past the timer); a failed upload is **held in the offline queue** with its id. The route
+`/api/site-visits/[id]/voice` shares the files route's floor (`resolveEstimateFileAccess`, session
+only, before the admin client), refuses >600 s and >25 MB again, **stores the audio first** (a
+`files` row nothing ever rewrites), then transcribes server-side; a failure answers 200 with
+`failed` and the phone offers **Try again** (`/api/site-visits/voice/[voiceId]/transcribe`, same
+floor). `transcript_machine` keeps what the model said; `transcript` is the editable copy and a
+retry never overwrites a human edit. A cost row lands in `ai_transcription_logs` on success AND
+failure. No `language`, no `prompt`, and never `/audio/translations`.
+
+| proof | result |
+| --- | --- |
+| `s108-voice.test.ts` (unit) | **6/6, `VITEST_EXIT_LINE=0`** — the cap is 600 on phone and server; 600 allowed, 600.1 refused, 0 refused; codec params stripped; iOS mp4 accepted; non-audio refused; ruled model and price |
+| `s108-voice.live.ts` (rebuild-test + real OpenAI, ≈ $0.001) | **5/5, `LIVE_VITEST_EXIT_LINE=0`** — garbage audio → `failed`, reason stored, cost row `success=false`, **stored audio byte-identical afterwards**; retry on the real clip → `done`, **Spanish words present, English absent**, cost row at (6.5 s / 60) × $0.006; recorder edits pre-promotion and `transcript_machine` untouched; a re-transcription does not overwrite the edit; after promotion the **recorder is refused (42501), the owner may edit**, and the recorder still reads it |
+| `e2e/m-site-visit-voice.spec.ts` (real screen, real route, Chromium fake mic) | **`PW_EXIT_LINE=0`, 2 passed**, `VOICE_E2E transcript_status=done`: one voice note, an `audio/*` file row with bytes, one cost row |
+
+Fixtures swept (0 left). **Voice is finished; nothing about it is deferred.**

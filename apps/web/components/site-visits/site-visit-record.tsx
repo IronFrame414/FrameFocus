@@ -14,6 +14,7 @@ import {
 } from '@/lib/services/site-visits-client';
 import { useOfflineSync } from '@/app/m/offline-sync';
 import { ErrorNotice, useOnline } from '@/app/m/write-ui';
+import { VoiceNotes } from './voice-notes';
 
 // S108 Spec A — THE SITE VISIT RECORD. ONE component, rendered by BOTH the
 // phone (/m/site-visits/[id]) and the desktop page (/dashboard/estimates/
@@ -464,6 +465,19 @@ export function SiteVisitRecord({
       </section>
 
       <NoteSection kind="blocker" ctx={noteCtx} />
+
+      <VoiceNotes
+        estimateId={estimateId}
+        voiceNotes={detail.voiceNotes}
+        audioUrls={audioUrls}
+        canWrite={canWrite}
+        office={office}
+        viewerUserId={viewerUserId}
+        onChanged={async () => {
+          await loadFiles();
+          refresh();
+        }}
+      />
 
     </div>
   );

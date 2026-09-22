@@ -11,7 +11,7 @@ import {
 } from 'react';
 import { createClient } from '@/lib/supabase-browser';
 import { uploadFile } from '@/lib/services/files-client';
-import { uploadSiteVisitPhoto } from '@/lib/services/site-visits-client';
+import { uploadSiteVisitPhoto, uploadVoiceNote } from '@/lib/services/site-visits-client';
 import { OfflineQueue, type EnqueueInput, type QueueEntry } from '@/lib/offline/queue';
 import { IdbStorage } from '@/lib/offline/idb-storage';
 import { makeExecutors } from '@/lib/offline/executors';
@@ -94,9 +94,9 @@ async function uploadQueuedSiteVisitMedia(
     duration_seconds?: number;
   };
   if (p.kind === 'voice') {
-    // Voice lands in its own step (S108: voice is built LAST). Until then a held
-    // voice note stays QUEUED — failing keeps it; nothing is dropped.
-    return { success: false, error: 'voice upload not available yet' };
+    // Stored first, transcribed after; a failed TRANSCRIPTION is still a
+    // successful upload (the audio is kept, the phone offers a retry).
+    return uploadVoiceNote(p.estimate_id, p.blob, p.duration_seconds ?? 0, p.id);
   }
   return uploadSiteVisitPhoto(p.estimate_id, p.blob, p.file_name ?? `photo-${p.id}.jpg`, p.id);
 }
