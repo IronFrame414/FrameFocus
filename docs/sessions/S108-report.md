@@ -598,3 +598,36 @@ No pipeline dollar total exists. Full table under FILL-A2.
 5. a `files` policy or route change per A7 — **route preferred, policy untouched.**
 ⚠️ **Any CHECK tying `status` to `estimate_number` is deferred until Josh runs the production count.**
 
+---
+
+## Phase 1 — COMPLETE
+
+**All 49 FILL markers are filled in place, by measurement. None deleted, no spec restructured.**
+Two are answered "not filled, and why", in one line each, as the specs require:
+
+- **FILL-A9** (voice model + cost per minute) — nothing in this repo to measure it against; it must
+  be confirmed against OpenAI's current model and pricing pages at build time.
+- **FILL-D3b** (comment-stripped functions on rebuild-test) — it needs the per-function normaliser
+  that Spec C FILL-C3 specifies, so it is Phase 3 work that runs after C builds. Groundwork measured:
+  285 functions, 267,630 bytes, 80 bodies containing `--`, 1 (`qb_vault_put`) where a `--` sits
+  inside a string literal.
+
+**One new ASK raised by measurement:** **ASK-B6** — `change_order_line_rows` carries the same
+`hours`/`days` CHECK as estimates, and the PARITY ruling [S122] says one feature, both surfaces.
+
+**Nothing found contradicts a RULED line.** The closest call was Spec A's FILL-A5 ("if the only
+safe answer contradicts the RULED shape, STOP"): it does not. A site visit can remain an estimate
+row while a crew member never SELECTs it, via an RPC plus money-free side tables.
+
+**Three instrument errors caught and re-measured during this phase, all the same named class —
+recorded because catching them is the point:**
+1. A task notification reported "exit code 0" for a build whose **printed** line was
+   `BUILD_EXIT_LINE=127` (`/usr/bin/time` is not installed; no build ran).
+2. A Prettier reflow measured on a copy in `/tmp` — **outside the repo, so `.prettierrc` never
+   applied**; it also mis-showed Prettier rewriting a TypeScript fence.
+3. An env-var sweep returning 42 variables because it included `apps/web/.next`, the build output.
+   The real figure is 28 — exactly what Spec D claimed.
+   A fourth: a `'[^']*--` probe reported 80/80 function bodies had a comment inside a literal; the
+   correct quote-parity measurement is **2 lines in 1 function**.
+
+**Phase 2 questions issued. Session stopped, awaiting Josh.**
