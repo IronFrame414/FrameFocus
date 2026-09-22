@@ -430,3 +430,171 @@ the restyled buttons still must not overflow at 400px.
    stay inside its own estimate.
 3. (conditional on ASK-B6) the same widening on `change_order_line_rows_labor_unit_check`.
 
+---
+
+### Step 4 — Spec A measured
+
+**FILL-A0** — `main` = `ad4e9b8`; branch `feature/s108` @ `f1b2de1`; tree clean.
+
+**FILL-A1 — `estimates` has 67 columns.** Money-bearing, and **every one of them is on the row a
+SELECT grant would ship**:
+
+| column | populated at INSERT? |
+| --- | --- |
+| `subtotal`, `tax_total`, `discount_total`, `grand_total` | **yes — `NOT NULL DEFAULT 0`** |
+| `tax_rate`, `subcontractor_markup_percent`, `material_markup_percent`, `labor_markup_percent` | nullable, no DB default — written by the create path |
+| `discount_type`, `discount_amount`, `retainage_percent`, `deposit_percent`, `projected_value` | nullable, no default |
+| `pricing_mode` | **yes — `NOT NULL DEFAULT 'markup'`** |
+| `contract_type` | **yes — `NOT NULL DEFAULT 'fixed_price'`** |
+| `proposal_pricing_level` | **yes — `NOT NULL DEFAULT 'lump_sum'`** |
+
+Also defaulted at INSERT: `company_id` (`get_my_company_id()`), `created_by`/`updated_by`
+(`auth.uid()`), **`created_by_role` (`get_my_role()`)**, `status` (`'draft'`), `version_number`,
+`expiration_days` (30), `include_client_contract`, `also_send_to`, and `estimate_number` — see A3.
+
+**FILL-A2 — `estimates_status_check` holds exactly nine values:** `draft, review, sent, viewed,
+accepted, declined, expired, converted, voided`. A tenth needs a migration.
+`EstimateStatus` (`estimates-client.ts:10-25`) mirrors them.
+
+⚠️ **There is a compile-time forcing function, and it is worth relying on.** Two **total**
+`Record<EstimateStatus, …>` maps exist — `STATUS_LABELS` and `STATUS_COLORS`
+(`app/dashboard/estimates/labels.ts:7,20`). Adding the union member makes **both fail to compile**
+until they are filled. Every other reader is a runtime `status === …` test and must be named by
+hand. Named, with what each does with a new value:
+
+| reader | test | behaviour with `site_visit` |
+| --- | --- | --- |
+| list `getEstimates()` `estimates-client.ts:237-241` | `is_deleted = false` **only** | ⚠️ **a site visit WOULD appear in the estimates list** — the one reader that needs an explicit exclusion |
+| list-row money `estimates-list.tsx:239` | renders `grand_total` | would print `$0.00` |
+| metrics — win rate `estimates/page.tsx:47-51` | cohort requires `sent_at` non-null | ✅ excluded (a visit is never sent) |
+| metrics — expiring soon `:56-60` | `status === 'sent'` | ✅ excluded |
+| Before You Send / send `api/proposals/send` | reads `status`, then freezes | ✅ unreachable — no send control on a visit |
+| resend `api/proposals/resend` | `status` | ✅ |
+| sign `signing-service.ts` | `estimate.status !== 'sent'` → refuse | ✅ |
+| submit-for-review / approve `estimates-client.ts` | `current.status !== 'draft'` / `!== 'review'` | ✅ refuse, correctly |
+| convert `convert_estimate_to_project()` | operates on accepted | ✅ |
+| reminders + expiry cron `estimate-reminders.ts:100,131-133` | `.eq('status','sent')` | ✅ |
+| projects page `projects/page.tsx:79` | `.eq('status','accepted')` | ✅ |
+| deletion sweep / QuickBooks | no estimate-status branch found | ✅ |
+
+**So exactly one aggregate needs changing, and it is the LIST, not a total.** FILL-A11's warning
+about inflating pipeline totals is measurably a non-issue: **there is no pipeline dollar total** —
+the strip is Win rate, cohort size and Expiring soon, all `sent`-gated.
+
+**FILL-A3 — `estimate_number`: assigned at INSERT by a column default, and it BURNS a sequence.**
+`estimate_number text NOT NULL DEFAULT next_estimate_number()`. **Not unique** — only the non-unique
+`idx_estimates_estimate_number`; the only unique indexes on the table are `estimates_pkey` and the
+partial `estimates_supersedes_once`. `next_estimate_number()` (SECURITY DEFINER plpgsql, live body
+read) does `UPDATE companies SET estimate_number_sequence = estimate_number_sequence + 1 …
+RETURNING`, so **an abandoned visit created the ordinary way would consume a client-visible number**
+— precisely what the RULED line forbids. Assigning at promotion requires: **drop NOT NULL** (never
+fails on existing data), keep the default for the ordinary create path, have the site-visit path
+pass `estimate_number => NULL` explicitly, and call `next_estimate_number()` at promotion.
+⚠️ Any CHECK pairing `status` with `estimate_number IS NULL` must be **row-counted on production
+first** — this is the exact shape of `20261610000000`.
+
+**FILL-A4 — what a foreman and a crew member can do today: nothing, on every table.**
+
+| table | foreman / crew today |
+| --- | --- |
+| `estimates` | **no SELECT** (`estimates_select_authenticated` = owner/admin, or PM-own), **no INSERT** (`estimates_insert_manager` = owner/admin/PM), **no UPDATE**, and **no DELETE policy exists for anyone** |
+| `estimate_categories` / `estimate_line_items` / `estimate_line_rows` | SELECT needs `EXISTS` on `estimates` → nothing; writes are owner/admin/PM on a **draft** they own |
+| `files` for an ESTIMATE file | ⚠️ `files_insert_non_client` **does list `foreman` and `crew_member`** — but then requires **`project_id IS NOT NULL` AND `can_view_project(project_id)`**. An estimate file is `project_id IS NULL`. `files_select_non_client` imposes the same. **So they can neither insert nor read one.** `files_delete_owner_admin` is owner/admin only. |
+| `contacts` | ⚠️ **they ALREADY read the whole company list** — `contacts_select_authenticated` excludes only `subcontractor` and `client`. INSERT is owner/admin/PM. |
+| `contact_addresses` | same shape: `_select_scoped` excludes only sub/client; INSERT/UPDATE/DELETE owner/admin/PM |
+
+**FILL-A5 — a money-free crew INSERT. Measured, then proposed; NOT picked.**
+`INSERT … RETURNING` through PostgREST needs SELECT, and **RLS is row-level: a SELECT grant on
+`estimates` ships all 67 columns**, including the four NOT NULL money totals. Adding crew to
+`estimates_select_*` therefore cannot meet the RULED "NO access to money", now or after promotion.
+Three candidates, measured against the schema above:
+
+1. **A `SECURITY DEFINER` RPC (`create_site_visit(...) RETURNS uuid`).** Needs **no SELECT policy at
+   all** — an RPC returns its own value, so the `INSERT … RETURNING` problem disappears. It can also
+   create the contact and address in the same call, which means **no widening of
+   `contacts_insert_authorized` and no new read surface** (and FILL-A10's worry is moot anyway,
+   since crew already read every contact). ⚠️ Per CLAUDE.md the function must be **SQL** where the
+   RLS-bypass matters, or plpgsql with the documented care.
+2. **A column-safe view** (`site_visits_mine`) with its own policy. Postgres 15+ honours
+   `security_invoker`; a non-invoker view owned by a privileged role bypasses RLS, which is a second
+   mechanism to get wrong. Weaker than (1) and does not solve INSERT.
+3. **Notes and photos kept OFF the estimate row entirely** — see A6. **This is not an alternative to
+   (1); it is the other half of the answer**, and it is what makes the POST-promotion read safe.
+
+**Recommendation: (1) + (3) together.** Neither alone satisfies the ruling. **This does NOT
+contradict the RULED shape** — the estimate row is still the site visit; the crew member simply
+never SELECTs it.
+
+**FILL-A6 — where the notes live. They cannot live on the estimate row.**
+Scope lives on `estimates.scope_summary` / `scope_sections` (jsonb) today. If conditions,
+measurements, blockers and transcripts join them there, then "the recorder keeps READ access to
+their notes" **means granting SELECT on a row carrying `grand_total`** — the ruling's own
+prohibition. So they must live in **their own table(s) keyed by `estimate_id`, with no money
+column**, e.g. `site_visit_notes(estimate_id, kind ∈ {condition, scope, measurement, blocker},
+body, …)` plus a transcript/audio table. The recorder's post-promotion read is then a policy on
+**that** table (`created_by = auth.uid()`), and the estimate row is never exposed. Photos are
+`files` rows with `estimate_id` — already a nullable column that exists.
+
+**FILL-A7 — the S106 estimate-files route.** Both halves confirmed by reading it:
+- **GET floor** = a session `SELECT` on `estimates` (`route.ts:40-45`), then the **admin** client.
+- **POST floor** = session read **plus** `est.status === 'draft' && (owner/admin || created_by === user.id)` (`:107-113`).
+- Its own header states the reason: *"THE ROUTE IS THE ONLY ACCESS CONTROL … If the session read is
+  wrong, skipped, or bypassed, a caller reaches any estimate's files in the company, and four of the
+  company-level rows are contracts."*
+- **A crew member fails BOTH gates** — they cannot SELECT any estimate, and `site_visit` is not
+  `draft`. So: the edit gate must admit `status === 'site_visit' && created_by === user.id`, **and**
+  the floor must stop being "can you SELECT the estimate" for this case, because that is the thing
+  FILL-A5 says must never be granted. The floor becomes **"did you record this visit"**, read from
+  the money-free side table — which keeps the route as the only access control.
+- `ALLOWED_MIME` must gain audio types for A9; `MAX_SIZE` is already 25 MB.
+- ⚠️ The S107 route-floor test must still fail if the admin client moves above the session read —
+  `s107-estimate-files-route-order.test.ts` is that test, and its MIRROR case (`:102`) keeps it
+  non-vacuous. **It must be extended, not replaced.**
+
+**FILL-A8 — reuse, and the project-less problem.**
+- `app/m/capture-store.tsx` — `hold(file, projectId: string | null)` (`:54`, `:105`) **already
+  accepts a null project**. Reusable as-is.
+- ⚠️ `app/m/offline-sync.tsx:51` types one queue payload's `project_id: string` — **not nullable**.
+  That is the seam to widen.
+- **§7a is not weakened, and does not need to be.** `files_insert_non_client` refuses a
+  `project_id IS NULL` row for foreman/crew, and it should keep refusing: the site-visit photo does
+  not go through the session client at all, it goes through the **route** (A7), which uses the admin
+  client after its own floor. The policy is untouched.
+- `ContactAddressPicker` (`app/dashboard/estimates/contact-address-picker.tsx`) and inline contact
+  create (`#147`/`#148`) exist and are reusable; contact creation by crew rides the RPC (A5).
+
+**FILL-A9 — voice. Nothing exists; this is entirely new.**
+The only OpenAI use in the repo is `gpt-4o` **vision** in `ai-tagging.ts`. There is no transcription
+call anywhere (`grep` for `whisper|transcri|audio|speech` over `lib/` returns one unrelated comment
+in `legal-docs.ts`).
+- **Storage:** bucket `project-files`, `public=false`, **`allowed_mime_types` is NULL** (so audio is
+  permitted at the bucket; the ROUTE's allowlist is the gate). Path convention already established
+  and safe: `{company_id}/estimates/{estimateId}/{uuid}-{safeName}` — real UUIDs, so the
+  angle-bracket Storage trap cannot arise.
+- **Model / size / price:** OpenAI's audio endpoint caps uploads at **25 MB**, which matches the
+  route's existing `MAX_SIZE` exactly. **⚠️ I have NOT verified the model list or per-minute price
+  this session — there is nothing in the repo to measure them against, and I will not assert a
+  figure I did not check.** To be confirmed against OpenAI's current pricing before build, and
+  logged per the Module 3H rule (`ai_*_logs`, log `response.model` not the alias, cost row on
+  failure too).
+- **Offline:** record to the existing IndexedDB store, upload on reconnect, transcribe server-side
+  after the upload — so weak signal costs a delay, never the audio.
+
+**FILL-A10 — contact creation by crew.** Answered above: **granting it exposes nothing new,
+because foreman and crew already SELECT every contact and every contact address in the company.**
+The S131 Roster Floor excluded only `subcontractor` and `client`. Recommended anyway to route
+creation through the A5 RPC so no policy changes at all.
+
+**FILL-A11 — aggregates.** Only the estimates **list** (`getEstimates`) counts a site visit today.
+No pipeline dollar total exists. Full table under FILL-A2.
+
+**FILL-A12 — migrations this spec requires** (rebuild-test only; production counts in Spec E):
+1. widen `estimates_status_check` with `'site_visit'` — a widening CHECK governs no existing row.
+2. `ALTER estimates ALTER COLUMN estimate_number DROP NOT NULL` — cannot fail on data.
+3. new `site_visit_*` table(s) + policies + the standard `updated_at`/`updated_by` triggers and the
+   three column defaults (CLAUDE.md per-tenant checklist).
+4. the `create_site_visit` RPC (+ any promote/update RPC), with `REVOKE EXECUTE … FROM public` and
+   an explicit `GRANT` to `authenticated`.
+5. a `files` policy or route change per A7 — **route preferred, policy untouched.**
+⚠️ **Any CHECK tying `status` to `estimate_number` is deferred until Josh runs the production count.**
+
