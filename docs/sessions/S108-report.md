@@ -1314,3 +1314,33 @@ old "+ Add Subcategory" ×0, trash ×2, Profit visible), then focuses a handle, 
 the result **from the database**: the line moved into the next category and the global order is
 `a1, a2, b1`. **`PW_EXIT_LINE=0`, 1 passed.** Sabotage — the keyboard handler short-circuited →
 **`SABOTAGE_PW_EXIT_LINE=1`, 1 failed**; reverted (`git diff` empty) → **`REVERTED_PW_EXIT_LINE=0`**.
+
+### B — CI run `35720702042` RED — ⚠️ three concurrent runs on one database; re-run alone
+
+`Lint & Type Check` **success**; `E2E (Playwright)` **failure: 2 failed, 1 flaky, 524 passed**:
+- `m-photos.spec.ts:212` / `:236` — `fixture punch link: … violates foreign key
+  punch_list_items_punch_list_id_fkey`, then `fixture hardDelete could not remove projects …
+  files_project_id_fkey — a dependent row from a previous run is still attached`.
+- `m-writes.spec.ts:541` (D-60) — expected 2 list options, received **3**; the test's own message:
+  *"either the fixture project gained a list or a previous run did not clean up (TECH_DEBT #144)"*.
+
+**None touches a B code path** (punch lists and the photo gallery). Read against the Actions API:
+this run executed **while `35720037343` (feature/s108) and `35719580487` (feature/s108-d-tooling)
+were ALSO running Playwright on rebuild-test** — three suites, one database, all triggered by my
+pushes within a few minutes of each other. Two `E2E List … / E2E CList …` punch lists stamped
+11:46 today were on the fixture project afterwards. Both suites clean their own fixtures at the
+START of a run (`m-writes` `beforeAll` pre-clean; `m-photos` hard-delete + re-seed), so the state
+self-heals; nothing was hand-deleted. `35720037343` (feature/s108, same suites, same window) came
+back **green** — contention produces reds non-deterministically, never greens.
+
+**The #157 lesson, one level up:** `cancel-in-progress` is per-BRANCH. Pushing to three branches in
+quick succession runs three suites at once. **From here: one branch's CI at a time, and no push to a
+second branch until the first run has finished.** Re-run: this commit, pushed only once every other
+run is complete, with no rebuild-test writes from this session until it finishes.
+
+**D's final run `35719580487` @ `4dcc146b` (a markdown-only commit) was ALSO red in the same window:**
+3 failed / 3 flaky / 553 passed in **40.0 min** (a normal run is ~23 min — load), failures in
+`desktop-chat-switcher :31 :62` (**#157's exact signature**), `desktop-selections :282 :306`,
+`m-photos :892`. A markdown commit cannot change e2e behaviour; this is the contention window.
+The merged `feature/s108` run `35720037343` @ `8e3bec0f` — which **contains all of D** and ran the
+same suites in the same window — is **green**. D stands merged on that evidence.
