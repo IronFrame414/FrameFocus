@@ -205,6 +205,16 @@ the file, never MCP, rebuild-test only. Verify by hash after.
 > definition text, **80** bodies containing `--`, and **1** function (`qb_vault_put`) where a `--`
 > sits inside a string literal and would be mis-normalised by the naive strip.
 > Building C's normaliser first and reusing it here is why C builds before D.
+>
+> **FILLED [S108 Phase 3].** Built as `scripts/db-function-sync.py` (`npm run db:functions`).
+> Of **287** live functions: **253 exact**, **32 comment-stripped**, and **2 REFORMATTED** —
+> `enforce_no_rows_on_override_line` and `qb_vault_put`, where the deployed text had `( SELECT`
+> collapsed and adjacent string literals merged (behaviourally identical, textually not the file).
+> **0 real drift**, and the config (SECURITY DEFINER / `search_path`) agreed for all 287. All 34
+> re-applied from their LATEST file on rebuild-test via the Management API query endpoint — never
+> MCP — and afterwards **287/287 byte-equal**. The 32 include all four this spec named. ⚠️ One
+> residual is recorded in the S108 report: the first 10 were applied before a config pre-flight
+> existed, so their prior config was not snapshotted.
 
 
 **D3c — `apps/web/.env.local.example` is stale.** It documents Stripe only. The app reads 28
@@ -265,3 +275,27 @@ a Turbo cache hit reported as a build. Josh decides whether it goes in CLAUDE.md
 5. D2b: every suspect classified.
 6. D3b: every listed function's hash matches its latest file after normalisation.
 7. D3c: `.env.local.example` contains no value that looks like a key — grep proves it.
+
+
+---
+
+## BUILD RESULTS [S108 Phase 3] — branch `feature/s108-d-tooling`
+
+Evidence for every line is in `docs/sessions/S108-report.md` under "SPEC D".
+
+| audit | result |
+| --- | --- |
+| 1. FILLs / ASKs | every FILL filled (D3b filled above); ASK-D1/D2/D3 ruled and applied |
+| 2. D1a — no reflow | ✅ one-line edit to a CLAUDE.md table cell wider than its column: **1 line** after `prettier --write`; **16 lines** in the control with the ignore file bypassed |
+| 3. D1c — ledger check | ✅ `npm run db:verify` → `LEDGER CLEAN` on rebuild-test (223 rows, md5 `8c0372e5…` = files, cross-checked in the shell); **7 sabotages on scratch copies**, each named with the offending version; the "pending tail" case correctly passes |
+| 4. D2a — `#157` | see the report and the `#157` entry — the first attempt was **contaminated by this session's own CI runs** and discarded |
+| 5. D2b | ✅ every suspect classified (FILL-D2b above) |
+| 6. D3b — hashes | ✅ 287/287 byte-equal to their latest file |
+| 7. D3c — no key | ✅ 0 assignments carry a value; key-pattern grep → 0 matches. Content delivered in the report for Josh to paste (path is permission-denied to CC) |
+
+Also in this branch: D1d (`gh` feature + Claude Code in post-create — **applies on rebuild**),
+D3a (revoked key removed from `context2.md` and from this session's own report), D3d (STATE.md
+Custom SMTP historical; auth rate cap 3/50 with `auth_recovery` exempt from the 50 only), ASK-D3
+(CLAUDE.md exit-status section generalised, nothing else in the file touched), and **#158** filed in
+`TECH_DEBT_IDEAS.md` (Spanish translation — a deferred decision), authority advanced to #159.
+D1b (pre-push hook) was **dropped by ruling** and not built.

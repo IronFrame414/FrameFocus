@@ -219,7 +219,7 @@ Stripe test mode. Nothing was weakened to reach this.
 #### D3a — the committed key
 
 `docs/sessions/context2.md:12` — line number in the spec is **correct**. It carries a partial
-publishable key (`sb_publishable_CohyWuCQrtn20grA7gfTjw_`) alongside
+publishable key (value redacted at D3a — revoked 2026-09-21) alongside
 `https://jwkcknyuyvcwcdeskrmz.supabase.co`, which `STATE.md:38` confirms is **production**. Nine
 other files mention `sb_publishable` generically; this is the only committed value.
 
@@ -858,3 +858,357 @@ exercised by a test — the harness drives `runSchemaDrift` directly, which is t
 for the loop but proves nothing about the 401. It matches the fourteen existing crons, none of which
 test their gate either. And **nothing has run against production**, so the drift detector has never
 seen the database it was built for.
+
+---
+
+## Resumed after a Codespace restart — Spec C MERGED into `feature/s108`
+
+Grounded against git first: `feature/s108` @ `92703ca7`, `feature/s108-c-email-drift` @ `a66bba7b`,
+both pushed, tree clean — exactly as the handoff said.
+
+- **CI on `a66bba7b`: run `35675907464`, conclusion `success`** — every step, including
+  `Build (production)`, `Run Playwright tests`, `Type check`, `Lint web`, `Unit tests (vitest)`.
+  Read from the Actions API per step, not from a summary.
+- **Spec C audit:** items 1, 3, 4 are proven above (sabotage on C1, the detector seen to fire on C2,
+  `vercel.json` parse test pins the 15th entry). Item 2 — "no other email type's Reply-To changed" —
+  is cases 4 and 5 of `s108-warming-reply-to.live.ts`, which pin the **shared resolver every other
+  email type calls** (owner fallback for NULL company email; `companies.email` when set). Item 5:
+  nothing touched production.
+- **Merged `--no-ff` → `98d056e3`.** Gate run on the MERGED tree, sequentially, nothing else running:
+
+| check | printed line |
+| --- | --- |
+| `tsc --noEmit` | `TSC_EXIT_LINE=0` |
+| `next lint` | `LINT_EXIT_LINE=0` |
+| `next build` (cold, `.next` removed) | `BUILD_EXIT_LINE=0`, `.next/BUILD_ID` present |
+| unit suite | `VITEST_EXIT_LINE=0` — **95 files, 1286 tests passed** |
+
+Pushed `92703ca7..98d056e3`. **Spec C: built, proven, merged.**
+
+---
+
+## Phase 3 — SPEC D — branch `feature/s108-d-tooling`, cut from `feature/s108` @ `98d056e3`
+
+### D1a — markdown format-on-save OFF — **built and proven**
+
+- `.vscode/settings.json` (new, trackable — `.gitignore:28` un-ignores it):
+  `"[markdown]": { "editor.formatOnSave": false }`. Takes effect **without a rebuild**.
+- `.prettierignore` (new): `*.md` — the part that can be proved from a terminal.
+
+**Audit 2, measured — a one-line edit to a table cell deliberately WIDER than its column, in
+`CLAUDE.md`'s Technology Stack table** (the Phase 1 probe), then Prettier:
+
+| step | `git diff --stat CLAUDE.md` |
+| --- | --- |
+| after the one-line edit | `1 insertion(+), 1 deletion(-)` |
+| after `npx prettier --write CLAUDE.md` (`PRETTIER_EXIT=0`) | **`1 insertion(+), 1 deletion(-)` — unchanged** |
+| **CONTROL** — same, with `--ignore-path /dev/null` (`CONTROL_PRETTIER_EXIT=0`) | **`16 insertions(+), 16 deletions(-)`** — the reflow, so the instrument can fire |
+
+`CLAUDE.md` restored with `git checkout` afterwards; `git diff --stat` empty. (A first attempt on a
+`STATE.md` row moved only 3 lines in the control because that column is already enormous — too weak
+a control, so it was redone on the table Phase 1 used.)
+⚠️ **The editor half — "save no longer reflows" — cannot be proved from a terminal.** The settings
+file is the mechanism; the ignore file is the provable backstop.
+
+### D1b — pre-push `next build` hook — **DROPPED, per ASK-D1 → A.** Nothing built.
+CI's `e2e` job already runs `next build` as its own ungated step on every branch push; C's own
+build failure (`"compareFingerprints" is not a valid Route export field`) is the live example.
+
+### D1d + ASK-D2 — `gh` and Claude Code survive a rebuild — **built; untestable until a rebuild**
+
+`.devcontainer/devcontainer.json`: `"features": { "ghcr.io/devcontainers/features/github-cli:1": {} }`
+and `postCreateCommand` → `npm install && npm install -g @anthropic-ai/claude-code`. The file is
+JSONC; parsed after stripping `//` lines → `PARSE_EXIT=0`, both keys present.
+⚠️ **Applies on REBUILD, not restart** — `gh` is still absent in this running Codespace, and will
+stay absent until Josh rebuilds. The token's measured limits are recorded in the file itself.
+
+### D1c — the migration-vs-ledger check — **built and proven by sabotage**
+
+`scripts/db-ledger-check.py` (new), `npm run db:ledger`, and **`npm run db:verify` now runs the
+schema replay AND the ledger check.** It checks, printing offending versions rather than a count:
+duplicate versions · versions not 14 digits · **MCP-signature rows** (name prefix ≠ version — the
+S104b definition verbatim) · ledger rows with no file · **files with no row BELOW the tip** (a
+skipped file) · a row whose name does not match its file · and the **ordered-version md5**
+(`md5(string_agg(version, ',' ORDER BY version))`, the S104 fingerprint) for ledger, files and the
+shared set. Files **above** the tip are printed as PENDING and do not fail — that is production's
+normal state before an attended push. Refuses any project but rebuild-test; production's ledger is
+checked by exporting it and passing `--ledger-json`.
+
+**Against live rebuild-test** (`npm run db:verify` → `DBVERIFY_EXIT=0`):
+```
+tables 123 · columns 1918 · NOT NULL 772 · check 230 · unique 42 · fk 566     (replay)
+ledger rows 223 · migration files 223 · tip 20261620000000
+ordered md5, ledger : 8c0372e538b44e7d77c31afae18d18d5
+ordered md5, files  : 8c0372e538b44e7d77c31afae18d18d5
+LEDGER CLEAN.
+```
+**Independent cross-check:** `ls *.sql | sed 's/_.*//' | paste -sd, | md5sum` in the shell gives
+`8c0372e538b44e7d77c31afae18d18d5` — the same value, by a different instrument. (Phase 1's
+`d0d8670…` was the 222-file figure, before C2 added `20261620000000`.)
+
+**Audit 3 — sabotage on SCRATCH COPIES of the exported ledger, never the real one:**
+
+| sabotage | printed exit | named |
+| --- | --- | --- |
+| none (the export itself) | `LEDGER_EXIT=0` | clean |
+| duplicate a row | `LEDGER_EXIT=1` | DUPLICATE versions: 1 |
+| add an MCP-style row `20260922123456 -> 20261620000000_schema_fingerprint` | `LEDGER_EXIT=1` | MCP-signature rows: 1 **and** ledger row with no file: 1 |
+| add a ledger row with no file (`20261630000000`) | `LEDGER_EXIT=1` | ledger rows with NO matching file: `20261630000000` |
+| delete a MID-tree row (`20261100000000`) | `LEDGER_EXIT=1` | files with no row BELOW the tip: 1 |
+| delete the TIP row (production's shape) | `LEDGER_EXIT=0` | PENDING: 1 — correct, not a finding |
+| rename a row | `LEDGER_EXIT=1` | ledger NAME does not match its file: 1 |
+| a 7-digit version | `LEDGER_EXIT=1` | version NOT 14 digits: 1 |
+
+⚠️ **What it cannot catch, in its docstring:** a ledger row for work that was truncated — S104's
+actual failure. A row is a row. Only reading the objects catches that (the replay, and C2's
+fingerprint).
+
+### D3b — rebuild-test's function bodies re-synced to their LATEST files — **built and proven by hash**
+
+**New tool: `scripts/db-function-sync.py`** (`npm run db:functions`). Check mode is read-only;
+`--apply` re-runs the latest file's exact `CREATE` statement, **extracted from the file
+programmatically — never a clipboard**, via the Management API query endpoint against rebuild-test
+only (the same endpoint `live-sql.mjs` uses; **not MCP**). It refuses any other project in both
+modes. "Latest" is load-bearing: files are read in version order and the last `CREATE` wins — and
+the tree has **no `ALTER FUNCTION` at all** (grep, 0 hits), so that last `CREATE` fully defines both
+body and config.
+
+**FILL-D3b, measured — 287 live functions:**
+
+| class | count | meaning |
+| --- | --- | --- |
+| exact | **253** | byte-equal to the latest file body |
+| comments | **32** | equal after comment-strip + whitespace collapse — the MCP signature |
+| **reformat** | **2** | ⚠️ **not in the spec's list of suspects.** `enforce_no_rows_on_override_line` and `qb_vault_put`: the deployed text has `( SELECT` → `(SELECT` and **adjacent string literals merged** (`'… a ' 'company …'` → one literal). Postgres concatenates those, so behaviour is identical — but it is not the file's text |
+| real drift | **0** | |
+
+The comment-stripped 32 include all four the spec named — `convert_estimate_to_project`,
+`set_winning_bid`, and the two line-total invariant functions (`enforce_no_rows_on_override_line` is
+one; it was *reformatted* as well) — plus 29 more: `handle_new_user`, `get_my_company_id`,
+`get_my_role`, `is_platform_admin`, `update_updated_at`, the QB enqueue family, and others.
+`create_safety_incident` has **two live overloads, both legitimately in the tree** (two files, two
+signatures, no DROP); the tool pairs overloads by signature rather than calling them drift.
+
+⚠️ **Why the 2 reformatted bodies mattered more than the 32.** C2's fingerprint strips comments and
+collapses whitespace, so the 32 never affected it — but it does **not** re-join literals. So the
+committed C2 baseline encoded MCP's reformatting, and **production, deployed by `db push` from the
+files, would have reported function drift every day for bodies nobody changed.** Re-syncing
+rebuild-test and regenerating the baseline removes that false alarm before it ever fires.
+
+**Two problems hit while applying, both handled, one with a residual:**
+1. **Baseline-schema functions are plain `CREATE FUNCTION`** (a `pg_dump`), which fails on an
+   existing function → HTTP 400 on the 11th statement (`get_my_company_id`). The tool now rewrites
+   only the leading keyword to `CREATE OR REPLACE`; body and config untouched. It also now prints
+   Postgres's own error body, which the first run swallowed.
+2. ⚠️ **A `CREATE OR REPLACE` resets `SECURITY DEFINER` and `SET search_path` to whatever the
+   statement says.** The post-check would only have caught a change *after* it happened, so a
+   **pre-flight** was added: any function whose file config differs from its live config is class
+   `CONFIG` and is never applied. Across all 287 it agrees — **179 with a `SET`, 259 definers, 28
+   invokers** — and two controls (search_path removed; definer flipped, on a copy of
+   `handle_new_user`'s live row) each return `CONFIG: 1`, so the arm can fire.
+   ⚠️ **RESIDUAL, stated plainly:** the **first 10** functions were re-applied by the first run,
+   *before* this pre-flight existed, and their prior config was held only in that run's memory,
+   which the HTTP 400 discarded. Their config now equals their files'. The evidence it was not
+   changed is indirect: the tree has no `ALTER FUNCTION`, so the only source of a function's config
+   is its `CREATE` statement, and these were MCP deployments of that same statement. Not proven by
+   a before/after snapshot. The 10: `allocate_invoice_number`, `compute_member_coi_expiry`,
+   `convert_estimate_to_project`, `enforce_companies_qb_scope`,
+   `enforce_company_members_payment_default`, `enforce_expense_payment_account`,
+   `enforce_expenses_column_scope`, `enforce_invoice_void_authority`,
+   `enforce_invoices_column_scope`, `enforce_profiles_self_column_scope`.
+
+**Result:** `--apply` → `SYNC_APPLY_EXIT=0`, *"re-synced 24; config and grants unchanged on every
+one"*; then **287 exact, 0 comments, 0 reformat, 0 drift, 0 config.** (10 + 24 = 34.)
+**Audit 6 — every listed function's hash matches its latest file:** yes, all 287, byte-equal.
+
+**C2 baseline regenerated** (`npm run db:fingerprint` → `FP_EXIT=0`; it re-asserted replay/live
+agreement on all six dimensions before writing). **Only the functions digest moved**
+(`b20b30ed…` → `4f075aba…`); policies `5cb72748…`, triggers `d1c987c4…`, constraints `4c9fced8…`
+byte-identical. `s108-schema-drift.live.ts` against the new baseline: **`VITEST_EXIT_LINE=0`, 8/8**,
+detector still seen to fire and return to zero.
+
+### D3a — the committed production key — **done**
+
+`docs/sessions/context2.md:12`: the partial `sb_publishable_…` value replaced with a note that it
+was **revoked on 2026-09-21** (revoking the production `sb_secret_` key took the whole new-format
+set) and that git history keeps it, acceptable only because it is revoked and publishable.
+⚠️ **This report had quoted the same value itself** (Phase 1, D3a entry) — redacted there too.
+A repo-wide grep for `sb_publishable_` followed by 6+ key characters, excluding `node_modules`,
+`.next` and `.git`, now returns **nothing**.
+
+### D3c — `apps/web/.env.local.example` — **content delivered here for Josh to paste (Q11 → A)**
+
+⚠️ **I cannot read or write that path** (denied by this session's permissions), so per the ruling
+the complete file is below. **Josh: replace the whole file with this block.**
+
+**Count, re-measured:** the app now reads **29** variables, not 28 — S108 C2 added
+`SCHEMA_DRIFT_COMPANY_ID`. **27 are declared** below; the other two (`NODE_ENV`, `VERCEL_ENV`) are
+set by the platform and named in the closing comment, as is the script-only `DB_VERIFY_OUT`.
+`NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` (in today's file, read by nothing) is dropped, and
+`NEXT_PUBLIC_APP_URL`'s pre-rebrand value goes with every other value.
+
+**Audit 7 — no value that looks like a key, proved by grep** over the scratch copy of exactly this
+content: assignments carrying any value **0** of 27; a pattern for JWTs (`eyJ`), `sb_publishable_`/
+`sb_secret_`, Stripe `sk_`/`pk_`/`whsec_`/`price_`, Resend `re_`, and any 32+ character token →
+**0 matches, `KEYGREP_EXIT=1`**. (The first draft said "the `eyJ…` keys" in a comment and matched
+its own grep; reworded rather than exempted.)
+
+```dotenv
+# apps/web/.env.local.example — every variable the app reads. NO VALUES, EVER.
+# Rebuilt S108 (D3c). Copy to apps/web/.env.local and fill in. .env.local is
+# gitignored and does NOT survive a Codespace rebuild.
+#
+# ⚠️ THIS CODESPACE TALKS TO REBUILD-TEST, NEVER PRODUCTION. Every value below
+# comes from rebuild-test (ref nmyphyhmfttxkdoposvf) or a sandbox.
+
+# ── Supabase ─────────────────────────────────────────────────────────────────
+# From the REBUILD-TEST project → Settings → API Keys → the LEGACY tab (the
+# JWT-format keys). The new-format keys were revoked on 2026-09-21.
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_ANON_KEY=
+SUPABASE_SERVICE_ROLE_KEY=
+# Personal access token for the Management API. Read by scripts/ only
+# (live-sql.mjs, db-fingerprint.mjs, db-ledger-check.py, db-function-sync.py).
+SUPABASE_ACCESS_TOKEN=
+
+# ── App origin ───────────────────────────────────────────────────────────────
+# Builds every outbound link and the QuickBooks redirect URI. No trailing slash.
+NEXT_PUBLIC_APP_URL=
+
+# ── Stripe (test mode) ───────────────────────────────────────────────────────
+STRIPE_SECRET_KEY=
+STRIPE_WEBHOOK_SECRET=
+STRIPE_PRICE_STARTER=
+STRIPE_PRICE_PROFESSIONAL=
+STRIPE_PRICE_BUSINESS=
+# Kill switch [S99]: `true` skips billing enforcement in middleware. Leave unset.
+DISABLE_BILLING_ENFORCEMENT=
+
+# ── Email (Resend) ───────────────────────────────────────────────────────────
+# ⚠️ RESEND_API_KEY IS DELIBERATELY ABSENT FROM CODESPACES [S107 ruling]. Email
+# only sends from a Vercel production deployment (the S126 gate). Leave it empty.
+RESEND_API_KEY=
+RESEND_SIGNING_SECRET=
+# Kill switch: `false` = nobody sends, anywhere; `true` = this process sends
+# (a supervised non-prod send); unset = only VERCEL_ENV=production sends.
+EMAIL_SEND_ENABLED=
+# Supabase Auth "Send Email" hook secret (/api/auth/send-email).
+SEND_EMAIL_HOOK_SECRET=
+# HMAC secret for one-click unsubscribe tokens.
+UNSUBSCRIBE_TOKEN_SECRET=
+
+# ── Web Push ─────────────────────────────────────────────────────────────────
+NEXT_PUBLIC_VAPID_PUBLIC_KEY=
+VAPID_PRIVATE_KEY=
+# A mailto: or https: contact URI.
+VAPID_SUBJECT=
+
+# ── QuickBooks Online ────────────────────────────────────────────────────────
+# The SANDBOX app's keys. Sandbox realm 9341457813274121 — the realm is NOT an
+# env var: it arrives on Intuit's callback and is stored on companies.qb_realm_id.
+QBO_CLIENT_ID=
+QBO_CLIENT_SECRET=
+# ⚠️ Anything other than exactly `production` means SANDBOX, silently (config.ts).
+QBO_ENVIRONMENT=
+
+# ── OpenAI ───────────────────────────────────────────────────────────────────
+# Photo auto-tagging (GPT-4o vision) and site-visit voice transcription.
+OPENAI_API_KEY=
+
+# ── Cron ─────────────────────────────────────────────────────────────────────
+# Bearer secret every /api/cron/* route requires.
+CRON_SECRET=
+# S108 C2: the company whose Owner is notified of schema drift, by ID (not slug).
+# Unset is supported: drift is still reported in the response and the log.
+SCHEMA_DRIFT_COMPANY_ID=
+
+# ── Tests only ───────────────────────────────────────────────────────────────
+# Playwright sign-in identity (e2e/auth.setup.ts). Defaults to the crew QA user.
+E2E_EMAIL=
+E2E_PASSWORD=
+
+# ── Set by the platform — do NOT set these by hand ───────────────────────────
+# NODE_ENV (Next.js), VERCEL_ENV (Vercel: production | preview | development).
+# DB_VERIFY_OUT is an optional output-path override for `npm run db:verify`.
+```
+
+### D3d — STATE.md stale rows — **verified and corrected** (8-line diff; no reflow, formatter off)
+
+| row | S107 state | now |
+| --- | --- | --- |
+| Send Email Hook | ✅ already correct — **ON [LIVE, 2026-09-10]**, superseded `Off` quoted | unchanged |
+| Custom SMTP | ❌ still read `None` as a live fact | marked **historical**, moot while the Hook is ON |
+| Auth email rate limit | ❌ still read *"2 per hour, project-wide … while GoTrue is the sender"* | **3/address/hour · 50/project/hour · `auth_recovery` exempt from the 50 only** — values read from `auth-email.ts:384-387`, not the spec; superseded text quoted |
+
+Also annotated the blockquote under the table whose *"nothing else has replaced it"* was true on
+2026-09-10 and stopped being true the next day.
+
+### ASK-D3 → C — CLAUDE.md's exit-status section GENERALISED — **done, and nothing else in CLAUDE.md touched**
+
+The heading becomes *"The thing inspected must be the thing being judged — exit statuses first"*,
+the old heading quoted. A new lead paragraph names the class and lists its seven forms, each with
+its real instance: a wrapper's status (this session's two notification-vs-printed-line mismatches),
+truncated output (`#2-deliv`'s `head -20`), a script that threw and fell through, an absent tool, a
+cached result (Turbo, `download()`), the wrong scope (Prettier in `/tmp`; the `.next` env sweep),
+and a probe that cannot fail (zero rows; the `'[^']*--` regex). The four numbered exit-status rules
+and the CI paragraph are **unchanged**. `git diff --stat CLAUDE.md` → **22 insertions, 1 deletion,
+all inside that one section** — made with the markdown formatter already off (D1a), so no table
+reflowed.
+
+### Added by Josh during D — **#158, Spanish translation for field employees → `TECH_DEBT_IDEAS.md`**
+
+A deferred **decision**, filed under a new "Filed S108" heading: why it is recorded now (the S108
+voice ruling keeps the spoken language, and must not be read later as translation having been
+rejected), the four candidate surfaces (a)–(d), the three sub-decisions per surface (original kept
+beside it · who edits which · per-user language preference), and that `OPENAI_API_KEY` already
+exists, with (d) falling under *AI drafts, humans approve*.
+
+**Number:** taken from the authority at the top of `TECH_DEBT.md`, which said next free = **#158**.
+Verified first rather than trusted: entry headings across all three files top out at **#157** (raw
+greps return 304 and 210, which are CI run numbers inside prose, not entries), and no branch on
+origin allocates #158 as an entry. Bare number on a branch, by Josh's explicit instruction — the
+#157 precedent — with the authority **advanced to #159 in the same commit**. Nothing renumbered.
+
+### D2a — `#157`, the `desktop-chat-switcher` flake — ⚠️ **FIRST ATTEMPT CONTAMINATED BY MY OWN PUSHES; discarded**
+
+I ran the file "solo" — one dev server via `scripts/e2e-preflight.sh`, `--project=chromium
+--workers=1`, no local suite running. **Printed `PW_EXIT_LINE=0`, and that line is a mask:**
+`3 passed, 2 flaky` — `:31` (ordering: PROJECT_TEST listed above QA_A) and `:88` (PROJECT_TEST's
+unread already `0`) **failed on first attempt** and passed on retry. `:62`, #157's own test, passed
+first time. (`retries: 1` locally; a retry restarts the worker, which **re-runs `beforeAll` and
+reseeds**, so a pass-on-retry proves nothing about the first attempt.)
+
+**Then I checked the Actions API, which I should have done BEFORE the run.** CI run
+`35715351774` — triggered by my own push of the Spec C merge to `feature/s108` — was
+**`in_progress` for the entire window**, and its Playwright job drives the same rebuild-test and
+tears down / reseeds **these same two projects**. My D-branch commits had queued more runs
+(`cancel-in-progress` cancelled most, but one was running). **So this was not a solo run on an idle
+database; it was exactly the run-against-run collision #157 describes, created by me.** Both
+first-attempt failures are the collision's fingerprint (another process reseeding PROJECT_TEST
+after my seed; another process's owner session reading it). **Result discarded as evidence either
+way.** And it cuts the other way too: **CI run `35715351774` may carry a false red that I
+manufactured** — contention makes false reds, never false greens (#157's own asymmetry). Its result
+is checked below rather than assumed.
+
+**The rule this teaches, stated for the next session:** "idle rebuild-test" means **no CI run
+queued or in progress on ANY branch**, checked by API immediately before the run, **and no push
+until it finishes** — because under "push after every commit" the session itself is the most
+likely second consumer. Redone below under exactly that condition.
+
+### D2a — `#157` DECIDED on a genuinely idle database — **contention, not a defect. CLOSED.**
+
+Redone under exactly the rule written above:
+- B's in-progress work **stashed**, so the tree under test was D's alone; dev server restarted on it
+  through `scripts/e2e-preflight.sh` (pid 42227, bound 3000).
+- **`ACTIVE_RUNS 0`** on the Actions API immediately before, and **`ACTIVE_RUNS_AFTER 0`** after.
+  No push in between. The two CI runs I had triggered both finished first — and both **green**
+  (`35715351774` feature/s108, `35715904649` feature/s108-d-tooling), so my earlier overlapping
+  run did NOT manufacture a red in either.
+- `npx playwright test e2e/desktop-chat-switcher.spec.ts --project=chromium --workers=1
+  --retries=0` → **`PW_EXIT_LINE=0`, `5 passed (1.0m)`, every test on its FIRST attempt**, `:62`
+  (#157's own) included. `--retries=0` so no pass can hide behind a retry.
+
+**Verdict:** #157 was run-against-run contention. The evidence is two-sided — the idle run is clean,
+and the contaminated run earlier reproduced the collision fingerprint on the same file's `:31` and
+`:88`. **#157 moved to `TECH_DEBT_CLOSED.md`** with this evidence (48 lines out of OPEN, full text in
+git history); #150's bullet gets a one-line pointer, since this is evidence FOR #150's class.

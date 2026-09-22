@@ -9,7 +9,7 @@ This was the first coding session. The full development environment was set up a
 1. **GitHub repo created** — github.com/IronFrame414/FrameFocus (private, under IronFrame414 account)
 2. **Monorepo scaffolded** — Turborepo with apps/web (Next.js 14), apps/mobile (Expo placeholder), packages/shared (types, validation, constants, utils), packages/supabase (migrations, functions, seed), packages/ui (placeholder)
 3. **GitHub Codespaces configured** — .devcontainer/devcontainer.json with Node 20, VS Code extensions, port forwarding for 3000 and 8081. Codespace name: "zany orbit"
-4. **Supabase project created** — Project URL: `https://jwkcknyuyvcwcdeskrmz.supabase.co`. Publishable key starts with `sb_publishable_CohyWuCQrtn20grA7gfTjw_`. Keys stored in apps/web/.env.local (gitignored). Email provider enabled, email confirmation enabled.
+4. **Supabase project created** — Project URL: `https://jwkcknyuyvcwcdeskrmz.supabase.co`. Publishable key: *[value removed S108 — this key was REVOKED on 2026-09-21, when revoking the production `sb_secret_` key took the whole new-format key set with it. The old value remains in git history; that is acceptable only because it is revoked and was publishable.]* Keys stored in apps/web/.env.local (gitignored). Email provider enabled, email confirmation enabled.
 5. **Vercel connected** — Auto-deploys from main branch. Root directory set to `apps/web`. Framework preset: Next.js. Live at `https://frame-focus-eight.vercel.app`. Environment variables set (SUPABASE_URL and ANON_KEY).
 6. **Supabase URL Configuration** — Site URL set to `https://frame-focus-eight.vercel.app`. Redirect URLs added for both Vercel (`/auth/callback`) and localhost (`http://localhost:3000/auth/callback`).
 
