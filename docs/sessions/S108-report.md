@@ -921,3 +921,44 @@ and `postCreateCommand` → `npm install && npm install -g @anthropic-ai/claude-
 JSONC; parsed after stripping `//` lines → `PARSE_EXIT=0`, both keys present.
 ⚠️ **Applies on REBUILD, not restart** — `gh` is still absent in this running Codespace, and will
 stay absent until Josh rebuilds. The token's measured limits are recorded in the file itself.
+
+### D1c — the migration-vs-ledger check — **built and proven by sabotage**
+
+`scripts/db-ledger-check.py` (new), `npm run db:ledger`, and **`npm run db:verify` now runs the
+schema replay AND the ledger check.** It checks, printing offending versions rather than a count:
+duplicate versions · versions not 14 digits · **MCP-signature rows** (name prefix ≠ version — the
+S104b definition verbatim) · ledger rows with no file · **files with no row BELOW the tip** (a
+skipped file) · a row whose name does not match its file · and the **ordered-version md5**
+(`md5(string_agg(version, ',' ORDER BY version))`, the S104 fingerprint) for ledger, files and the
+shared set. Files **above** the tip are printed as PENDING and do not fail — that is production's
+normal state before an attended push. Refuses any project but rebuild-test; production's ledger is
+checked by exporting it and passing `--ledger-json`.
+
+**Against live rebuild-test** (`npm run db:verify` → `DBVERIFY_EXIT=0`):
+```
+tables 123 · columns 1918 · NOT NULL 772 · check 230 · unique 42 · fk 566     (replay)
+ledger rows 223 · migration files 223 · tip 20261620000000
+ordered md5, ledger : 8c0372e538b44e7d77c31afae18d18d5
+ordered md5, files  : 8c0372e538b44e7d77c31afae18d18d5
+LEDGER CLEAN.
+```
+**Independent cross-check:** `ls *.sql | sed 's/_.*//' | paste -sd, | md5sum` in the shell gives
+`8c0372e538b44e7d77c31afae18d18d5` — the same value, by a different instrument. (Phase 1's
+`d0d8670…` was the 222-file figure, before C2 added `20261620000000`.)
+
+**Audit 3 — sabotage on SCRATCH COPIES of the exported ledger, never the real one:**
+
+| sabotage | printed exit | named |
+| --- | --- | --- |
+| none (the export itself) | `LEDGER_EXIT=0` | clean |
+| duplicate a row | `LEDGER_EXIT=1` | DUPLICATE versions: 1 |
+| add an MCP-style row `20260922123456 -> 20261620000000_schema_fingerprint` | `LEDGER_EXIT=1` | MCP-signature rows: 1 **and** ledger row with no file: 1 |
+| add a ledger row with no file (`20261630000000`) | `LEDGER_EXIT=1` | ledger rows with NO matching file: `20261630000000` |
+| delete a MID-tree row (`20261100000000`) | `LEDGER_EXIT=1` | files with no row BELOW the tip: 1 |
+| delete the TIP row (production's shape) | `LEDGER_EXIT=0` | PENDING: 1 — correct, not a finding |
+| rename a row | `LEDGER_EXIT=1` | ledger NAME does not match its file: 1 |
+| a 7-digit version | `LEDGER_EXIT=1` | version NOT 14 digits: 1 |
+
+⚠️ **What it cannot catch, in its docstring:** a ledger row for work that was truncated — S104's
+actual failure. A row is a row. Only reading the objects catches that (the replay, and C2's
+fingerprint).
