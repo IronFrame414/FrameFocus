@@ -12,9 +12,17 @@
 > register) is the assignment authority, unchanged from CLAUDE.md's rule that *main's file is the
 > authority*. **Numbers are IMMUTABLE — never reused, reassigned, or compacted — and they span all
 > THREE files.** The next free number is **one above the highest number appearing in ANY of the
-> three files**. The highest currently allocated is **#158** (in `TECH_DEBT_IDEAS.md`, S108), so
-> the next free number is **#159**. Branch-scoped provisional ids (`#N-<tag>`, per CLAUDE.md → 'Tech-debt
+> three files**. The highest currently allocated is **#163** (in this file — the S108 Spec E
+> production-runbook findings, `#159`–`#163`, 2026-09-22), so the next free number is **#164**.
+> Branch-scoped provisional ids (`#N-<tag>`, per CLAUDE.md → 'Tech-debt
 > numbering') convert to a real number **from this authority, when the branch lands** — not before.
+>
+> ⚠️ **`#159`–`#163` were allocated as REAL numbers ON A BRANCH, by Josh's explicit instruction,
+> which departs from CLAUDE.md → 'Tech-debt numbering'.** Recorded rather than quietly done,
+> because the rule exists for a reason that still applies: any other live branch filing before
+> `feature/debt-runbook-s108` lands will read this same authority. Advancing the line to `#164` in
+> the same commit is what makes the allocation safe; **a branch that takes a number must update
+> this line, or the next branch collides.**
 
 ---
 
@@ -73,6 +81,401 @@ Complete as of Session 40. All polish items closed. Module 4 build is unblocked.
 
 > **#155 and #156 moved to [`TECH_DEBT_IDEAS.md`](TECH_DEBT_IDEAS.md)** — they are deferred
 > decisions, not owed work. Everything below is owed work with a known fix.
+
+### Production runbook findings — S108 Spec E [Josh, 2026-09-22]
+
+Five items found by Josh while running Spec E's runbook against **production**, with S108 merged
+(`cf57fa93`) and all eight migrations applied. Filed with real numbers from this file's numbering
+authority by Josh's instruction — **not** branch-scoped provisional ids. The authority line at the
+top of this file is advanced to `#164` in the same commit, which is what keeps that safe.
+
+- **#159 — the bid-request Send button says "Resend" on a request that has never been emailed, and
+  the creation dialog has no Send at all.** Two halves, one row of UI.
+
+  **Half one — the label is wrong, and S107 believed it had fixed this.** `bidding-tab.tsx:538`
+  renders `{sendingId === r.id ? 'Sending…' : r.sent_at ? 'Resend' : 'Send'}`. The `'Send'` branch
+  is **dead code**, because `estimate_sub_bid_requests.sent_at` is
+  `timestamptz DEFAULT now()` (`20261230000000_sub_bid_request_surface.sql:41`) — every row is
+  pre-stamped at INSERT, so `r.sent_at` is never null and the label is always "Resend".
+  ⚠️ **This is a HALF-FIX, not an untouched defect, and that is the part worth recording.** S107
+  item B3b did change the writer: `api/estimates/[id]/bid-requests/[requestId]/send/route.ts:191`
+  stamps `sent_at` after a successful send, and `S107-report.md:232` records the conclusion as
+  **"`sent_at` now means 'sent'"**, with `:296-297` resting the new label on it. The route's own
+  comment at `:186-189` even states *"It is `DEFAULT now()` at INSERT"* — so the default was
+  **known and left in place**. Stamping on send is necessary and was done; **dropping the default
+  is the other half and was not.** Verified live on rebuild-test: `sent_at`'s `column_default` is
+  `now()`, while its siblings `viewed_at` and `submitted_at` are both null-defaulted — the odd one
+  out is `sent_at`.
+
+  **Fix:** `ALTER TABLE estimate_sub_bid_requests ALTER COLUMN sent_at DROP DEFAULT;`. One line,
+  and it makes the existing conditional correct with no UI change.
+  **The backfill is a real question, not a formality.** Existing rows all carry a `sent_at` that
+  may mean either "sent" or merely "created", and the column alone cannot tell them apart
+  retrospectively. The candidate instrument is `email_logs`, which the send route writes with
+  `metadata: { bid_request_id: reqRow.id }` (`route.ts:178`) — so a request with no matching
+  `email_logs` row was never mailed and should be nulled. ⚠️ **Unverified:** whether `email_logs`
+  retention covers the whole history of this table. Check before trusting a backfill; nulling on a
+  gappy log would relabel genuinely-sent requests as unsent, which is the safer direction of the
+  two but still wrong.
+
+  **Half two — creation offers no send, so the first real send is a button labelled "Resend".**
+  `RequestByLinkForm` creates the row and then shows only the link: *"Request created. Send this
+  link to the sub — their reply lands here automatically"*, followed by a single dismiss button.
+  There is no Send control in the dialog. So the intended path for a brand-new request is: create
+  it, dismiss the dialog, find the pill for that sub on the line item, and press **Resend** — for
+  something never sent once. The two halves compound: fixing only the label still leaves creation
+  with no send, and fixing only the dialog leaves the label lying on every row created before it.
+  **Fix shape:** offer Send in the creation dialog (it would call the same
+  `handleSendRequest`/send route, not a second mechanism — CLAUDE.md → PARITY), and keep the link
+  for the copy-by-hand case, which is a deliberate supported path (`reply_mode = 'link'`).
+
+- **#160 — removing a team member leaves a ghost in `company_members`; the two tables do not
+  agree.** `softDeleteTeamMember()` (`lib/services/team.ts:117-134`) marks
+  `profiles.is_deleted = true` + `deleted_at` and bans the auth user — and **never touches
+  `company_members`**. Confirmed the only delete path: `is_deleted: true` against a profile or
+  member appears in exactly one place in `apps/web` outside tests (`team.ts:126`).
+
+  **Why it is visible in one place and not the other:** `/dashboard/team` reads `profiles`, so the
+  person disappears there. The assignment pickers read `company_members` via `getMembers()`
+  (`lib/services/members.ts:20-52`), which filters **`.eq('is_deleted', false)` on
+  `company_members` only** and never joins `profiles`. A member row whose profile is soft-deleted
+  is therefore still `is_deleted = false` and still listed. This is the two-roster trap CLAUDE.md
+  already records under the Roster Visibility Floor ("the roster is TWO tables") showing up as a
+  write-path defect rather than a read-path one.
+
+  **Hit on PRODUCTION, not in test.** Two "Juan Cardona" rows in the project "Assign a member"
+  dropdown, one of them backed by a deleted test profile. Cleaned by hand on **2026-09-22** —
+  `company_members` `55b55c4a-48f9-4f05-b40c-5d3e9ce28f8a` soft-deleted — and Josh's sweep of
+  production found no others.
+  ⚠️ **The clean and the sweep are Josh's, on production, and are recorded here on his report.**
+  This session's own query ran against **rebuild-test** (`nmyphyhmfttxkdoposvf`), which is what the
+  Supabase MCP and the CLI are linked to per STATE.md:43 — it returned zero `company_members` rows
+  joined to a soft-deleted profile, which is a fact about **rebuild-test and not about
+  production**. Recorded this way deliberately: CLAUDE.md → "The thing inspected must be the thing
+  being judged."
+
+  **RULED [Josh]: the fix belongs in the DATABASE, not in each delete path.** The two tables must
+  agree by construction. A second `.update()` inside `softDeleteTeamMember()` would work today and
+  fail the moment anything else soft-deletes a profile — a SQL script, a future admin tool, the
+  trial-lifecycle code, or a restore-from-trash flow that un-deletes one table and not the other.
+  **Fix shape:** an `AFTER UPDATE` trigger on `profiles` that propagates `is_deleted`/`deleted_at`
+  to the matching `company_members` row, per CLAUDE.md → Database Patterns.
+  **Two constraints on whoever builds it:**
+  (a) **It must propagate the restore as well as the delete**, or the trash-bin pattern breaks in
+  the other direction — un-deleting a profile would leave the member row deleted and the person
+  unassignable. Both directions, one trigger.
+  (b) **`company_members` rows with `profile_id IS NULL` are legitimate and must be left alone** —
+  directory subs and vendors that were never linked to a profile (S113 counted 32 such roster
+  rows). A trigger keyed on `profile_id` match touches none of them, which is the correct
+  behaviour, and a fix written as a broad sweep instead would wipe the sub directory.
+
+- **#161 — a PDF opens in a new tab and the user loses their place. RULED [Josh]: it should open
+  in a SHEET over the current screen by default**, with explicit actions for **open in new tab**,
+  **print**, and **download**. The default becomes "stay where you are"; leaving the page becomes a
+  choice the user makes.
+
+  **Scope: this is not the estimate Files tab.** It is every surface that opens a stored file, and
+  the sweep found **22 call sites** that navigate away, plus **8 more** that render a file inline
+  with no open path at all and would gain the same sheet.
+
+  **Desktop — `window.open(..., '_blank')` on a file URL, 10 sites:**
+  `projects/[id]/files/file-row.tsx:45` (the main Files-tab row click, inline),
+  `projects/[id]/files/file-row-actions.tsx:49` (Download, the one `?download=` site),
+  `estimates/[id]/bidding-tab.tsx:647` (a sub's bid PDF),
+  `projects/[id]/lien-releases/releases-panel.tsx:81`,
+  `settings/lien-release-settings-form.tsx:260` and `settings/contract-settings-form.tsx:420`
+  (blank PDF templates), `subcontractors/[id]/compliance-section.tsx:61` (COI/W-9),
+  `field-ops/[projectId]/daily-logs/[logId]/detail-client.tsx:128`,
+  `field-ops/safety/[incidentId]/incident-detail-client.tsx:167`,
+  `field-ops/[projectId]/deliveries/d/[deliveryId]/delivery-actions.tsx:32`.
+
+  **`target="_blank"` on a stored file, 6 sites:** `estimates/[id]/estimate-files-tab.tsx:149`
+  (the tab that prompted this), `projects/[id]/invoices/[invoiceId]/invoice-builder.tsx:1891`
+  (Print / Preview PDF), `field-ops/[projectId]/deliveries/d/[deliveryId]/page.tsx:186` and `:223`,
+  `dashboard/expenses/review-popup.tsx:422` (receipts),
+  `portal/[projectId]/files/page.tsx:122` (**the client portal** — a client loses their place too),
+  and `components/chat/chat-thread.tsx:269`, which is **shared by desktop and `/m`**.
+
+  **Same-tab navigation, 6 sites:** `m/p/[projectId]/files/open-file.tsx:89`
+  (`window.location.href` — mobile, inline), `estimates/[id]/signing-activity.tsx:68` (forced
+  download), and plain `<a href>` at `projects/[id]/files/archive-panel.tsx:149`,
+  `trial/export/export-client.tsx:171`,
+  `field-ops/[projectId]/deliveries/[poId]/po-lines-panel.tsx:323`,
+  `invoice-builder.tsx:1894`.
+
+  **Renders a file inline with NO open path — 8 surfaces the sheet would newly serve:** desktop
+  daily-log photos (`detail-client.tsx:59-64`), desktop incident photos
+  (`field-ops/safety/[incidentId]/page.tsx:188-205`), desktop selections thumbnails
+  (`selections-tab.tsx:79-86`), portal photos and portal message photos
+  (`portal/[projectId]/files/page.tsx:159, 239`), portal selection images
+  (`portal-selections-ui.tsx:121`), site-visit photos
+  (`components/site-visits/site-visit-record.tsx:222, 262-266, 354-357` — mounted by **both**
+  surfaces), and the mobile punch completion photo.
+
+  ⚠️ **`/m` HAS AN EXPLICIT CUT THAT THIS RULING REVERSES.**
+  `m/p/[projectId]/files/open-file.tsx:42-43` records the decision in its own words: *"an in-app
+  document viewer. The browser handles the MIME type or it does not."* That is a deliberate M6M
+  scope cut, not an oversight — so this entry **overturns a recorded decision** and the comment must
+  be superseded in place when the sheet ships, per CLAUDE.md's quote-don't-rewrite convention.
+  The `?download=` split (`/m` inline, desktop forced) is a **ruled** surface difference
+  (M6M §4.11.16) and is about **delivery**, not about **where the file opens** — a sheet on both
+  surfaces does not disturb it. But see the convention finding below.
+
+  ⚠️ **AND IT NARROWS #55.** `#55`(b) already specifies an in-app fullscreen viewer, and says in
+  terms: *"Non-image files keep current behavior (table row, **Download opens new tab**)."* **That
+  carve-out is what this ruling overturns.** The two must be built as one viewer or they will
+  disagree about what clicking a row does — #55 covers images, this covers everything else, and a
+  user cannot tell the two categories apart from a file list. Cross-ref **#100** (markup invisible
+  outside the editor — it names #55 as "the natural host for layered display", so a PDF/file sheet
+  is where that lands too) and **#53** (flattened export, the leaving-the-app half).
+
+  **There is real material to reuse — this is not a from-scratch viewer.**
+  (a) **`components/box-map/pdf-page-raster.tsx:26-80`** already renders a PDF page in-app:
+  rasterises to `<canvas>` via a dynamic client-only `pdfjs-dist/legacy` import, worker copied by
+  `scripts/copy-pdf-worker.mjs`, reports page count, never throws upward. Its constraints are
+  documented at `:8-22` and are load-bearing — **~350 KB, must stay dynamically imported, must use
+  the `legacy` entry point** on Node 20 LTS.
+  (b) **`components/box-map/box-map-editor.tsx:398-412` is already a full-screen PDF modal**
+  (`position: fixed, inset: 0`, scrim `rgba(20,33,61,0.45)`, `zIndex: 50`), signing via
+  `getFileSignedUrlClient(pdfFileId, 900)` at `:180-195`. It is shared by 7F lien releases and 7I
+  contracts, and its header at `:17-22` states the parity precedent: a component two surfaces mount
+  belongs under `components/`. **So the new sheet belongs at `components/files/`, not under
+  `app/dashboard/` or `app/m/`** — CLAUDE.md → PARITY, "location is a claim about ownership".
+  (c) `app/m/p/[projectId]/photos/[fileId]/viewer.tsx` (M-9) has the pan/zoom and prev/next
+  behaviour, but it is **a route, not a sheet, and images only** — two other surfaces already route
+  into it (`m/expenses/page.tsx:210`), so converting it is a wider change than adding a sheet.
+  (d) **Not reusable:** `estimates/[id]/proposal/pdf-preview.tsx` is react-pdf's `PDFViewer` over a
+  *generated* `ProposalDocument`, not a stored signed URL.
+
+  **Three constraints for whoever builds it:**
+  1. **There is no generic `Sheet`/`Drawer`/`Modal` primitive in this codebase.** The only
+     `aria-modal` primitive is `components/confirm/confirm-provider.tsx:133-145`; `/m`'s bottom
+     sheet (`app/m/mobile-shell.tsx:775-790`) is deliberately `aria-modal="false"`; everything
+     named `*-sheet.tsx` (contacts, subs, selections, review-send) is a panel, not a modal. So this
+     entry either builds the primitive or extends one — **decide which before writing the viewer**,
+     or the app gains a fifth thing called a sheet.
+  2. **`<iframe>`, `<embed>` and `<object>` appear NOWHERE in `apps/web/app` or
+     `apps/web/components`.** "Just iframe the signed URL" is the cheap route and it has no
+     precedent here either way — it is a decision, and it interacts with (a): pdf.js is already
+     vendored and proven, so the cheap route adds a second PDF mechanism.
+  3. **The signed-URL TTL is a cost input, already noted in the code.**
+     `lib/services/signed-url-ttl.ts:32` sets `SIGNED_URL_TTL_SECONDS = 7200` and its header comment
+     names "every PDF open" as the consideration. A sheet the user opens and closes repeatedly mints
+     more URLs than a new tab did.
+
+  **A separate finding from the same sweep, recorded here because the fix will touch it — the
+  `?download=` "convention" is FOUR mechanisms, and the desktop half is applied at exactly one
+  site.** `?download=<name>` (`file-row-actions.tsx:47-49`), `&download=<name>`
+  (`signing-activity-client.ts:79`), Supabase's `{ download }` option
+  (`daily-logs-client.ts:256-265`, `api/projects/[id]/archive/route.ts:115`,
+  `api/trial/export/[id]/route.ts:56`), and `?download=1`
+  (`api/invoices/[id]/pdf/route.ts:17,92`). `files-client.ts:321-330`
+  (`getFileSignedUrlClient`) **never** appends anything, so every one of its consumers opens a raw
+  inline URL. ⚠️ **CLAUDE.md's "desktop appends `?download=`" therefore describes one call site, not
+  a codebase-wide rule** — the doc is aspirational here. Not filed separately because the sheet's
+  explicit **download** action is the natural place to collapse the four into one helper; if the
+  sheet is built without doing so, this becomes its own entry.
+
+- **#162 — no way for a user to change their own password. A change-password page EXISTS and
+  WORKS; what is missing is any route to it.** ⚠️ **Verified before filing, per the request, and
+  the verification changed what is owed** — this is not "build a change-password feature".
+
+  **What exists and works without email.** `app/reset-password/page.tsx` calls
+  `supabase.auth.updateUser({ password })` (`:30`) against whatever session is present. It does
+  **not** require a recovery token, does not read one, and is not token-gated in code —
+  `middleware.ts:300` lists it among routes assumed "token-based and hold no session", which is an
+  assumption about how it is reached, not an enforcement. **So a signed-in user who types
+  `/reset-password` into the address bar changes their own password successfully, no email
+  involved.** That path is live today.
+
+  **What is missing is discoverability.** Nothing in the signed-in app links to it. The only
+  references in `apps/web` are the two flows that both **require email delivery**:
+  `forgot-password/page.tsx:19` (`resetPasswordForEmail` → `/auth/callback?next=/reset-password`)
+  and `app/dashboard/team/[id]/actions.ts:98` (the team page's admin-initiated reset, also an
+  email). `sign-in-form.tsx:103` links to `/forgot-password` — the pre-auth flow — and that is the
+  whole of it. A signed-in user has no in-app affordance at all.
+
+  **This is exactly the failure Josh hit.** Three real staff accounts on production were given the
+  same password **by hand** (confirmed + password set via SQL on **2026-09-22**) because the invite
+  email was not reaching them. A working no-email change-password page was three feet away and
+  unreachable, so the workaround was SQL.
+  ⚠️ **Three accounts currently share one known password and cannot rotate it themselves.** That is
+  the live exposure and it is the reason this is not cosmetic.
+
+  **Fix — small, and the home for it already exists.** Put a change-password control on the
+  personal account page, which every role can reach and which already hosts exactly this kind of
+  self-service edit: `app/dashboard/account/page.tsx` and `app/m/account/page.tsx`, today a name
+  edit only, sharing one `components/account/name-form.tsx` between both surfaces (parity S122).
+  Follow that pattern — **one shared form component, both surfaces**, per CLAUDE.md → PARITY.
+  ⚠️ **Do NOT put it on `/dashboard/settings`.** Company settings is Owner/Admin-only (CLAUDE.md →
+  Role Permissions), and the roles that hit this — foreman, crew — cannot reach it. Putting it
+  there would leave the affected users exactly as stuck as they are now. `/m/settings` is
+  read-only by §4.13.7 / A-48 for the same reason `/m/account` exists.
+
+  **Two things to settle while building it, both currently absent:**
+  (a) **`updateUser({ password })` does not require the current password, and the page does not ask
+  for one.** Fine for the recovery-token flow it was written for; **for a self-service change from
+  a live session it means anyone with a borrowed unlocked browser can lock the real user out of
+  their own account.** Re-authentication should be part of the self-service form, and it is a
+  decision rather than a detail — Supabase has no built-in current-password check, so it means an
+  explicit `signInWithPassword` re-verify before the update.
+  (b) **The 8-character minimum is enforced in the page only** (`:19`), client-side, with no
+  server or DB floor behind it. Any new entry point inherits that.
+
+- **#163 — only the text in a row is clickable, not the row. RULED [Josh]: the whole row is the
+  click target wherever rows of items are listed** — files, contacts, and every other list — with
+  the row opening the item.
+
+  > ### ⚠️ THE PREMISE OF THIS ENTRY IS OFF BY ONE LAYER — corrected before filing
+  >
+  > The request filed this as *"`components/list-screen/list-screen.tsx` is the shared anatomy six
+  > screens already use, so this is one change there rather than per screen."* **That is not what
+  > that file is.** `list-screen.tsx` is 170 lines and exports five presentational pieces —
+  > `ListPageHeader`, `ListSearchInput`, `MetricStrip`, `AlertStrip`, `FilterChips`. **It renders no
+  > row, no table and no cell, so it contains no click target to fix.** It shares the *chrome*, and
+  > it refuses to share the table **on purpose**, in its own words at `:13-15`:
+  >
+  > _"DELIBERATELY NOT SHARED: the table itself. The six tables differ in columns, grids, reflows
+  > and row affordances; a generic table component would be a framework, not a pattern. Tables stay
+  > per-screen, on the theme tokens."_
+  >
+  > **So this is not one edit.** It is either N per-screen edits, or **a new shared row primitive**
+  > added alongside `list-screen.tsx` and migrated to — which is a decision, because building it
+  > walks straight into the "framework, not a pattern" objection that file already recorded. That
+  > choice is the first thing to settle, and it should be settled by Josh.
+  >
+  > Two further corrections from the same sweep: the adopter count is **nine, not six** (the six
+  > named in the component's comment, plus `daily-logs-list.tsx:12`, `files-list.tsx:13`, and
+  > `expenses-page-client.tsx:32` which takes `MetricStrip` only). And the "six screens (S105b)"
+  > attribution is not in `CLAUDE.md` — the string `S105b` does not appear there; the nearest note
+  > is `CLAUDE.md:246` ("the S105 spec, three list screens"). The six-screen claim traces to the
+  > component's own header comment.
+
+  **AND THE FIX ALREADY EXISTS, ON MOBILE.** `app/m/mobile-ui.tsx:379-434` exports `ListRowLink`,
+  a whole-row link, already adopted by **nine `/m` screens** (`m/contacts:155`, `m/team:141`,
+  `m/subs:96`, `m/site-visits:39`, `m/logs/log-rows:107`, `m/p/[projectId]/{team:105, punch:126,
+  changes:136, contacts:110}`). Its 70-line comment block (`:359-377`, `:416-427`) already
+  documents both traps the desktop fix will hit:
+  - **nesting `<a>` in `<a>` is invalid HTML**, so trailing row actions must be **siblings** of the
+    link at `relative z-10`, not children;
+  - the link's own box must carry **`min-h-[44px]`**, because `after:absolute after:inset-0`
+    stretches the *hit area* but not the *measured element box*.
+
+  **This is a CLAUDE.md → PARITY case, and the shared mechanism already has a home.** A desktop row
+  primitive written from scratch while `ListRowLink` sits in `app/m/` is the divergence-written-as-
+  agreement that the parity ruling exists to prevent. If both surfaces need it, it belongs in
+  `lib/` or `components/`, not under `app/m/`.
+
+  **The desktop screens are in THREE states, and only the third is the reported defect.** Recorded
+  because "make rows clickable" applied blindly would undo the first group.
+
+  **(a) Already whole-row AND keyboard-reachable — the reference implementation, and a PRIOR RULING
+  on this exact question.** `contacts-list.tsx:181-201` and `subcontractors-list.tsx:230-245`:
+  `<tr onClick>` + `tabIndex={0}` + `role="button"` + `aria-label` + `onKeyDown` (Enter/Space).
+  ⚠️ **Both carry comments recording a deliberate decision against the name-cell-link shape**
+  (`contacts-list.tsx:183-185`), and `subcontractors-list.tsx:248-250` records that the company
+  name was **demoted from `<a>` to plain text** because *"a link inside a row that is itself a
+  control gives the same click two meanings."* **That demotion is part of the pattern, not
+  collateral damage** — whoever does the other screens should expect to remove title links, and
+  should not treat it as a regression.
+
+  **(b) Whole-row but MOUSE-ONLY — the accessibility half, 5 files.** Bare `onClick` with no
+  `tabIndex`, no `role`, no `onKeyDown`: `projects/projects-list.tsx:247-257` (`<div>`),
+  `team/team-page-client.tsx:280-283` (`<tr>`), `projects/[id]/files/file-row.tsx:51-59` (`<tr>`),
+  `projects/[id]/changes/changes-panel.tsx:339-352` (`<div>`),
+  `portal/[projectId]/selections/portal-selections-ui.tsx:210` (`<div>` + `cursor: pointer`).
+  ⚠️ **`tabIndex` appears in a row context in only the two files in group (a), codebase-wide** — so
+  five of the seven existing whole-row targets are already unreachable by keyboard. **Adding more
+  whole-row `onClick`s multiplies this defect unless the pattern is centralised first**, which is
+  the strongest argument for the shared primitive over N edits.
+
+  **(c) Text-only click target — the reported defect.**
+  `estimates/estimates-list.tsx:199-227` (`<tr>` inert; the only target is a `<Link>` in the first
+  `<td>` around the name + number — five cells are dead space),
+  `projects/[id]/invoices/page.tsx:254-258` (same shape, `<Link>` on the number cell only),
+  `projects/[id]/page.tsx:471-499` (`openItems` — `<Link>` on the text at `:491-493`),
+  `projects/[id]/selections/selections-tab.tsx:308-324` (a `<Link style={{flex:1}}>` covering most
+  but not all of the row), `expenses/expenses-page-client.tsx:369` (inert `<tr>`, actions only),
+  and **`catalog/catalog-list.tsx:172-238`, which is worse and needs a decision**: the row has
+  **no detail-nav target at all**, the name at `:175-183` is an `<a target="_blank">` to the
+  **external vendor `product_url`**, and the only route to the record is the "Edit" `<Link>` at
+  `:215-220`. **Deciding what a row click MEANS here is part of the work** — the name currently
+  means something else entirely.
+
+  **Correct already, leave alone:** whole-card `<Link>` at `daily-logs-list.tsx:102`,
+  `field-ops/page.tsx:93`, `field-ops/safety/page.tsx:77`,
+  `field-ops/[projectId]/safety/page.tsx:81`, `portal/page.tsx:58`,
+  `schedule-views.tsx:103,181`, `m/projects/projects-list.tsx:82`, `m/field/page.tsx:21`; row-as-
+  `<button>` at `projects/[id]/schedule/schedule-panel.tsx:629` and `schedule-card.tsx:163`.
+  **Deliberately inert, must STAY inert:** `/m`'s `ListRow` (`mobile-ui.tsx:284-299`) as used by
+  `m/schedule:131`, `m/p/[projectId]/schedule:86`, `m/p/[projectId]/{files:56, safety:38,
+  deliveries:38}`, `m/expenses:168`; the read-only portal financial tables
+  (`portal/[projectId]/financials/page.tsx:90,111,151,197,214`); the report tables at
+  `projects/[id]/profitability/page.tsx:173,193,250` and `projects/[id]/budget/page.tsx:1148,1181`;
+  and `m/logs/log-rows.tsx:67-70`, where a queued row renders a **non-linking** `<li>` on purpose.
+  ⚠️ **"Every other list" in the ruling must not be read as "every `<tbody>`."** A row that opens
+  nothing has nothing to open.
+
+  ### The three constraints — all three are real, and one is already solved in-repo
+
+  **1. A row that contains its own buttons must not fire the row action.** The hazard is large:
+  **~26 files** have unguarded interactive controls inside rows, including destructive ones —
+  **Void** (`contracts-panel.tsx:240,387`), **Delete** (`catalog-list.tsx:221-236`,
+  `expenses-page-client.tsx:428-439,461-472`, `file-categories-manager.tsx:213`,
+  `files/trash/trash-row.tsx:75-76`), **Remove** (`team-panel.tsx:198-199`,
+  `compliance-section.tsx:158-161`), **Restore** (three `trash-row.tsx` files),
+  **Send/Void** (`releases-panel.tsx:289-308`), **Unapply payment**
+  (`payments-view.tsx:359-363`), **Resend/Cancel invite** (`team-page-client.tsx:373,390`),
+  **Approve** (`timesheets-client.tsx:427-430`), **Delete bid / Send request**
+  (`bidding-tab.tsx:376-386,522-534` — the same rows as **#159**), **Unassign**
+  (`po-lines-panel.tsx:241-245`), and the densest set in the app,
+  `components/notifications/notification-list.tsx` (rollup `:195`, open `:234`, open `:264`, star
+  `:253`, dismiss `:274`). Plus **12 in-row checkboxes**, **5 `<select>`s**, and **inline-edit
+  `<input>`s used AS cells** (`bidding-tab.tsx:332`, `payments-view.tsx:555`,
+  `estimates/inline-edit.tsx` throughout `items-tab.tsx`).
+  ✅ **The pattern to copy already exists:** `projects/[id]/files/file-row.tsx:61,107,118` wraps
+  each actions `<td>` in `onClick={(e) => e.stopPropagation()}` — the cleanest in-repo model for a
+  `<tr>`. `changes-panel.tsx:428` does the same with a `<span>`, and
+  `ai-tag-editor.tsx:71,83,97,138`, `photo-visibility-toggle.tsx:25`,
+  `portal-selections-ui.tsx:164` and `status-control.tsx:166` show components guarding their own
+  events. ⚠️ **`stopPropagation` is the `<tr>`/`onClick` answer; the sibling-at-`z-10` arrangement
+  is the `<a>`-wrapper answer.** They are not interchangeable, and which one applies follows from
+  constraint 3's choice of element.
+
+  **2. The S108 line-items drag handle must still drag, not open.** **No DnD library is installed**
+  — it is native HTML5, and `items-tab.tsx:241-249` says so, along with why: *"Native DnD has no
+  keyboard path and no touch support in mobile Safari, so the handle is also a focusable button
+  that ArrowUp/ArrowDown move one step."* The handle is a **`<button draggable>` nested three divs
+  deep inside the line card** (`:955-991`), and **the card itself is the drop target** with an
+  `onDrop` that already calls `stopPropagation()` (`:909-916`, factory at `:299-320`, `:313`).
+  ⚠️ **Two distinct failure modes, and the second is the subtle one:** a card-level `onClick` may
+  fire on drag-release in some engines, **and it will fire when the user clicks the handle to focus
+  it before pressing ↑/↓ — which is the documented keyboard and touch reorder path.** So the
+  keyboard affordance that exists *because* native DnD lacks one would be broken by the fix
+  intended to improve keyboard access. The handle has **no `onClick` guard today**, because nothing
+  above it listens. It needs one. Gated by `reorderEnabled` (`:253` = `canEdit && !findQ`), so the
+  guard must hold in both states.
+  Also in scope, and easier: `settings/file-categories-manager.tsx:155-170` reorders with **↑/↓
+  buttons, not drag** — already keyboard-reachable, and just needs constraint 1's guard.
+  Everything else matching `onDrop` in the repo is file-upload or canvas pointer work
+  (`selection-sheet.tsx:257-302`, the two markup canvases, `box-map-editor.tsx:256-322`,
+  `m/.../viewer.tsx:128-212`) — **not row reordering, and out of scope.**
+
+  **3. The row must be keyboard-reachable and announced as a link or button, not a bare `div`
+  with an `onClick`.** Two valid shapes exist in-repo and the choice is architectural, not
+  cosmetic: **`<tr>` + `tabIndex={0}` + `role="button"` + `aria-label` + Enter/Space `onKeyDown`**
+  (group (a), works inside a `<table>`, needs `stopPropagation` for actions), or **a real `<a>`/
+  `<Link>` wrapping the row** (`ListRowLink`, free keyboard and announcement, but **cannot be used
+  inside a `<table>`** and forces actions to be siblings). ⚠️ **24 files contain `<tbody>`**, so the
+  `<a>`-wrapper shape is unavailable for most desktop lists without converting tables to divs —
+  which would be a far larger change, and is precisely the "generic table component would be a
+  framework" objection at `list-screen.tsx:13-15`. **Settle this before writing any of it.**
+
+  **Cross-ref #13** — *"Row click should open read-only detail view (contacts + subcontractors) —
+  currently Edit button is only way in."* **#13 is the narrow ancestor of this entry and is
+  SATISFIED for its two named screens** (group (a) above), though it is still open in this file.
+  Whoever lands #163 should close or amend #13 in the same pass rather than leaving a stale
+  narrower duplicate. Not renumbered or merged here, per the request and per the immutability rule.
 
 ### Branch-scoped, awaiting real numbers — `feature/s106` [S106]
 
