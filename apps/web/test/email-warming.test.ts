@@ -55,15 +55,37 @@ describe('the firing schedule agrees with vercel.json', () => {
     );
   });
 
-  it('the other thirteen crons are still scheduled — the guard cuts both ways', () => {
-    // Adding a fourteenth entry is the one edit most likely to damage this file,
-    // and S103 records a malformed vercel.json failing a deploy with eleven
-    // migrations already on production.
-    expect(vercel.crons).toHaveLength(14);
+  it('⚠️ the SCHEMA-DRIFT cron is scheduled, at its ruled path AND its ruled time', () => {
+    // S108 C2 — the fifteenth entry. Pinned the same way the warming entry is,
+    // because it is exactly as invisible when it stops: nothing in the product
+    // shows a drift check that never fires.
+    const entry = vercel.crons.find((c) => c.path === '/api/cron/schema-drift');
+    expect(entry, 'the schema-drift cron is not in vercel.json — the detector is dead code').toBeDefined();
+    // RULED [Josh, S108 ASK-C2 -> A]: daily, 11:00 UTC (07:00 EDT) — before the
+    // working day and deliberately off the 13:00/14:00 cluster the other crons
+    // occupy, so it is not queued behind them.
+    expect(entry!.schedule, 'the schema-drift schedule moved off its ruled daily slot').toBe(
+      '0 11 * * *'
+    );
+  });
+
+  it('the other fourteen crons are still scheduled — the guard cuts both ways', () => {
+    // Adding an entry is the one edit most likely to damage this file, and S103
+    // records a malformed vercel.json failing a deploy with eleven migrations
+    // already on production.
+    //
+    // ⚠️ THE LENGTH ASSERTION IS THE POINT, not pedantry. It is what turns
+    // "somebody deleted a cron while adding one" from an invisible production
+    // change into a red test. Bumped 14 -> 15 by S108 C2.
+    expect(vercel.crons).toHaveLength(15);
     for (const c of vercel.crons) {
       expect(typeof c.path, `${JSON.stringify(c)} has no path`).toBe('string');
       expect(c.schedule.split(' '), `${c.path} has a malformed schedule`).toHaveLength(5);
     }
+    // And no duplicates — two entries for one path is a valid JSON file that
+    // double-fires a job, which no other assertion here would notice.
+    const paths = vercel.crons.map((c) => c.path);
+    expect(new Set(paths).size, 'vercel.json has a duplicate cron path').toBe(paths.length);
   });
 });
 

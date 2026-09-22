@@ -10057,6 +10057,7 @@ export type Database = {
         }
         Returns: Json
       }
+      schema_fingerprint: { Args: never; Returns: Json }
       seed_default_tags: { Args: { p_company_id: string }; Returns: undefined }
       seed_file_categories: {
         Args: { p_company_id: string }
@@ -10116,6 +10117,7 @@ export type Database = {
         Args: { p_profile_id: string }
         Returns: boolean
       }
+      strip_sql_line_comments: { Args: { p_src: string }; Returns: string }
       submit_delivery_check_in: {
         Args: { p_delivery_id: string }
         Returns: undefined
