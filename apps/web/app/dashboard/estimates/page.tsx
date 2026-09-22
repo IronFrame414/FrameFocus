@@ -1,6 +1,35 @@
 import { createClient } from '@/lib/supabase-server';
 import { redirect } from 'next/navigation';
 import { EstimatesList } from './estimates-list';
+import Link from 'next/link';
+import { listSiteVisits, type SiteVisit } from '@/lib/services/site-visits';
+
+// [S108 Spec A] Open site visits — recorded, not yet estimates. Shown ABOVE
+// the list and never inside it: no number, $0 totals, and excluded from the
+// win-rate / expiring metrics by construction (FILL-A11).
+function SiteVisitsPanel({ visits }: { visits: SiteVisit[] }) {
+  if (visits.length === 0) return null;
+  return (
+    <section data-testid="site-visits-panel" style={{ border: '1px solid #e4e8ef', borderRadius: '14px', padding: '1rem 1.25rem', marginBottom: '1rem', background: '#fff' }}>
+      <h2 style={{ fontSize: '0.75rem', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#8792a8', margin: '0 0 0.5rem' }}>
+        Site visits waiting to be priced · {visits.length}
+      </h2>
+      <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
+        {visits.map((v) => (
+          <li key={v.id} style={{ padding: '0.4rem 0', borderTop: '1px solid #f4f6fa' }}>
+            <Link href={`/dashboard/estimates/site-visits/${v.estimate_id}`} style={{ color: '#3b4ae0', fontWeight: 600 }}>
+              {v.title}
+            </Link>
+            <span style={{ color: '#7b8699', fontSize: '0.8125rem' }}>
+              {' · '}
+              {[v.contact ? `${v.contact.first_name} ${v.contact.last_name}` : null, v.address ? `${v.address.address_line1}, ${v.address.city}` : null, new Date(v.visited_at).toLocaleDateString()].filter(Boolean).join(' · ')}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
 
 /**
  * 14b Estimates (desktop-redesign §8.2).
@@ -59,9 +88,14 @@ export default async function EstimatesPage() {
     return t > now && t <= sevenDaysOut;
   }).length;
 
+  const openVisits = await listSiteVisits({ openOnly: true });
+
   return (
-    <EstimatesList
-      metrics={{ winRate, cohortSize: cohort.length, expiringSoon }}
-    />
+    <>
+      <SiteVisitsPanel visits={openVisits} />
+      <EstimatesList
+        metrics={{ winRate, cohortSize: cohort.length, expiringSoon }}
+      />
+    </>
   );
 }

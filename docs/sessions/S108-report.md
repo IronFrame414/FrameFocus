@@ -1344,3 +1344,145 @@ run is complete, with no rebuild-test writes from this session until it finishes
 `m-photos :892`. A markdown commit cannot change e2e behaviour; this is the contention window.
 The merged `feature/s108` run `35720037343` @ `8e3bec0f` — which **contains all of D** and ran the
 same suites in the same window — is **green**. D stands merged on that evidence.
+
+---
+
+## Phase 3 — SPEC A — branch `feature/s108-a-site-visit`, cut from `feature/s108` @ `df8daae9`
+
+### B merged first
+`feature/s108-b-line-items` merged `--no-ff` → **`df8daae9`** after its SOLO CI run
+**`35723727160` green on both jobs**. Gate on the merged tree (byte-identical to B's tip):
+`TSC_EXIT_LINE=0`, `LINT_EXIT_LINE=0`, `BUILD_EXIT_LINE=0` (BUILD_ID present),
+`VITEST_EXIT_LINE=0` — **96 files, 1300 tests**. Pushed.
+
+### A — everything except voice — **built and proven live**
+
+**Migration `20261650000000_site_visit.sql`**, `supabase db push` → `DBPUSH_EXIT=0`, first time,
+link checked (`nmyphyhmfttxkdoposvf`), ledger showing it as the one PENDING file. Verified by object:
+four `site_visit_*` tables + `ai_transcription_logs`, **RLS on, exactly one SELECT policy each and
+NO write policy** (every write is an RPC — ASK-A8), the two standard triggers on each side table;
+**ten RPCs, all SECURITY DEFINER, none executable by `anon` or PUBLIC**; `estimates_status_check`
+with `site_visit`; `estimate_number` nullable; `notifications_type_check` with
+`site_visit_recorded`. Fingerprint regenerated (replay/live agreement re-asserted): policies 368,
+triggers 277, functions 303, latest `20261650000000`; `db:functions` **303/303 exact**.
+
+⚠️ **A FINDING FILL-A2 MISSED — its reader table listed only application code.**
+`enforce_estimate_immutability` (a database trigger) treats every status other than draft/review as
+a SENT document: any edit to a site visit would have raised, and **promotion (site_visit → draft)
+would have been refused as "a sent estimate cannot be returned to draft"**. The migration re-states
+the trigger verbatim from its latest file (`20261330000000`) plus two marked arms: nothing enters
+`site_visit` from another status, and a site visit is editable and may leave only to `draft`. Swept
+for other database readers of `estimates.status` (functions and policies): every one refuses a
+non-draft status, which is correct for a visit (no lines, bids or estimate files through them).
+Also corrected: the list reader is `listEstimates()`, not `getEstimates()`.
+
+**The floor, as built (ASK-A1/A2 → A):** foreman/crew get NOTHING on `estimates`. They create and
+edit through `create_site_visit` / `save_site_visit_note` / `save_site_visit_measurement` /
+`update_site_visit` / `abandon_site_visit`, which return ids only; they READ the money-free
+`site_visit_*` rows they created. `site_visit_access()` (SQL definer) is the one write rule:
+office any time; the recorder only while the estimate IS a site visit. The files route and (later)
+the voice route share one session-only decision, `lib/site-visits/access.ts`.
+
+**Nullable `estimate_number` rippled to exactly 7 compile errors** — every one a path reachable only
+for a numbered estimate. All go through `requireEstimateNumber()`, which THROWS rather than printing
+a blank number on a client document. The eighth error was the offline page's total label map — the
+new queue entity, caught by the compiler as designed.
+
+**`s108-site-visit.live.ts` — 17/17, `VITEST_EXIT_LINE=0`, on REAL crew/foreman/sub/PM/owner
+sessions.** The audit-6 claim, with counts so nothing passes on zero rows:
+- **BEFORE promotion:** the crew session reads **0** estimate rows while the row exists (admin
+  count 1), and reads **1 visit, 3 notes, 1 measurement, 0 voice notes — no money key on any row**
+  (checked against every money column FILL-A1 lists). Creating the visit left the company's
+  estimate-number sequence **unchanged**.
+- **AFTER the owner promotes** (draft, real number, sequence **+1 exactly**): the crew session
+  STILL reads **0** estimate rows and STILL reads its 3 notes / 1 measurement / 1 visit, no money
+  key — and has **lost every write** (note, measurement, upload refused; files floor says
+  `canUpload:false`, `ownFilesOnly:true`).
+- A different crew-level user (the foreman) reads 0 and is refused writes; a subcontractor cannot
+  create a visit; the crew member cannot promote (ASK-A3); a second promotion is refused; nothing can
+  turn an estimate back into a site visit; an abandoned visit is soft-deleted with no number; the
+  office notification row is written (`site_visit_recorded`), then removed.
+- Sweep verified: **0** fixture estimates, contacts, notifications left.
+
+**Q3 condition 2 — the route-order test EXTENDED, with a mirror, PROVEN BY SABOTAGE.**
+`s107-estimate-files-route-order.test.ts` gains the recorder arm: no visit → 404, abandoned →
+404, promoted → POST 403 — each asserting the admin client was **never reached** — plus TWO mirrors
+(still-a-visit POST, promoted GET) that must reach it. **12/12, exit 0.** Sabotage — one
+`getSupabaseAdmin()` call above the floor in both handlers → **`SABOTAGE_VITEST_EXIT_LINE=1`,
+8 failed / 4 passed**: every "never reached" case red, including all 3 new recorder cases, every
+mirror green. Reverted (0 sabotage lines left) → **12/12, `REVERTED_VITEST_EXIT_LINE=0`**.
+
+**UI (one shared record component, PARITY):** `/m/site-visits` (list), `/m/site-visits/new`
+(existing-or-new contact and address), `/m/site-visits/[id]` (photos, conditions, scope,
+measurements with computed sq ft, checkable blockers); desktop `/dashboard/estimates/site-visits/[id]`
+renders the SAME `SiteVisitRecord` plus Promote / Abandon; open visits appear in a panel ABOVE the
+estimates list and never in it; the builder redirects a site visit to its record; the Field page
+gains a "Site visits" entry OUTSIDE the project grid (m-hubs pins that grid at 4). Photos that fail
+to upload are held in the offline queue (new entity `site_visit_media` — a deliberate, ruled
+widening of M6M's queued set) and replayed with the same id; the files route accepts a client id
+so a replay lands one row. `lint` clean.
+
+### A — the gate caught a real defect: tenant deletion — **fixed, migration + walk**
+
+A's first gate: `TSC 0 · LINT 0 · BUILD 0` (all five site-visit routes in the manifest) but
+**`VITEST_EXIT_LINE=1` — 1 failed / 1306 passed**: `lib/trial/deletion-census.test.ts` —
+*"Tables with company_id in NEITHER the walk NOR SURVIVES … ai_transcription_logs,
+site_visit_measurements, site_visit_notes, site_visit_voice_notes, site_visits"*. Deleting a
+company would have left site-visit rows standing — **the existing census test did exactly its job.**
+
+- The four `site_visit_*` tables are tenant data → added to `COMPANY_TABLES` before `estimates`.
+- `ai_transcription_logs` is OUR AI spend → `SURVIVES` + `detachSurvivors()` nulls its
+  `company_id`, the ruled `ai_tag_logs` treatment [S137 Q1]. ⚠️ **That exposed a second defect in
+  my own migration:** its `company_id` was NOT NULL with a NO ACTION FK, so the detach would have
+  FAILED and the company row could never be deleted. **`20261660000000_ai_transcription_logs_detachable`**
+  makes it nullable with an `ON DELETE CASCADE` FK — identical to `ai_tag_logs`, verified by object
+  (`is_nullable YES`, `confdeltype c`). `db push` → `DBPUSH_EXIT=0`.
+
+Re-run: `TSC_EXIT_LINE=0`; unit suite **`VITEST_EXIT_LINE=0` — 96 files, 1307 tests**;
+`s138-trial-deletion-run.live.ts` (the real walk against rebuild-test) **14/14, exit 0**.
+⚠️ Stated plainly: that test's doomed tenant holds no site-visit rows, so it proves the walk still
+completes, not that it deletes site-visit rows — the table accounting is the census test's.
+Fingerprint regenerated (constraints n=1000, latest `20261660000000`).
+
+### A — the real UI, end to end — `e2e/m-site-visit.spec.ts` — **proven by sabotage**
+
+As the crew identity at 402px: Field → **Site visits** → Record → existing contact, address later →
+lands on `/m/site-visits/<id>` → adds a condition (1 row) and a 12 × 14 measurement (button
+previews and row shows **168 sq ft**) → the `site_visit_recorded` notification exists. Then the
+**Owner** opens the desktop page, **Create estimate from this visit** → confirm → lands on the
+builder; the row reads `draft` with a number. Then the **crew member again**: promoted banner shown,
+the note and measurement still read, **no add controls, no photo input, and no `$` anywhere in the
+record**. **`PW_EXIT_LINE=0`, 2 passed** (setup + this). Sabotage — `canWrite` forced true on the
+phone page → **`SABOTAGE_PW_EXIT_LINE=1`** (the write control reappeared); reverted (diff empty) →
+**`REVERTED_PW_EXIT_LINE=0`**. Fixtures swept: 0 `S108A-E2E` estimates left.
+
+### A — VOICE NOTES, the last piece — **built and proven, unit + live + real UI**
+
+**Model: `gpt-4o-transcribe`** — chosen from the models this key lists (GET /v1/models, key never
+printed; the transcription-capable ones present: `gpt-4o-transcribe`, `gpt-4o-mini-transcribe`,
+`gpt-transcribe`, `whisper-1`), and **proven by one real call on short clips** (TTS-generated, so
+the words are known): English came back verbatim including "LVP" and "12x14"; **Spanish came back
+in Spanish**, not translated. **Price $0.006/minute** — read from OpenAI's pricing page
+(developers.openai.com/api/docs/pricing, "Transcription models", 2026-09-22) through a summarising
+fetch, i.e. verified against the authoritative page but read by a tool, stated as such.
+⚠️ The transcription response carries **no `model` field**, so the Module 3H rule "log the
+RESOLVED model" cannot be met: the REQUESTED id is logged, and the code says so.
+
+**As built:** the phone records with MediaRecorder (webm/opus, or mp4 on iOS), **stops itself at
+10:00**, and **refuses a longer recording before upload** (a backgrounded tab can let the mic run
+past the timer); a failed upload is **held in the offline queue** with its id. The route
+`/api/site-visits/[id]/voice` shares the files route's floor (`resolveEstimateFileAccess`, session
+only, before the admin client), refuses >600 s and >25 MB again, **stores the audio first** (a
+`files` row nothing ever rewrites), then transcribes server-side; a failure answers 200 with
+`failed` and the phone offers **Try again** (`/api/site-visits/voice/[voiceId]/transcribe`, same
+floor). `transcript_machine` keeps what the model said; `transcript` is the editable copy and a
+retry never overwrites a human edit. A cost row lands in `ai_transcription_logs` on success AND
+failure. No `language`, no `prompt`, and never `/audio/translations`.
+
+| proof | result |
+| --- | --- |
+| `s108-voice.test.ts` (unit) | **6/6, `VITEST_EXIT_LINE=0`** — the cap is 600 on phone and server; 600 allowed, 600.1 refused, 0 refused; codec params stripped; iOS mp4 accepted; non-audio refused; ruled model and price |
+| `s108-voice.live.ts` (rebuild-test + real OpenAI, ≈ $0.001) | **5/5, `LIVE_VITEST_EXIT_LINE=0`** — garbage audio → `failed`, reason stored, cost row `success=false`, **stored audio byte-identical afterwards**; retry on the real clip → `done`, **Spanish words present, English absent**, cost row at (6.5 s / 60) × $0.006; recorder edits pre-promotion and `transcript_machine` untouched; a re-transcription does not overwrite the edit; after promotion the **recorder is refused (42501), the owner may edit**, and the recorder still reads it |
+| `e2e/m-site-visit-voice.spec.ts` (real screen, real route, Chromium fake mic) | **`PW_EXIT_LINE=0`, 2 passed**, `VOICE_E2E transcript_status=done`: one voice note, an `audio/*` file row with bytes, one cost row |
+
+Fixtures swept (0 left). **Voice is finished; nothing about it is deferred.**

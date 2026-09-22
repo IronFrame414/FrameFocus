@@ -5,6 +5,7 @@ import type {
 } from '@/lib/services/estimates-client';
 
 export const STATUS_LABELS: Record<EstimateStatus, string> = {
+  site_visit: 'Site visit',
   draft: 'Draft',
   review: 'In Review',
   sent: 'Sent',
@@ -18,6 +19,7 @@ export const STATUS_LABELS: Record<EstimateStatus, string> = {
 
 // badge colors: [background, text]
 export const STATUS_COLORS: Record<EstimateStatus, [string, string]> = {
+  site_visit: ['#ecfdf5', '#065f46'],
   draft: ['#f3f4f6', '#374151'],
   review: ['#fef3c7', '#92400e'],
   sent: ['#dbeafe', '#1e40af'],

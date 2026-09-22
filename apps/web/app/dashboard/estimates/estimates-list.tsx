@@ -22,6 +22,7 @@ import {
 } from '@/components/list-screen/list-screen';
 import type { Metric } from '@/components/list-screen/list-screen';
 import { cardStyle, color, font, microLabelStyle, primaryButtonStyle } from '@/lib/theme';
+import { requireEstimateNumber } from '@/lib/estimate-number';
 
 const STATUS_FILTERS: Array<EstimateStatus | 'all'> = [
   'all',
@@ -275,7 +276,7 @@ export function EstimatesList({
         <CloneModal
           sourceId={cloneSource.id}
           sourceName={cloneSource.name}
-          sourceNumber={cloneSource.estimate_number}
+          sourceNumber={requireEstimateNumber(cloneSource)}
           onClose={() => setCloneSource(null)}
         />
       )}

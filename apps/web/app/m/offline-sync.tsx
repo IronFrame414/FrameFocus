@@ -11,6 +11,7 @@ import {
 } from 'react';
 import { createClient } from '@/lib/supabase-browser';
 import { uploadFile } from '@/lib/services/files-client';
+import { uploadSiteVisitPhoto, uploadVoiceNote } from '@/lib/services/site-visits-client';
 import { OfflineQueue, type EnqueueInput, type QueueEntry } from '@/lib/offline/queue';
 import { IdbStorage } from '@/lib/offline/idb-storage';
 import { makeExecutors } from '@/lib/offline/executors';
@@ -78,6 +79,28 @@ async function uploadQueuedPhoto(payload: {
   return { success: true };
 }
 
+/** [S108 Spec A] Replays a held site-visit photo or voice note through its
+ *  ROUTE, with the id it was captured under — the route treats a repeat id as
+ *  already landed, so N replays make one row. */
+async function uploadQueuedSiteVisitMedia(
+  payload: Record<string, unknown>
+): Promise<{ success: boolean; error?: string }> {
+  const p = payload as {
+    kind: 'photo' | 'voice';
+    estimate_id: string;
+    id: string;
+    blob: Blob;
+    file_name?: string;
+    duration_seconds?: number;
+  };
+  if (p.kind === 'voice') {
+    // Stored first, transcribed after; a failed TRANSCRIPTION is still a
+    // successful upload (the audio is kept, the phone offers a retry).
+    return uploadVoiceNote(p.estimate_id, p.blob, p.duration_seconds ?? 0, p.id);
+  }
+  return uploadSiteVisitPhoto(p.estimate_id, p.blob, p.file_name ?? `photo-${p.id}.jpg`, p.id);
+}
+
 export function OfflineSyncProvider({ children }: { children: React.ReactNode }) {
   const queueRef = useRef<OfflineQueue | null>(null);
   const [entries, setEntries] = useState<QueueEntry[]>([]);
@@ -101,7 +124,10 @@ export function OfflineSyncProvider({ children }: { children: React.ReactNode })
     let events: SyncEvent[] = [];
     try {
       const supabase = createClient();
-      const exec = makeExecutors(supabase, { uploadPhoto: uploadQueuedPhoto });
+      const exec = makeExecutors(supabase, {
+        uploadPhoto: uploadQueuedPhoto,
+        uploadSiteVisitMedia: uploadQueuedSiteVisitMedia,
+      });
       events = await syncOnce(getQueue(), exec, () => navigator.onLine);
     } finally {
       syncing.current = false;

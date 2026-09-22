@@ -34,6 +34,7 @@ const ENTITY_LABEL: Record<QueueEntry['entity'], string> = {
   time_segment: 'Time segment',
   daily_log: 'Daily log',
   photo: 'Photo',
+  site_visit_media: 'Site visit photo / voice note',
 };
 
 export default function MobileOfflinePage() {
