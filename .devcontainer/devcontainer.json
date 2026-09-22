@@ -1,7 +1,17 @@
 {
   "name": "FrameFocus Dev",
   "image": "mcr.microsoft.com/devcontainers/typescript-node:20",
-  "postCreateCommand": "npm install",
+  // S108 D1d + ASK-D2. Both apply on REBUILD, not on a restart.
+  //
+  // `gh` as a devcontainer FEATURE, not `apt install` — an apt install lives in
+  // the container layer and vanishes on rebuild, exactly as Claude Code did.
+  // ⚠️ What `gh` can do here is bounded by the Codespace token, measured S108:
+  // runs/workflows/pulls/issues READ → 200 (so `gh run list|view|watch` works);
+  // branch protection, Actions secrets and the Actions CANCEL API → 403.
+  "features": {
+    "ghcr.io/devcontainers/features/github-cli:1": {}
+  },
+  "postCreateCommand": "npm install && npm install -g @anthropic-ai/claude-code",
   "forwardPorts": [3000, 8081],
   // ⚠️ PORT 3000 DEFAULTS TO **PRIVATE** ON REBUILD, AND IS DELIBERATELY MADE
   // PUBLIC BY HAND WHEN OAUTH IS BEING EXERCISED. TWO STATES, ON PURPOSE.

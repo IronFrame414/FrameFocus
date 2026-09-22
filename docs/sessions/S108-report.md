@@ -909,3 +909,15 @@ Pushed `92703ca7..98d056e3`. **Spec C: built, proven, merged.**
 a control, so it was redone on the table Phase 1 used.)
 ⚠️ **The editor half — "save no longer reflows" — cannot be proved from a terminal.** The settings
 file is the mechanism; the ignore file is the provable backstop.
+
+### D1b — pre-push `next build` hook — **DROPPED, per ASK-D1 → A.** Nothing built.
+CI's `e2e` job already runs `next build` as its own ungated step on every branch push; C's own
+build failure (`"compareFingerprints" is not a valid Route export field`) is the live example.
+
+### D1d + ASK-D2 — `gh` and Claude Code survive a rebuild — **built; untestable until a rebuild**
+
+`.devcontainer/devcontainer.json`: `"features": { "ghcr.io/devcontainers/features/github-cli:1": {} }`
+and `postCreateCommand` → `npm install && npm install -g @anthropic-ai/claude-code`. The file is
+JSONC; parsed after stripping `//` lines → `PARSE_EXIT=0`, both keys present.
+⚠️ **Applies on REBUILD, not restart** — `gh` is still absent in this running Codespace, and will
+stay absent until Josh rebuilds. The token's measured limits are recorded in the file itself.
