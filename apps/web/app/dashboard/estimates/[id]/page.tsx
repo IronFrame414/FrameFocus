@@ -40,9 +40,12 @@ export default async function EstimateBuilderPage({ params }: PageProps) {
   // caller-RLS-scoped.
   const { data: est } = await supabase
     .from('estimates')
-    .select('created_by')
+    .select('created_by, status')
     .eq('id', params.id)
     .maybeSingle();
+  // [S108 Spec A] A site visit is not an estimate document yet — it opens as
+  // the visit record, where the office can promote it.
+  if (est?.status === 'site_visit') redirect(`/dashboard/estimates/site-visits/${params.id}`);
   let estimatorName: string | null = null;
   if (est?.created_by) {
     const names = await getUploaderNames([est.created_by]);

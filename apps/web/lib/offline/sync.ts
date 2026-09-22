@@ -47,6 +47,10 @@ export interface Executors {
    * built for (A-20d).
    */
   uploadPhoto(entry: QueueEntry): Promise<void>;
+  /** [S108 Spec A] A site-visit photo or voice note, through its route. The
+   *  payload carries a client id, so a replay lands one row. Optional so the
+   *  existing harness fakes need not implement it. */
+  uploadSiteVisitMedia?(entry: QueueEntry): Promise<void>;
 }
 
 export interface SyncEvent {
@@ -98,6 +102,12 @@ async function replayOne(
   try {
     if (entry.entity === 'photo') {
       await exec.uploadPhoto(entry);
+      await queue.succeed(entry.entry_id);
+      return { entry, outcome: 'succeeded' };
+    }
+    if (entry.entity === 'site_visit_media') {
+      if (!exec.uploadSiteVisitMedia) throw new Error('no site-visit uploader wired');
+      await exec.uploadSiteVisitMedia(entry);
       await queue.succeed(entry.entry_id);
       return { entry, outcome: 'succeeded' };
     }

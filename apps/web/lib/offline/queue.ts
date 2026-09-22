@@ -16,7 +16,15 @@
 // insert. A-16c asserts the three-entry shape; A-16 is stated on target_id.
 
 export type QueueOp = 'insert' | 'update';
-export type QueueEntity = 'time_clock_session' | 'time_segment' | 'daily_log' | 'photo';
+// [S108 Spec A] 'site_visit_media' — a site-visit photo or voice note, held
+// offline and replayed through the estimate-files / voice ROUTES (the only
+// access control for a project-less file). Ruled by the voice ruling.
+export type QueueEntity =
+  | 'time_clock_session'
+  | 'time_segment'
+  | 'daily_log'
+  | 'photo'
+  | 'site_visit_media';
 export type QueueState = 'queued' | 'conflicted';
 
 export interface QueueEntry {

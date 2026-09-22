@@ -21,6 +21,7 @@ import { NotificationEmail } from '@/lib/email/templates/notification-email';
 
 import { CONSENT_TEXT } from '@/lib/proposal/proposal-defaults';
 import { applied } from './mutation-result';
+import { requireEstimateNumber } from '@/lib/estimate-number';
 export { CONSENT_TEXT };
 
 type SigningSessionRow = Database['public']['Tables']['signing_sessions']['Row'];
@@ -206,7 +207,7 @@ export async function completeSignature(
 
   const { fileId, error: storeError } = await storeSignedPDF(admin, {
     companyId: estimate.company_id,
-    estimateNumber: estimate.estimate_number,
+    estimateNumber: requireEstimateNumber(estimate),
     signedPdfBuffer: signedPdf,
   });
   if (storeError || !fileId) {

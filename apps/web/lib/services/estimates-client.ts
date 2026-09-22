@@ -9,6 +9,8 @@ import { applied, DISCARDED } from './mutation-result';
 // generator; re-narrow them to the literal unions per CLAUDE.md.
 
 export type EstimateStatus =
+  // [S108 Spec A] a site visit IS an estimate, in a status before draft.
+  | 'site_visit'
   | 'draft'
   | 'review'
   | 'sent'
@@ -240,6 +242,9 @@ export async function listEstimates(filters?: ListEstimatesFilters): Promise<Est
     .from('estimates')
     .select('*')
     .eq('is_deleted', false)
+    // [S108 Spec A, FILL-A2] A site visit has no number and $0 totals; it is
+    // listed in its own section, never among estimates.
+    .neq('status', 'site_visit')
     .order('created_at', { ascending: false });
 
   if (filters?.status) {

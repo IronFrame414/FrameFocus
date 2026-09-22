@@ -118,7 +118,11 @@ export type NotificationType =
   // route resolves ONE company BY ID and writes to that Owner alone, and the
   // body carries NO drift detail — which dimension moved is read from the
   // route's response and the server log, never from a row a tenant can see.
-  | 'schema_drift';
+  | 'schema_drift'
+  // S108 Spec A, ASK-A4 — a site visit was recorded; Owner, Admin and every
+  // PM are told. CHECK value in the site-visit migration, same commit.
+  // In-app + push only; not emailed, so `email_types` is untouched.
+  | 'site_visit_recorded';
 
 export interface NotifyParams {
   admin: SupabaseClient<Database>;

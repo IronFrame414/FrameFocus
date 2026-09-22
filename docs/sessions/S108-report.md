@@ -1344,3 +1344,80 @@ run is complete, with no rebuild-test writes from this session until it finishes
 `m-photos :892`. A markdown commit cannot change e2e behaviour; this is the contention window.
 The merged `feature/s108` run `35720037343` @ `8e3bec0f` — which **contains all of D** and ran the
 same suites in the same window — is **green**. D stands merged on that evidence.
+
+---
+
+## Phase 3 — SPEC A — branch `feature/s108-a-site-visit`, cut from `feature/s108` @ `df8daae9`
+
+### B merged first
+`feature/s108-b-line-items` merged `--no-ff` → **`df8daae9`** after its SOLO CI run
+**`35723727160` green on both jobs**. Gate on the merged tree (byte-identical to B's tip):
+`TSC_EXIT_LINE=0`, `LINT_EXIT_LINE=0`, `BUILD_EXIT_LINE=0` (BUILD_ID present),
+`VITEST_EXIT_LINE=0` — **96 files, 1300 tests**. Pushed.
+
+### A — everything except voice — **built and proven live**
+
+**Migration `20261650000000_site_visit.sql`**, `supabase db push` → `DBPUSH_EXIT=0`, first time,
+link checked (`nmyphyhmfttxkdoposvf`), ledger showing it as the one PENDING file. Verified by object:
+four `site_visit_*` tables + `ai_transcription_logs`, **RLS on, exactly one SELECT policy each and
+NO write policy** (every write is an RPC — ASK-A8), the two standard triggers on each side table;
+**ten RPCs, all SECURITY DEFINER, none executable by `anon` or PUBLIC**; `estimates_status_check`
+with `site_visit`; `estimate_number` nullable; `notifications_type_check` with
+`site_visit_recorded`. Fingerprint regenerated (replay/live agreement re-asserted): policies 368,
+triggers 277, functions 303, latest `20261650000000`; `db:functions` **303/303 exact**.
+
+⚠️ **A FINDING FILL-A2 MISSED — its reader table listed only application code.**
+`enforce_estimate_immutability` (a database trigger) treats every status other than draft/review as
+a SENT document: any edit to a site visit would have raised, and **promotion (site_visit → draft)
+would have been refused as "a sent estimate cannot be returned to draft"**. The migration re-states
+the trigger verbatim from its latest file (`20261330000000`) plus two marked arms: nothing enters
+`site_visit` from another status, and a site visit is editable and may leave only to `draft`. Swept
+for other database readers of `estimates.status` (functions and policies): every one refuses a
+non-draft status, which is correct for a visit (no lines, bids or estimate files through them).
+Also corrected: the list reader is `listEstimates()`, not `getEstimates()`.
+
+**The floor, as built (ASK-A1/A2 → A):** foreman/crew get NOTHING on `estimates`. They create and
+edit through `create_site_visit` / `save_site_visit_note` / `save_site_visit_measurement` /
+`update_site_visit` / `abandon_site_visit`, which return ids only; they READ the money-free
+`site_visit_*` rows they created. `site_visit_access()` (SQL definer) is the one write rule:
+office any time; the recorder only while the estimate IS a site visit. The files route and (later)
+the voice route share one session-only decision, `lib/site-visits/access.ts`.
+
+**Nullable `estimate_number` rippled to exactly 7 compile errors** — every one a path reachable only
+for a numbered estimate. All go through `requireEstimateNumber()`, which THROWS rather than printing
+a blank number on a client document. The eighth error was the offline page's total label map — the
+new queue entity, caught by the compiler as designed.
+
+**`s108-site-visit.live.ts` — 17/17, `VITEST_EXIT_LINE=0`, on REAL crew/foreman/sub/PM/owner
+sessions.** The audit-6 claim, with counts so nothing passes on zero rows:
+- **BEFORE promotion:** the crew session reads **0** estimate rows while the row exists (admin
+  count 1), and reads **1 visit, 3 notes, 1 measurement, 0 voice notes — no money key on any row**
+  (checked against every money column FILL-A1 lists). Creating the visit left the company's
+  estimate-number sequence **unchanged**.
+- **AFTER the owner promotes** (draft, real number, sequence **+1 exactly**): the crew session
+  STILL reads **0** estimate rows and STILL reads its 3 notes / 1 measurement / 1 visit, no money
+  key — and has **lost every write** (note, measurement, upload refused; files floor says
+  `canUpload:false`, `ownFilesOnly:true`).
+- A different crew-level user (the foreman) reads 0 and is refused writes; a subcontractor cannot
+  create a visit; the crew member cannot promote (ASK-A3); a second promotion is refused; nothing can
+  turn an estimate back into a site visit; an abandoned visit is soft-deleted with no number; the
+  office notification row is written (`site_visit_recorded`), then removed.
+- Sweep verified: **0** fixture estimates, contacts, notifications left.
+
+**Q3 condition 2 — the route-order test EXTENDED, with a mirror, PROVEN BY SABOTAGE.**
+`s107-estimate-files-route-order.test.ts` gains the recorder arm: no visit → 404, abandoned →
+404, promoted → POST 403 — each asserting the admin client was **never reached** — plus TWO mirrors
+(still-a-visit POST, promoted GET) that must reach it. **12/12, exit 0.** Sabotage — one
+`getSupabaseAdmin()` call above the floor in both handlers → **`SABOTAGE_VITEST_EXIT_LINE=1`,
+8 failed / 4 passed**: every "never reached" case red, including all 3 new recorder cases, every
+mirror green. Reverted (0 sabotage lines left) → **12/12, `REVERTED_VITEST_EXIT_LINE=0`**.
+
+**UI (one shared record component, PARITY):** `/m/site-visits` (list), `/m/site-visits/new`
+(existing-or-new contact and address), `/m/site-visits/[id]` (photos, conditions, scope,
+measurements with computed sq ft, checkable blockers); desktop `/dashboard/estimates/site-visits/[id]`
+renders the SAME `SiteVisitRecord` plus Promote / Abandon; open visits appear in a panel ABOVE the
+estimates list and never in it; the builder redirects a site visit to its record; the Field page
+gains a "Site visits" entry OUTSIDE the project grid (m-hubs pins that grid at 4). Photos that fail
+to upload are held in the offline queue (new entity `site_visit_media` — a deliberate, ruled
+widening of M6M's queued set) and replayed with the same id; the files route accepts a client id
+so a replay lands one row. `lint` clean.

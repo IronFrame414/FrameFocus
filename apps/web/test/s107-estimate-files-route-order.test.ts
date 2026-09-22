@@ -41,6 +41,10 @@ let profileRow: { company_id: string; role: string } | null = {
   role: 'project_manager',
 };
 let estimateRow: Record<string, unknown> | null = null;
+// [S108 Spec A] the recorder arm reads `site_visits` on the session, then asks
+// site_visit_access() — both mocked here so the arm's ORDER can be asserted.
+let visitRow: Record<string, unknown> | null = null;
+let accessValue: string | null = null;
 
 /** A chainable PostgREST-shaped stub. `.single()` resolves the configured row. */
 function table(row: unknown) {
@@ -57,7 +61,9 @@ function table(row: unknown) {
 vi.mock('@/lib/supabase-server', () => ({
   createClient: async () => ({
     auth: { getUser: async () => ({ data: { user: sessionUser } }) },
-    from: (t: string) => table(t === 'profiles' ? profileRow : estimateRow),
+    from: (t: string) =>
+      table(t === 'profiles' ? profileRow : t === 'site_visits' ? visitRow : estimateRow),
+    rpc: async () => ({ data: accessValue, error: null }),
   }),
 }));
 
@@ -66,7 +72,14 @@ vi.mock('@/lib/supabase-admin', () => ({
     adminSpy(...args);
     return {
       from: () => table(null),
-      storage: { from: () => ({ createSignedUrl: async () => ({ data: null }) }) },
+      storage: {
+        from: () => ({
+          createSignedUrl: async () => ({ data: null }),
+          // [S108] the recorder MIRROR reaches the upload; a stub error ends it
+          // cleanly (500) AFTER the admin client was reached, which is the point.
+          upload: async () => ({ error: { message: 'stub' } }),
+        }),
+      },
     };
   },
 }));
@@ -79,6 +92,8 @@ beforeEach(() => {
   sessionUser = { id: 'user-1' };
   profileRow = { company_id: 'co-1', role: 'project_manager' };
   estimateRow = null;
+  visitRow = null;
+  accessValue = null;
 });
 
 describe('GET — the session read is the floor and runs first', () => {
@@ -145,5 +160,67 @@ describe('POST — the session read AND the edit gate both precede the admin cli
     const res = await POST(body(), ctx);
     expect(res.status).toBe(403);
     expect(adminSpy).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// [S108 Spec A, Q3 → A, condition 2] THE RECORDER ARM — "did you record this
+// visit". A foreman or crew member can never SELECT the estimate (it carries
+// money), so the route falls through to the money-free `site_visits` read.
+// That arm must ALSO run entirely before the service-role client, and it gets
+// its OWN mirror case so its not-called assertions cannot pass vacuously.
+// ---------------------------------------------------------------------------
+describe('[S108] the RECORDER arm — also before the admin client, with its own mirror', () => {
+  const body = () => {
+    const form = new FormData();
+    form.set('file', new File([new Uint8Array(4)], 'a.jpg', { type: 'image/jpeg' }));
+    return new Request('http://t/', { method: 'POST', body: form });
+  };
+  const crew = () => {
+    profileRow = { company_id: 'co-1', role: 'crew_member' };
+    estimateRow = null; // RLS: a crew member never sees the estimate row
+  };
+
+  it('no estimate AND no visit of theirs → GET 404 AND the admin client is never reached', async () => {
+    crew();
+    const res = await GET(new Request('http://t/'), ctx);
+    expect(res.status).toBe(404);
+    expect(adminSpy).not.toHaveBeenCalled();
+  });
+
+  it('an ABANDONED visit of theirs → POST 404 AND the admin client is never reached', async () => {
+    crew();
+    visitRow = { estimate_id: ctx.params.id, company_id: 'co-1', created_by: 'user-1', is_deleted: true };
+    accessValue = null;
+    const res = await POST(body(), ctx);
+    expect(res.status).toBe(404);
+    expect(adminSpy).not.toHaveBeenCalled();
+  });
+
+  it('their visit, already PROMOTED (access null) → POST 403 AND the admin client is never reached', async () => {
+    // Q3 condition 1: after promotion the recorder keeps READ and LOSES UPLOAD.
+    crew();
+    visitRow = { estimate_id: ctx.params.id, company_id: 'co-1', created_by: 'user-1', is_deleted: false };
+    accessValue = null;
+    const res = await POST(body(), ctx);
+    expect(res.status).toBe(403);
+    expect(adminSpy).not.toHaveBeenCalled();
+  });
+
+  it('MIRROR: their visit, still a site visit → POST reaches the admin client (so the above is not vacuous)', async () => {
+    crew();
+    visitRow = { estimate_id: ctx.params.id, company_id: 'co-1', created_by: 'user-1', is_deleted: false };
+    accessValue = 'recorder';
+    await POST(body(), ctx);
+    expect(adminSpy, 'the recorder arm never reaches the admin client at all').toHaveBeenCalled();
+  });
+
+  it('MIRROR: their PROMOTED visit → GET still reaches the admin client (READ survives promotion)', async () => {
+    crew();
+    visitRow = { estimate_id: ctx.params.id, company_id: 'co-1', created_by: 'user-1', is_deleted: false };
+    accessValue = null;
+    const res = await GET(new Request('http://t/'), ctx);
+    expect(res.status).toBe(200);
+    expect(adminSpy).toHaveBeenCalled();
   });
 });
