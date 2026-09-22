@@ -219,7 +219,7 @@ Stripe test mode. Nothing was weakened to reach this.
 #### D3a — the committed key
 
 `docs/sessions/context2.md:12` — line number in the spec is **correct**. It carries a partial
-publishable key (`sb_publishable_CohyWuCQrtn20grA7gfTjw_`) alongside
+publishable key (value redacted at D3a — revoked 2026-09-21) alongside
 `https://jwkcknyuyvcwcdeskrmz.supabase.co`, which `STATE.md:38` confirms is **production**. Nine
 other files mention `sb_publishable` generically; this is the only committed value.
 
@@ -1026,3 +1026,12 @@ agreement on all six dimensions before writing). **Only the functions digest mov
 (`b20b30ed…` → `4f075aba…`); policies `5cb72748…`, triggers `d1c987c4…`, constraints `4c9fced8…`
 byte-identical. `s108-schema-drift.live.ts` against the new baseline: **`VITEST_EXIT_LINE=0`, 8/8**,
 detector still seen to fire and return to zero.
+
+### D3a — the committed production key — **done**
+
+`docs/sessions/context2.md:12`: the partial `sb_publishable_…` value replaced with a note that it
+was **revoked on 2026-09-21** (revoking the production `sb_secret_` key took the whole new-format
+set) and that git history keeps it, acceptable only because it is revoked and publishable.
+⚠️ **This report had quoted the same value itself** (Phase 1, D3a entry) — redacted there too.
+A repo-wide grep for `sb_publishable_` followed by 6+ key characters, excluding `node_modules`,
+`.next` and `.git`, now returns **nothing**.
