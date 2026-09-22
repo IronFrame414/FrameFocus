@@ -22,8 +22,14 @@ import { Body, Container, Head, Html, Preview, Text } from '@react-email/compone
 //     dress it as something it isn't."
 //
 // The company's name is the ONLY variable, and it appears as text rather than
-// as branding. Reply-To resolves to that company (sendEmail's replyToCompanyId),
-// so a reply is a real reply to a real address.
+// as branding. Reply-To is the SENDING ADDRESS ITSELF —
+// `<slug>@ezcontractorbinder.com`, the same string as From [S108 C1, RULED
+// Josh]. _Superseded, quoted rather than deleted: "Reply-To resolves to that
+// company (sendEmail's replyToCompanyId), so a reply is a real reply to a real
+// address."_ That resolved to the company's own settings email, or failing that
+// the OWNER'S PERSONAL EMAIL — off the warming domain entirely, and for one
+// tenant a real person who never asked for this. A reply now reaches the
+// warming domain's catch-all, which is the engagement signal being built.
 export interface WarmingEmailProps {
   /** The full body, already composed. Blank lines separate paragraphs. */
   body: string;
