@@ -1212,3 +1212,58 @@ Redone under exactly the rule written above:
 and the contaminated run earlier reproduced the collision fingerprint on the same file's `:31` and
 `:88`. **#157 moved to `TECH_DEBT_CLOSED.md`** with this evidence (48 lines out of OPEN, full text in
 git history); #150's bullet gets a one-line pointer, since this is evidence FOR #150's class.
+
+---
+
+## Phase 3 — SPEC B — branch `feature/s108-b-line-items`, cut from `feature/s108` @ `8e3bec0f`
+
+### Spec D merged first
+`feature/s108-d-tooling` merged `--no-ff` → **`8e3bec0f`**. Gate on the MERGED tree, dev server
+stopped by PID first so a cold build could not collide with it: **`TSC_EXIT_LINE=0`,
+`LINT_EXIT_LINE=0`, `BUILD_EXIT_LINE=0` (BUILD_ID present), `VITEST_EXIT_LINE=0` — 95 files,
+1286 tests.** Pushed. D's last CI run (`35715904649` @ `44a02488`) green; its final commit
+`4dcc146b` changed only markdown, all of which the local unit run above already exercised.
+
+### B, database half — **built and proven live**
+
+**Migrations, applied to rebuild-test by `supabase db push` (`DBPUSH_EXIT=0`), CLI link checked
+first (`nmyphyhmfttxkdoposvf`), the ledger check listing exactly these two as PENDING:**
+- `20261630000000_labor_unit_sq_ft` — widens BOTH `estimate_line_rows_labor_unit_check` and
+  `change_order_line_rows_labor_unit_check` to `hours · days · sq_ft` (ASK-B6 → A, PARITY).
+- `20261640000000_line_item_containment_and_reorder` — the containment trigger (ASK Q1 → A; header
+  says **future writes only**) + `reorder_estimate_lines()` (SECURITY INVOKER, one transaction,
+  raises 42501 where RLS would silently update nothing).
+
+**Verified by object:** both CHECK definitions read back with `sq_ft`; trigger
+`estimate_line_items_containment BEFORE INSERT OR UPDATE OF estimate_id, category_id,
+subcategory_id`; `reorder_estimate_lines` `prosecdef=false`, ACL `authenticated` + `service_role`
+only — **no `anon`, no PUBLIC**. Ledger: 225 rows, `LEDGER CLEAN`.
+⚠️ The trigger ALSO makes `estimate_id` immutable on UPDATE — FILL-B5's hole was wider than the
+category: the policy's WITH CHECK never re-checked `estimate_id` either, so a line could have been
+moved into another estimate.
+
+**Fingerprint regenerated** (replay/live agreement re-asserted first): triggers 268→**269**,
+functions 287→**289**, constraints 961 (definitions changed, count not), policies unchanged —
+exactly the movement the two migrations predict. `db:functions`: **289/289 exact**.
+`db:types`: +4 lines (the RPC signature). `tsc` → `TSC_EXIT_LINE=0`.
+
+**Tests:**
+- `s108-line-items.test.ts` (unit) — **14/14, `VITEST_EXIT_LINE=0`**: sq-ft cost/sell/budget/actual
+  with stated inputs ($3 × 2,365 = $7,095.00; profit $1,773.75 at the LIVE capture's $8,868.75);
+  the reorder plan; "on target" at parity including gaps that ROUND to zero.
+- `s108-line-items.live.ts` — **17/17, `VITEST_EXIT_LINE=0`**, against rebuild-test:
+  sq_ft accepted on BOTH row tables and `weeks` still refused on both; containment refuses a
+  foreign category, a foreign subcategory and an estimate move, and does NOT refuse a rename;
+  reorder succeeds for the owner across categories and for the authoring PM, and is **refused at
+  the database** (42501) for a SENT estimate and for another user's draft, **with the rows proven
+  unchanged**; a refused move rolls back the moves before it; anon cannot execute it; **FILL-B3:
+  foreman and crew receive 0 estimates and 0 lines while the owner reads 3 and 8 of the same.**
+  Sweep verified: 0 fixture estimates, 0 fixture CO rows left.
+
+**Two test defects of my own, fixed, both named classes:**
+1. `created_by_role` is NOT NULL with a `get_my_role()` default — NULL under the service role —
+   so admin-built fixtures must pass it.
+2. ⚠️ **CLAUDE.md's `.limit(1)` rule, category 2, hit in my own new test.** A3 took an arbitrary CO
+   line item and it belonged to a SENT change order, so the insert tripped the immutability trigger
+   instead of the CHECK under test. Scoped to `change_orders.status = 'draft'` — ordering alone
+   would only have made the wrong pick stable.

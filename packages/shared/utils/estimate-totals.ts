@@ -210,12 +210,16 @@ export function deriveCostPlusSell(cost: number, ratePercent: number): number {
   return roundMoney(cost * (1 + ratePercent / 100));
 }
 
-/** Flat labor sell: man-hours × the negotiated flat rate. Both T&M and
+/** Flat labor sell: quantity × the negotiated flat rate. Both T&M and
  *  cost-plus (A-9) bill own-crew labor this way. Sell-side only — overhead +
  *  profit are baked into the rate; it never touches cost, markup, or the
- *  burden multiplier (spec §4.2, 7d1 §6.1). */
-export function deriveFlatLaborSell(hours: number, hourlyRate: number): number {
-  return roundMoney(hours * hourlyRate);
+ *  burden multiplier (spec §4.2, 7d1 §6.1).
+ *
+ *  [S108] Parameters renamed from `(hours, hourlyRate)`: it is a plain product,
+ *  and a labor row's unit may now be hours, days OR square feet (ruling #6).
+ *  The old names asserted an hours-only world this change ended. */
+export function deriveFlatLaborSell(quantity: number, rate: number): number {
+  return roundMoney(quantity * rate);
 }
 
 export type ContractType = 'fixed_price' | 'cost_plus' | 'time_and_materials';

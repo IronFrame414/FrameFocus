@@ -12,7 +12,24 @@ import { discountTypes } from './estimate';
 // 4D-rev: a line item is composed of typed rows; no more line_type.
 export const rowTypes = ['labor', 'material', 'subcontractor', 'other', 'allowance'] as const;
 
-export const laborUnits = ['hours', 'days'] as const;
+// S108 Spec B ruling #6 — 'sq_ft' added (20261630000000), on estimates AND
+// change orders (PARITY [S122], ASK-B6). Cost stays `rate × quantity`; the unit
+// is a label, and nothing per-HOUR ever reads an estimate/CO labor row (FILL-B8).
+// ONE list, ONE label map, shared by every editor that offers a labor unit —
+// the estimate Items tab, the desktop CO builder and the mobile CO editor —
+// so no surface can offer a different set.
+export const laborUnits = ['hours', 'days', 'sq_ft'] as const;
+export type LaborUnitValue = (typeof laborUnits)[number];
+export const laborUnitLabels: Record<LaborUnitValue, string> = {
+  hours: 'hours',
+  days: 'days',
+  sq_ft: 'sq ft',
+};
+/** A stored labor_unit rendered for a person; unknown values pass through. */
+export function laborUnitLabel(unit: string | null | undefined): string {
+  const u = unit ?? 'hours';
+  return (laborUnitLabels as Record<string, string>)[u] ?? u;
+}
 
 export const materialUnitsOfMeasure = [
   'each',

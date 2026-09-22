@@ -12,8 +12,13 @@
 //   other          → amount                (+ tax when apply_tax)
 //   flat-priced line with NO rows → override_cost (the RPC's 5b fallback)
 //
-// Rounding: per row to 2dp, as the RPC rounds. The ⚠️ target-margin bar is
-// DEFERRED (§6b.2 — no target exists); nothing here renders one.
+// Rounding: per row to 2dp, as the RPC rounds.
+//
+// [S108 B] _Superseded, quoted not deleted: "The ⚠️ target-margin bar is
+// DEFERRED (§6b.2 — no target exists); nothing here renders one."_ A target
+// DOES exist — `companies.margin_target_percent`, nullable, since
+// 20261110000000 — and the comparison is `marginTargetGap()` below, shared by
+// the Details bar and the Items-tab strip so the two cannot word it differently.
 //
 // The unpriced-row half of the mockup's allowance warning ships through
 // `unpricedRowCount`: a row whose cost basis is zero (no rate/cost/amount
@@ -99,4 +104,33 @@ export function computeEstimateHealth(input: EstimateHealthInput): EstimateHealt
   const marginPercent = price > 0 ? Math.round((profit / price) * 1000) / 10 : null;
 
   return { cost, price, profit, marginPercent, unpricedRowCount, flatLinesMissingCost };
+}
+
+/** S108 Spec B — margin against the company target, worded ONE way for every
+ *  surface (the Details bar and the Items-tab strip).
+ *
+ *  - no target, or no margin (zero price) → null: render NOTHING, per the
+ *    ruling that an unset target means "no comparison" (not "—", not 0).
+ *  - the gap is rounded to one decimal FIRST, and a rounded gap of 0.0 reads
+ *    **"on target"** (ASK-B1 → A) — never "0.0 pts over".
+ *  - otherwise "N.N pts under" / "N.N pts over". Markup-mode estimates are
+ *    compared too: marginPercent is profit/price in both modes and the target
+ *    is margin-denominated by design (FILL-B4). */
+export interface MarginTargetGap {
+  direction: 'under' | 'over' | 'on';
+  /** |gap| rounded to one decimal. 0 when on target. */
+  pts: number;
+  /** "10.0 pts under" · "2.5 pts over" · "on target" */
+  label: string;
+}
+
+export function marginTargetGap(
+  marginPercent: number | null,
+  target: number | null
+): MarginTargetGap | null {
+  if (marginPercent == null || target == null) return null;
+  const gap = Math.round((marginPercent - target) * 10) / 10;
+  if (gap === 0) return { direction: 'on', pts: 0, label: 'on target' };
+  const direction = gap < 0 ? 'under' : 'over';
+  return { direction, pts: Math.abs(gap), label: `${Math.abs(gap).toFixed(1)} pts ${direction}` };
 }
