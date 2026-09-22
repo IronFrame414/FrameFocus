@@ -1326,6 +1326,7 @@ export type Database = {
           default_terms_sections: Json | null
           email: string | null
           email_warming_enabled: boolean
+          email_warming_weekly_quota: number
           estimate_number_prefix: string
           estimate_number_sequence: number
           fixed_burden_per_hour: number | null
@@ -1411,6 +1412,7 @@ export type Database = {
           default_terms_sections?: Json | null
           email?: string | null
           email_warming_enabled?: boolean
+          email_warming_weekly_quota?: number
           estimate_number_prefix?: string
           estimate_number_sequence?: number
           fixed_burden_per_hour?: number | null
@@ -1496,6 +1498,7 @@ export type Database = {
           default_terms_sections?: Json | null
           email?: string | null
           email_warming_enabled?: boolean
+          email_warming_weekly_quota?: number
           estimate_number_prefix?: string
           estimate_number_sequence?: number
           fixed_burden_per_hour?: number | null
