@@ -317,6 +317,34 @@ purpose and a production row count for any new constraint. Rebuild-test only.
 
 ## ASK — Phase 2
 
+### RULED [Josh, S108 Phase 2] — all six answered, plus one addition to scope.
+
+**Q1 → A. ⚠️ ADDED TO SCOPE: the category-ownership guard, as a TRIGGER.**
+A `BEFORE INSERT OR UPDATE` trigger on `estimate_line_items` requiring `category_id` (and
+`subcategory_id`) to belong to the row's own `estimate_id`. **Josh's instruction: its header must
+state that it governs FUTURE WRITES ONLY** — it validates the NEW row and does not, and cannot,
+repair rows already stored. A trigger rather than a policy rewrite, because it also covers INSERT
+and cannot be defeated by a future permissive policy being OR'd alongside.
+
+**ASK-B1 → A.** At exact parity the note reads **"on target"**, not "0.0 pts over".
+
+**ASK-B2 → A. No `rate` prefill when the labor unit is sq ft** — leave it blank. A prefilled hourly
+rate on a per-square-foot row is a wrong number the user may not notice; a blank is honest.
+
+**ASK-B3 → A. No font change.** Barlow + IBM Plex Mono stay (ui-01 §S2). **Do the per-component
+weight and size work** from ruling #3 — that is the real visible gap.
+
+**ASK-B4 → A. Leave existing hours-as-sq-ft rows alone.** No migration, no backfill, no per-line
+switch. They include sent estimates and real money, and their totals are already correct.
+
+**ASK-B5 → MOOT, confirmed.** The trash is module-local to `items-tab.tsx`; enlarging it changes no
+other screen.
+
+**ASK-B6 → A. `sq_ft` lands on CHANGE ORDERS in the same pass** — widen
+`change_order_line_rows_labor_unit_check` **and** both CO editors' hard-coded `'hours' | 'days'`
+unions (`co-builder.tsx:1088,1119` and `app/m/p/[projectId]/changes/new/co-editor.tsx`).
+**PARITY [S122]: one feature, both surfaces, same behaviour.**
+
 **ASK-B1** — On FILL-B4: the wording for at-target and above-target, and what shows when no target
 is set.
 

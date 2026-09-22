@@ -221,6 +221,26 @@ cap (3/address/hour, 50/project/hour, `auth_recovery` exempt from the global cei
 
 ## ASK — Phase 2
 
+### RULED [Josh, S108 Phase 2] — all three answered.
+
+**ASK-D1 → A. DROP the pre-push `next build` hook.** It is not built. CI already runs `next build`
+as its own ungated step on every branch push (`ci.yml:295`), and a cold local build measured **227
+seconds** — the hook would add ~4 minutes to every push to duplicate a gate already applied to the
+same commit.
+
+**ASK-D2 → A.** `npm install -g @anthropic-ai/claude-code` goes in the devcontainer's post-create
+command, alongside the `gh` feature. Both apply on **rebuild**, not restart.
+
+**ASK-D3 → C. GENERALISE THE EXISTING EXIT-STATUS SECTION in `CLAUDE.md`** rather than adding a new
+one. ⚠️ **Josh authorised editing `CLAUDE.md` for THIS CHANGE ONLY.** Nothing else in that file may
+be touched in this session, and the markdown formatter must be off first (D1a) so the edit does not
+reflow tables.
+
+**D3c → Q11 answer A.** ⚠️ **CC cannot read or write `apps/web/.env.local.example`** — the path is
+denied by this session's permission settings. **The complete file content goes in
+`docs/sessions/S108-report.md` and Josh pastes it.** This is a delivery route, not a reduction in
+scope: the content is still owed in full.
+
 **ASK-D1** — On FILL-D1b: keep the pre-push `next build` hook as ruled, drop it because CI now
 builds every branch push, or narrow it (e.g. only on pushes to `main`).
 

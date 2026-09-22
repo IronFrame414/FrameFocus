@@ -386,6 +386,64 @@ confirmed or corrected it.
 
 ## ASK — Phase 2
 
+### RULED [Josh, S108 Phase 2] — every ASK answered. This section is settled; do not re-litigate.
+
+**ASK-A1 + ASK-A2 → A, as ONE decision.**
+A **`SECURITY DEFINER` RPC** creates the visit and returns only its id. **No SELECT policy on
+`estimates` is granted to foreman or crew, ever.** Notes, measurements, blockers and transcripts
+live in **money-free `site_visit_*` tables** keyed by `estimate_id`. The recorder's post-promotion
+read is a policy on *those* tables (`created_by = auth.uid()`), so the estimate row — which carries
+four NOT NULL money totals — is never exposed, before or after promotion.
+
+**Q3 → A, with TWO CONDITIONS [Josh].** The estimate-files route's floor becomes "did you record
+this visit", read from the money-free side table.
+1. ⚠️ **The recorder predicate applies ONLY while the estimate is a site visit.** **After promotion
+   the recorder keeps READ of their own photos and LOSES UPLOAD.** Promotion is the boundary.
+2. ⚠️ **Extend `s107-estimate-files-route-order.test.ts` with the mirror case, and PROVE BY SABOTAGE
+   that it still fails if the admin client moves above the floor.** Revert the sabotage after.
+
+**ASK-A3 → owner / admin / PM only** may promote a visit to `draft`. Promotion assigns the number
+and creates the first money-bearing state.
+
+**ASK-A4 → yes.** `notify()` to **Owner, Admin and PM**, **in-app + push, NOT emailed** — so no
+`email_types` row and no second CHECK widening, matching the `selection_approved` /
+`po_item_missing` / `qb_sync_blocked` precedents.
+
+**ASK-A5 → STRUCTURED measurements** — area name, length × width, computed square feet. It feeds
+Spec B's square-foot labor unit directly, which is why both are in this session.
+
+**ASK-A6 → blockers are a CHECKABLE LIST**, each with a resolved flag. "What still blocks a number"
+is a question asked repeatedly; free text cannot answer it.
+
+**ASK-A7 → yes, a visit can be abandoned: SOFT-DELETE it** (`is_deleted`, the standing trash-bin
+pattern). It never received a number, so nothing is orphaned; it leaves the list and stays
+recoverable.
+
+**ASK-A8 → yes.** The recorder may edit **their own** visit until promotion, **via the RPC only** —
+never through a SELECT grant. A crew member who mistypes a measurement on site must be able to fix
+it.
+
+---
+
+### ⚠️ VOICE NOTES — RULED [Josh, S108 Phase 2]. Q20 CHANGED.
+
+**Voice is BUILT THIS SESSION, as the LAST piece of Spec A**, after everything else in Spec A is
+built, proven and pushed. ⚠️ **If voice cannot be finished: stop at a clean commit, record exactly
+what remains, and it continues tomorrow. The rest of S108 must not wait on it.**
+
+**FILL-A9 is now measurable.** `OPENAI_API_KEY` is present in `apps/web/.env.local`.
+⚠️ **Do not print it, echo it, or log it. Check presence WITHOUT printing.**
+
+| ruling | detail |
+| --- | --- |
+| **Model** | Choose the OpenAI transcription model **this key supports**, **prove it with one real call on a short test clip**, and record the model name. State the per-minute price **only if verifiable from an authoritative source; otherwise say it is unverified.** |
+| **Where** | **Transcribe SERVER-SIDE, after the audio is stored.** Audio is recorded and held **offline like photos**; transcription runs when it reaches the server. |
+| **Length cap** | **10 minutes maximum per voice note. Refuse longer with a message, BEFORE upload.** |
+| **Language** | ⚠️ **Keep the spoken language. NO translation.** Crews may speak Spanish. |
+| **Retention** | **Audio AND transcript are both kept.** The recorder may edit the transcript **until promotion**; **after promotion, owner/admin/PM** may edit it. ⚠️ **The original audio is NEVER altered.** |
+| **Failure** | A failed transcription **surfaces on the phone with a retry and NEVER loses the audio.** |
+| **Floor** | **Transcripts are money-free and live in the `site_visit_*` tables.** |
+
 **ASK-A1** — On FILL-A5: the mechanism for a money-free crew INSERT.
 
 **ASK-A2** — On FILL-A6: where notes live.

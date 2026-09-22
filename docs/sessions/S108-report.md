@@ -631,3 +631,45 @@ recorded because catching them is the point:**
    correct quote-parity measurement is **2 lines in 1 function**.
 
 **Phase 2 questions issued. Session stopped, awaiting Josh.**
+---
+
+## Phase 2 — RULED. All 20 answered by Josh, written into the specs.
+
+| Q | ruling |
+| --- | --- |
+| Q1 | **A** — category-ownership guard as a **trigger** in Spec B; its header must say it governs **future writes only** |
+| Q2 | **A** — widen both CO CHECKs and both CO editors. PARITY [S122] |
+| Q3 | **A + 2 conditions** — recorder predicate applies **only while the estimate is a site visit**; after promotion the recorder keeps READ and **loses upload**. Extend the S107 route-order test with the mirror case and **prove by sabotage** |
+| — | 223→222 / 231→230 correction **accepted**; `20261610000000` is **not owed** |
+| Q4 | **A** — Reply-To = `buildSenderAddress()`'s exact output |
+| Q5 | **A** — committed `scripts/.db-fingerprint.json`, `npm run db:fingerprint`, same commit as any migration |
+| Q6 | **A** — notify the Owner of Worth Properties only, **keyed by company id not slug**, no drift detail in the body |
+| Q7 | **A** — 15th cron `/api/cron/schema-drift`, `0 11 * * *`; extend the `vercel.json` parse test |
+| Q8 | **A** — drop the pre-push hook |
+| Q9 | **A** — Claude Code install in post-create, alongside the `gh` feature |
+| Q10 | **C** — generalise the existing exit-status section. ⚠️ `CLAUDE.md` editable **for this change only** |
+| Q11 | **A** — full `.env.local.example` content in this report; Josh pastes it |
+| Q12 | **A** — "on target" |
+| Q13 | **A** — no `rate` prefill for sq ft |
+| Q14 | **A** — no font change; do the per-component weight/size work |
+| Q15 | **A** — leave existing hours-as-sq-ft rows alone |
+| Q16 | moot, confirmed |
+| Q17 | **A** — SECURITY DEFINER RPC, no SELECT policy, money-free `site_visit_*` tables |
+| Q18 | all six as recommended |
+| Q19 | **CHANGED** — CC does **not** merge to `main`; merge each spec branch into `feature/s108` |
+| Q20 | **CHANGED** — build voice **now**, as the **last** piece of Spec A |
+
+### Voice — ruled, and FILL-A9 is now measurable
+`OPENAI_API_KEY` is in `apps/web/.env.local`. ⚠️ Never printed, echoed or logged; presence checked
+without printing. Model proven by one real call on a short clip, name recorded; per-minute price
+stated only if verifiable, otherwise marked unverified. Server-side transcription after storage;
+offline hold like photos; **10-minute cap refused before upload**; **spoken language kept, no
+translation**; audio and transcript both kept, original audio never altered; recorder edits the
+transcript until promotion, owner/admin/PM after; a failed transcription surfaces on the phone with
+a retry and never loses the audio; transcripts are money-free and live in `site_visit_*`.
+
+### Merge sequence for every spec branch (into `feature/s108`, never `main`)
+clean tree → branch pushed → `--no-ff` → **stop on conflicts** → `next build` **and** the unit suite
+**on the MERGED `feature/s108`** → only then push. **Never push a red branch.**
+Final: one green CI run on `feature/s108` with no pushes during it.
+

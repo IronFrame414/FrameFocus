@@ -14,6 +14,27 @@ two files and committed ledger rows for work that never ran. `supabase db push` 
 
 ---
 
+## ⚠️ RULED [Josh, S108 Phase 2] — THIS FILE IS A RUNBOOK, IN THIS ORDER
+
+Josh runs it top to bottom. Every step names what to run, how to verify it, and what correct looks
+like.
+
+1. **Every migration owed to production** — `20261580000000`, `20261590000000`, `20261600000000`
+   **and every S108 migration** — each with its production row count and verification query,
+   applied by **ONE `supabase db push`**, with **the CLI link checked before and re-linked to
+   rebuild-test after**.
+2. **The single command to merge `feature/s108` into `main` and push.**
+3. **The warming arming `UPDATE`, and how to confirm the first send — including which folder.**
+4. **The P3 real-invite check, and the sub bid-request real send.**
+5. **The burst and site-visit field checklists.**
+
+⚠️ **MERGE RULES [Josh, S108 — Q19 CHANGED].** **CC does NOT merge to `main`.** A merge to `main`
+deploys to production, and S108 adds migrations production does not have — **so the migrations in
+step 1 go FIRST, and the merge in step 2 SECOND.** CC merges each spec branch into **`feature/s108`**
+only.
+
+---
+
 ## E1 — Migrations, in order
 
 Owed from the deliverability merge: `20261580000000`, `20261590000000`, `20261600000000`, plus every
