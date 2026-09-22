@@ -962,3 +962,67 @@ LEDGER CLEAN.
 ⚠️ **What it cannot catch, in its docstring:** a ledger row for work that was truncated — S104's
 actual failure. A row is a row. Only reading the objects catches that (the replay, and C2's
 fingerprint).
+
+### D3b — rebuild-test's function bodies re-synced to their LATEST files — **built and proven by hash**
+
+**New tool: `scripts/db-function-sync.py`** (`npm run db:functions`). Check mode is read-only;
+`--apply` re-runs the latest file's exact `CREATE` statement, **extracted from the file
+programmatically — never a clipboard**, via the Management API query endpoint against rebuild-test
+only (the same endpoint `live-sql.mjs` uses; **not MCP**). It refuses any other project in both
+modes. "Latest" is load-bearing: files are read in version order and the last `CREATE` wins — and
+the tree has **no `ALTER FUNCTION` at all** (grep, 0 hits), so that last `CREATE` fully defines both
+body and config.
+
+**FILL-D3b, measured — 287 live functions:**
+
+| class | count | meaning |
+| --- | --- | --- |
+| exact | **253** | byte-equal to the latest file body |
+| comments | **32** | equal after comment-strip + whitespace collapse — the MCP signature |
+| **reformat** | **2** | ⚠️ **not in the spec's list of suspects.** `enforce_no_rows_on_override_line` and `qb_vault_put`: the deployed text has `( SELECT` → `(SELECT` and **adjacent string literals merged** (`'… a ' 'company …'` → one literal). Postgres concatenates those, so behaviour is identical — but it is not the file's text |
+| real drift | **0** | |
+
+The comment-stripped 32 include all four the spec named — `convert_estimate_to_project`,
+`set_winning_bid`, and the two line-total invariant functions (`enforce_no_rows_on_override_line` is
+one; it was *reformatted* as well) — plus 29 more: `handle_new_user`, `get_my_company_id`,
+`get_my_role`, `is_platform_admin`, `update_updated_at`, the QB enqueue family, and others.
+`create_safety_incident` has **two live overloads, both legitimately in the tree** (two files, two
+signatures, no DROP); the tool pairs overloads by signature rather than calling them drift.
+
+⚠️ **Why the 2 reformatted bodies mattered more than the 32.** C2's fingerprint strips comments and
+collapses whitespace, so the 32 never affected it — but it does **not** re-join literals. So the
+committed C2 baseline encoded MCP's reformatting, and **production, deployed by `db push` from the
+files, would have reported function drift every day for bodies nobody changed.** Re-syncing
+rebuild-test and regenerating the baseline removes that false alarm before it ever fires.
+
+**Two problems hit while applying, both handled, one with a residual:**
+1. **Baseline-schema functions are plain `CREATE FUNCTION`** (a `pg_dump`), which fails on an
+   existing function → HTTP 400 on the 11th statement (`get_my_company_id`). The tool now rewrites
+   only the leading keyword to `CREATE OR REPLACE`; body and config untouched. It also now prints
+   Postgres's own error body, which the first run swallowed.
+2. ⚠️ **A `CREATE OR REPLACE` resets `SECURITY DEFINER` and `SET search_path` to whatever the
+   statement says.** The post-check would only have caught a change *after* it happened, so a
+   **pre-flight** was added: any function whose file config differs from its live config is class
+   `CONFIG` and is never applied. Across all 287 it agrees — **179 with a `SET`, 259 definers, 28
+   invokers** — and two controls (search_path removed; definer flipped, on a copy of
+   `handle_new_user`'s live row) each return `CONFIG: 1`, so the arm can fire.
+   ⚠️ **RESIDUAL, stated plainly:** the **first 10** functions were re-applied by the first run,
+   *before* this pre-flight existed, and their prior config was held only in that run's memory,
+   which the HTTP 400 discarded. Their config now equals their files'. The evidence it was not
+   changed is indirect: the tree has no `ALTER FUNCTION`, so the only source of a function's config
+   is its `CREATE` statement, and these were MCP deployments of that same statement. Not proven by
+   a before/after snapshot. The 10: `allocate_invoice_number`, `compute_member_coi_expiry`,
+   `convert_estimate_to_project`, `enforce_companies_qb_scope`,
+   `enforce_company_members_payment_default`, `enforce_expense_payment_account`,
+   `enforce_expenses_column_scope`, `enforce_invoice_void_authority`,
+   `enforce_invoices_column_scope`, `enforce_profiles_self_column_scope`.
+
+**Result:** `--apply` → `SYNC_APPLY_EXIT=0`, *"re-synced 24; config and grants unchanged on every
+one"*; then **287 exact, 0 comments, 0 reformat, 0 drift, 0 config.** (10 + 24 = 34.)
+**Audit 6 — every listed function's hash matches its latest file:** yes, all 287, byte-equal.
+
+**C2 baseline regenerated** (`npm run db:fingerprint` → `FP_EXIT=0`; it re-asserted replay/live
+agreement on all six dimensions before writing). **Only the functions digest moved**
+(`b20b30ed…` → `4f075aba…`); policies `5cb72748…`, triggers `d1c987c4…`, constraints `4c9fced8…`
+byte-identical. `s108-schema-drift.live.ts` against the new baseline: **`VITEST_EXIT_LINE=0`, 8/8**,
+detector still seen to fire and return to zero.

@@ -17,6 +17,7 @@
     "db:types": "bash scripts/db-types.sh",
     "db:verify": "python3 scripts/db-replay-schema.py && python3 scripts/db-ledger-check.py",
     "db:ledger": "python3 scripts/db-ledger-check.py",
+    "db:functions": "python3 scripts/db-function-sync.py",
     "db:fingerprint": "node scripts/db-fingerprint.mjs"
   },
   "devDependencies": {
