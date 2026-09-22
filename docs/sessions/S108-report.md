@@ -754,3 +754,107 @@ show it, because the route returns 200 — and the **one thing to be careful abo
 bid-request sent today mails a real person while leaving no record, so `20261580000000` must land
 before E4.
 
+---
+
+## Phase 3 — SPEC C — BUILT
+
+Branch `feature/s108-c-email-drift`, cut from `feature/s108`.
+
+### C1 — warming Reply-To — **built and proven**
+
+`warming-email.ts:400` now passes `replyTo: from` (ASK-C1 → A). Three comments corrected with the
+superseded text quoted, including `email-service.ts`'s `SUPPORT_REPLY_TO` docstring, which asserted
+the sending domain *"has no inbox"* — the sentence a future reader would have cited to reject this
+ruling.
+
+- `s108-warming-reply-to.live.ts` — **6 cases, 6 passed, printed exit 0**, against rebuild-test.
+- **Row count exercised: 2 seeded companies, 2 sends captured.** Case 0 asserts that count so cases
+  1–3 cannot pass on an empty array.
+- Case 2 is the NULL-company-email case, built through `handle_new_user`'s real OWNER PATH because
+  `profiles.user_id` is NOT NULL + UNIQUE + FK to `auth.users`.
+- Case 4 is the counterfactual: the shared resolver still returns the owner's off-domain address,
+  proving no other email type moved.
+- **PROVEN BY SABOTAGE:** reverting line 400 to `replyToCompanyId` → **printed exit 1, "3 failed |
+  3 passed"** (cases 1, 2, 3 red). Reverted; re-run **printed exit 0, 6 passed**.
+
+### C2 — schema drift — **built and proven**
+
+**Migration `20261620000000_schema_fingerprint.sql`, applied to rebuild-test.**
+`supabase db push` **printed exit 0**. Verified **by object, not by ledger row**:
+`schema_fingerprint` exists with `prosecdef = true`, `strip_sql_line_comments` exists and is
+`IMMUTABLE`, and `notifications_type_check` genuinely contains `schema_drift`. Ledger row
+`20261620000000 / schema_fingerprint` present; `max(version)` now `20261620000000`.
+
+- **The quote-parity normaliser is in the migration**, not a naive strip — the measured reason is in
+  its header (391 real comments vs **2 `--` inside a string literal, both in `qb_vault_put`**).
+- **`npm run db:fingerprint`** (`scripts/db-fingerprint.mjs`) regenerates the baseline. It
+  **refuses to write** unless `db:verify`'s replay and the live catalogue still agree on all six
+  replayable dimensions — that agreement is the baseline's only warrant, so it is re-asserted every
+  time rather than assumed. It also refuses any project that is not rebuild-test.
+- Baseline committed: policies **363**, triggers **268**, functions **287**, constraints **961**,
+  latest migration `20261620000000`. Policy and trigger digests match the ad-hoc query I ran in
+  Phase 1 **exactly** (`5cb7274…`, `d1c987c…`) — an independent cross-check that the SQL function
+  agrees with the query it was derived from.
+- `/api/cron/schema-drift` — 15th cron, `0 11 * * *`. `vercel.json` now has 15 entries; the parse
+  test pins the new path **and** its schedule, bumps the length assertion to 15, and adds a
+  duplicate-path check that nothing had before.
+- `s108-schema-drift.live.ts` — **8 cases, 8 passed, printed exit 0**.
+  **⚠️ THE DETECTOR WAS SEEN TO FIRE.** Case 3 creates a real throwaway table with a real CHECK on
+  rebuild-test and requires the route to report it; case 4 drops it and requires zero again.
+  Verified afterwards that **0 probe tables remain** and the live constraints digest is **byte-equal
+  to the committed baseline** (`4c9fced86ea83df80f1eab2d350e381a`, n=961).
+  Case 3 also asserts the report is **specific** — a new table must not light up policies or
+  functions. Cases 6–8 cover the pure comparison so no dimension is silently unwired.
+
+### Two deviations, both deliberate, both flagged
+
+1. **⚠️ The baseline is written to TWO paths.** Josh ruled `scripts/.db-fingerprint.json`; it is
+   written there **and** to `apps/web/lib/schema-fingerprint-baseline.json`, which is the copy the
+   route imports. **Vercel's serverless bundle contains only files traced from inside `apps/web`**,
+   so a route reading `../../scripts/…` works in the Codespace and returns ENOENT in production —
+   the worst possible failure for a drift detector, because the catch would read as "no drift". One
+   script writes both in one pass.
+2. **⚠️ The notify target is `process.env.SCHEMA_DRIFT_COMPANY_ID`, not a hardcoded UUID.** Josh
+   ruled "keyed by company id, not slug", and it is — but **I do not have the production company id
+   and will not invent one.** A wrong literal would resolve no owner and report "no owner profile"
+   every day while looking like it worked. **Unset is a supported state**: the route still runs,
+   still compares, still reports in its response and log, and says so in `notes`. Case 5 asserts
+   exactly that. **Spec E gives Josh the query for the id and the variable to set.**
+
+### ⚠️ Two things went wrong building C, both worth recording
+
+**1. `next build` failed where `tsc --noEmit` passed — the exact class D1b names.**
+The first cut put `compareFingerprints` and `runSchemaDrift` in `route.ts`. Type-check was clean;
+the build failed with **`"compareFingerprints" is not a valid Route export field`** — a Next.js
+route file may only export a fixed set of names. The loop moved to
+`apps/web/lib/services/schema-drift.ts` and the route became the auth gate, which is the split every
+cron in this repo already uses. **This is the strongest possible argument for ASK-D1's answer being
+right: CI builds every branch, so this would have been caught regardless — but only because the
+build runs somewhere.**
+⚠️ **And the task notification reported "exit code 0" over a build whose printed line was
+`BUILD_EXIT_LINE=1`.** Second time this session. The printed line is the only thing read.
+
+**2. I violated my own standing rule and produced a false red.** I ran the full unit suite while a
+`next build` was running. `s160-auth-email.test.tsx` failed on a **5-second timeout**, which looks
+exactly like a real failure. Re-run with nothing else running: **95 files, 1286 tests, all passed,
+printed exit 0.** The other failure in that run — `s123-still-clocked-in.test.ts` — was **real**: an
+exact allowlist of migrations that restate `notifications_type_check`. **Extended, not weakened**,
+with the sixth entry stating in writing that the drift route emits `schema_drift` and never
+`still_clocked_in` — which is the price that list charges, deliberately.
+
+### Spec C — final verification, all printed exit lines
+
+| check | result |
+| --- | --- |
+| `tsc --noEmit` | **`TSC_EXIT_LINE=0`** |
+| `next build` (cold, `.next` removed) | **`BUILD_EXIT_LINE=0`** · BUILD_ID present · 251 manifest lines · `/api/cron/schema-drift` listed |
+| unit suite, isolated | **`VITEST_EXIT_LINE=0`** · **95 files, 1286 tests, 0 failed** |
+| `s108-warming-reply-to.live.ts` | **`VITEST_EXIT_LINE=0`** · 6/6 · **2 companies, 2 sends** |
+| `s108-schema-drift.live.ts` | **`VITEST_EXIT_LINE=0`** · 8/8 · detector **seen to fire** and return to zero |
+| rebuild-test left clean | 0 probe tables; constraints digest byte-equal to the committed baseline |
+
+**Untested, stated plainly:** the cron route's **HTTP layer** (the `CRON_SECRET` gate) is not
+exercised by a test — the harness drives `runSchemaDrift` directly, which is the right instrument
+for the loop but proves nothing about the 401. It matches the fourteen existing crons, none of which
+test their gate either. And **nothing has run against production**, so the drift detector has never
+seen the database it was built for.

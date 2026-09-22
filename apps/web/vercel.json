@@ -55,6 +55,10 @@
     {
       "path": "/api/cron/email-warming",
       "schedule": "*/15 13-22 * * 1-5"
+    },
+    {
+      "path": "/api/cron/schema-drift",
+      "schedule": "0 11 * * *"
     }
   ]
 }
