@@ -10043,6 +10043,10 @@ export type Database = {
         }
         Returns: Json
       }
+      reorder_estimate_lines: {
+        Args: { p_estimate_id: string; p_moves: Json }
+        Returns: number
+      }
       revert_invoice_settlement: {
         Args: { p_invoice_id: string }
         Returns: undefined

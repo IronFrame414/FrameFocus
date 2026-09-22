@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { computeEstimateHealth } from '@/lib/estimate-health';
+import { computeEstimateHealth, marginTargetGap } from '@/lib/estimate-health';
 import { createClient } from '@/lib/supabase-browser';
 import {
   DiscountType,
@@ -132,6 +132,7 @@ export function DetailsTab({
     rows: data.rows,
   });
   const gapPts = target != null && health.marginPercent != null ? health.marginPercent - target : null;
+  const targetGap = marginTargetGap(health.marginPercent, target);
 
   async function saveAlsoSendTo(next: AlsoSendToRecipient[]) {
     setAlsoSendTo(next);
@@ -542,7 +543,9 @@ export function DetailsTab({
             </div>
             <div style={{ fontSize: '0.72rem', color: gapPts != null && gapPts < 0 ? '#c0362c' : '#1f8f4e', marginTop: '0.4rem', fontFamily: 'var(--font-mono, monospace)' }}>
               {health.marginPercent}% vs {target}% target
-              {gapPts != null && ` · ${Math.abs(gapPts).toFixed(1)} pts ${gapPts < 0 ? 'under' : 'over'}`}
+              {/* S108 ASK-B1 — worded by the shared helper: parity reads "on target",
+                  never "0.0 pts over"; the Items-tab strip uses the same one. */}
+              {targetGap && ` · ${targetGap.label}`}
             </div>
           </div>
         )}

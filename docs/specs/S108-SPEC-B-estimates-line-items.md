@@ -381,3 +381,24 @@ that demo the same way. Does `sq_ft` land on change-order labor rows in the same
    unit test with stated inputs.
 6. Tests updated to the new UI, none weakened. `next build` green.
 7. Before/after screenshots of the live screen at desktop and phone width, committed to the report.
+
+---
+
+## BUILD RESULTS [S108 Phase 3] — branch `feature/s108-b-line-items`
+
+Evidence for every line: `docs/sessions/S108-report.md` → "SPEC B".
+
+| audit | result |
+| --- | --- |
+| 1. FILLs / ASKs | all filled and ruled (Phase 1/2); nothing re-asked |
+| 2. no RULED line contradicted | ✅ **"+ Add Line" is present** — and now pinned by an e2e assertion, so matching the mockup by deleting it fails CI |
+| 3. FILL-B3 | ✅ live: foreman and crew receive **0** estimates / **0** lines while the owner reads **3 / 8** of the same fixtures |
+| 4. FILL-B6 | ✅ live: reorder **refused at the database** (42501) for a SENT estimate and for another user's draft, rows proven unchanged; a refused move rolls back the whole call |
+| 5. FILL-B8 | ✅ unit, stated inputs: $3 × 2,365 sq ft = **$7,095.00** cost = budget baseline (Health agrees); flat sell $7,095.00; profit $1,773.75 at the live capture's price; actuals compare dollars to dollars |
+| 6. tests / build | ✅ new: `s108-line-items.test.ts` 14/14, `s108-line-items.live.ts` 17/17, `desktop-line-items-s108.spec.ts` 1/1 — **proven by sabotage** (handler no-op → exit 1; reverted → exit 0). Nothing existing referenced this screen, so nothing was weakened. Gate on the merged tree below |
+| 7. screenshots | ✅ `docs/design/screenshots/S108-B-{before,after}-{desktop,phone}.png`. ⚠️ Phone-width overflow and the name/total collision are **pre-existing** (identical in "before") |
+
+**Additions beyond the letter of the spec, each flagged in the report:** the containment trigger also
+freezes `estimate_id` (the WITH CHECK never re-checked it); the reorder is ONE atomic INVOKER RPC
+that raises where RLS would silently update nothing; the mobile CO editor gained a unit choice it
+never had (PARITY — it offered none, so sq ft was unrecordable from a phone).

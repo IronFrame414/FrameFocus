@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase-server';
+import type { LaborUnitValue } from '@framefocus/shared/validation/estimate-items';
 import type { Database } from '@framefocus/shared/types/database';
 
 // 5D — Change Orders (docs/specs/5D-spec.md). A CO is written identically
@@ -18,7 +19,8 @@ export type ChangeOrderType = 'fixed_price' | 'time_and_materials' | 'cost_plus'
 export type CoPricingMode = 'markup' | 'margin';
 /** [S170] 'allowance' added (allowances-selections-spec §2). */
 export type CoRowType = 'labor' | 'material' | 'subcontractor' | 'other' | 'allowance';
-export type CoLaborUnit = 'hours' | 'days';
+/** S108 — 'sq_ft' added (PARITY with estimates); the shared list is the source. */
+export type CoLaborUnit = LaborUnitValue;
 
 export type ChangeOrder = Omit<ChangeOrderRow, 'status' | 'co_type' | 'pricing_mode'> & {
   status: ChangeOrderStatus;

@@ -1212,3 +1212,135 @@ Redone under exactly the rule written above:
 and the contaminated run earlier reproduced the collision fingerprint on the same file's `:31` and
 `:88`. **#157 moved to `TECH_DEBT_CLOSED.md`** with this evidence (48 lines out of OPEN, full text in
 git history); #150's bullet gets a one-line pointer, since this is evidence FOR #150's class.
+
+---
+
+## Phase 3 — SPEC B — branch `feature/s108-b-line-items`, cut from `feature/s108` @ `8e3bec0f`
+
+### Spec D merged first
+`feature/s108-d-tooling` merged `--no-ff` → **`8e3bec0f`**. Gate on the MERGED tree, dev server
+stopped by PID first so a cold build could not collide with it: **`TSC_EXIT_LINE=0`,
+`LINT_EXIT_LINE=0`, `BUILD_EXIT_LINE=0` (BUILD_ID present), `VITEST_EXIT_LINE=0` — 95 files,
+1286 tests.** Pushed. D's last CI run (`35715904649` @ `44a02488`) green; its final commit
+`4dcc146b` changed only markdown, all of which the local unit run above already exercised.
+
+### B, database half — **built and proven live**
+
+**Migrations, applied to rebuild-test by `supabase db push` (`DBPUSH_EXIT=0`), CLI link checked
+first (`nmyphyhmfttxkdoposvf`), the ledger check listing exactly these two as PENDING:**
+- `20261630000000_labor_unit_sq_ft` — widens BOTH `estimate_line_rows_labor_unit_check` and
+  `change_order_line_rows_labor_unit_check` to `hours · days · sq_ft` (ASK-B6 → A, PARITY).
+- `20261640000000_line_item_containment_and_reorder` — the containment trigger (ASK Q1 → A; header
+  says **future writes only**) + `reorder_estimate_lines()` (SECURITY INVOKER, one transaction,
+  raises 42501 where RLS would silently update nothing).
+
+**Verified by object:** both CHECK definitions read back with `sq_ft`; trigger
+`estimate_line_items_containment BEFORE INSERT OR UPDATE OF estimate_id, category_id,
+subcategory_id`; `reorder_estimate_lines` `prosecdef=false`, ACL `authenticated` + `service_role`
+only — **no `anon`, no PUBLIC**. Ledger: 225 rows, `LEDGER CLEAN`.
+⚠️ The trigger ALSO makes `estimate_id` immutable on UPDATE — FILL-B5's hole was wider than the
+category: the policy's WITH CHECK never re-checked `estimate_id` either, so a line could have been
+moved into another estimate.
+
+**Fingerprint regenerated** (replay/live agreement re-asserted first): triggers 268→**269**,
+functions 287→**289**, constraints 961 (definitions changed, count not), policies unchanged —
+exactly the movement the two migrations predict. `db:functions`: **289/289 exact**.
+`db:types`: +4 lines (the RPC signature). `tsc` → `TSC_EXIT_LINE=0`.
+
+**Tests:**
+- `s108-line-items.test.ts` (unit) — **14/14, `VITEST_EXIT_LINE=0`**: sq-ft cost/sell/budget/actual
+  with stated inputs ($3 × 2,365 = $7,095.00; profit $1,773.75 at the LIVE capture's $8,868.75);
+  the reorder plan; "on target" at parity including gaps that ROUND to zero.
+- `s108-line-items.live.ts` — **17/17, `VITEST_EXIT_LINE=0`**, against rebuild-test:
+  sq_ft accepted on BOTH row tables and `weeks` still refused on both; containment refuses a
+  foreign category, a foreign subcategory and an estimate move, and does NOT refuse a rename;
+  reorder succeeds for the owner across categories and for the authoring PM, and is **refused at
+  the database** (42501) for a SENT estimate and for another user's draft, **with the rows proven
+  unchanged**; a refused move rolls back the moves before it; anon cannot execute it; **FILL-B3:
+  foreman and crew receive 0 estimates and 0 lines while the owner reads 3 and 8 of the same.**
+  Sweep verified: 0 fixture estimates, 0 fixture CO rows left.
+
+**Two test defects of my own, fixed, both named classes:**
+1. `created_by_role` is NOT NULL with a `get_my_role()` default — NULL under the service role —
+   so admin-built fixtures must pass it.
+2. ⚠️ **CLAUDE.md's `.limit(1)` rule, category 2, hit in my own new test.** A3 took an arbitrary CO
+   line item and it belonged to a SENT change order, so the insert tripped the immutability trigger
+   instead of the CHECK under test. Scoped to `change_orders.status = 'draft'` — ordering alone
+   would only have made the wrong pick stable.
+
+### B, UI half — **built; proven by screenshot and by the gate below**
+
+- **Items tab** (`items-tab.tsx`): header "Price" → **"Cost"** (the markup/margin header untouched,
+  per the ruling); category header = **filled indigo "Add Items"**, outlined **"+ Subcategory"**
+  (shortened), outlined **"+ Add Line" — KEPT, the ruling beats the mockup**, and a **red-outlined
+  square line-icon trash** (lucide `Trash2`) replacing the 🗑 emoji at all four sites; heavier
+  weight and larger text. Module-local styles only — no other screen changes (FILL-B1/ASK-B5).
+- **Metrics card** (`EstimateHealthStrip`): stacked small-caps labels over large mono figures —
+  Your cost · Client price · **Profit (green; red if negative)** · Margin, the target note beneath
+  it, and "Find a line…" inside the card on the right. Same derivation as Details, unchanged.
+- **"N pts under target"**: `marginTargetGap()` in `lib/estimate-health.ts`, used by BOTH the strip
+  and the Details bar, so "on target" (ASK-B1) reads identically on both. Absent when no target is
+  set. Stale "no target exists" comments corrected in both files, superseded text quoted.
+- **Drag-reorder**: a grab handle FAR LEFT of every line (`GripVertical`), native HTML5 DnD from
+  the handle only; drop onto a line = land before it, adopting its category/subcategory; dashed
+  "drop at the end of …" zones per category/subcategory appear only while dragging; a category
+  header is also a drop target. **Keyboard/touch alternative:** the handle is a focusable button;
+  ↑/↓ move one step in display order (crossing categories), announced via an `aria-live` region.
+  Handles hide while "Find a line…" filters (neighbours would be invisible). Writes go through the
+  ONE atomic RPC; order is renumbered estimate-globally in display order (the proposal and billing
+  read one global `sort_order`).
+- **Square foot**: the unit select on estimate labor rows, the desktop CO builder, and — new — the
+  **mobile CO editor's add-row form** all render the ONE shared list (`laborUnits`/`laborUnitLabels`
+  in `packages/shared`). The mobile CO editor previously offered no unit at all. **ASK-B2:**
+  switching a row to sq ft BLANKS a rate that still equals the hourly prefill (row then reads
+  unpriced); a rate the user typed is kept.
+
+**Audit 7 — before/after, the LIVE screen on rebuild-test, owner, estimate `202994aa…`
+("Condo Renovation"), committed to `docs/design/screenshots/`:**
+`S108-B-before-desktop.png`, `S108-B-after-desktop.png`, `S108-B-before-phone.png` (400px),
+`S108-B-after-phone.png`. Captured by the same script against the same dev server, the UI files
+stashed for "before". Desktop horizontal overflow **0 → 0 px**.
+⚠️ **Phone width, stated plainly:** overflow **594 px before, 588 after**. The whole desktop shell
+(fixed sidebar, wide rows table) does not fit 400px, and the line name collides with the TOTAL
+figure — **identically in the before capture**, so neither is introduced by B. The new buttons
+wrap and stay tappable. This is a `/dashboard` screen at phone width — TECH_DEBT #101's territory,
+not fixed here.
+
+### B — new e2e coverage for a screen nothing drove — **proven by sabotage**
+
+`e2e/desktop-line-items-s108.spec.ts` (own fixture: 1 draft estimate, 2 categories, 3 lines, swept
+after): asserts the ruled buttons per category (**"+ Add Line" ×2 present**, "+ Subcategory" ×2,
+old "+ Add Subcategory" ×0, trash ×2, Profit visible), then focuses a handle, presses ↓, and reads
+the result **from the database**: the line moved into the next category and the global order is
+`a1, a2, b1`. **`PW_EXIT_LINE=0`, 1 passed.** Sabotage — the keyboard handler short-circuited →
+**`SABOTAGE_PW_EXIT_LINE=1`, 1 failed**; reverted (`git diff` empty) → **`REVERTED_PW_EXIT_LINE=0`**.
+
+### B — CI run `35720702042` RED — ⚠️ three concurrent runs on one database; re-run alone
+
+`Lint & Type Check` **success**; `E2E (Playwright)` **failure: 2 failed, 1 flaky, 524 passed**:
+- `m-photos.spec.ts:212` / `:236` — `fixture punch link: … violates foreign key
+  punch_list_items_punch_list_id_fkey`, then `fixture hardDelete could not remove projects …
+  files_project_id_fkey — a dependent row from a previous run is still attached`.
+- `m-writes.spec.ts:541` (D-60) — expected 2 list options, received **3**; the test's own message:
+  *"either the fixture project gained a list or a previous run did not clean up (TECH_DEBT #144)"*.
+
+**None touches a B code path** (punch lists and the photo gallery). Read against the Actions API:
+this run executed **while `35720037343` (feature/s108) and `35719580487` (feature/s108-d-tooling)
+were ALSO running Playwright on rebuild-test** — three suites, one database, all triggered by my
+pushes within a few minutes of each other. Two `E2E List … / E2E CList …` punch lists stamped
+11:46 today were on the fixture project afterwards. Both suites clean their own fixtures at the
+START of a run (`m-writes` `beforeAll` pre-clean; `m-photos` hard-delete + re-seed), so the state
+self-heals; nothing was hand-deleted. `35720037343` (feature/s108, same suites, same window) came
+back **green** — contention produces reds non-deterministically, never greens.
+
+**The #157 lesson, one level up:** `cancel-in-progress` is per-BRANCH. Pushing to three branches in
+quick succession runs three suites at once. **From here: one branch's CI at a time, and no push to a
+second branch until the first run has finished.** Re-run: this commit, pushed only once every other
+run is complete, with no rebuild-test writes from this session until it finishes.
+
+**D's final run `35719580487` @ `4dcc146b` (a markdown-only commit) was ALSO red in the same window:**
+3 failed / 3 flaky / 553 passed in **40.0 min** (a normal run is ~23 min — load), failures in
+`desktop-chat-switcher :31 :62` (**#157's exact signature**), `desktop-selections :282 :306`,
+`m-photos :892`. A markdown commit cannot change e2e behaviour; this is the contention window.
+The merged `feature/s108` run `35720037343` @ `8e3bec0f` — which **contains all of D** and ran the
+same suites in the same window — is **green**. D stands merged on that evidence.

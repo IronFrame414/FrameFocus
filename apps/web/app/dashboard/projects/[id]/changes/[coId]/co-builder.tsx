@@ -21,10 +21,16 @@ import {
   type ChangeOrderLineRow,
   type ChangeOrderStatus,
   type ChangeOrderWithChildren,
+  type CoLaborUnit,
   type CoRowType,
   type UpdateCoLineRowInput,
 } from '@/lib/services/change-orders-client';
 import { CoRateSection } from './co-rate-section';
+import {
+  laborUnitLabel,
+  laborUnitLabels,
+  laborUnits,
+} from '@framefocus/shared/validation/estimate-items';
 
 // 5D — estimate-style CO builder (D-1). Typed rows carry SIGNED values:
 // enter a negative rate / unit cost / amount for a credit and put the
@@ -1061,7 +1067,7 @@ function RowEntrySummary({ row }: { row: ChangeOrderLineRow }) {
     case 'labor':
       return (
         <>
-          {money(row.rate ?? 0)} × {row.quantity ?? 0} {row.labor_unit ?? 'hours'}
+          {money(row.rate ?? 0)} × {row.quantity ?? 0} {laborUnitLabel(row.labor_unit)}
         </>
       );
     case 'material':
@@ -1085,7 +1091,7 @@ interface RowFieldValues {
   name: string;
   rate?: number | null;
   quantity?: number | null;
-  labor_unit?: 'hours' | 'days' | null;
+  labor_unit?: CoLaborUnit | null;
   unit_of_measure?: string | null;
   unit_cost?: number | null;
   amount?: number | null;
@@ -1116,7 +1122,7 @@ function RowFields({
   const [quantity, setQuantity] = useState(
     initial?.quantity != null ? String(initial.quantity) : ''
   );
-  const [laborUnit, setLaborUnit] = useState<'hours' | 'days'>(initial?.labor_unit ?? 'hours');
+  const [laborUnit, setLaborUnit] = useState<CoLaborUnit>(initial?.labor_unit ?? 'hours');
   const [uom, setUom] = useState(initial?.unit_of_measure ?? 'each');
   const [unitCost, setUnitCost] = useState(
     initial?.unit_cost != null ? String(initial.unit_cost) : ''
@@ -1195,9 +1201,14 @@ function RowFields({
           </div>
           <div>
             <label style={smallLabelStyle}>Unit</label>
-            <select value={laborUnit} onChange={(e) => setLaborUnit(e.target.value as 'hours' | 'days')} style={inputStyle}>
-              <option value="hours">hours</option>
-              <option value="days">days</option>
+            {/* S108 ASK-B6 — the SHARED unit list (hours · days · sq ft), the same
+                one the estimate Items tab and the mobile CO editor offer. */}
+            <select value={laborUnit} onChange={(e) => setLaborUnit(e.target.value as CoLaborUnit)} style={inputStyle}>
+              {laborUnits.map((u) => (
+                <option key={u} value={u}>
+                  {laborUnitLabels[u]}
+                </option>
+              ))}
             </select>
           </div>
         </>

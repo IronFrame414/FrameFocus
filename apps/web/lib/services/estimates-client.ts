@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase-browser';
+import type { LaborUnitValue } from '@framefocus/shared/validation/estimate-items';
 import type { Database } from '@framefocus/shared/types/database';
 import { recalculateEstimateTotals } from '@/lib/services/estimate-items-client';
 import type { SupabaseClient } from '@supabase/supabase-js';
@@ -185,7 +186,8 @@ type EstimateFileRow = Database['public']['Tables']['estimate_files']['Row'];
 /** [S170] 'allowance' added (allowances-selections-spec §2). */
 export type RowType = 'labor' | 'material' | 'subcontractor' | 'other' | 'allowance';
 
-export type LaborUnit = 'hours' | 'days';
+/** S108 — 'sq_ft' added; derived from the shared list so it cannot drift. */
+export type LaborUnit = LaborUnitValue;
 
 export type MaterialUnitOfMeasure =
   | 'each'
