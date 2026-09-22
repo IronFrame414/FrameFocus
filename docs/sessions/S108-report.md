@@ -1154,3 +1154,17 @@ and a probe that cannot fail (zero rows; the `'[^']*--` regex). The four numbere
 and the CI paragraph are **unchanged**. `git diff --stat CLAUDE.md` → **22 insertions, 1 deletion,
 all inside that one section** — made with the markdown formatter already off (D1a), so no table
 reflowed.
+
+### Added by Josh during D — **#158, Spanish translation for field employees → `TECH_DEBT_IDEAS.md`**
+
+A deferred **decision**, filed under a new "Filed S108" heading: why it is recorded now (the S108
+voice ruling keeps the spoken language, and must not be read later as translation having been
+rejected), the four candidate surfaces (a)–(d), the three sub-decisions per surface (original kept
+beside it · who edits which · per-user language preference), and that `OPENAI_API_KEY` already
+exists, with (d) falling under *AI drafts, humans approve*.
+
+**Number:** taken from the authority at the top of `TECH_DEBT.md`, which said next free = **#158**.
+Verified first rather than trusted: entry headings across all three files top out at **#157** (raw
+greps return 304 and 210, which are CI run numbers inside prose, not entries), and no branch on
+origin allocates #158 as an entry. Bare number on a branch, by Josh's explicit instruction — the
+#157 precedent — with the authority **advanced to #159 in the same commit**. Nothing renumbered.

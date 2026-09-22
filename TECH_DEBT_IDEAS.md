@@ -85,6 +85,46 @@
 
 ---
 
+### Filed S108
+
+- **#158 — SPANISH TRANSLATION FOR FIELD EMPLOYEES. A DEFERRED DECISION, not owed work.** Raised by
+  Josh, 2026-09-22.
+
+  **Why it is recorded now.** S108 built voice notes for site visits and **ruled that a transcript
+  keeps the spoken language, with NO translation** (`docs/specs/S108-SPEC-A-site-visit.md`, the
+  VOICE NOTES ruling — *"Crews may speak Spanish."*). That ruling is about not corrupting what was
+  said. **This entry records that translation itself is wanted** — so the S108 ruling is not later
+  read as "translation was considered and rejected". It was not; it was deferred.
+
+  **The open decision — which surfaces:**
+  - **(a)** the mobile / field UI rendered in Spanish;
+  - **(b)** voice-note transcripts translated for the office;
+  - **(c)** chat, daily logs and tasks translated between office and crew;
+  - **(d)** outbound documents such as work orders.
+
+  **For any surface chosen, three sub-decisions ride with it:**
+  1. **Is the original kept beside the translation?** (S108's voice ruling keeps audio *and*
+     transcript because transcription mishears; a translation adds a third layer that can also be
+     wrong, and a misheard measurement has to be checkable against something.)
+  2. **Who may edit which** — the original, the translation, or both — and does editing one
+     invalidate the other?
+  3. **Is language a per-user preference** (a profile setting that drives (a) and the direction of
+     (b)/(c)), or per-company, or per-document?
+
+  **Already in place, so it is not a new dependency:** `OPENAI_API_KEY` is in use for voice
+  transcription (S108) and photo auto-tagging. Any translation is AI output and falls under
+  CLAUDE.md's AI rules — *AI drafts, humans approve* for anything client-facing, which is (d) at
+  least.
+
+  **Numbering note.** Allocated as a bare `#158` on a branch (`feature/s108-d-tooling`), against
+  CLAUDE.md → "Tech-debt numbering", **by Josh's explicit instruction for this filing** ("take the
+  number from the numbering authority … renumber nothing") — the same exception, and the same
+  mitigation, as #157: the authority block at the top of `TECH_DEBT.md` is advanced to **#159** in
+  this same commit. Verified before allocating: the highest entry across all three files was #157,
+  and no branch on origin allocates #158 as an entry.
+
+---
+
 ### Branch-scoped provisional (awaiting a real number at merge — S136 rule)
 
 - **#1-listscr — COST CODES IN THE ADD-ITEMS SHEET: REMOVED for now, pending a decision on HOW they

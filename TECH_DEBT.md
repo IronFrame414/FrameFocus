@@ -12,8 +12,8 @@
 > register) is the assignment authority, unchanged from CLAUDE.md's rule that *main's file is the
 > authority*. **Numbers are IMMUTABLE — never reused, reassigned, or compacted — and they span all
 > THREE files.** The next free number is **one above the highest number appearing in ANY of the
-> three files**. The highest currently allocated is **#157** (in this file), so the next
-> free number is **#158**. Branch-scoped provisional ids (`#N-<tag>`, per CLAUDE.md → 'Tech-debt
+> three files**. The highest currently allocated is **#158** (in `TECH_DEBT_IDEAS.md`, S108), so
+> the next free number is **#159**. Branch-scoped provisional ids (`#N-<tag>`, per CLAUDE.md → 'Tech-debt
 > numbering') convert to a real number **from this authority, when the branch lands** — not before.
 
 ---
