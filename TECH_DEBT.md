@@ -12,9 +12,17 @@
 > register) is the assignment authority, unchanged from CLAUDE.md's rule that *main's file is the
 > authority*. **Numbers are IMMUTABLE — never reused, reassigned, or compacted — and they span all
 > THREE files.** The next free number is **one above the highest number appearing in ANY of the
-> three files**. The highest currently allocated is **#158** (in `TECH_DEBT_IDEAS.md`, S108), so
-> the next free number is **#159**. Branch-scoped provisional ids (`#N-<tag>`, per CLAUDE.md → 'Tech-debt
+> three files**. The highest currently allocated is **#163** (in this file — the S108 Spec E
+> production-runbook findings, `#159`–`#163`, 2026-09-22), so the next free number is **#164**.
+> Branch-scoped provisional ids (`#N-<tag>`, per CLAUDE.md → 'Tech-debt
 > numbering') convert to a real number **from this authority, when the branch lands** — not before.
+>
+> ⚠️ **`#159`–`#163` were allocated as REAL numbers ON A BRANCH, by Josh's explicit instruction,
+> which departs from CLAUDE.md → 'Tech-debt numbering'.** Recorded rather than quietly done,
+> because the rule exists for a reason that still applies: any other live branch filing before
+> `feature/debt-runbook-s108` lands will read this same authority. Advancing the line to `#164` in
+> the same commit is what makes the allocation safe; **a branch that takes a number must update
+> this line, or the next branch collides.**
 
 ---
 
@@ -73,6 +81,139 @@ Complete as of Session 40. All polish items closed. Module 4 build is unblocked.
 
 > **#155 and #156 moved to [`TECH_DEBT_IDEAS.md`](TECH_DEBT_IDEAS.md)** — they are deferred
 > decisions, not owed work. Everything below is owed work with a known fix.
+
+### Production runbook findings — S108 Spec E [Josh, 2026-09-22]
+
+Five items found by Josh while running Spec E's runbook against **production**, with S108 merged
+(`cf57fa93`) and all eight migrations applied. Filed with real numbers from this file's numbering
+authority by Josh's instruction — **not** branch-scoped provisional ids. The authority line at the
+top of this file is advanced to `#164` in the same commit, which is what keeps that safe.
+
+- **#159 — the bid-request Send button says "Resend" on a request that has never been emailed, and
+  the creation dialog has no Send at all.** Two halves, one row of UI.
+
+  **Half one — the label is wrong, and S107 believed it had fixed this.** `bidding-tab.tsx:538`
+  renders `{sendingId === r.id ? 'Sending…' : r.sent_at ? 'Resend' : 'Send'}`. The `'Send'` branch
+  is **dead code**, because `estimate_sub_bid_requests.sent_at` is
+  `timestamptz DEFAULT now()` (`20261230000000_sub_bid_request_surface.sql:41`) — every row is
+  pre-stamped at INSERT, so `r.sent_at` is never null and the label is always "Resend".
+  ⚠️ **This is a HALF-FIX, not an untouched defect, and that is the part worth recording.** S107
+  item B3b did change the writer: `api/estimates/[id]/bid-requests/[requestId]/send/route.ts:191`
+  stamps `sent_at` after a successful send, and `S107-report.md:232` records the conclusion as
+  **"`sent_at` now means 'sent'"**, with `:296-297` resting the new label on it. The route's own
+  comment at `:186-189` even states *"It is `DEFAULT now()` at INSERT"* — so the default was
+  **known and left in place**. Stamping on send is necessary and was done; **dropping the default
+  is the other half and was not.** Verified live on rebuild-test: `sent_at`'s `column_default` is
+  `now()`, while its siblings `viewed_at` and `submitted_at` are both null-defaulted — the odd one
+  out is `sent_at`.
+
+  **Fix:** `ALTER TABLE estimate_sub_bid_requests ALTER COLUMN sent_at DROP DEFAULT;`. One line,
+  and it makes the existing conditional correct with no UI change.
+  **The backfill is a real question, not a formality.** Existing rows all carry a `sent_at` that
+  may mean either "sent" or merely "created", and the column alone cannot tell them apart
+  retrospectively. The candidate instrument is `email_logs`, which the send route writes with
+  `metadata: { bid_request_id: reqRow.id }` (`route.ts:178`) — so a request with no matching
+  `email_logs` row was never mailed and should be nulled. ⚠️ **Unverified:** whether `email_logs`
+  retention covers the whole history of this table. Check before trusting a backfill; nulling on a
+  gappy log would relabel genuinely-sent requests as unsent, which is the safer direction of the
+  two but still wrong.
+
+  **Half two — creation offers no send, so the first real send is a button labelled "Resend".**
+  `RequestByLinkForm` creates the row and then shows only the link: *"Request created. Send this
+  link to the sub — their reply lands here automatically"*, followed by a single dismiss button.
+  There is no Send control in the dialog. So the intended path for a brand-new request is: create
+  it, dismiss the dialog, find the pill for that sub on the line item, and press **Resend** — for
+  something never sent once. The two halves compound: fixing only the label still leaves creation
+  with no send, and fixing only the dialog leaves the label lying on every row created before it.
+  **Fix shape:** offer Send in the creation dialog (it would call the same
+  `handleSendRequest`/send route, not a second mechanism — CLAUDE.md → PARITY), and keep the link
+  for the copy-by-hand case, which is a deliberate supported path (`reply_mode = 'link'`).
+
+- **#160 — removing a team member leaves a ghost in `company_members`; the two tables do not
+  agree.** `softDeleteTeamMember()` (`lib/services/team.ts:117-134`) marks
+  `profiles.is_deleted = true` + `deleted_at` and bans the auth user — and **never touches
+  `company_members`**. Confirmed the only delete path: `is_deleted: true` against a profile or
+  member appears in exactly one place in `apps/web` outside tests (`team.ts:126`).
+
+  **Why it is visible in one place and not the other:** `/dashboard/team` reads `profiles`, so the
+  person disappears there. The assignment pickers read `company_members` via `getMembers()`
+  (`lib/services/members.ts:20-52`), which filters **`.eq('is_deleted', false)` on
+  `company_members` only** and never joins `profiles`. A member row whose profile is soft-deleted
+  is therefore still `is_deleted = false` and still listed. This is the two-roster trap CLAUDE.md
+  already records under the Roster Visibility Floor ("the roster is TWO tables") showing up as a
+  write-path defect rather than a read-path one.
+
+  **Hit on PRODUCTION, not in test.** Two "Juan Cardona" rows in the project "Assign a member"
+  dropdown, one of them backed by a deleted test profile. Cleaned by hand on **2026-09-22** —
+  `company_members` `55b55c4a-48f9-4f05-b40c-5d3e9ce28f8a` soft-deleted — and Josh's sweep of
+  production found no others.
+  ⚠️ **The clean and the sweep are Josh's, on production, and are recorded here on his report.**
+  This session's own query ran against **rebuild-test** (`nmyphyhmfttxkdoposvf`), which is what the
+  Supabase MCP and the CLI are linked to per STATE.md:43 — it returned zero `company_members` rows
+  joined to a soft-deleted profile, which is a fact about **rebuild-test and not about
+  production**. Recorded this way deliberately: CLAUDE.md → "The thing inspected must be the thing
+  being judged."
+
+  **RULED [Josh]: the fix belongs in the DATABASE, not in each delete path.** The two tables must
+  agree by construction. A second `.update()` inside `softDeleteTeamMember()` would work today and
+  fail the moment anything else soft-deletes a profile — a SQL script, a future admin tool, the
+  trial-lifecycle code, or a restore-from-trash flow that un-deletes one table and not the other.
+  **Fix shape:** an `AFTER UPDATE` trigger on `profiles` that propagates `is_deleted`/`deleted_at`
+  to the matching `company_members` row, per CLAUDE.md → Database Patterns.
+  **Two constraints on whoever builds it:**
+  (a) **It must propagate the restore as well as the delete**, or the trash-bin pattern breaks in
+  the other direction — un-deleting a profile would leave the member row deleted and the person
+  unassignable. Both directions, one trigger.
+  (b) **`company_members` rows with `profile_id IS NULL` are legitimate and must be left alone** —
+  directory subs and vendors that were never linked to a profile (S113 counted 32 such roster
+  rows). A trigger keyed on `profile_id` match touches none of them, which is the correct
+  behaviour, and a fix written as a broad sweep instead would wipe the sub directory.
+
+- **#162 — no way for a user to change their own password. A change-password page EXISTS and
+  WORKS; what is missing is any route to it.** ⚠️ **Verified before filing, per the request, and
+  the verification changed what is owed** — this is not "build a change-password feature".
+
+  **What exists and works without email.** `app/reset-password/page.tsx` calls
+  `supabase.auth.updateUser({ password })` (`:30`) against whatever session is present. It does
+  **not** require a recovery token, does not read one, and is not token-gated in code —
+  `middleware.ts:300` lists it among routes assumed "token-based and hold no session", which is an
+  assumption about how it is reached, not an enforcement. **So a signed-in user who types
+  `/reset-password` into the address bar changes their own password successfully, no email
+  involved.** That path is live today.
+
+  **What is missing is discoverability.** Nothing in the signed-in app links to it. The only
+  references in `apps/web` are the two flows that both **require email delivery**:
+  `forgot-password/page.tsx:19` (`resetPasswordForEmail` → `/auth/callback?next=/reset-password`)
+  and `app/dashboard/team/[id]/actions.ts:98` (the team page's admin-initiated reset, also an
+  email). `sign-in-form.tsx:103` links to `/forgot-password` — the pre-auth flow — and that is the
+  whole of it. A signed-in user has no in-app affordance at all.
+
+  **This is exactly the failure Josh hit.** Three real staff accounts on production were given the
+  same password **by hand** (confirmed + password set via SQL on **2026-09-22**) because the invite
+  email was not reaching them. A working no-email change-password page was three feet away and
+  unreachable, so the workaround was SQL.
+  ⚠️ **Three accounts currently share one known password and cannot rotate it themselves.** That is
+  the live exposure and it is the reason this is not cosmetic.
+
+  **Fix — small, and the home for it already exists.** Put a change-password control on the
+  personal account page, which every role can reach and which already hosts exactly this kind of
+  self-service edit: `app/dashboard/account/page.tsx` and `app/m/account/page.tsx`, today a name
+  edit only, sharing one `components/account/name-form.tsx` between both surfaces (parity S122).
+  Follow that pattern — **one shared form component, both surfaces**, per CLAUDE.md → PARITY.
+  ⚠️ **Do NOT put it on `/dashboard/settings`.** Company settings is Owner/Admin-only (CLAUDE.md →
+  Role Permissions), and the roles that hit this — foreman, crew — cannot reach it. Putting it
+  there would leave the affected users exactly as stuck as they are now. `/m/settings` is
+  read-only by §4.13.7 / A-48 for the same reason `/m/account` exists.
+
+  **Two things to settle while building it, both currently absent:**
+  (a) **`updateUser({ password })` does not require the current password, and the page does not ask
+  for one.** Fine for the recovery-token flow it was written for; **for a self-service change from
+  a live session it means anyone with a borrowed unlocked browser can lock the real user out of
+  their own account.** Re-authentication should be part of the self-service form, and it is a
+  decision rather than a detail — Supabase has no built-in current-password check, so it means an
+  explicit `signInWithPassword` re-verify before the update.
+  (b) **The 8-character minimum is enforced in the page only** (`:19`), client-side, with no
+  server or DB floor behind it. Any new entry point inherits that.
 
 ### Branch-scoped, awaiting real numbers — `feature/s106` [S106]
 
