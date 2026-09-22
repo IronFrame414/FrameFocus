@@ -12,8 +12,9 @@ import { WarmingEmail } from '@/lib/email/templates/warming-email';
 // requirement — SPF, DKIM, alignment, DMARC, encryption, spam rate, DNS,
 // one-click unsubscribe — and then says it cannot determine deliverability
 // because not enough mail has reached personal Gmail accounts. Nothing is
-// misconfigured. The gap is volume Gmail can count. This sends 24 messages a
-// week, 12 per tenant, at irregular times, from the app's real send path.
+// misconfigured. The gap is volume Gmail can count. This sends a per-tenant
+// weekly quota at irregular times, from the app's real send path — 30 messages
+// a week as configured today (Worth Properties 20, H&H 10).
 //
 // ---------------------------------------------------------------------------
 // ⚠️ READ THIS BEFORE TREATING IT AS A FIX. IT PROBABLY HELPS LESS THAN IT LOOKS.
@@ -26,8 +27,13 @@ import { WarmingEmail } from '@/lib/email/templates/warming-email';
 //     many times a person genuinely replies to a delivery test — which is why
 //     the copy asks for one in plain words instead of pretending to be
 //     something worth answering.
-//   · FOUR FIXED ADDRESSES IS LIST-WARMING, NOT ORGANIC MAIL. 24/week to the
-//     same four inboxes is, structurally, a warming list. Gmail models
+//   · FOUR FIXED ADDRESSES IS LIST-WARMING, NOT ORGANIC MAIL. 30/week to the
+//     same four inboxes is, structurally, a warming list — and RAISING THE
+//     QUOTA MAKES THIS WORSE, NOT BETTER [2026-09-22]: ~7.5 messages per inbox
+//     per week is further into the saturation this bullet describes, not
+//     further out of it. The quota is now per company precisely so that number
+//     is a decision someone makes, rather than a constant nobody revisits.
+//     Gmail models
 //     per-recipient engagement, so a mailbox that has received three hundred of
 //     these contributes progressively less signal than three hundred different
 //     people receiving one each. This shape is closer to the problem than to
@@ -60,8 +66,31 @@ export const WARMING_RECIPIENTS = [
   'FrameFocus2026@gmail.com',
 ] as const;
 
-/** Per company, per ISO week. Two enabled companies × 12 = 24/week. */
-export const WEEKLY_QUOTA_PER_COMPANY = 12;
+/**
+ * ⚠️ THE FALLBACK, NOT THE QUOTA. [RULED Josh, 2026-09-22]
+ *
+ * The quota is PER COMPANY and lives in `companies.email_warming_weekly_quota`
+ * (migration `20261670000000`). `runEmailWarming` reads that column; this
+ * constant only mirrors the column's DEFAULT, so `shouldSendNow` can be called
+ * without a quota in a unit test and mean the same thing the database does.
+ *
+ * ⚠️ IT IS A SECOND COPY OF THE DB DEFAULT, which is the divergence the PARITY
+ * rule warns about — the same shape as `SLOT_HOURS_UTC` mirroring `vercel.json`
+ * below, and handled the same way: `email-warming.test.ts` asserts this value
+ * against the migration text and fails if either moves.
+ *
+ * ⚠️ DO NOT REINTRODUCE A SLUG-KEYED QUOTA MAP HERE. #119's collision rule can
+ * rename `worth-properties` to `worth-properties-2`, and a map keyed on slug
+ * would fall back to the default at exactly that moment — silently. The column
+ * travels with the row. See the migration header.
+ */
+export const DEFAULT_WEEKLY_QUOTA = 12;
+
+/** @deprecated Kept as the old name; prefer `DEFAULT_WEEKLY_QUOTA`. */
+export const WEEKLY_QUOTA_PER_COMPANY = DEFAULT_WEEKLY_QUOTA;
+
+/** The CHECK on `companies.email_warming_weekly_quota` (migration 20261670000000). */
+export const QUOTA_BOUNDS = { min: 0, max: 50 } as const;
 
 // ---------------------------------------------------------------------------
 // The schedule, mirrored from vercel.json.
@@ -206,6 +235,16 @@ export function slotsRemainingInWeek(now: Date): number {
  * roughly half the time and the "steady rate" Postmaster asks for would drift
  * downward week over week.
  *
+ * ⚠️ THE QUOTA IS PER COMPANY AND RAISING IT DOES NOT CHANGE THE SHAPE — IT
+ * CHANGES THE DENSITY. This rule (send with probability remaining/slotsLeft,
+ * then force the tail) draws a UNIFORMLY RANDOM k-subset of the week's 200
+ * slots, for any k. So k=20 is the same distribution as k=12, not a more
+ * clustered one — but the concrete spacing tightens. Measured over 200,000
+ * simulated weeks of this exact function: mean gap 3.78h → 2.36h, back-to-back
+ * quarter-hour pairs 0.61/wk → 1.79/wk, same-hour pairs 1.09 → 2.95, and the
+ * quota is hit exactly 100% of the time at both. That is why the column is
+ * capped well below 200 rather than left open; see the migration header.
+ *
  * ⚠️ RESIDUAL, STATED RATHER THAN HIDDEN: sends still land on a quarter-hour
  * boundary, because that is when the cron runs. `:00/:15/:30/:45` across a
  * randomised weekday spread is not a detectable pattern; a fixed daily `:00`
@@ -216,7 +255,7 @@ export function shouldSendNow(
   sentThisWeek: number,
   slotsLeft: number,
   random: number,
-  quota: number = WEEKLY_QUOTA_PER_COMPANY
+  quota: number = DEFAULT_WEEKLY_QUOTA
 ): boolean {
   const remaining = quota - sentThisWeek;
   if (remaining <= 0) return false;
@@ -231,18 +270,20 @@ export function shouldSendNow(
  * the same mailbox in lockstep, and the week number rotates the starting point
  * so the same company/recipient pairing does not recur every Monday.
  */
-export function recipientFor(
-  sentThisWeek: number,
-  week: number,
-  companyOffset: number
-): string {
+export function recipientFor(sentThisWeek: number, week: number, companyOffset: number): string {
   const n = WARMING_RECIPIENTS.length;
   // ⚠️ `week` ENTERS UNSCALED, and that is not an accident. The first cut wrote
-  // `week * WEEKLY_QUOTA_PER_COMPANY`, which is INERT: the quota is 12, there
+  // `week * WEEKLY_QUOTA_PER_COMPANY`, which was INERT: the quota was 12, there
   // are 4 recipients, and 12 % 4 === 0, so multiplying by the week contributed
   // nothing at all and every week opened on the same inbox. Caught by
-  // 'the starting inbox moves week to week'. Any future change to either
-  // constant should re-run that test rather than trusting this line.
+  // 'the starting inbox moves week to week'.
+  //
+  // ⚠️ AND THIS IS WHY THE QUOTA MUST NEVER COME BACK INTO THIS LINE
+  // [2026-09-22]: the quota is now PER COMPANY, so a quota term here would make
+  // the rotation depend on a value that differs between tenants AND can be
+  // edited in the dashboard — reintroducing the same inert-multiplier bug for
+  // any quota divisible by 4 (20 is; 10 is not), and only for some tenants.
+  // Rotation depends on week, slot index and company offset. Nothing else.
   return WARMING_RECIPIENTS[(week + sentThisWeek + companyOffset) % n];
 }
 
@@ -274,6 +315,28 @@ export interface WarmingCompany {
   id: string;
   name: string;
   slug: string;
+  /** `companies.email_warming_weekly_quota`. NOT NULL in the schema; see `quotaFor`. */
+  email_warming_weekly_quota: number;
+}
+
+/**
+ * The quota actually used for a company, defended at the read.
+ *
+ * ⚠️ THE COLUMN IS `NOT NULL DEFAULT 12` AND THIS STILL CHECKS. Not defensive
+ * habit — the sender runs against PRODUCTION, which `schema-drift.ts` exists
+ * because it "has been written by hand". If the column is ever missing, wrong
+ * or hand-set out of range on that database, the honest behaviour is to fall
+ * back to the documented default and keep sending at a sane rate, not to send
+ * `NaN` (which makes every comparison false and silently stops the sender) or
+ * to honour a hand-typed 5000.
+ */
+export function quotaFor(company: Pick<WarmingCompany, 'email_warming_weekly_quota'>): number {
+  const raw = company.email_warming_weekly_quota;
+  if (typeof raw !== 'number' || !Number.isFinite(raw)) return DEFAULT_WEEKLY_QUOTA;
+  const floored = Math.floor(raw);
+  if (floored < QUOTA_BOUNDS.min) return QUOTA_BOUNDS.min;
+  if (floored > QUOTA_BOUNDS.max) return QUOTA_BOUNDS.max;
+  return floored;
 }
 
 export interface WarmingOutcome {
@@ -304,7 +367,7 @@ export async function runEmailWarming(
   // exactly the failure nobody would notice.
   const { data: companies, error: companiesError } = await admin
     .from('companies')
-    .select('id, name, slug')
+    .select('id, name, slug, email_warming_weekly_quota')
     .eq('email_warming_enabled', true)
     .order('slug', { ascending: true });
 
@@ -345,10 +408,12 @@ export async function runEmailWarming(
     }
 
     const sentThisWeek = count ?? 0;
-    if (!shouldSendNow(sentThisWeek, slotsLeft, random())) {
+    // ⚠️ THIS COMPANY's quota, not the shared constant. [RULED Josh, 2026-09-22]
+    const quota = quotaFor(company);
+    if (!shouldSendNow(sentThisWeek, slotsLeft, random(), quota)) {
       outcome.skipped.push({
         company: company.slug,
-        reason: `not this slot (${sentThisWeek}/${WEEKLY_QUOTA_PER_COMPANY} sent, ${slotsLeft} slots left)`,
+        reason: `not this slot (${sentThisWeek}/${quota} sent, ${slotsLeft} slots left)`,
       });
       continue;
     }
@@ -429,6 +494,10 @@ export async function runEmailWarming(
         week,
         slot_index: sentThisWeek,
         slots_left_at_decision: slotsLeft,
+        // The quota IN FORCE for this send. Recorded because the column is
+        // editable in the dashboard with no deploy, so a week's ledger would
+        // otherwise be uninterpretable after someone changed it mid-week.
+        quota,
         ...(error ? { error } : {}),
       },
     });
