@@ -1508,3 +1508,25 @@ Fixtures swept (0 left). **Voice is finished; nothing about it is deferred.**
   (`email_types.name`) would have errored — the column is `email_type`**, corrected and the wrong
   line quoted in place. The expected production tip was also corrected (560 → **570**, since
   `20261570000000` exists) and marked as unverifiable by CC.
+
+---
+
+## FINAL — `feature/s108` @ `6bea70e5`, one green CI run with no pushes during it
+
+**Run `35734335559`: `Lint & Type Check` success, `E2E (Playwright)` success** — 13:34:17 → 14:08:05
+UTC, the only run active (`ACTIVE 0` before and after), branch tip unchanged throughout. This
+entry is pushed AFTER that run, and is markdown only.
+
+| spec | state |
+| --- | --- |
+| **C** email + drift | **built and proven** — merged `98d056e3` |
+| **D** tooling, tests, housekeeping | **built and proven** — merged `8e3bec0f`. Untestable until Josh rebuilds: `gh` + Claude Code in the devcontainer. `.env.local.example` content delivered for Josh to paste. #157 decided and CLOSED; #158 filed |
+| **B** estimates line items | **built and proven** — merged `df8daae9` after a SOLO green run |
+| **A** site visit | **built and proven, voice included** — merged `cbf7bc22`. Not yet: a real phone on a real jobsite (Spec E STEP 5b) |
+| **E** production runbook | **ready** — nothing in it executed; nothing touched production |
+
+**Not merged to `main`** (Josh's ruling): production lacks eight migrations, and Spec E STEP 1 must
+run before STEP 2's merge.
+
+**Real-money spend this session (OpenAI, test only):** the voice probe (two ~6 s transcriptions + two
+TTS clips), `s108-voice.live.ts` (three transcription calls), two e2e voice runs — cents in total.
