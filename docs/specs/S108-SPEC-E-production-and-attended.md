@@ -200,8 +200,9 @@ UPDATE companies SET email_warming_enabled = false;   -- every company, no WHERE
 ```sql
 UPDATE companies SET email_warming_enabled = true WHERE slug = 'worth-properties';
 ```
-The cron fires `*/15 13-22 * * 1-5` UTC and most ticks deliberately send nothing (~12/company/week),
-so the first send may be hours away — correct behaviour. Then:
+The cron fires `*/15 13-22 * * 1-5` UTC and most ticks deliberately send nothing (12/company/week at
+this point in the runbook — **STEP 6** makes it per company), so the first send may be hours away —
+correct behaviour. Then:
 ```sql
 SELECT created_at, recipient_email, sender_email, subject, status, resend_message_id,
        delivered_at, opened_at, metadata
@@ -272,6 +273,113 @@ design. Use the E5 table in this file.
 | 12 | Owner, desktop: Estimates → "Site visits waiting to be priced" → the visit → **Create estimate from this visit** | it becomes a Draft with the NEXT estimate number; no number was used by the visit |
 | 13 | Crew again, same visit | still reads every note/photo/transcript; **cannot add or edit** anything; sees NO dollar figure anywhere |
 | 14 | Crew: record a throwaway visit, then Owner abandons it | it leaves the list; no estimate number was consumed |
+
+
+## STEP 6 — Per-company warming quota (Worth Properties 20, H&H 10)
+
+Branch: **`feature/warming-quota-per-company`**. Migration **`20261670000000_email_warming_quota.sql`**
+— applied to rebuild-test, **NOT to production**. RULED [Josh, 2026-09-22]: the weekly quota is per
+company, stored on `companies`, not a slug-keyed map in code.
+
+> ### ⚠️ ORDER IS LOAD-BEARING: MIGRATION FIRST, THEN THE MERGE. NOT THE REVERSE.
+>
+> The new sender selects `email_warming_weekly_quota`. Against a database without that column the
+> companies query **errors and the sender stops** — loudly, but it stops. The other order is
+> harmless: the column sitting on production while the old code runs is simply ignored, and the
+> old shared constant keeps sending 12.
+>
+> So this step is safe to run **before** the branch is merged, and the branch **must not** be merged
+> until it has run. 6a → 6b → 6c → then merge.
+
+**6a. Apply the migration (WRITE).** From the repo root, with the CLI linked to **production**:
+
+```bash
+npx supabase db push
+```
+
+Expect exactly one migration applied: `20261670000000_email_warming_quota.sql`. If the CLI is still
+linked to `nmyphyhmfttxkdoposvf` (rebuild-test — its normal state, STATE.md:43), **it will report
+nothing to push**, because rebuild-test already has it. Confirm the target before reading that as
+success: `npx supabase projects list` and check the ● is on `jwkcknyuyvcwcdeskrmz`.
+
+**6b. Verify the OBJECT, not the ledger (READ-ONLY).** Two statements — the column and the
+constraint. `db push` writing a ledger row is not evidence the DDL ran; S104 left ledger rows for
+work that never ran, which is why `schema_fingerprint()` exists.
+
+```sql
+SELECT column_name, data_type, is_nullable, column_default
+  FROM information_schema.columns
+ WHERE table_schema = 'public' AND table_name = 'companies'
+   AND column_name LIKE 'email_warming%'
+ ORDER BY column_name;
+```
+**Correct:** two rows — `email_warming_enabled` (boolean, NO, `false`) and
+`email_warming_weekly_quota` (**integer, NO, `12`**).
+
+```sql
+SELECT conname, pg_get_constraintdef(oid) AS def
+  FROM pg_constraint
+ WHERE conrelid = 'public.companies'::regclass
+   AND conname = 'companies_email_warming_weekly_quota_check';
+```
+**Correct:** one row, def
+`CHECK (((email_warming_weekly_quota >= 0) AND (email_warming_weekly_quota <= 50)))`.
+**No row means the column landed without its bound** — stop and re-apply, do not continue to 6c.
+
+**6c. Set the two quotas (WRITE).**
+
+⚠️ **READ THIS SELECT FIRST AND USE WHAT IT RETURNS.** The whole reason the quota is a column is
+that **#119's collision rule can rename a slug** (`worth-properties` → `worth-properties-2`). An
+UPDATE keyed on a slug that has moved matches **zero rows and reports success**. Confirm the slugs
+on production before trusting the two UPDATEs below:
+
+```sql
+SELECT id, name, slug, email_warming_enabled, email_warming_weekly_quota
+  FROM companies ORDER BY slug;
+```
+
+Then, **only if the slugs match what that returned** (otherwise repeat the UPDATEs keyed on `id`
+from it):
+
+```sql
+UPDATE companies SET email_warming_weekly_quota = 20 WHERE slug = 'worth-properties';
+```
+```sql
+UPDATE companies SET email_warming_weekly_quota = 10 WHERE slug = 'h-h-signature-renovations';
+```
+
+Each must report **`UPDATE 1`**. `UPDATE 0` means the slug moved — go back to the SELECT.
+
+**Confirm (READ-ONLY):**
+```sql
+SELECT name, slug, email_warming_enabled, email_warming_weekly_quota
+  FROM companies WHERE email_warming_weekly_quota <> 12 ORDER BY slug;
+```
+**Correct:** Worth Properties **20**, H&H Signature Renovations **10**. Every other tenant keeps the
+default 12 and is unaffected — and stays off, since `email_warming_enabled` defaults false.
+
+**6d. Merge `feature/warming-quota-per-company` into `main` and push.** THIS deploys the code that
+reads the column. Until it lands, 6c has changed a number nothing consults.
+
+**6e. Confirm the quota is actually in force (READ-ONLY, after the next send).** The sender records
+the quota it used on every row, precisely so a week's ledger stays interpretable after someone edits
+the column mid-week:
+
+```sql
+SELECT created_at, sender_email, status, metadata->>'quota' AS quota_in_force,
+       metadata->>'slot_index' AS slot_index
+  FROM email_logs WHERE email_type = 'warming'
+ ORDER BY created_at DESC LIMIT 20;
+```
+**Correct:** rows from the Worth Properties address read `quota_in_force = 20`; H&H rows read `10`.
+A row still reading `12` was sent by the **old** deployment — check the deploy landed, not the SQL.
+
+⚠️ **WHAT TO EXPECT AT 20, so it is not mistaken for a defect.** The pacing rule draws a uniformly
+random subset of the week's 200 slots, so 20 is the **same distribution** as 12, just denser — not a
+more clustered one. Measured over 200,000 simulated weeks: the average gap falls **3.78h → 2.36h**,
+back-to-back quarter-hour sends go **0.61 → 1.79 a week**, and same-hour pairs **1.09 → 2.95**. Two
+messages 15 minutes apart is expected at this quota and is **not** clockwork; the quota is still hit
+exactly, 100% of the time. See `shouldSendNow`'s header.
 
 
 ## AFTER THE RUNBOOK — also Josh's, unordered, listed so none is lost
