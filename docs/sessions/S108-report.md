@@ -1443,3 +1443,15 @@ Re-run: `TSC_EXIT_LINE=0`; unit suite **`VITEST_EXIT_LINE=0` — 96 files, 1307 
 ⚠️ Stated plainly: that test's doomed tenant holds no site-visit rows, so it proves the walk still
 completes, not that it deletes site-visit rows — the table accounting is the census test's.
 Fingerprint regenerated (constraints n=1000, latest `20261660000000`).
+
+### A — the real UI, end to end — `e2e/m-site-visit.spec.ts` — **proven by sabotage**
+
+As the crew identity at 402px: Field → **Site visits** → Record → existing contact, address later →
+lands on `/m/site-visits/<id>` → adds a condition (1 row) and a 12 × 14 measurement (button
+previews and row shows **168 sq ft**) → the `site_visit_recorded` notification exists. Then the
+**Owner** opens the desktop page, **Create estimate from this visit** → confirm → lands on the
+builder; the row reads `draft` with a number. Then the **crew member again**: promoted banner shown,
+the note and measurement still read, **no add controls, no photo input, and no `$` anywhere in the
+record**. **`PW_EXIT_LINE=0`, 2 passed** (setup + this). Sabotage — `canWrite` forced true on the
+phone page → **`SABOTAGE_PW_EXIT_LINE=1`** (the write control reappeared); reverted (diff empty) →
+**`REVERTED_PW_EXIT_LINE=0`**. Fixtures swept: 0 `S108A-E2E` estimates left.
