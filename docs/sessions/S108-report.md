@@ -884,3 +884,28 @@ both pushed, tree clean — exactly as the handoff said.
 | unit suite | `VITEST_EXIT_LINE=0` — **95 files, 1286 tests passed** |
 
 Pushed `92703ca7..98d056e3`. **Spec C: built, proven, merged.**
+
+---
+
+## Phase 3 — SPEC D — branch `feature/s108-d-tooling`, cut from `feature/s108` @ `98d056e3`
+
+### D1a — markdown format-on-save OFF — **built and proven**
+
+- `.vscode/settings.json` (new, trackable — `.gitignore:28` un-ignores it):
+  `"[markdown]": { "editor.formatOnSave": false }`. Takes effect **without a rebuild**.
+- `.prettierignore` (new): `*.md` — the part that can be proved from a terminal.
+
+**Audit 2, measured — a one-line edit to a table cell deliberately WIDER than its column, in
+`CLAUDE.md`'s Technology Stack table** (the Phase 1 probe), then Prettier:
+
+| step | `git diff --stat CLAUDE.md` |
+| --- | --- |
+| after the one-line edit | `1 insertion(+), 1 deletion(-)` |
+| after `npx prettier --write CLAUDE.md` (`PRETTIER_EXIT=0`) | **`1 insertion(+), 1 deletion(-)` — unchanged** |
+| **CONTROL** — same, with `--ignore-path /dev/null` (`CONTROL_PRETTIER_EXIT=0`) | **`16 insertions(+), 16 deletions(-)`** — the reflow, so the instrument can fire |
+
+`CLAUDE.md` restored with `git checkout` afterwards; `git diff --stat` empty. (A first attempt on a
+`STATE.md` row moved only 3 lines in the control because that column is already enormous — too weak
+a control, so it was redone on the table Phase 1 used.)
+⚠️ **The editor half — "save no longer reflows" — cannot be proved from a terminal.** The settings
+file is the mechanism; the ignore file is the provable backstop.
