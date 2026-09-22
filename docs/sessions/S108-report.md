@@ -1142,3 +1142,15 @@ E2E_PASSWORD=
 
 Also annotated the blockquote under the table whose *"nothing else has replaced it"* was true on
 2026-09-10 and stopped being true the next day.
+
+### ASK-D3 → C — CLAUDE.md's exit-status section GENERALISED — **done, and nothing else in CLAUDE.md touched**
+
+The heading becomes *"The thing inspected must be the thing being judged — exit statuses first"*,
+the old heading quoted. A new lead paragraph names the class and lists its seven forms, each with
+its real instance: a wrapper's status (this session's two notification-vs-printed-line mismatches),
+truncated output (`#2-deliv`'s `head -20`), a script that threw and fell through, an absent tool, a
+cached result (Turbo, `download()`), the wrong scope (Prettier in `/tmp`; the `.next` env sweep),
+and a probe that cannot fail (zero rows; the `'[^']*--` regex). The four numbered exit-status rules
+and the CI paragraph are **unchanged**. `git diff --stat CLAUDE.md` → **22 insertions, 1 deletion,
+all inside that one section** — made with the markdown formatter already off (D1a), so no table
+reflowed.
