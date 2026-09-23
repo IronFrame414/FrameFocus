@@ -79,3 +79,14 @@ from (
 ```
 
 ## Phase 1 — COMPLETE. Phase 2 questions sent to Josh; build stopped until ruled.
+
+## Phase 2 — RULED. All 17 answered by Josh, written into the spec with what each beat.
+
+Merge NOT authorized. One branch per section, order F, C, D, E, A, B, H; Josh applies A's, D's
+and H's migrations to production before each deploying merge. Section A is blocked on Josh's
+production counts. Q8: secure password change is NOT to be recommended until a real recovery
+round-trip on rebuild-test proves it safe. Q16: the row-policy hole is fixed in D.
+
+**Branch layout:** `feature/s110-site-visit-access` carries the spec and this report. Each section
+is built on its own branch cut from it (`feature/s110-f-route-guard`, …). Report appends land here,
+through a separate worktree, so the section branches never conflict over this file.

@@ -301,9 +301,40 @@ estimates past `review`. **Give Josh the query.**
 **ASK-A.A** — Should read really be company-wide for foreman and crew, or scoped to the recorder
 plus the office? Josh said "any employee"; state the exposure it creates and let him confirm.
 
+> **RULED [Josh, S110 Q1] → A — company-wide for all five internal roles, as ruled.** Beat: B
+> (recorder plus office). Josh: the real exposure is the client's name and address, not money.
+> Subcontractors and clients still see nothing.
+
 **ASK-A.B** — After send, may any employee add, or only the recorder and the office?
 
+> **RULED [Josh, S110 Q2] → A — any internal employee may add after send.** Beat: recorder plus
+> office only.
+
 **ASK-A.C** — On FILL-A.3: when, if ever, does a post-send addition itself freeze?
+
+> **RULED [Josh, S110 Q3] → B — a post-send addition freezes when the estimate reaches its
+> OUTCOME: accepted, declined, expired, voided. `viewed` does not count.** Beat: (a) never — _"it
+> would leave an accepted contract's field record editable forever, which defeats the point of
+> having it"_ — and (c) a correction window. Mechanism: `frozen_at` moves FORWARD to `now()` on
+> each outcome transition (not `coalesce`).
+> **And: a transcription pending at send MAY complete afterwards** — it writes the machine
+> transcript of audio that already existed (FILLED-A.2's admitted shape).
+>
+> **Q-A.D — RULED [Josh, S110 Q4] → A — `files.site_visit_capture`, backfilled.** Beat: images
+> only, no flag. Josh: _"it is the Financial Visibility Floor doing its job: without a marker,
+> widening photo read hands crew every vendor quote on the estimate."_ The Site Visit tab splits
+> into **"Captured before the estimate was sent" / "Added after it was sent"**, which
+> **supersedes S108 ruling 4**. _Superseded, quoted rather than deleted:_ _"[Josh, 2026-09-23,
+> ruling 4] VISIT-ERA PHOTOS ONLY on the site-visit record. 'The tab shows what was captured during
+> the visit; anything added after promotion lives in Files.' THE CUTOFF IS PROMOTION
+> (site_visits.promoted_at), not finish."_ The same quote goes into `lib/site-visits/photos.ts`
+> at build.
+>
+> **Section A superseded rulings, quoted in place (not deleted):** S108 ASK-A8 _"after promotion
+> the recorder keeps READ … and LOSES every write"_ (overturned by ruling 2); S108 SELECT policy
+> _"Anyone else reads only the rows THEY created"_ (overturned by ruling 1); S108 freeze
+> _"After send, nothing may be written at all … an unresolved blocker after send stays open,
+> permanently"_ (narrowed by ruling 3 to material that existed at send).
 
 ---
 
@@ -364,6 +395,13 @@ design (S108). Creating at a computer is new capability, not a missing link. Jos
 > **ASK-B.B** (added) — top-level entry reaching foreman/crew, or office-only tab under Estimates
 > (FILLED-B.1).
 
+> **RULED [Josh, S110 Q5] → A — a top-level sidebar item reachable by foreman and crew; the
+> record page stops redirecting them to `/m`.** Beat: office-only tab under Estimates.
+>
+> **ASK-B.A — RULED [Josh, S110 Q6] → B — no desktop creation.** _"Josh asked for a way to
+> REACH site visits on desktop, not to record them there. Recording stays mobile, on site."_ Beat:
+> a desktop form; a link to the `/m` form.
+
 ---
 
 # SECTION C — the mobile path to `/m/account`
@@ -398,6 +436,11 @@ adding a second one.**
 > staff use, and it does not reshuffle the tile grid. The Settings card link stays. Plus an e2e
 > that CLICKS it as crew and as a subcontractor. **→ Q-C.A.**
 
+> **RULED [Josh, S110 Q7] → A — a "Your account" row in the ☰ menu above Sign out, every role.**
+> Beat: an 8th tile. **The corrected premise is accepted and recorded here:** the link exists
+> (`app/m/settings/page.tsx:85-91`) and is unreachable in practice; **no second link to the
+> same page from the same place is filed.**
+
 **RULED** — Every internal employee and every subcontractor must reach it from inside `/m`.
 
 ---
@@ -431,6 +474,11 @@ the containment trigger governs a row move the same way it governs a line move.
 > another PM's or a sent estimate by direct PostgREST UPDATE. Not reachable from the UI. The
 > proposed RPC never changes `line_item_id`; the policy hole gets a provisional id
 > (`#1-s110`) in `TECH_DEBT.md`.
+
+> **RULED [Josh, S110 Q16] → FIX IT HERE, in Section D.** _"It is the same hole as FILL-B5's, on
+> the sibling table, and row reorder is exactly the feature that makes it reachable — the same way
+> drag-across-categories made the line hole reachable. Authority belongs in the database."_ Filed
+> as `#1-s110` and fixed on the D branch. ⚠️ **Production row count first, query to Josh.**
 
 **D2 — clicking a drag grip does not focus it.** Tab-then-arrow works; click-then-arrow does
 nothing. ⚠️ **CC's `e2e/desktop-row-activation-s109.spec.ts` T2 asserts "handle focused" after a
@@ -502,6 +550,13 @@ wrong breaks the only recovery path on production.**
 > through `/auth/callback` and generate the link server-side with `auth.admin.generateLink` so no
 > verifier is needed), or there is no working recovery path to protect. **→ Q-E.A covers both.**
 
+> **RULED [Josh, S110 Q8] → A — the `redirectType` cookie path. The team-page admin reset is
+> fixed FIRST** (the more urgent half, and unfiled). Beat: (B) `amr`, unmeasured.
+> ⚠️ **On (C), Supabase's secure password change: do NOT recommend switching it on until it is
+> PROVEN not to break the emailed recovery link — measured on rebuild-test with a real recovery
+> round-trip, then reported.** It is wanted (the only floor against a direct API call), but not
+> before it is proven safe.
+
 **E2 — catalog rows.** The vendor `product_url` link sits on the item name while the rest of the row
 opens Edit, so one row has two destinations. **ASK-E.B**: move the vendor link to its own control,
 or leave it.
@@ -511,6 +566,8 @@ or leave it.
 > `rowActivation` (`:183-185`) **for managers only**. For everyone else the row is inert and the
 > name link is the only thing on it. Moving the link to its own small "Vendor ↗" control keeps
 > it for both.
+
+> **RULED [Josh, S110 Q9] → A — its own "Vendor ↗" control.** Beat: leave it on the name.
 
 **E3 — `#161`'s remaining file-sheet sites**, listed by name in its `TECH_DEBT.md` status line:
 lien releases, contract and lien templates, delivery photos, receipts, **the client portal**,
@@ -546,6 +603,10 @@ through a sheet that they could not reach before.**
 > for the portal, resolver = the already-signed URL, no new route, and **no sheet on portal
 > photos** (keeps them view-only as today). **→ Q-E.D.**
 
+> **RULED [Josh, S110 Q10] → A — the eight staff sites; the portal reuses the URL it already
+> signed and stays view-only.** Beat: sheet on portal photos; leave the portal alone. Deciding
+> reason: an annotated photo's unmarked original must never reach a client.
+
 **E4 — `#1-deliv`.** Closable now that its classification is recorded, or does the Stripe
 event-shape gap keep it open? **ASK-E.C** — Josh's call.
 
@@ -560,6 +621,9 @@ event-shape gap keep it open? **ASK-E.C** — Josh's call.
 > **Recommended: close `#1-deliv` AND in the same commit re-file the Stripe check on its own**
 > (`#2-s110`, "confirm the real `checkout.session.completed` `mode:'setup'` event in Stripe test
 > mode"), or closing loses it.
+
+> **RULED [Josh, S110 Q11] → close `#1-deliv`, and re-file the Stripe fidelity check on its own
+> in the same commit.** Beat: keep it open.
 
 ---
 
@@ -870,6 +934,9 @@ never a blank. State it for each surface.
 > (`site-visit-notify.ts:85`, `assignment-notify.ts:190`) — they cannot be translated at read
 > time without changing how notifications are built; proposed out of scope for S110 and filed.
 
+> **RULED [Josh, S110 Q15] → agreed: notifications and web push are OUT OF SCOPE for S110.**
+> Filed in `TECH_DEBT.md` on the H branch.
+
 **FILL-H.9** — ⚠️ **The residual case RULED line 5 does not settle, and it is a real one.** A crew
 member types Spanish into a field that later appears on a CLIENT-FACING document — an estimate line
 name, a scope note that flows to a proposal, a change-order description. The document must be
@@ -919,9 +986,24 @@ Mark it **ASK-H.D**.
 > line under it — the original is always one tap away and always shown when translation is
 > pending or failed (H.8). Side-by-side doubles the length of every note on a phone.
 
+> **RULED [Josh, S110 Q13] → as recommended** — translation shown, "Translated from Spanish · show
+> original" available, original shown automatically while pending or failed. Beat: side by side.
+
 **ASK-H.C** — On FILL-H.4: translate on write and store, or translate on read and cache.
 
+> **RULED [Josh, S110 Q12] → on read, with the company-scoped cache keyed by (text hash,
+> language, model). The original is never overwritten.** Beat: on write.
+
 **ASK-H.D** — On FILL-H.9: what a client-facing document does with Spanish source text.
+
+> **RULED [Josh, S110 Q14] → A + C, never B — AMENDED: the send-time check WARNS and names the
+> offending field, and the sender (always office) may OVERRIDE and send; the override is
+> RECORDED.** Beat: (B) machine translation on the document, ever; and a hard block — _"a hard
+> block on a false positive (a proper noun, a street name, a brand) would wedge a real send."_
+> Documents import no translation code, and a test pins that.
+> ⚠️ **Recorded as ruled: crew-typed Spanish ALREADY reaches clients today** — the site-visit
+> title becomes `estimates.name`, the proposal title and the proposal email subject. That is
+> pre-existing, not introduced by Section H, and Q14 is what addresses it.
 
 ---
 
@@ -957,6 +1039,12 @@ the work twice.
 > + account toggle → provider → `/m` dictionaries + anti-rot guard → user-text translation +
 > cache + log → AUDIT-8 client-facing test last.
 
+> **MERGE — RULED [Josh, S110 Q17]: NOT authorized.** One branch per section, order **F, C, D, E,
+> A, B, H**. Josh authorizes each merge individually and applies **A's, D's and H's migrations to
+> production, attended, BEFORE** the merge that deploys them. Section A is blocked on the
+> production counts (FILLED-A.8) until Josh runs them; the build moves to unblocked work rather
+> than idling.
+
 ## Standing constraints
 Branch from `main`, commit path-scoped, never `git add -A`, push after every commit. Migrations
 rebuild-test only; verify the CLI link first; never MCP `apply_migration`. `next build` must pass —
@@ -979,3 +1067,28 @@ passes on zero rows is a failure. Nothing touches production.
    translation, and it fails when that is made possible.** RULED line 5 is worth nothing if only
    the code says it.
 9. ⚠️ **Section H's anti-rot guard is proven to fire** by adding a hardcoded `/m` string.
+## AUDIT — answered before the build [S110, after Phase 2]
+
+1. **Every FILL filled; every ASK ruled** with the alternative it beat — A.A/A.B/A.C/A.D, B.A/B.B,
+   C (Q7), D1 (Q16), E.A/E.B/E.C, E3 (Q10), H.B/H.C/H.D, Q15, Q17. No FILL left unfilled; the only
+   FILLs that could not be measured say why in one line (production counts: `live-sql.mjs`
+   refuses production by design; `amr` after recovery: needs a live round-trip — now ruled to
+   be measured, Q8).
+2. **No measurement contradicts a RULED line.** One measurement contradicted a *premise* — Section
+   C's "nothing links to it" — and it was reported, not reconciled; Josh accepted the correction
+   (Q7). Superseded rulings quoted in place: S108 ASK-A8, the S108 SELECT scope, the S108 freeze,
+   S108 ruling 4 (Q-A.D block); ruling 4 is quoted again in `photos.ts` at build.
+3. **Section A proof plan:** every DB refusal paired with a case that must succeed (4.5a-style
+   control; post-send INSERT succeeds beside the pre-send UPDATE refusal; sub/client 0 rows beside
+   non-recorder crew >0). The UI half by sabotage (tab split forced off; frozen check forced off).
+4. **Crew reads no money** — `MONEY`/`moneyKeys()` kept; extended to the non-recorder read and to
+   the new files staff arm (flagged files only; an unflagged PDF on the same estimate → 404).
+5. **F's guard proven to fire** — by adding a consumer AND by removing a registered field; both red.
+6. **Migrations named** (FILLED-X.1) with production queries: A (A.8 1–3), D (`#1-s110` count,
+   given at build), H (`profiles` count). None aborts on existing rows.
+7. **Overturned tests inverted in place**: FILLED-A.7's seven live cases and four files; none
+   deleted.
+8. **H client-facing test** — pins the FILLED-H.9 renderer list (plus the `contract_documents`
+   renderer, to be located first) and fails when any imports the translation module, proven by
+   sabotage.
+9. **H anti-rot guard** — proven by adding a hardcoded `/m` string.
