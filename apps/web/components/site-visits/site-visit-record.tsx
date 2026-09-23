@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import {
   deleteSiteVisitMeasurement,
   deleteSiteVisitNote,
+  finishSiteVisit,
   saveSiteVisitMeasurement,
   saveSiteVisitNote,
   uploadSiteVisitPhoto,
@@ -21,6 +22,13 @@ import { VoiceNotes } from './voice-notes';
 // site-visits/[id]). PARITY [S122]: the two surfaces share this mechanism, not
 // just the intent — the same reads, the same RPC writes, the same refusals.
 // Desktop adds the office actions (promote, abandon) AROUND it, not inside it.
+//
+// [S108 follow-up] FINISH lives INSIDE the record (both surfaces, same RPC);
+// PROMOTE stays OUTSIDE it, on the office's desktop page only. They are two
+// different decisions and must never look like one: the field defect was a
+// visit that became a numbered draft because promote was the only "done"
+// control anywhere. Finish changes nothing on the estimate — see
+// finish_site_visit() in 20261680000000.
 //
 // Writes go to the database only through the site-visit RPCs and the two file
 // routes; the database decides who may write (site_visit_access()). `canWrite`
@@ -242,6 +250,8 @@ export function SiteVisitRecord({
   const [busy, setBusy] = useState(false);
   const estimateId = detail.visit.estimate_id;
   const promoted = detail.visit.promoted_at != null;
+  const finishedAt = detail.visit.finished_at;
+  const [confirmingFinish, setConfirmingFinish] = useState(false);
 
   const refresh = useCallback(() => router.refresh(), [router]);
 
@@ -328,6 +338,16 @@ export function SiteVisitRecord({
         >
           This visit is now an estimate.{' '}
           {canWrite ? 'The office can still update it here.' : 'You can still read everything you captured.'}
+        </p>
+      ) : null}
+      {!promoted && finishedAt ? (
+        <p
+          data-testid="sv-finished-banner"
+          className="mb-[12px] rounded-[10px] border border-[#b7e4c7] bg-[#ecfdf5] px-[12px] py-[10px] text-[14px] text-m6m-navy"
+        >
+          <strong>Finished</strong> {new Date(finishedAt).toLocaleString()} — ready for the office to price.
+          It becomes an estimate, and gets its number, only when the office creates one.
+          {canWrite ? ' Mistakes can still be fixed here until then.' : ''}
         </p>
       ) : null}
       {!online && canWrite ? (
@@ -478,6 +498,53 @@ export function SiteVisitRecord({
           refresh();
         }}
       />
+
+      {/* FINISH — the recorder's "done". Not promotion: no number, no estimate. */}
+      {canWrite && !promoted && !detail.visit.is_deleted && !finishedAt ? (
+        <section data-testid="sv-finish" className="mt-[24px] border-t border-m6m-border pt-[18px]">
+          {confirmingFinish ? (
+            <div className="flex flex-col gap-[8px]">
+              <p className="text-[14px] text-m6m-navy">
+                Finish this visit? The office sees it is ready to price. It does <strong>not</strong> become an
+                estimate yet — the office does that. You can still fix mistakes until then.
+                {blockersOpen > 0 ? ` ${blockersOpen} blocker${blockersOpen === 1 ? ' is' : 's are'} still open.` : ''}
+                {heldForThisVisit > 0
+                  ? ` ${heldForThisVisit} photo or voice note${heldForThisVisit === 1 ? ' is' : 's are'} still on this phone and will upload when signal returns.`
+                  : ''}
+              </p>
+              <button
+                type="button"
+                data-testid="sv-finish-confirm"
+                disabled={busy || !online}
+                onClick={async () => {
+                  if (await run(() => finishSiteVisit(estimateId))) setConfirmingFinish(false);
+                }}
+                className="h-[52px] rounded-[14px] bg-m6m-navy text-[16px] font-bold text-white disabled:opacity-40"
+              >
+                Yes, finish the visit
+              </button>
+              <button
+                type="button"
+                onClick={() => setConfirmingFinish(false)}
+                className="h-[48px] rounded-[12px] border border-m6m-border text-[15px]"
+              >
+                Keep recording
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              data-testid="sv-finish-start"
+              disabled={busy || !online}
+              onClick={() => setConfirmingFinish(true)}
+              className="h-[52px] w-full rounded-[14px] bg-m6m-navy text-[16px] font-bold text-white disabled:opacity-40"
+            >
+              Finish site visit
+            </button>
+          )}
+          {!online ? <p className="mt-[6px] text-[13px] text-m6m-muted">Finishing needs a connection.</p> : null}
+        </section>
+      ) : null}
 
     </div>
   );

@@ -20,6 +20,12 @@ function SiteVisitsPanel({ visits }: { visits: SiteVisit[] }) {
             <Link href={`/dashboard/estimates/site-visits/${v.estimate_id}`} style={{ color: '#3b4ae0', fontWeight: 600 }}>
               {v.title}
             </Link>
+            <span
+              data-testid="site-visit-panel-state"
+              style={{ marginLeft: '0.5rem', fontSize: '0.6875rem', fontWeight: 700, padding: '1px 7px', borderRadius: '999px', ...(v.finished_at ? { background: '#ecfdf5', color: '#065f46' } : { background: '#f4f6fa', color: '#7b8699' }) }}
+            >
+              {v.finished_at ? 'Finished' : 'Still recording'}
+            </span>
             <span style={{ color: '#7b8699', fontSize: '0.8125rem' }}>
               {' · '}
               {[v.contact ? `${v.contact.first_name} ${v.contact.last_name}` : null, v.address ? `${v.address.address_line1}, ${v.address.city}` : null, new Date(v.visited_at).toLocaleDateString()].filter(Boolean).join(' · ')}

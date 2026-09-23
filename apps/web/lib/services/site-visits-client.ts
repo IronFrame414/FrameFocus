@@ -120,6 +120,17 @@ export async function updateVoiceTranscript(id: string, transcript: string): Pro
   return r.error ? { success: false, error: r.error } : { success: true };
 }
 
+/** FINISH — "done capturing, ready to price". NOT promotion: it stamps the
+ *  money-free site_visits row and nothing else; no number, status unchanged.
+ *  The office, or the recorder while it is still a visit. Idempotent. */
+export async function finishSiteVisit(estimateId: string): Promise<Result> {
+  const r = await rpc('finish_site_visit', { p_estimate_id: estimateId });
+  return r.error ? { success: false, error: r.error } : { success: true };
+}
+
+/** PROMOTE — owner/admin/PM only: assigns the estimate number and creates the
+ *  first money-bearing state. Never a side effect; only the office's explicit
+ *  "Create estimate from this visit" calls this. */
 export async function promoteSiteVisit(
   estimateId: string
 ): Promise<{ success: boolean; estimateNumber?: string; error?: string }> {
