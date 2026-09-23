@@ -9,6 +9,12 @@ import { abandonSiteVisit, promoteSiteVisit } from '@/lib/services/site-visits-c
 // S108 Spec A — the two OFFICE decisions on a visit. Both are RPCs that the
 // database refuses for anyone but owner/admin/PM (promote) or the office and
 // the recorder pre-promotion (abandon); these buttons only decide what to show.
+//
+// [S108 follow-up] PROMOTE IS NOT FINISH. On production a visit became a
+// numbered draft because this button was the only "done"-shaped control
+// anywhere. The recorder's "done" is now Finish, inside the shared record.
+// This button says plainly what it does, and its confirm says whether the
+// recorder has finished.
 
 const button: React.CSSProperties = {
   padding: '0.55rem 1rem',
@@ -22,10 +28,12 @@ export function SiteVisitOfficeActions({
   estimateId,
   promoted,
   abandoned,
+  finishedAt,
 }: {
   estimateId: string;
   promoted: boolean;
   abandoned: boolean;
+  finishedAt: string | null;
 }) {
   const router = useRouter();
   const confirm = useConfirm();
@@ -46,12 +54,20 @@ export function SiteVisitOfficeActions({
 
   return (
     <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '1rem', alignItems: 'center' }}>
+      <span data-testid="sv-office-state" style={{ fontSize: '0.8125rem', color: finishedAt ? '#065f46' : '#7b8699', flexBasis: '100%' }}>
+        {finishedAt
+          ? `Finished ${new Date(finishedAt).toLocaleString()} — ready to price.`
+          : 'Still being recorded — the recorder has not tapped Finish.'}
+      </span>
       <button
         type="button"
         data-testid="sv-promote"
         disabled={busy}
         onClick={async () => {
-          if (!(await confirm('Turn this site visit into a draft estimate? It gets its estimate number now.'))) return;
+          const msg = finishedAt
+            ? 'Create a draft estimate from this visit? It gets its estimate number now, and the recorder can no longer change the visit.'
+            : 'The recorder has NOT finished this visit yet. Create a draft estimate from it anyway? It gets its estimate number now, and the recorder can no longer add to the visit.';
+          if (!(await confirm(msg))) return;
           setBusy(true);
           setError(null);
           const r = await promoteSiteVisit(estimateId);

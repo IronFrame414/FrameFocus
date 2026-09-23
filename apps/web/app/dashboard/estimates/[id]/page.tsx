@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase-server';
 import { redirect } from 'next/navigation';
 import { getCompanyTimezone } from '@/lib/services/company';
 import { getUploaderNames } from '@/lib/services/photos';
+import { getSiteVisit, getSiteVisitAccess } from '@/lib/services/site-visits';
 import { EstimateBuilder } from './estimate-builder';
 
 interface PageProps {
@@ -46,6 +47,13 @@ export default async function EstimateBuilderPage({ params }: PageProps) {
   // [S108 Spec A] A site visit is not an estimate document yet — it opens as
   // the visit record, where the office can promote it.
   if (est?.status === 'site_visit') redirect(`/dashboard/estimates/site-visits/${params.id}`);
+  // [S108 follow-up] What was captured on site, for the estimator pricing it.
+  // Read on the caller's SESSION from the money-free site_visit_* tables
+  // (office reads every visit in the company). Null for an estimate that never
+  // was a site visit — the builder then shows no Site Visit tab at all.
+  const siteVisit = await getSiteVisit(params.id);
+  const siteVisitAccess = siteVisit ? await getSiteVisitAccess(params.id) : null;
+
   let estimatorName: string | null = null;
   if (est?.created_by) {
     const names = await getUploaderNames([est.created_by]);
@@ -59,6 +67,8 @@ export default async function EstimateBuilderPage({ params }: PageProps) {
       userId={user.id}
       companyTimeZone={companyTimeZone}
       estimatorName={estimatorName}
+      siteVisit={siteVisit}
+      siteVisitCanWrite={siteVisitAccess !== null}
     />
   );
 }

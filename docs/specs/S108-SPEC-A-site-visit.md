@@ -409,6 +409,16 @@ and creates the first money-bearing state.
 `email_types` row and no second CHECK widening, matching the `selection_approved` /
 `po_item_missing` / `qb_sync_blocked` precedents.
 
+> ⚠️ **ASK-A4 AMENDED [Josh, 2026-09-23] — the office is notified at FINISH, not at creation.**
+> _Superseded, quoted rather than rewritten:_ the notification fired when the visit was
+> **created** (`/api/site-visits`, "When a foreman or crew member records a visit, is the office
+> notified?" → yes, at record time). **Why it changed:** a notification at creation arrives before
+> anything has been captured, so it tells the office nothing. It now fires when the visit is
+> **finished**, from `/api/site-visits/[id]/finish`, on the first finish only. **The type is
+> unchanged** (`site_visit_recorded`: no new type, no CHECK widening). Only the moment and the
+> wording ("Site visit ready to price") changed. **A visit that is never finished notifies
+> nobody. Accepted.**
+
 **ASK-A5 → STRUCTURED measurements** — area name, length × width, computed square feet. It feeds
 Spec B's square-foot labor unit directly, which is why both are in this session.
 
@@ -510,3 +520,41 @@ Evidence for every line: `docs/sessions/S108-report.md` → "SPEC A".
 
 **Voice (the ruled LAST piece): finished** — unit 6/6, live 5/5 against the real endpoint, and a
 real-screen e2e through the route. Nothing about it is deferred.
+
+---
+
+## FOLLOW-UP [2026-09-23] — two field defects from Josh's production test
+
+Evidence: `docs/sessions/S108-report.md` → "S108 FOLLOW-UP". **No ruling above is changed.**
+
+1. **No way to finish a visit.** The only "done"-shaped control anywhere was the office's
+   **Create estimate from this visit** (promote). **Added FINISH** (`finish_site_visit`,
+   `20261680000000`). It stamps `site_visits.finished_at/_by` and changes **nothing** on
+   `estimates`: status stays `site_visit`, there is no number, and the sequence is untouched.
+   The office may finish, or the recorder while it is still a visit. It is idempotent and not a
+   lock (ASK-A8 stands). Promotion is unchanged: owner/admin/PM, desktop, explicit.
+2. **The estimate showed none of the visit's data.** Added a **Site Visit tab** right after Line
+   Items, present only when a `site_visits` row exists. It renders the same `SiteVisitRecord`,
+   read on the office session from the money-free tables.
+
+### Rulings on the follow-up [Josh, 2026-09-23] — settled; do not re-litigate
+
+1. **Notify at FINISH** — ASK-A4 amended above.
+2. **Promotion stays OPTIONAL.** The office may promote an unfinished visit. The confirm warns;
+   nothing blocks it. A crew member forgetting to tap Finish must not block pricing.
+3. **The visit record FREEZES when the estimate is SENT** (any status past draft/review). *"It is
+   the evidence of what was found on site at the price quoted, and an editable record is not
+   evidence."* Enforced in the database (`20261690000000`): `site_visit_access()` stops admitting
+   the office, and a BEFORE INSERT/UPDATE trigger on all four `site_visit_*` tables refuses
+   writes, including the service role's. **An unresolved blocker stays unresolved, permanently, on
+   the record.** Resolving one after send is not permitted; any such exception is a separate
+   ruling.
+4. **Visit-era photos only; the cutoff is PROMOTION** (`created_at <= promoted_at`, inclusive, both
+   timestamps set by the database). A photo added between Finish and promotion **is** visit-era,
+   because finishing is not a lock and the recorder may still add a missed shot. Anything added
+   after promotion lives in Files. Before promotion, every image on the estimate is visit-era: a
+   site visit has no Files tab, so a photo can only arrive through the visit.
+
+**TRUE BURST CAPTURE IS REJECTED [Josh, 2026-09-23]** — see `GATED.md`. Do not propose replacing
+the native camera input.
+

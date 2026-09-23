@@ -103,7 +103,9 @@ describe('§3j — the spec premise that turned out to be false', () => {
       'supabase/migrations/20261620000000_schema_fingerprint.sql',
       // S108 Spec A re-creates it a SEVENTH time, to add `site_visit_recorded`.
       // Its only emitter is lib/notify/site-visit-notify.ts, called by the
-      // /api/site-visits route; it emits THAT type and never still_clocked_in.
+      // /api/site-visits/[id]/finish route (moved from the create route at
+      // FINISH — ASK-A4 amended 2026-09-23); it emits THAT type and never
+      // still_clocked_in.
       'supabase/migrations/20261650000000_site_visit.sql',
     ]);
   });

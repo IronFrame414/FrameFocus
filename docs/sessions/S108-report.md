@@ -1530,3 +1530,279 @@ run before STEP 2's merge.
 
 **Real-money spend this session (OpenAI, test only):** the voice probe (two ~6 s transcriptions + two
 TTS clips), `s108-voice.live.ts` (three transcription calls), two e2e voice runs — cents in total.
+
+---
+
+## S108 FOLLOW-UP — two field defects from Josh's production test (2026-09-23)
+
+**Branch:** `feature/site-visit-finish-and-review`, cut from `main` @ `3b2f0eaa` (verified: `origin/main`
+tip `3b2f0eaa merge: per-company warming quota`; tree clean). CLI link checked:
+`supabase/.temp/linked-project.json` → `nmyphyhmfttxkdoposvf` (rebuild-test).
+
+### Step 1 — DEFECT 1 measured: what promoted EST-107
+
+**⚠️ NOT measured on production by CC, and why, in one line:** `scripts/live-sql.mjs` refuses every ref
+but rebuild-test *by design* ("an audit tool must not be pointable at production"), the Supabase MCP is
+pinned to `--project-ref nmyphyhmfttxkdoposvf`, and the standing constraint is "nothing touches
+production" — so I did not route around the guard. **The query is below for Josh to run.**
+
+**What the code establishes — read from `main` @ `3b2f0eaa`, the deployed tree:**
+
+1. **Exactly ONE writer of `site_visits.promoted_at` / `promoted_by` exists:** `promote_site_visit()`
+   (`20261650000000_site_visit.sql` §8f). It refuses any role but owner/admin/PM (42501), and in the
+   same statement sets `estimates.status='draft'`, calls `next_estimate_number()`, and **rewrites
+   `estimates.created_by` to the promoter**.
+2. **Exactly ONE caller of that RPC in the app:** `promoteSiteVisit()` ← the desktop button
+   **"Create estimate from this visit"** (`app/dashboard/estimates/site-visits/[id]/office-actions.tsx`,
+   `data-testid="sv-promote"`), behind a `confirm()`. No `/m` screen calls it; `SiteVisitRecord` has no
+   promote control; no server route, cron, trigger or offline-replay path calls it
+   (`grep promote_site_visit|promoteSiteVisit` over `app/ lib/ components/` = those two files only).
+3. **Nothing promotes on navigation.** No `useEffect`, unmount handler, `beforeunload`, redirect or
+   server page writes `estimates.status`. The builder page only READS status and redirects a visit to
+   its record (`[id]/page.tsx:48`).
+4. **The only other way to reach `draft`** is a direct owner/admin UPDATE through
+   `estimates_update_manager`; `enforce_estimate_immutability` permits `site_visit → draft`. No app
+   code issues one (`grep "status: 'draft'"` over `lib/`/`app/` finds no estimates write).
+
+**The most likely sequence, to be confirmed by the query:** Josh is the **Owner**, so the
+`site_visit_recorded` notification and the **Estimates → Open site visits** panel both lead him to the
+desktop record page — whose ONLY prominent action is a blue **"Create estimate from this visit"**.
+With no Finish control anywhere, that button is the one thing on either surface that looks like
+"done". If `promoted_by` = Josh's user id, the promotion was that tap plus the confirm, taken as
+"finish" — **a UI defect (no finish control, and promote was the only "done"-shaped affordance), not
+a database one.** If `promoted_at` is NULL while `status='draft'`, something wrote status outside
+the RPC and this conclusion is wrong — **stop and report**.
+
+**The query — READ-ONLY, production SQL editor:**
+
+```sql
+select e.estimate_number, e.status, e.created_at as est_created_at, e.updated_at as est_updated_at,
+       e.created_by as est_created_by, e.updated_by as est_updated_by,
+       sv.created_by as recorder, sv.created_at as visit_created_at,
+       sv.promoted_at, sv.promoted_by,
+       (sv.promoted_by = e.created_by) as promoter_is_est_author,   -- expect TRUE if the RPC ran
+       (sv.promoted_by = sv.created_by) as promoter_is_recorder,
+       pr.role as promoter_role, pr.email as promoter_email,
+       (select max(created_at) from site_visit_notes n where n.estimate_id = e.id) as last_note_at,
+       (select max(created_at) from site_visit_voice_notes v where v.estimate_id = e.id) as last_voice_at
+from estimates e
+join site_visits sv on sv.estimate_id = e.id
+left join profiles pr on pr.user_id = sv.promoted_by and not coalesce(pr.is_deleted,false)
+where e.id = 'd858b3c6-d86c-4c23-9a9b-f9ee7ef97678';
+```
+
+Reading it: `promoted_at` non-null **and** `promoter_is_est_author = true` ⇒ the RPC ran, at
+`promoted_at`, by `promoter_email`. `promoted_at` minus `last_voice_at` says how long after the last
+capture it happened.
+
+**Consequence for the fix — it does not depend on the answer.** Either way the phone needs a Finish
+control and promotion must be unmistakably a separate office decision.
+
+### Step 2 — FINISH, database half — **built and proven live** (`3bf20e43`)
+
+`20261680000000_site_visit_finish.sql` → `supabase db push` **`DBPUSH_EXIT=0`**, link checked
+(`nmyphyhmfttxkdoposvf`), the one pending file. Verified by object: `site_visits.finished_at`
+(timestamptz, nullable), `finished_by` (uuid, nullable); `finish_site_visit` `prosecdef=true`,
+`anon` execute **false**, `authenticated` **true**. `db:types` exit 0 (7 added lines, nothing else);
+`db:fingerprint` exit 0 (functions 304, constraints 1002, latest `20261680000000`); `db:verify`
+**exit 0, LEDGER CLEAN 229/229**.
+
+**Production row count owed before Josh applies it:** none governs a row — two nullable columns and
+a function, no constraint. For the record: `select count(*) from site_visits;` (every row reads
+`finished_at` NULL afterwards).
+
+| | FINISH (`finish_site_visit`) | PROMOTE (`promote_site_visit`, unchanged) |
+| --- | --- | --- |
+| means | "done capturing — ready to price" | "make it an estimate" |
+| who | office (owner/admin/PM), or the **recorder** while it is still a visit | owner / admin / PM only (ASK-A3) |
+| writes | `site_visits.finished_at/_by` only — **nothing on `estimates`** | `estimates.status='draft'`, the number, pricing defaults, `created_by` → promoter |
+| number | **none**; sequence untouched | `next_estimate_number()` |
+| after | recorder may still correct it (ASK-A8 is not changed) | recorder keeps READ, loses every write |
+| twice | idempotent — first stamp kept | refused |
+
+`s108-site-visit.live.ts` → **23/23, `LIVE_VITEST_EXIT_LINE=0`** (17 existing + 6 new): foreman and
+sub refused (42501) and the row stays unstamped; crew finish stamps `finished_by = crew`, **status
+still `site_visit`, number still NULL, sequence unchanged**; second finish keeps the first stamp;
+crew still reads **0** estimate rows and **1 visit / 3 notes / 1 measurement** with no money key;
+crew can still edit a note after finishing; after promotion crew finish → 42501 and owner finish →
+22023; an abandoned visit cannot be finished. Non-vacuous: §3a proves those same two fields DO
+change on promotion. ⚠️ Not proven by sabotage — altering the RPC on rebuild-test outside a
+migration would itself be drift; the assertions read the fields directly and are paired with §3a.
+
+### Step 3 — FINISH, the screens (`998e2b53`) and DEFECT 2, the Site Visit tab (`9b5918af`)
+
+**Finish UI.** The control lives INSIDE `SiteVisitRecord`, so phone and desktop share one mechanism
+(PARITY [S122]). Promote stays OUTSIDE it, on the office's desktop page. It is two-step on purpose,
+because `/m` has no confirm provider: **Finish site visit** → a panel saying it does *not* become an
+estimate, with open blockers and held uploads counted → **Yes, finish the visit** / **Keep recording**.
+
+| after… | the phone shows |
+| --- | --- |
+| **Finish** | a green **Finished {time} — ready for the office to price. It becomes an estimate, and gets its number, only when the office creates one. Mistakes can still be fixed here until then.** Add controls stay (ASK-A8). The list moves it from *Recording* to **Finished · waiting for the office** |
+| **Promote** (office, desktop only) | the existing **"This visit is now an estimate. You can still read everything you captured."** No write controls, no `$`. The list shows it under *Became estimates* |
+
+On the desktop, the estimates panel badges each open visit **Finished** / **Still recording**. The
+record page states which one applies. Promote's confirm **warns when the recorder has not finished**.
+
+**DEFECT 2 — where, and why: a Site Visit TAB, right after Line Items.**
+- **Not a Details panel:** Details is the document's header (client, dates, health). Measurements,
+  scope and blockers are working material, and the estimator flips between them and Line Items
+  while pricing. A tab next to Line Items is one click away, and it does not push the header down.
+- **Not a Files sub-view:** most of the captured content is structured rows (notes, measurements,
+  blockers, transcripts), not files.
+- **Shown only when a `site_visits` row exists for the estimate.** An estimate that never was a
+  site visit has **no tab**: the filter keys on the row existing.
+- **Long after the visit:** it stays permanently as the record of what was found on site, which is
+  the change-order evidence the conditions-vs-scope ruling exists for. The header line reads
+  *captured {date} · finished {time} · became this estimate {date}*. An open-blockers count badge
+  shows on the tab label.
+- **Content** = the same `SiteVisitRecord` as the phone: Existing conditions and Proposed scope as
+  separate sections; measurements as `L × W ft = N sq ft` plus a total; blockers with checkbox and
+  strike-through when resolved; voice notes with an `<audio controls>` player (signed URL) and the
+  transcript, plus the edited marker.
+- **Data path:** `[id]/page.tsx` calls `getSiteVisit()` on the caller's SESSION. It reads the
+  money-free `site_visit_*` tables only, and adds nothing to what an office role could already
+  read. The builder itself is office-only (it redirects any other role).
+
+**Proof, the real UI** (`e2e/m-site-visit.spec.ts`, production build `next start`):
+the crew member taps Finish → banner shown, Finish gone, add-controls still present, and the DB reads
+`status site_visit, estimate_number NULL`. **Then navigates away to the list (the field defect's
+exact gesture)**: the row is `data-finished=true`, and the DB still reads `site_visit`/NULL. The
+owner sees *Finished*, promotes, and on the builder's **Site Visit tab** sees the crew member's
+condition and `12 × 14 ft = 168 sq ft`. A second test takes a scoped plain draft (owner's company,
+not a visit) and asserts **no tab**.
+
+| run | result |
+| --- | --- |
+| green | **`PW_EXIT_LINE=0`, 3 passed** |
+| sabotage 1 — tab filter forced true | **`SABOTAGE_PW_EXIT_LINE=1`**: exactly the no-tab test red, the other green |
+| sabotage 2 — page passes `siteVisit={null}` | **`SABOTAGE2_PW_EXIT_LINE=1`**: exactly the flow test red, at `est-tab-site_visit` |
+| reverted (grep: 0 sabotage lines), rebuilt | **`BUILD_EXIT_LINE=0`, `REVERTED_PW_EXIT_LINE=0`, 3 passed**. Fixtures: **0** `S108A-E2E` estimates left |
+
+`tsc` 0, `lint` 0 on every changed file.
+
+### Step 4 — final gate on `feature/site-visit-finish-and-review`, and what Josh does next
+
+| check | printed line |
+| --- | --- |
+| type-check | `TSC_EXIT_LINE=0` |
+| lint (whole app) | `LINT_EXIT_LINE=0` |
+| `next build` | `BUILD_EXIT_LINE=0`, fresh `BUILD_ID`, on the final (post-revert) tree |
+| unit suite | `VITEST_EXIT_LINE=0`: **97 files, 1325 tests** (incl. the S107 route-order floor test) |
+| `s108-site-visit.live.ts` | `LIVE_VITEST_EXIT_LINE=0`: **23/23** |
+| `e2e/m-site-visit.spec.ts` | `REVERTED_PW_EXIT_LINE=0`: 3 passed; both new assertions proven by sabotage |
+| `e2e/m-site-visit-voice.spec.ts` | `VOICE_PW_EXIT_LINE=0`: 2 passed, `transcript_status=done` (real OpenAI, under a cent) |
+| test sweep (CLAUDE.md S157) | grep for site-visit / promote / tab test ids across `test/`, `e2e/`: no existing test encodes overturned behaviour. Nothing was overturned; Finish is additive |
+
+The server was stopped by PID, not `pkill`. Fixtures: 0 left. **Nothing touched production.**
+
+**To ship (Josh, in order):**
+1. **Run the Step 1 query on production** and confirm `promoted_by` / `promoter_is_est_author`.
+   If `promoted_at` is NULL while `status='draft'`, STOP: something outside the RPC wrote the status.
+2. **EST-107 itself is left as it is.** It is a real numbered draft now. The ruling forbids
+   turning an estimate back into a visit (the trigger raises), and its number is already
+   client-visible in the sequence. Once this ships, its Site Visit tab shows the two notes and the
+   voice note. No data repair is proposed.
+3. Apply `20261680000000_site_visit_finish.sql` to production (`supabase db push` with the link
+   switched and switched back, per the Spec E runbook). **Rows governed: none** (no constraint).
+   For the record: `select count(*) from site_visits;`. Verify:
+   `select column_name from information_schema.columns where table_name='site_visits' and column_name like 'finished%';`
+   → 2 rows.
+4. **Migration BEFORE merge.** The deployed code reads `site_visits.*`, and the new record
+   component reads `finished_at`. Without the column, `finished_at` is simply undefined (falsy), so
+   the pages render as "never finished" rather than error. But the Finish button would call a
+   missing RPC and show an error. Apply first.
+5. Merge `feature/site-visit-finish-and-review` → `main` (Josh's call).
+
+---
+
+### Step 5 — Josh's four rulings (2026-09-23), built
+
+| ruling | built | commit |
+| --- | --- | --- |
+| 1. Notify at **FINISH**, not creation; same type, reworded | the create route no longer notifies. New `/api/site-visits/[id]/finish` runs `finish_site_visit` on the session, then (first finish only) `notifySiteVisitReadyToPrice` → `site_visit_recorded`, title **"Site visit ready to price: …"**. ASK-A4 amended in Spec A with the old ruling quoted | `f90f11e3` |
+| 2. Promotion stays optional | unchanged from step 3: the confirm warns when unfinished, nothing blocks | — |
+| 3. **Freeze at send**, in the database | `20261690000000_site_visit_freeze_at_send.sql` — `site_visit_access()` drops the office arm past draft/review, plus `enforce_site_visit_freeze()` BEFORE INSERT/UPDATE on all four tables (service role included). DELETE deliberately untriggered (cascades). The only admitted update is an FK nulled by `ON DELETE SET NULL` | `55f30fe2` |
+| 4. **Visit-era photos**, cutoff = promotion | `lib/site-visits/photos.ts` `visitEraPhotos()` — `created_at <= promoted_at`. The record stops offering *Add photos* after promotion and tells the office later photos are in Files | `297365a2` |
+| burst capture rejected | recorded in `GATED.md` and Spec A | `bfcb3e98` |
+
+**The photo cutoff, stated:** **promotion**, inclusive, on database timestamps. **Photos added
+between Finish and promotion ARE visit-era.** Finish is not a lock (ASK-A8), so a shot the recorder
+adds after tapping Finish is still what was found on site. Promotion is also where the recorder
+loses upload and the estimate begins. Before promotion, every image on the estimate counts: a visit
+has no Files tab.
+
+**An unresolved blocker after send:** it stays **open, permanently, on the record**. Owner, PM and
+the service role are all refused (live 4.5c/4.5d; the row still reads `resolved=false`). If
+resolving one after send is wanted, that is the separate ruling Josh offered.
+
+**The freeze migration: DB push `DBPUSH_EXIT=0`**, link `nmyphyhmfttxkdoposvf`. The four
+`*_z_freeze_after_send` triggers exist (trigger count 277 → 281). Fingerprint regenerated;
+`db:verify` exit 0, **LEDGER CLEAN 230/230**. `db:types` produced no diff (a trigger function adds
+no type).
+**Production rows it governs:** it governs future writes only, has no constraint, and reads no
+existing row at apply time, so it cannot abort. The count, for the record, should be 0 today
+(EST-107 is a draft):
+```sql
+select 'notes' t, count(*) from site_visit_notes x join estimates e on e.id=x.estimate_id where e.status not in ('site_visit','draft','review')
+union all select 'measurements', count(*) from site_visit_measurements x join estimates e on e.id=x.estimate_id where e.status not in ('site_visit','draft','review')
+union all select 'voice', count(*) from site_visit_voice_notes x join estimates e on e.id=x.estimate_id where e.status not in ('site_visit','draft','review')
+union all select 'visits', count(*) from site_visits x join estimates e on e.id=x.estimate_id where e.status not in ('site_visit','draft','review');
+```
+
+**Proof:**
+
+| check | printed line |
+| --- | --- |
+| `s108-site-visit.live.ts` | **29/29**. §4.5: a **draft control** (the office CAN write, access = `office`) → sent → owner/PM refused 42501 and access NULL; blocker resolve refused; **service-role** insert/update/title refused ("frozen"); FK-null admitted; crew still reads 0 estimate rows / 3 notes, no money key. 1.5b-ii: title "ready to price" |
+| `s108-voice.live.ts` + the above | `LIVE_VITEST_EXIT_LINE=0`, **34/34** |
+| `s108-visit-era-photos.test.ts` | 4/4: boundary inclusive, finish-to-promotion kept, unpromoted keeps all, undated excluded |
+| `e2e/m-site-visit.spec.ts` | creation → **0** notifications; finish → notified, "ready to price"; tab shows **1** photo after a post-promotion image is added; after send, **FROZEN** banner and no add controls (with a draft control first) |
+| e2e sabotage A — notify put back on create | **`SABOTAGE_A_PW_EXIT_LINE=1`**, red at "notified before the visit was finished"; reverted, diff empty |
+| e2e sabotage B — photo filter disabled | **`SABOTAGE_B_PW_EXIT_LINE=1`**, received "· 2"; reverted, 0 sabotage lines |
+| S157 sweep | the superseded "notified at creation" e2e assertion and live **1d** are quoted and inverted; the `s123` comment naming the create route as emitter is corrected |
+
+### ⚠️ The finish RPC is UNPROVEN BY SABOTAGE — and why
+
+`finish_site_visit()` and the freeze trigger live in the database. Sabotaging them means changing
+a function body on rebuild-test outside a migration. That is exactly the drift the fingerprint and
+`db:functions` checks exist to catch, and it would leave rebuild-test disagreeing with the
+migration files unless the change was perfectly reverted. The standing rule is migrations only, via
+`db push`. **What stands in for sabotage:** each refusal is paired with a control that must
+succeed. §3a shows promotion DOES change status and number (so 1.5b reading them unchanged is not
+vacuous), and §4.5a shows the office CAN write while it is a draft (so §4.5c/d's refusals are the
+send). The UI half of both rules *was* proven by sabotage.
+
+### Known edges, not blockers, recorded
+
+- **Void + reissue:** the visit stays on the voided original, frozen. The reissued estimate has no
+  Site Visit tab.
+- **Photos are `files` rows, outside `site_visit_*`:** the freeze does not stop an owner/admin
+  deleting an estimate photo through the Files tab. Upload to a sent estimate was already refused
+  by the files route (drafts only).
+- **A transcription still pending at send cannot be retried** (the route asks
+  `site_visit_access()`), and the trigger would refuse the write anyway. The audio is kept.
+
+### FINAL — `feature/site-visit-finish-and-review`, green
+
+| check | printed line |
+| --- | --- |
+| type-check | `TSC_EXIT_LINE=0` |
+| lint | `LINT_EXIT_LINE=0` |
+| `next build` | `BUILD_EXIT_LINE=0`, fresh `BUILD_ID` (10:55), final tree |
+| unit | `VITEST_EXIT_LINE=0`, **98 files, 1329 tests** |
+| live | `LIVE_VITEST_EXIT_LINE=0`, **34/34** |
+| e2e (production build) | `PW_EXIT_LINE=0`, **4 passed** (site visit ×2, voice, setup) |
+
+Fixtures: 0 estimates, 0 visits, 0 test files left. The server was stopped by PID. **Nothing touched
+production.**
+
+**Ship order (Josh):**
+1. Run the Step 1 EST-107 query.
+2. Apply **both** migrations to production in one `supabase db push`:
+   `20261680000000_site_visit_finish` and `20261690000000_site_visit_freeze_at_send`. Neither
+   governs an existing row; the counts are above. Verify: 2 `finished%` columns on `site_visits`,
+   and `select count(*) from pg_trigger where tgname like '%z_freeze_after_send'` → **4**.
+3. **Then** merge. Migrations must come first: the finish route calls an RPC that only the first
+   migration creates.
+4. Field-test on a real phone (Josh, after merge).

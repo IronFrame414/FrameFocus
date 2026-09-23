@@ -29,7 +29,11 @@ export default async function SiteVisitsPage() {
   }
 
   const visits = await listSiteVisits();
-  const open = visits.filter((v) => !v.promoted_at);
+  // Three states, never two: RECORDING (still capturing), FINISHED (the
+  // recorder's "done" — no number, not an estimate), and BECAME ESTIMATES
+  // (the office promoted it). [S108 follow-up — finish is not promotion.]
+  const open = visits.filter((v) => !v.promoted_at && !v.finished_at);
+  const finished = visits.filter((v) => !v.promoted_at && v.finished_at);
   const done = visits.filter((v) => v.promoted_at);
 
   const row = (v: (typeof visits)[number]) => {
@@ -40,7 +44,10 @@ export default async function SiteVisitsPage() {
         key={v.id}
         href={`/m/site-visits/${v.estimate_id}`}
         testId="m-site-visit-row"
-        dataAttrs={{ 'data-promoted': v.promoted_at ? 'true' : 'false' }}
+        dataAttrs={{
+          'data-promoted': v.promoted_at ? 'true' : 'false',
+          'data-finished': v.finished_at ? 'true' : 'false',
+        }}
       >
         <span className="block truncate text-[15px] font-semibold text-m6m-navy">{v.title}</span>
         <span className="block truncate font-mono text-[11px] text-m6m-muted">
@@ -63,6 +70,13 @@ export default async function SiteVisitsPage() {
 
       <SectionLabel>Recording · {open.length}</SectionLabel>
       {open.length === 0 ? <EmptyState>No open site visits.</EmptyState> : <ul>{open.map(row)}</ul>}
+
+      {finished.length > 0 ? (
+        <>
+          <SectionLabel>Finished · waiting for the office · {finished.length}</SectionLabel>
+          <ul>{finished.map(row)}</ul>
+        </>
+      ) : null}
 
       {done.length > 0 ? (
         <>

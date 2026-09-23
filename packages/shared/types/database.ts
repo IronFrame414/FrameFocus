@@ -8818,6 +8818,8 @@ export type Database = {
           created_by: string | null
           deleted_at: string | null
           estimate_id: string
+          finished_at: string | null
+          finished_by: string | null
           id: string
           is_deleted: boolean | null
           promoted_at: string | null
@@ -8835,6 +8837,8 @@ export type Database = {
           created_by?: string | null
           deleted_at?: string | null
           estimate_id: string
+          finished_at?: string | null
+          finished_by?: string | null
           id?: string
           is_deleted?: boolean | null
           promoted_at?: string | null
@@ -8852,6 +8856,8 @@ export type Database = {
           created_by?: string | null
           deleted_at?: string | null
           estimate_id?: string
+          finished_at?: string | null
+          finished_by?: string | null
           id?: string
           is_deleted?: boolean | null
           promoted_at?: string | null
@@ -10250,6 +10256,7 @@ export type Database = {
         Returns: undefined
       }
       email_has_account: { Args: { p_email: string }; Returns: boolean }
+      finish_site_visit: { Args: { p_estimate_id: string }; Returns: string }
       flag_po_item_missing: {
         Args: { p_item_id: string; p_note: string }
         Returns: undefined

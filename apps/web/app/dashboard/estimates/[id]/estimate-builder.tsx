@@ -32,6 +32,8 @@ import { ItemsTab } from './items-tab';
 import { BiddingTab } from './bidding-tab';
 import { CoverTab, NotesTab, ScopeTab, TermsTab } from './text-tabs';
 import EstimateFilesTab from './estimate-files-tab';
+import { SiteVisitRecord } from '@/components/site-visits/site-visit-record';
+import type { SiteVisitDetail } from '@/lib/services/site-visits';
 import { ReviewSendSheet } from './review-send-sheet';
 import { useConfirm } from '@/components/confirm/confirm-provider';
 import { color } from '@/lib/theme';
@@ -61,6 +63,7 @@ type TabKey =
   | 'scope'
   | 'bidding'
   | 'files'
+  | 'site_visit'
   | 'cover'
   | 'notes';
 
@@ -69,6 +72,10 @@ type TabKey =
 const TABS: Array<{ key: TabKey; label: string; disabled?: boolean }> = [
   { key: 'details', label: 'Details' },
   { key: 'items', label: 'Line Items' },
+  // [S108 follow-up] Only on an estimate that began as a site visit — filtered
+  // out below when there is none. Beside Line Items because the estimator
+  // prices FROM it, flipping between the two.
+  { key: 'site_visit', label: 'Site Visit' },
   { key: 'terms', label: 'Terms' },
   { key: 'scope', label: 'Scope of Work' },
   { key: 'bidding', label: 'Sub Bids' },
@@ -83,6 +90,12 @@ interface EstimateBuilderProps {
   userId: string;
   companyTimeZone: string;
   estimatorName: string | null;
+  /** [S108 follow-up] The visit this estimate was promoted from, read
+   *  server-side from the money-free site_visit_* tables; null when the
+   *  estimate never was a site visit. */
+  siteVisit: SiteVisitDetail | null;
+  /** site_visit_access() said this viewer may write to the visit record. */
+  siteVisitCanWrite: boolean;
 }
 
 export function EstimateBuilder({
@@ -91,12 +104,15 @@ export function EstimateBuilder({
   userId,
   companyTimeZone,
   estimatorName,
+  siteVisit,
+  siteVisitCanWrite,
 }: EstimateBuilderProps) {
   const router = useRouter();
   const confirm = useConfirm();
   const [data, setData] = useState<EstimateWithChildren | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabKey>('details');
+  const siteVisitOpenBlockers = (siteVisit?.notes ?? []).filter((n) => n.kind === 'blocker' && !n.resolved).length;
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionBusy, setActionBusy] = useState(false);
   const [cloneOpen, setCloneOpen] = useState(false);
@@ -608,7 +624,7 @@ export function EstimateBuilder({
             flexWrap: 'wrap',
           }}
         >
-          {TABS.map((tab) => {
+          {TABS.filter((tab) => tab.key !== 'site_visit' || siteVisit).map((tab) => {
             const isActive = activeTab === tab.key;
             return (
               <button
@@ -636,6 +652,15 @@ export function EstimateBuilder({
                 }}
               >
                 {tab.label}
+                {tab.key === 'site_visit' && siteVisitOpenBlockers > 0 ? (
+                  <span
+                    data-testid="est-tab-site_visit-blockers"
+                    title="Blockers still open on the site visit"
+                    style={{ fontSize: '0.6875rem', marginLeft: '0.375rem', padding: '0 6px', borderRadius: '999px', background: '#fdecea', color: '#c0362c', fontWeight: 700 }}
+                  >
+                    {siteVisitOpenBlockers}
+                  </span>
+                ) : null}
                 {tab.disabled && (
                   <span style={{ fontSize: '0.625rem', marginLeft: '0.375rem', color: color.faintAlt }}>
                     Soon
@@ -660,6 +685,16 @@ export function EstimateBuilder({
         {activeTab === 'scope' && <ScopeTab {...tabProps} />}
         {activeTab === 'bidding' && <BiddingTab {...tabProps} />}
         {activeTab === 'files' && <EstimateFilesTab estimateId={estimate.id} canEdit={canEdit} />}
+        {activeTab === 'site_visit' && siteVisit && (
+          <div data-testid="est-site-visit-tab" style={{ maxWidth: '760px' }}>
+            <p style={{ color: color.mutedAlt, fontSize: '0.8125rem', margin: '0 0 1rem' }}>
+              Captured on site {new Date(siteVisit.visit.visited_at).toLocaleDateString()}
+              {siteVisit.visit.finished_at ? ` · finished ${new Date(siteVisit.visit.finished_at).toLocaleString()}` : ''}
+              {siteVisit.visit.promoted_at ? ` · became this estimate ${new Date(siteVisit.visit.promoted_at).toLocaleDateString()}` : ''}
+            </p>
+            <SiteVisitRecord detail={siteVisit} canWrite={siteVisitCanWrite} viewerUserId={userId} office />
+          </div>
+        )}
         {activeTab === 'cover' && <CoverTab {...tabProps} />}
         {activeTab === 'notes' && <NotesTab {...tabProps} />}
       </div>

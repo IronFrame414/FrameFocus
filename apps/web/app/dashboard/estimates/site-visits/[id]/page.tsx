@@ -55,6 +55,7 @@ export default async function DesktopSiteVisitPage({ params }: { params: { id: s
         estimateId={params.id}
         promoted={detail.visit.promoted_at != null}
         abandoned={!!detail.visit.is_deleted}
+        finishedAt={detail.visit.finished_at}
       />
       <SiteVisitRecord detail={detail} canWrite={access !== null} viewerUserId={user.id} office />
     </div>

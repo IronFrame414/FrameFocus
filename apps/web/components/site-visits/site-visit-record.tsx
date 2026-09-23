@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import {
   deleteSiteVisitMeasurement,
   deleteSiteVisitNote,
+  finishSiteVisit,
   saveSiteVisitMeasurement,
   saveSiteVisitNote,
   uploadSiteVisitPhoto,
@@ -15,12 +16,20 @@ import {
 import { useOfflineSync } from '@/app/m/offline-sync';
 import { ErrorNotice, useOnline } from '@/app/m/write-ui';
 import { VoiceNotes } from './voice-notes';
+import { visitEraPhotos } from '@/lib/site-visits/photos';
 
 // S108 Spec A — THE SITE VISIT RECORD. ONE component, rendered by BOTH the
 // phone (/m/site-visits/[id]) and the desktop page (/dashboard/estimates/
 // site-visits/[id]). PARITY [S122]: the two surfaces share this mechanism, not
 // just the intent — the same reads, the same RPC writes, the same refusals.
 // Desktop adds the office actions (promote, abandon) AROUND it, not inside it.
+//
+// [S108 follow-up] FINISH lives INSIDE the record (both surfaces, same RPC);
+// PROMOTE stays OUTSIDE it, on the office's desktop page only. They are two
+// different decisions and must never look like one: the field defect was a
+// visit that became a numbered draft because promote was the only "done"
+// control anywhere. Finish changes nothing on the estimate — see
+// finish_site_visit() in 20261680000000.
 //
 // Writes go to the database only through the site-visit RPCs and the two file
 // routes; the database decides who may write (site_visit_access()). `canWrite`
@@ -219,6 +228,7 @@ interface PhotoFile {
   id: string;
   file_name: string;
   mime_type: string;
+  created_at: string | null;
   url: string | null;
 }
 
@@ -242,6 +252,8 @@ export function SiteVisitRecord({
   const [busy, setBusy] = useState(false);
   const estimateId = detail.visit.estimate_id;
   const promoted = detail.visit.promoted_at != null;
+  const finishedAt = detail.visit.finished_at;
+  const [confirmingFinish, setConfirmingFinish] = useState(false);
 
   const refresh = useCallback(() => router.refresh(), [router]);
 
@@ -262,9 +274,11 @@ export function SiteVisitRecord({
     const res = await fetch(`/api/estimates/${estimateId}/files`);
     if (!res.ok) return;
     const body = (await res.json()) as { files: Array<PhotoFile & { id: string }> };
-    setPhotos(body.files.filter((f) => f.mime_type.startsWith('image/')));
+    // [ruling 4, 2026-09-23] VISIT-ERA photos only — cutoff = promotion, see
+    // lib/site-visits/photos.ts. Later photos live in the estimate's Files tab.
+    setPhotos(visitEraPhotos(body.files, detail.visit.promoted_at));
     setAudioUrls(Object.fromEntries(body.files.filter((f) => f.mime_type.startsWith('audio/')).map((f) => [f.id, f.url])));
-  }, [estimateId]);
+  }, [estimateId, detail.visit.promoted_at]);
   useEffect(() => {
     void loadFiles();
   }, [loadFiles]);
@@ -327,7 +341,21 @@ export function SiteVisitRecord({
           className="mb-[12px] rounded-[10px] border border-m6m-border bg-[#f5f7ff] px-[12px] py-[10px] text-[14px] text-m6m-navy"
         >
           This visit is now an estimate.{' '}
-          {canWrite ? 'The office can still update it here.' : 'You can still read everything you captured.'}
+          {canWrite
+            ? 'The office can still update it here until the estimate is sent.'
+            : office
+              ? 'The estimate has been sent, so this record is FROZEN — it is the evidence of what was found on site at the price quoted. Open blockers stay open.'
+              : 'You can still read everything you captured.'}
+        </p>
+      ) : null}
+      {!promoted && finishedAt ? (
+        <p
+          data-testid="sv-finished-banner"
+          className="mb-[12px] rounded-[10px] border border-[#b7e4c7] bg-[#ecfdf5] px-[12px] py-[10px] text-[14px] text-m6m-navy"
+        >
+          <strong>Finished</strong> {new Date(finishedAt).toLocaleString()} — ready for the office to price.
+          It becomes an estimate, and gets its number, only when the office creates one.
+          {canWrite ? ' Mistakes can still be fixed here until then.' : ''}
         </p>
       ) : null}
       {!online && canWrite ? (
@@ -345,7 +373,7 @@ export function SiteVisitRecord({
       {/* PHOTOS */}
       <section data-testid="sv-section-photos" className="mt-[18px]">
         <h2 className="mb-[8px] font-mono text-[11px] font-medium uppercase tracking-wide text-m6m-muted">
-          Photos {photos.length > 0 ? `· ${photos.length}` : ''}
+          {promoted ? 'Photos taken during the visit' : 'Photos'} {photos.length > 0 ? `· ${photos.length}` : ''}
           {heldForThisVisit > 0 ? ` · ${heldForThisVisit} waiting for signal` : ''}
         </h2>
         {photos.length > 0 ? (
@@ -362,7 +390,12 @@ export function SiteVisitRecord({
         ) : (
           <p className="text-[14px] text-m6m-muted">No photos yet.</p>
         )}
-        {canWrite ? (
+        {promoted && office ? (
+          <p className="mt-[6px] text-[13px] text-m6m-muted">Photos added after it became an estimate are in Files.</p>
+        ) : null}
+        {/* After promotion new photos belong to the estimate (Files), not the
+            visit — so the record stops offering to add them. */}
+        {canWrite && !promoted ? (
           <label className="mt-[10px] flex h-[52px] cursor-pointer items-center justify-center rounded-[14px] bg-m6m-blue text-[16px] font-bold text-white">
             Add photos
             <input
@@ -478,6 +511,53 @@ export function SiteVisitRecord({
           refresh();
         }}
       />
+
+      {/* FINISH — the recorder's "done". Not promotion: no number, no estimate. */}
+      {canWrite && !promoted && !detail.visit.is_deleted && !finishedAt ? (
+        <section data-testid="sv-finish" className="mt-[24px] border-t border-m6m-border pt-[18px]">
+          {confirmingFinish ? (
+            <div className="flex flex-col gap-[8px]">
+              <p className="text-[14px] text-m6m-navy">
+                Finish this visit? The office sees it is ready to price. It does <strong>not</strong> become an
+                estimate yet — the office does that. You can still fix mistakes until then.
+                {blockersOpen > 0 ? ` ${blockersOpen} blocker${blockersOpen === 1 ? ' is' : 's are'} still open.` : ''}
+                {heldForThisVisit > 0
+                  ? ` ${heldForThisVisit} photo or voice note${heldForThisVisit === 1 ? ' is' : 's are'} still on this phone and will upload when signal returns.`
+                  : ''}
+              </p>
+              <button
+                type="button"
+                data-testid="sv-finish-confirm"
+                disabled={busy || !online}
+                onClick={async () => {
+                  if (await run(() => finishSiteVisit(estimateId))) setConfirmingFinish(false);
+                }}
+                className="h-[52px] rounded-[14px] bg-m6m-navy text-[16px] font-bold text-white disabled:opacity-40"
+              >
+                Yes, finish the visit
+              </button>
+              <button
+                type="button"
+                onClick={() => setConfirmingFinish(false)}
+                className="h-[48px] rounded-[12px] border border-m6m-border text-[15px]"
+              >
+                Keep recording
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              data-testid="sv-finish-start"
+              disabled={busy || !online}
+              onClick={() => setConfirmingFinish(true)}
+              className="h-[52px] w-full rounded-[14px] bg-m6m-navy text-[16px] font-bold text-white disabled:opacity-40"
+            >
+              Finish site visit
+            </button>
+          )}
+          {!online ? <p className="mt-[6px] text-[13px] text-m6m-muted">Finishing needs a connection.</p> : null}
+        </section>
+      ) : null}
 
     </div>
   );
