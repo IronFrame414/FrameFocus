@@ -2,6 +2,12 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
 import { resolveEstimateFileAccess } from '@/lib/site-visits/access';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import type { Database } from '@framefocus/shared/types/database';
+import type {
+  EstimateFileListResponse,
+  EstimateFileUploadResponse,
+} from '@/lib/api-contracts/estimate-files';
 
 // S106 Part C [RULED Josh, Option A] — the estimate Files route.
 //
@@ -52,7 +58,8 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
   const access = await resolveEstimateFileAccess(supabase, user.id, estimateId);
   if (!access.ok) return NextResponse.json({ error: access.error }, { status: access.status });
 
-  const admin = getSupabaseAdmin();
+  // [S110 F] Typed, so `satisfies` below checks the real selected columns.
+  const admin = getSupabaseAdmin() as SupabaseClient<Database>;
   let q = admin
     .from('files')
     .select('id, file_name, file_size, mime_type, category, created_at')
@@ -78,7 +85,9 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
   // mount/upload, so a click after five minutes hit a dead link. The client now
   // signs one file on click via `./[fileId]/url`, behind this same floor.
   // `file_path` is not returned either: nothing in the tab needs it.
-  return NextResponse.json({ files: files ?? [] });
+  // [S110 F] The response is a CONTRACT with named consumers — see
+  // lib/api-contracts/registry.ts before changing its shape.
+  return NextResponse.json({ files: files ?? [] } satisfies EstimateFileListResponse);
 }
 
 // POST — upload a file to an estimate. EDIT rights: owner/admin any DRAFT, PM own DRAFT
@@ -124,7 +133,8 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   const rawId = form.get('id');
   const clientId = typeof rawId === 'string' && /^[0-9a-f-]{36}$/i.test(rawId) ? rawId : null;
 
-  const admin = getSupabaseAdmin();
+  // [S110 F] Typed, so `satisfies` below checks the real selected columns.
+  const admin = getSupabaseAdmin() as SupabaseClient<Database>;
   if (clientId) {
     const { data: already } = await admin
       .from('files')
@@ -132,7 +142,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       .eq('id', clientId)
       .eq('estimate_id', estimateId)
       .maybeSingle();
-    if (already) return NextResponse.json({ file: already });
+    if (already) return NextResponse.json({ file: already } satisfies EstimateFileUploadResponse);
   }
 
   const uniqueId = clientId ?? crypto.randomUUID();
@@ -177,5 +187,5 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     });
     return NextResponse.json({ error: 'Could not store the file.' }, { status: 500 });
   }
-  return NextResponse.json({ file: row });
+  return NextResponse.json({ file: row } satisfies EstimateFileUploadResponse);
 }

@@ -1,4 +1,5 @@
 import { visitEraPhotos } from '@/lib/site-visits/photos';
+import type { EstimateFileListItem, EstimateFileUrlResponse } from '@/lib/api-contracts/estimate-files';
 
 /**
  * S109 photo regression — the site-visit record signs its OWN media.
@@ -23,12 +24,9 @@ import { visitEraPhotos } from '@/lib/site-visits/photos';
  * PDFs and the like are not.
  */
 
-export interface ListedFile {
-  id: string;
-  file_name: string;
-  mime_type: string;
-  created_at: string | null;
-}
+// [S110 F] Derived from the route's CONTRACT, not hand-written: this interface
+// was a hand-written copy that still said nothing about `url` being gone.
+export type ListedFile = Pick<EstimateFileListItem, 'id' | 'file_name' | 'mime_type' | 'created_at'>;
 
 export interface ResolvedMediaFile extends ListedFile {
   url: string | null;
@@ -40,7 +38,7 @@ async function resolveOne(estimateId: string, fileId: string, fetchImpl: FetchLi
   try {
     const res = await fetchImpl(`/api/estimates/${estimateId}/files/${fileId}/url`);
     if (!res.ok) return null;
-    const body = (await res.json()) as { url?: unknown };
+    const body = (await res.json()) as Partial<EstimateFileUrlResponse>;
     return typeof body.url === 'string' ? body.url : null;
   } catch {
     return null;

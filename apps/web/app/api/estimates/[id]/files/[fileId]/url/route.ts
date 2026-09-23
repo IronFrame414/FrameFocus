@@ -3,6 +3,9 @@ import { createClient } from '@/lib/supabase-server';
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
 import { resolveEstimateFileAccess } from '@/lib/site-visits/access';
 import { SIGNED_URL_TTL_SECONDS } from '@/lib/services/signed-url-ttl';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import type { Database } from '@framefocus/shared/types/database';
+import type { EstimateFileUrlResponse } from '@/lib/api-contracts/estimate-files';
 
 // S109 #161 [RULED Josh, 161.B] — SIGN ON CLICK, NOT AT LIST TIME.
 //
@@ -39,7 +42,8 @@ export async function GET(
   const access = await resolveEstimateFileAccess(supabase, user.id, estimateId);
   if (!access.ok) return NextResponse.json({ error: access.error }, { status: access.status });
 
-  const admin = getSupabaseAdmin();
+  // [S110 F] Typed, so `satisfies` below checks the real selected columns.
+  const admin = getSupabaseAdmin() as SupabaseClient<Database>;
   let q = admin
     .from('files')
     .select('file_path, file_name, mime_type')
@@ -77,9 +81,10 @@ export async function GET(
     return NextResponse.json({ error: 'Could not open file' }, { status: 500 });
   }
 
+  // [S110 F] A CONTRACT with named consumers — lib/api-contracts/registry.ts.
   return NextResponse.json({
     url: signed.signedUrl,
     file_name: file.file_name,
     mime_type: file.mime_type,
-  });
+  } satisfies EstimateFileUrlResponse);
 }
