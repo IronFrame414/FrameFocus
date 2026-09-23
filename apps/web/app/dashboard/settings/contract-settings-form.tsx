@@ -11,7 +11,8 @@ import {
   uploadContractTemplatePdf,
   type ContractBoxInput,
 } from '@/lib/services/contracts-client';
-import { getFileSignedUrlClient } from '@/lib/services/files-client';
+import { getFileViewClient } from '@/lib/services/files-client';
+import { useFileSheet } from '@/components/files/file-sheet';
 import {
   catalogForKind,
   minWidthForContractKey,
@@ -293,6 +294,7 @@ function TemplateSet({
   onError: (message: string | null) => void;
   onDone: () => void;
 }) {
+  const openFile = useFileSheet(); // S110 E3 — 'View form' opens in the sheet
   const [placing, setPlacing] = useState<ContractTemplateRow | null>(null);
   const confirm = useConfirm();
 
@@ -415,11 +417,15 @@ function TemplateSet({
               <button
                 type="button"
                 style={{ ...secondaryButtonStyle, padding: '4px 10px', fontSize: '12px' }}
-                onClick={async () => {
-                  const url = await getFileSignedUrlClient(t.pdf_file_id as string);
-                  if (url) window.open(url, '_blank', 'noopener');
-                  else onError('Could not open that form.');
-                }}
+                onClick={() =>
+                  // S110 E3 [RULED Q10 → A] — the form opens in the SHEET.
+                  // _Superseded, quoted:_ `window.open(url, '_blank', 'noopener')`.
+                  openFile({
+                    fileName: t.name ?? 'Form',
+                    mimeType: 'application/pdf',
+                    resolveUrl: () => getFileViewClient(t.pdf_file_id as string),
+                  })
+                }
               >
                 View form
               </button>
