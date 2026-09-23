@@ -167,20 +167,23 @@ export function BiddingTab({ data, canEdit, reload, companyTimeZone }: TabProps)
   // email_logs row; this only reports the outcome where the estimator is looking.
   // ⚠️ A failure is SHOWN, never swallowed: a bid request that silently did not
   // send is a sub who never bids and an estimator who thinks they did.
-  async function handleSendRequest(requestId: string) {
+  // S109 #159 — also called by the creation dialog's Send, so both entry points
+  // share ONE send path (CLAUDE.md → PARITY). Returns whether it sent.
+  async function handleSendRequest(requestId: string): Promise<boolean> {
     setError(null);
     setSendingId(requestId);
     const result = await sendSubBidRequest(data.estimate.id, requestId);
     setSendingId(null);
     if (!result.success) {
       setError(result.error || 'Could not send the bid request');
-      return;
+      return false;
     }
     setRequests(await listSubBidRequests(data.estimate.id));
     await alert({
       title: 'Bid request sent',
       message: `Sent to ${result.to ?? 'the subcontractor'}.\nThe link stays valid until the request expires — resending reuses the same link.`,
     });
+    return true;
   }
 
   async function handleDeleteBid(subBidId: string) {
@@ -513,7 +516,13 @@ export function BiddingTab({ data, canEdit, reload, companyTimeZone }: TabProps)
                           backgroundColor: r.status === 'submitted' ? '#e6f0e9' : '#f2f4ff',
                         }}
                       >
-                        {subName(r.subcontractor_id)} · {r.status}
+                        {/* S109 #159 (ASK-159.B) — `status` still defaults to
+                            'sent' at INSERT, by ruling; `sent_at` is what records
+                            a real send. So a request still at 'sent' with no
+                            sent_at has never been emailed, and says so. A later
+                            status (viewed, submitted…) is shown as-is. */}
+                        {subName(r.subcontractor_id)} ·{' '}
+                        {r.status === 'sent' && !r.sent_at ? 'not yet emailed' : r.status}
                         {/* S107 — the SEND action. Before this the request row and
                             its token existed and nothing was ever mailed, so the
                             sub only ever got the link if someone copied it by
@@ -562,6 +571,7 @@ export function BiddingTab({ data, canEdit, reload, companyTimeZone }: TabProps)
                     estimateId={data.estimate.id}
                     subs={subs}
                     winRecordFor={winRecordFor}
+                    onSendRequest={handleSendRequest}
                     onDone={async (err) => {
                       setRequestingFor(null);
                       if (err) setError(err);
@@ -706,12 +716,15 @@ function RequestByLinkForm({
   estimateId,
   subs,
   winRecordFor,
+  onSendRequest,
   onDone,
 }: {
   lineItemId: string;
   estimateId: string;
   subs: SubcontractorOption[];
   winRecordFor: (subId: string | null) => { won: number; total: number };
+  /** S109 #159 — BiddingTab's handleSendRequest: the same send route as the chip. */
+  onSendRequest: (requestId: string) => Promise<boolean>;
   onDone: (error?: string) => void;
 }) {
   const [trade, setTrade] = useState('');
@@ -726,6 +739,9 @@ function RequestByLinkForm({
   const [busy, setBusy] = useState(false);
   const [link, setLink] = useState<string | null>(null);
   const [emailed, setEmailed] = useState(false);
+  const [createdId, setCreatedId] = useState<string | null>(null);
+  const [sending, setSending] = useState(false);
+  const [sent, setSent] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const rec = winRecordFor(subId);
 
@@ -760,10 +776,11 @@ function RequestByLinkForm({
       siteVisitDate: siteVisit || null,
     });
     setBusy(false);
-    if (!result.success || !result.token) {
+    if (!result.success || !result.token || !result.id) {
       setErr(result.error ?? 'Could not create the request.');
       return;
     }
+    setCreatedId(result.id);
     if (replyMode === 'email') setEmailed(true);
     else setLink(bidReplyUrl(result.token));
   }
@@ -775,6 +792,52 @@ function RequestByLinkForm({
     fontSize: '0.8125rem',
   };
 
+  // S109 #159 (ASK-159.C) — the creation dialog offers SEND, in BOTH reply modes.
+  // Before this the dialog showed only a link and the first real send was a chip
+  // labelled "Resend". The route refuses a sub with no email (422); the button is
+  // disabled up front with the same reason, so the estimator is not sent to find
+  // out by failing.
+  const chosenSub = subs.find((s) => s.id === subId) ?? null;
+  const noEmailReason = chosenSub && !chosenSub.email
+    ? `${chosenSub.company_name} has no email address on file. Add one on the Subcontractors page, then send.`
+    : null;
+
+  async function sendCreated() {
+    if (!createdId || noEmailReason) return;
+    setSending(true);
+    const ok = await onSendRequest(createdId);
+    setSending(false);
+    if (ok) setSent(true);
+  }
+
+  const sendControl = (
+    <div style={{ marginTop: '0.5rem' }}>
+      <button
+        type="button"
+        data-testid="bid-request-dialog-send"
+        onClick={() => void sendCreated()}
+        disabled={sending || sent || !!noEmailReason}
+        style={{
+          padding: '0.375rem 0.875rem',
+          fontSize: '0.8125rem',
+          backgroundColor: sending || sent || noEmailReason ? '#9aa3c7' : '#3b4ae0',
+          color: '#fff',
+          border: 'none',
+          borderRadius: '0.25rem',
+          cursor: sending ? 'wait' : sent || noEmailReason ? 'not-allowed' : 'pointer',
+          marginRight: '0.5rem',
+        }}
+      >
+        {sending ? 'Sending…' : sent ? 'Sent' : 'Send to sub'}
+      </button>
+      {noEmailReason && (
+        <p data-testid="bid-request-dialog-no-email" style={{ fontSize: '0.75rem', color: '#8a5a00', margin: '0.375rem 0 0' }}>
+          {noEmailReason}
+        </p>
+      )}
+    </div>
+  );
+
   if (emailed) {
     return (
       <div style={{ border: '1px solid #dbe0fb', backgroundColor: '#f2f4ff', borderRadius: '0.375rem', padding: '0.75rem' }}>
@@ -782,7 +845,8 @@ function RequestByLinkForm({
           Request recorded. This sub replies by email — when their bid arrives, enter it with
           “Add bid” on this line.
         </p>
-        <button type="button" onClick={() => onDone()} style={{ padding: '0.375rem 0.875rem', fontSize: '0.8125rem', backgroundColor: '#3b4ae0', color: '#fff', border: 'none', borderRadius: '0.25rem', cursor: 'pointer' }}>
+        {sendControl}
+        <button type="button" onClick={() => onDone()} style={{ marginTop: '0.5rem', padding: '0.375rem 0.875rem', fontSize: '0.8125rem', backgroundColor: '#3b4ae0', color: '#fff', border: 'none', borderRadius: '0.25rem', cursor: 'pointer' }}>
           Done
         </button>
       </div>
@@ -793,9 +857,11 @@ function RequestByLinkForm({
     return (
       <div style={{ border: '1px solid #dbe0fb', backgroundColor: '#f2f4ff', borderRadius: '0.375rem', padding: '0.75rem' }}>
         <p style={{ fontSize: '0.8125rem', color: '#1f2a44', margin: '0 0 0.5rem' }}>
-          Request created. Send this link to the sub — their reply lands here automatically:
+          Request created. Send it to the sub by email, or copy this link to them yourself —
+          their reply lands here automatically:
         </p>
         <input readOnly value={link} onFocus={(e) => e.target.select()} style={{ ...inputStyle, width: '100%', fontFamily: 'var(--font-mono, monospace)' }} />
+        {sendControl}
         <button type="button" onClick={() => onDone()} style={{ marginTop: '0.5rem', padding: '0.375rem 0.875rem', fontSize: '0.8125rem', backgroundColor: '#3b4ae0', color: '#fff', border: 'none', borderRadius: '0.25rem', cursor: 'pointer' }}>
           Done
         </button>
