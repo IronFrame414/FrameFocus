@@ -45,3 +45,42 @@ Appended after every step; committed and pushed each time.
 - `tsc --noEmit` → `TSC_EXIT=0`. `next build` → `BUILD_EXIT=0`, "✓ Compiled successfully",
   129/129 static pages.
 - **Production:** Josh applies `20261700000000` before the merge.
+
+## Step 2 — #160 profile ↔ member deletion agree by construction
+
+- **Migration `20261710000000_profile_member_delete_sync.sql`**: `sync_member_deleted_from_profile()`
+  (plpgsql SECURITY DEFINER, as `sync_member_display_name()`) + trigger
+  `profiles_sync_member_deleted` **AFTER UPDATE OF is_deleted**. Both directions (delete and
+  restore; restore clears `deleted_at`); fires only on `IS DISTINCT FROM`; `profile_id` match
+  only; **`member_type = 'subcontractor'` excluded** (ruling 160.C). Then the ghost clean-up
+  (ruling 160.A, a soft delete — nothing destroyed), then a `DO` block that **raises and aborts the
+  migration if any ghost remains** — so on production "Jo B must be gone" is checked by the
+  migration itself.
+- **Back-fill proven on a real ghost.** Rebuild-test had 0 (and 0 deleted profiles — a probe that
+  could not fire), so one was planted first: a throwaway signup whose profile was soft-deleted
+  before the trigger existed → query A returned exactly 1 (`aaf87b06…`, crew). Pushed the migration
+  (link verified, dry-run listed it alone, `PUSH_EXIT=0`) → that member row `is_deleted = true`,
+  `deleted_at` copied from the profile; ghosts left **0**. Planted company, member, profile and
+  auth user then removed (verified 0/0/0); the temporary planting file was never committed.
+- **`test/s109-profile-member-sync.live.ts`** — every delete done **the wrong way** (a bare
+  service-role UPDATE of `profiles.is_deleted`, never `softDeleteTeamMember()`):
+  D delete follows · R restore follows, `deleted_at` cleared · S a profile save that does not
+  change `is_deleted` leaves a member-only deactivation alone · X a profile-linked sub row is untouched.
+  - **Before the migration:** `PRE_MIGRATION_EXIT=1` — D failed, _"GHOST: the member row stayed
+    live after the profile was deleted"_. (R and X passed trivially there — nothing propagated.)
+  - **After:** `POST_MIGRATION_EXIT=0`, 5/5.
+  - **Sabotage of rule 2** — function replaced on rebuild-test with one that copies on every
+    UPDATE, trigger widened to `AFTER UPDATE` → `SABOTAGE_S_EXIT=1`, S failed: _"a profile save
+    undid the deactivation"_. Restored from the migration file's exact text → `RESTORED_EXIT=0`,
+    5/5; live `prosrc` md5 `a31b3b1c…` (514 bytes) **equals** the file's body; `pg_get_triggerdef`
+    reads `AFTER UPDATE OF is_deleted`. `npm run db:verify` → `DBVERIFY_EXIT=0`, **LEDGER CLEAN**,
+    232/232, tip `20261710000000`.
+- **Sweep of older tests** touching profile deletion: `s177-self-name-edit` (a self-update to
+  `is_deleted` is refused — unaffected), `s138-trial-unlock` (soft-deletes a profile whose member
+  row it then hard-deletes — unaffected), the rest read `is_deleted = false` only. None encodes the
+  old behaviour.
+- `TECH_DEBT.md`: #159 and #160 carry an S109 status line (built, open until production + merge);
+  **`#1-s109` filed** — `/m/team` Inactive leaves a live login (ruling 160.B, a DEFECT).
+- No app code changed in this step, so no build was run for it.
+- **Production:** Josh applies `20261710000000` before the merge; its DO block aborts the migration
+  if the Jo B ghost is not cleaned.

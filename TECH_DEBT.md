@@ -129,6 +129,16 @@ top of this file is advanced to `#164` in the same commit, which is what keeps t
   `handleSendRequest`/send route, not a second mechanism — CLAUDE.md → PARITY), and keep the link
   for the copy-by-hand case, which is a deliberate supported path (`reply_mode = 'link'`).
 
+  **⚙️ S109 — BUILT on `feature/s109-debt-159-163`; open until Josh applies `20261700000000` to
+  production and merges.** `DROP DEFAULT` only — **no back-fill, by ruling** (production holds one
+  request, and it was really sent). `status DEFAULT 'sent'` left alone by ruling; the chip reads
+  "not yet emailed" when `sent_at IS NULL`. The dialog offers Send in both reply modes through the
+  same `handleSendRequest`, disabled with the reason when the sub has no email. ⚠️ **The
+  back-fill instrument in this entry was wrong as well as unverified:** `email_logs.status` is
+  advanced past `sent` by the Resend webhook (the one production row reads `delivered`), so
+  "a request with no matching `email_logs` row" must never be read as `status = 'sent'`. See
+  `docs/sessions/S109-report.md` Step 1.
+
 - **#160 — removing a team member leaves a ghost in `company_members`; the two tables do not
   agree.** `softDeleteTeamMember()` (`lib/services/team.ts:117-134`) marks
   `profiles.is_deleted = true` + `deleted_at` and bans the auth user — and **never touches
@@ -168,6 +178,16 @@ top of this file is advanced to `#164` in the same commit, which is what keeps t
   directory subs and vendors that were never linked to a profile (S113 counted 32 such roster
   rows). A trigger keyed on `profile_id` match touches none of them, which is the correct
   behaviour, and a fix written as a broad sweep instead would wipe the sub directory.
+
+  **⚙️ S109 — BUILT on `feature/s109-debt-159-163`; open until Josh applies `20261710000000` to
+  production and merges.** Trigger `profiles_sync_member_deleted` (AFTER UPDATE OF `is_deleted`),
+  both directions, fires only when `is_deleted` changes. ⚠️ **Constraint (b) above was incomplete:**
+  `handle_new_user()` links an invited sub user's profile to the sub DIRECTORY's member row, so
+  `member_type = 'subcontractor'` is excluded as well (ruling ASK-160.C; production has 7 such
+  rows). The migration also cleans existing ghosts and refuses to commit if any remain —
+  production has exactly one, **Jo B** (`jsbishop14+p3@gmail.com`, member
+  `3305f15b-4b28-48cf-8f88-6f84bbbe8661`), so **#160 was still producing ghosts at S109.** The
+  reverse direction is a separate defect: **`#1-s109`**. See `docs/sessions/S109-report.md` Step 2.
 
 - **#161 — a PDF opens in a new tab and the user loses their place. RULED [Josh]: it should open
   in a SHEET over the current screen by default**, with explicit actions for **open in new tab**,
@@ -476,6 +496,24 @@ top of this file is advanced to `#164` in the same commit, which is what keeps t
   SATISFIED for its two named screens** (group (a) above), though it is still open in this file.
   Whoever lands #163 should close or amend #13 in the same pass rather than leaving a stale
   narrower duplicate. Not renumbered or merged here, per the request and per the immutability rule.
+
+### Branch-scoped, awaiting real numbers — `feature/s109-debt-159-163` [S109]
+
+- **#1-s109 — DEFECT: a person deactivated on `/m/team` can still sign in. RULED [Josh, S109
+  ASK-160.B]: filed separately, as a defect, not an idea.** `/m/team/[memberId]/edit/team-edit-form.tsx`
+  writes `is_deleted: active === 'inactive'` straight to `company_members` via `updateMember()`
+  (`members-client.ts:92`). It never touches `profiles` and never bans the auth user — so the
+  person leaves the pickers but **keeps a live login**, the reverse of #160's ghost. Desktop's
+  Remove (`softDeleteTeamMember()`) bans; `/m`'s Inactive does not — two surfaces, two meanings
+  for the same act (CLAUDE.md → PARITY).
+  **Why #160's trigger does not cover it:** that trigger runs profile → member. Running it the
+  other way (member → profile + ban) from a trigger cannot ban, since the ban is an auth admin
+  call, not SQL. **Fix shape (not built):** route `/m`'s Inactive through the same server action
+  as desktop Remove, so one mechanism deactivates, soft-deletes the profile and bans; #160's
+  trigger then brings the member row along. Measured on production at S109: **0** reverse ghosts
+  (query B, `S109-SPEC-debt-159-163.md` FILL-160.3) — the defect is latent, not yet hit.
+  ⚠️ **Build constraint already honoured by #160:** the trigger fires only when `is_deleted`
+  changes, so `/m`'s profile save in the same submit does not undo the member-only toggle today.
 
 ### Branch-scoped, awaiting real numbers — `feature/s106` [S106]
 
