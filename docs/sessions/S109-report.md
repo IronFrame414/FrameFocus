@@ -292,3 +292,60 @@ and every DB change restored and hash-checked. Final unit suite 103 files / 1385
 `next build` green on the final tree.
 ⚠️ **Green means no regression, not a working feature.** Nothing was clicked by a person. The
 file sheet, the password form and the whole-row lists want Josh's hands on them before the merge.
+
+## Post-merge — PRODUCTION REGRESSION: site-visit photos blank, voice notes silent
+
+**Cause (CC's).** #161 (ruling 161.B) stopped `GET /api/estimates/[id]/files` signing URLs and
+selecting `file_path`. `components/site-visits/site-visit-record.tsx:274` was a SECOND consumer of
+that list: it read `url` off each row for the photo `<img src>` (`:382-384`) and for voice-note
+audio (`:280` → `voice-notes.tsx:188/242`). With no `url`, every photo fell to the grey fallback and
+every voice-note player vanished. #161's consumer sweep missed it because the grep was piped
+through `head` and the hit was past the cut — the CLAUDE.md "truncated output" trap — and
+`m-site-visit.spec.ts` asserted the photo COUNT, which stayed right.
+
+**Fix — branch `feature/s109-photo-regression`, from `main` `c73b696d`. Ruled [Josh]:** the list
+stays URL-free (S2 unchanged); the record resolves each file itself through the per-file route.
+- `lib/site-visits/media.ts` `resolveSiteVisitMedia()` — signs every visit-era photo and every
+  audio file through `GET /api/estimates/[id]/files/[fileId]/url` (the floored route from #161),
+  **in parallel**; a failed or throwing resolve yields `url: null` for that file only, which the
+  record already renders as its fallback.
+- `site-visit-record.tsx` calls it; `data-testid`s added: `sv-photo`, `sv-photo-missing`,
+  `sv-voice-audio`.
+- **Requests for a visit with N visit-era photos and A voice notes: 1 + N + A** (the list, then
+  one per photo and one per audio file, concurrently). Post-promotion photos and non-media files
+  are not signed. Before #161 it was 1 request (the list signed everything, for 300 s).
+- **One component, three mounts:** `app/m/site-visits/[id]/page.tsx:34`,
+  `app/dashboard/estimates/[id]/estimate-builder.tsx:695` (the Site Visit tab),
+  `app/dashboard/estimates/site-visits/[id]/page.tsx:60` — all import `SiteVisitRecord` from
+  `components/site-visits/site-visit-record.tsx`; asserted in the unit test.
+
+**Tests**
+- `test/s109-site-visit-media.test.ts` (committed suite, 9/9): src for every visit-era photo, an
+  audio url for the voice note; signs via the per-file route only; exactly the displayed files are
+  signed; max 3 in flight for 3 files (parallel); one failed resolve leaves the others intact; a
+  throwing fetch is contained; the record feeds both photos and audio from the helper and renders
+  `src={p.url}`; all three mounts use the one component.
+- `e2e/m-site-visit.spec.ts` S108 A strengthened — `expectMediaRendered()`: the `sv-photo` `<img>`
+  is visible and decoded (`naturalWidth > 0`), no `sv-photo-missing`, and `sv-voice-audio` carries a
+  signed `/storage/v1/object/sign/` src — asserted at all three mounts (/m after capture, the
+  desktop standalone page, the desktop Site Visit tab) and for the crew after the freeze. A voice
+  note + audio file is seeded as the crew's (a headless browser cannot record audio).
+- **Sabotage 1 — the regression itself put back** (record reads `url` off the list):
+  `SABOTAGE_UNIT_EXIT=1` and `SABOTAGE_E2E_EXIT=1` — the e2e failed at the /m check,
+  `m-site-visit.spec.ts:133`, _"the photo rendered as the grey fallback — no src"_. Restored,
+  `cmp` identical.
+- **Sabotage 2 — the helper returns no url:** `SABOTAGE_HELPER_EXIT=1`, 3 tests red. Restored,
+  `cmp` identical, 9/9.
+- Unit suite `UNIT_EXIT=0`, 104 files / 1394 tests; `tsc` 0; `next build` `BUILD_EXIT=0`, 129/129.
+
+⚠️ **The e2e could NOT be taken past the owner step, and the desktop half is therefore not proven
+in a browser.** On the fixed build the run passed the /m media check (`:133`) and then failed at
+`:164`, `signInAs(page, OWNER)` — rebuild-test answers **`400 Invalid login credentials`** for
+`josh+test50@worthprop.com` with the documented test password (crew signs in fine; measured with
+a direct password grant). The same failure breaks the file's second test at `:227`, which this fix
+does not touch. `auth.users` shows the owner's `last_sign_in_at` 16:55:16.917 and `updated_at`
+16:55:16.920 — a sign-in followed 3 ms later by an update, the footprint of a password change
+through the new Account form's re-verify-then-update. **Not reset by CC:** it is a shared persistent
+identity and the change may have been deliberate. `node scripts/seed-test-identities.mjs` is the
+sanctioned repair (it re-sets the shared password); once run, re-run
+`npx playwright test e2e/m-site-visit.spec.ts` to prove the two desktop mounts.
