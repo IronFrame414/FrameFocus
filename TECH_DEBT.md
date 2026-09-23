@@ -342,6 +342,21 @@ top of this file is advanced to `#164` in the same commit, which is what keeps t
   (b) **The 8-character minimum is enforced in the page only** (`:19`), client-side, with no
   server or DB floor behind it. Any new entry point inherits that.
 
+  **⚙️ S109 — BUILT on `feature/s109-debt-159-163`; open until merge.** `PasswordForm`
+  (`components/account/password-form.tsx`) on both account pages → server action
+  `changeMyPassword` (`lib/auth/change-my-password.ts`), which **requires the current password**
+  (ruling ASK-162.A) through `verifyCurrentPassword` (`lib/auth/verify-current-password.ts`) —
+  the check extracted from transfer-ownership, which now calls it too. (a) is settled for the new
+  control; (b) is settled for it too — the length floor is `PASSWORD_MIN_LENGTH`, enforced on the
+  server. The re-verify's throwaway session is now revoked with `scope: 'local'` (supabase-js
+  defaults to `'global'`). `/reset-password` lands a subcontractor on `/m/projects` and a client
+  on `/portal`. Clients are out of scope (ruling 162.B — Module 9).
+  ⚠️ **NOT closed by S109, and a question for Josh:** `/reset-password` itself still changes the
+  password of **any live session with no current password** — it has to, because the recovery
+  link's user does not know their password, and the page cannot tell a recovery session from an
+  ordinary one without a design decision. So the unlocked-phone case the ruling addressed is closed
+  on the Account page and **still open at that URL**. See `S109-report.md` Step 3.
+
 - **#163 — only the text in a row is clickable, not the row. RULED [Josh]: the whole row is the
   click target wherever rows of items are listed** — files, contacts, and every other list — with
   the row opening the item.

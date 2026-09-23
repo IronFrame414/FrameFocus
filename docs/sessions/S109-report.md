@@ -84,3 +84,46 @@ Appended after every step; committed and pushed each time.
 - No app code changed in this step, so no build was run for it.
 - **Production:** Josh applies `20261710000000` before the merge; its DO block aborts the migration
   if the Jo B ghost is not cleaned.
+
+## Step 3 — #162 change your own password, no email
+
+- **One check, shared.** `lib/auth/verify-current-password.ts` — the plain-client
+  `signInWithPassword` re-verify, extracted from `transferOwnership`, which now calls it (ruling
+  162.A: "reuse the transfer-ownership check"). ⚠️ **Found while extracting:** the throwaway
+  session was never revoked, and supabase-js's `signOut()` **defaults to `scope: 'global'`** (read
+  in `auth-js` 2.100.1, `GoTrueClient.js:3138`) — revoking it the obvious way would have signed
+  the user out on every device. It uses `scope: 'local'`, and a test fails if that changes.
+- **Server action** `lib/auth/change-my-password.ts` `changeMyPassword`: session required; length
+  (`PASSWORD_MIN_LENGTH`, now in `lib/auth/password-policy.ts` and shared with `/reset-password`),
+  confirmation and "different from current" all enforced **on the server**; then the re-verify;
+  then `updateUser`. Errors log the real cause server-side.
+- **One form, both surfaces:** `components/account/password-form.tsx` on `/dashboard/account` and
+  `/m/account` (parity S122, beside `NameForm`). Every staff role and subcontractors reach it;
+  clients are out of scope (ruling 162.B). `/m` header "Your name" → "Your account"; the Settings
+  link reads "Your name and password →" (same `data-testid`; no e2e asserted the old text).
+- **`/reset-password` redirect fixed:** lands on `dashboardDeniedRedirect(role) ?? '/dashboard'` —
+  the helper middleware uses — instead of `/dashboard` for everyone.
+- **Tests:**
+  - `test/s109-change-password.live.ts` (rebuild-test, throwaway signup, the real server action) —
+    `LIVE162_EXIT=0`, **6/6**: wrong current refused and password unchanged; too short and
+    mismatch refused **by the server**; the caller's session survives (`refreshSession()` OK);
+    new password signs in, old does not.
+    - Sabotage 1 — `scope: 'global'` → `SABOTAGE_GLOBAL_EXIT=1`, K failed (and C, since the
+      caller's session was gone before `updateUser`). Restored, `cmp` identical.
+    - Sabotage 2 — re-verify skipped → `SABOTAGE_NOVERIFY_EXIT=1`, W failed (and the rest
+      cascaded: the password had really changed). Restored, `cmp` identical.
+    - Clean re-run with `s175-team-clients-off` (which drives the real `transferOwnershipAction`):
+      `LIVE_EXIT=0`, 23/23. ⚠️ s175 B7 is refused BEFORE the password check, so
+      transfer-ownership's password path is covered only through the shared helper's tests.
+  - `test/s109-password-wiring.test.ts` (committed suite) — one shared check, scope local, same
+    form on both pages, not on settings, redirect via the helper.
+  - Full unit suite: `UNIT_EXIT=0`, **100 files / 1339 tests**. (One red first: my own negative
+    regex matched the phrase `signOut()` in a comment; tightened to `auth.signOut()`.)
+- `tsc` → `TSC_EXIT=0`. `next build` → `BUILD_EXIT=0`, compiled, 129/129.
+- ⚠️ **OPEN — for Josh, not built (stop rule 2):** `/reset-password` still changes the password of
+  any live session without asking for the current one. It must accept a recovery-link session
+  (whose user does not know the password), and telling the two apart — for example by the JWT's
+  `amr` recovery method — is a design decision, and getting it wrong would break the only
+  recovery path on production. So the unlocked-phone case is closed on the Account page and still
+  open at that URL. The real floor would be GoTrue's hosted "secure password change" setting, which
+  is not visible from the repo.

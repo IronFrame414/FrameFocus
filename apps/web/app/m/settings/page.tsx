@@ -81,13 +81,13 @@ export default async function MobileSettingsPage() {
 
       {/* The one editable thing reachable from Settings — a LINK, not a control,
           so Settings stays read-only (A-48 counts controls, not navigation).
-          Self-service name edit [S177]; the page it opens holds the only field. */}
+          Self-service name edit [S177] and password change [S109 #162]. */}
       <Link
         href="/m/account"
         data-testid="m-settings-edit-name"
         className="mt-[12px] block rounded-[15px] border border-m6m-border bg-m6m-card p-[16px] text-[13px] font-semibold text-brand-500"
       >
-        Edit your name →
+        Your name and password →
       </Link>
 
       {/* ── Your company ───────────────────────────────────────────────────

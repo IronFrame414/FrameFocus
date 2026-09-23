@@ -4,6 +4,8 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase-browser';
 import { brand } from '@/lib/brand';
+import { dashboardDeniedRedirect } from '@/lib/dashboard-access';
+import { PASSWORD_MIN_LENGTH, passwordTooShortMessage } from '@/lib/auth/password-policy';
 
 export default function ResetPasswordPage() {
   const router = useRouter();
@@ -16,8 +18,8 @@ export default function ResetPasswordPage() {
     e.preventDefault();
     setError(null);
 
-    if (password.length < 8) {
-      setError('Password must be at least 8 characters.');
+    if (password.length < PASSWORD_MIN_LENGTH) {
+      setError(passwordTooShortMessage());
       return;
     }
     if (password !== confirm) {
@@ -27,14 +29,24 @@ export default function ResetPasswordPage() {
 
     setLoading(true);
     const supabase = createClient();
-    const { error: updateError } = await supabase.auth.updateUser({ password });
-    setLoading(false);
+    const { data: updated, error: updateError } = await supabase.auth.updateUser({ password });
 
     if (updateError) {
+      setLoading(false);
       setError(updateError.message);
       return;
     }
-    router.push('/dashboard');
+    // S109 #162 — land where this role LIVES. This used to push every role to
+    // /dashboard, which middleware then bounced for a subcontractor (→ /m/projects)
+    // or a client (→ /portal). Same destinations, from the same helper
+    // middleware uses, so the two cannot disagree.
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('user_id', updated.user.id)
+      .maybeSingle();
+    setLoading(false);
+    router.push(dashboardDeniedRedirect(profile?.role) ?? '/dashboard');
   }
 
   return (
