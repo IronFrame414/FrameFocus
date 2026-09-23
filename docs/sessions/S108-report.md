@@ -1713,3 +1713,96 @@ The server was stopped by PID, not `pkill`. Fixtures: 0 left. **Nothing touched 
    the pages render as "never finished" rather than error. But the Finish button would call a
    missing RPC and show an error. Apply first.
 5. Merge `feature/site-visit-finish-and-review` → `main` (Josh's call).
+
+---
+
+### Step 5 — Josh's four rulings (2026-09-23), built
+
+| ruling | built | commit |
+| --- | --- | --- |
+| 1. Notify at **FINISH**, not creation; same type, reworded | the create route no longer notifies. New `/api/site-visits/[id]/finish` runs `finish_site_visit` on the session, then (first finish only) `notifySiteVisitReadyToPrice` → `site_visit_recorded`, title **"Site visit ready to price: …"**. ASK-A4 amended in Spec A with the old ruling quoted | `f90f11e3` |
+| 2. Promotion stays optional | unchanged from step 3: the confirm warns when unfinished, nothing blocks | — |
+| 3. **Freeze at send**, in the database | `20261690000000_site_visit_freeze_at_send.sql` — `site_visit_access()` drops the office arm past draft/review, plus `enforce_site_visit_freeze()` BEFORE INSERT/UPDATE on all four tables (service role included). DELETE deliberately untriggered (cascades). The only admitted update is an FK nulled by `ON DELETE SET NULL` | `55f30fe2` |
+| 4. **Visit-era photos**, cutoff = promotion | `lib/site-visits/photos.ts` `visitEraPhotos()` — `created_at <= promoted_at`. The record stops offering *Add photos* after promotion and tells the office later photos are in Files | `297365a2` |
+| burst capture rejected | recorded in `GATED.md` and Spec A | `bfcb3e98` |
+
+**The photo cutoff, stated:** **promotion**, inclusive, on database timestamps. **Photos added
+between Finish and promotion ARE visit-era.** Finish is not a lock (ASK-A8), so a shot the recorder
+adds after tapping Finish is still what was found on site. Promotion is also where the recorder
+loses upload and the estimate begins. Before promotion, every image on the estimate counts: a visit
+has no Files tab.
+
+**An unresolved blocker after send:** it stays **open, permanently, on the record**. Owner, PM and
+the service role are all refused (live 4.5c/4.5d; the row still reads `resolved=false`). If
+resolving one after send is wanted, that is the separate ruling Josh offered.
+
+**The freeze migration: DB push `DBPUSH_EXIT=0`**, link `nmyphyhmfttxkdoposvf`. The four
+`*_z_freeze_after_send` triggers exist (trigger count 277 → 281). Fingerprint regenerated;
+`db:verify` exit 0, **LEDGER CLEAN 230/230**. `db:types` produced no diff (a trigger function adds
+no type).
+**Production rows it governs:** it governs future writes only, has no constraint, and reads no
+existing row at apply time, so it cannot abort. The count, for the record, should be 0 today
+(EST-107 is a draft):
+```sql
+select 'notes' t, count(*) from site_visit_notes x join estimates e on e.id=x.estimate_id where e.status not in ('site_visit','draft','review')
+union all select 'measurements', count(*) from site_visit_measurements x join estimates e on e.id=x.estimate_id where e.status not in ('site_visit','draft','review')
+union all select 'voice', count(*) from site_visit_voice_notes x join estimates e on e.id=x.estimate_id where e.status not in ('site_visit','draft','review')
+union all select 'visits', count(*) from site_visits x join estimates e on e.id=x.estimate_id where e.status not in ('site_visit','draft','review');
+```
+
+**Proof:**
+
+| check | printed line |
+| --- | --- |
+| `s108-site-visit.live.ts` | **29/29**. §4.5: a **draft control** (the office CAN write, access = `office`) → sent → owner/PM refused 42501 and access NULL; blocker resolve refused; **service-role** insert/update/title refused ("frozen"); FK-null admitted; crew still reads 0 estimate rows / 3 notes, no money key. 1.5b-ii: title "ready to price" |
+| `s108-voice.live.ts` + the above | `LIVE_VITEST_EXIT_LINE=0`, **34/34** |
+| `s108-visit-era-photos.test.ts` | 4/4: boundary inclusive, finish-to-promotion kept, unpromoted keeps all, undated excluded |
+| `e2e/m-site-visit.spec.ts` | creation → **0** notifications; finish → notified, "ready to price"; tab shows **1** photo after a post-promotion image is added; after send, **FROZEN** banner and no add controls (with a draft control first) |
+| e2e sabotage A — notify put back on create | **`SABOTAGE_A_PW_EXIT_LINE=1`**, red at "notified before the visit was finished"; reverted, diff empty |
+| e2e sabotage B — photo filter disabled | **`SABOTAGE_B_PW_EXIT_LINE=1`**, received "· 2"; reverted, 0 sabotage lines |
+| S157 sweep | the superseded "notified at creation" e2e assertion and live **1d** are quoted and inverted; the `s123` comment naming the create route as emitter is corrected |
+
+### ⚠️ The finish RPC is UNPROVEN BY SABOTAGE — and why
+
+`finish_site_visit()` and the freeze trigger live in the database. Sabotaging them means changing
+a function body on rebuild-test outside a migration. That is exactly the drift the fingerprint and
+`db:functions` checks exist to catch, and it would leave rebuild-test disagreeing with the
+migration files unless the change was perfectly reverted. The standing rule is migrations only, via
+`db push`. **What stands in for sabotage:** each refusal is paired with a control that must
+succeed. §3a shows promotion DOES change status and number (so 1.5b reading them unchanged is not
+vacuous), and §4.5a shows the office CAN write while it is a draft (so §4.5c/d's refusals are the
+send). The UI half of both rules *was* proven by sabotage.
+
+### Known edges, not blockers, recorded
+
+- **Void + reissue:** the visit stays on the voided original, frozen. The reissued estimate has no
+  Site Visit tab.
+- **Photos are `files` rows, outside `site_visit_*`:** the freeze does not stop an owner/admin
+  deleting an estimate photo through the Files tab. Upload to a sent estimate was already refused
+  by the files route (drafts only).
+- **A transcription still pending at send cannot be retried** (the route asks
+  `site_visit_access()`), and the trigger would refuse the write anyway. The audio is kept.
+
+### FINAL — `feature/site-visit-finish-and-review`, green
+
+| check | printed line |
+| --- | --- |
+| type-check | `TSC_EXIT_LINE=0` |
+| lint | `LINT_EXIT_LINE=0` |
+| `next build` | `BUILD_EXIT_LINE=0`, fresh `BUILD_ID` (10:55), final tree |
+| unit | `VITEST_EXIT_LINE=0`, **98 files, 1329 tests** |
+| live | `LIVE_VITEST_EXIT_LINE=0`, **34/34** |
+| e2e (production build) | `PW_EXIT_LINE=0`, **4 passed** (site visit ×2, voice, setup) |
+
+Fixtures: 0 estimates, 0 visits, 0 test files left. The server was stopped by PID. **Nothing touched
+production.**
+
+**Ship order (Josh):**
+1. Run the Step 1 EST-107 query.
+2. Apply **both** migrations to production in one `supabase db push`:
+   `20261680000000_site_visit_finish` and `20261690000000_site_visit_freeze_at_send`. Neither
+   governs an existing row; the counts are above. Verify: 2 `finished%` columns on `site_visits`,
+   and `select count(*) from pg_trigger where tgname like '%z_freeze_after_send'` → **4**.
+3. **Then** merge. Migrations must come first: the finish route calls an RPC that only the first
+   migration creates.
+4. Field-test on a real phone (Josh, after merge).
