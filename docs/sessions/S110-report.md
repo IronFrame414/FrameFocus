@@ -46,3 +46,36 @@ Branch `feature/s110-site-visit-access`, cut from `main` @ `8bce4311` (tree clea
 - **E3:** the portal can take the sheet with no new bytes if it reuses the already-signed URL;
   a re-sign route would be new client surface.
 - **E4:** closable, provided the Stripe fidelity check is re-filed in the same commit.
+
+### Step 4 — Section H and cross-cutting measured, written into the spec
+
+- **No i18n exists** (0 hits for i18n / next-intl / react-intl / useTranslation) — new infrastructure.
+- `/m` + mounted components: **767** user-facing strings (a floor; ~850–900 realistic); 15
+  components are shared by both surfaces.
+- ⚠️ Crew-typed text ALREADY reaches client-facing output: `site_visits.title` → `estimates.name`
+  → proposal title and email subject; markup text → portal photos.
+- `transcript_language` exists and nothing writes it.
+- Pricing page read through WebFetch (summarised, not verbatim): gpt-4o-mini $0.15/$0.60 per 1M.
+  Cost does not decide on-write vs on-read; correctness does.
+
+**Production volume query for H (READ-ONLY, for Josh):**
+
+```sql
+select f, count(*) n, count(*) filter (where created_at > now()-interval '30 days') n30,
+       round(avg(len),1) avg_len, sum(len) filter (where created_at > now()-interval '30 days') chars30
+from (
+  select 'site_visit_notes' f, created_at, length(body) len from site_visit_notes where not coalesce(is_deleted,false)
+  union all select 'sv_measurements', created_at, length(area_name)+coalesce(length(notes),0) from site_visit_measurements
+  union all select 'sv_voice_transcript', created_at, length(transcript) from site_visit_voice_notes where transcript is not null
+  union all select 'site_visits.title', created_at, length(title) from site_visits
+  union all select 'chat_messages', created_at, length(body) from chat_messages
+  union all select 'punch_items', created_at, length(title)+coalesce(length(description),0) from punch_list_items
+  union all select 'daily_logs', created_at, coalesce(length(notes),0)+coalesce(length(work_performed),0)+coalesce(length(hazard_notes),0)+coalesce(length(material_needed),0)+coalesce(length(material_used),0)+coalesce(length(tasks_tomorrow),0)+coalesce(length(equipment_used),0) from daily_logs
+  union all select 'tasks', created_at, length(title)+coalesce(length(description),0) from tasks
+  union all select 'time_segments.note', created_at, length(note) from time_segments where note is not null
+  union all select 'safety_incidents', created_at, coalesce(length(description),0)+coalesce(length(outcome),0)+coalesce(length(prevention_notes),0) from safety_incidents
+  union all select 'expenses.description', created_at, length(description) from expenses where description is not null
+) x group by f order by f;
+```
+
+## Phase 1 — COMPLETE. Phase 2 questions sent to Josh; build stopped until ruled.

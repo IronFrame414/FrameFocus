@@ -721,16 +721,65 @@ is the decision.
 `locale`, `t(`). ⚠️ **State the command and the full count — do not truncate.** Expect none; say so
 plainly if so, because it makes this new infrastructure rather than an extension.
 
+> **FILLED-H.1. None — this is new infrastructure.** GNU `grep -rn` over `apps/web` (excluding
+> `node_modules`, `.next`, `test-results`, `playwright-report`, `.turbo`, `*.tsbuildinfo` — the
+> shell's `grep` is a ugrep wrapper that skips gitignored files, so every count was re-run with
+> `command grep`): `i18n` **0**, `next-intl` **0**, `react-intl` **0**, `useTranslation` **0**;
+> `Intl\.` **27** (25 `Intl.DateTimeFormat`, 1 options type, 1 `Intl.NumberFormat('en-US')` for
+> money — formatting, not translation); `locale` **23** (every source hit `localeCompare`, one
+> comment, one minified pdf.js worker); `\bt\(` in `.ts/.tsx` **4** (a test helper). No i18n
+> dependency in either `package.json`. Adjacent: 154 `toLocale*String` calls, 13 under `/m`, of
+> which 4 pass no locale and already follow the phone.
+
 **FILL-H.2** — Every user-facing string under `app/m/` and the components it mounts, counted.
 ⚠️ **`SiteVisitRecord` is mounted by BOTH `/m` and two desktop pages** (S109 measured this). A
 component shared across surfaces cannot read a surface-level locale — state how it resolves the
 reader's language instead.
+
+> **FILLED-H.2.** TypeScript-compiler-API walk from every file under `app/m` (88 files), following
+> `@/` and relative imports transitively, skipping `lib/services` and supabase: 129 files reached,
+> **767 strings** (343 JSX text, 274 user-facing attributes, 150 JSX-expression literals), plus 34
+> `setX('…')` messages and ~17 label maps (`STATUS_LABEL`, `KIND_LABEL`, `CONTACT_TYPE_LABELS` …).
+> **A floor, not a total** — it misses service/route error text, server-action messages, header
+> titles passed by variable, RPC `RAISE EXCEPTION` text and stored notification titles; realistic
+> ~850–900. Largest: `site-visit-record.tsx` 48, `m/logs/new/log-form.tsx` 35,
+> `m/timeclock/timeclock-screen.tsx` 29. Half of `/m` (50 files) are server components.
+>
+> **Shared by both surfaces (15):** `account/{name,password}-form`, `chat/{chat-body,chat-thread,
+> chat-composer,chat-segments,use-chat-thread}`, `field/my-po-lines`, `files/{file-sheet,pdf-pages}`,
+> `sheet/modal-sheet`, `notifications/{notification-list,push-enrolment}`,
+> `site-visits/{site-visit-record,voice-notes}`.
+>
+> **How a shared component resolves language:** `profiles.language` (`'en' | 'es'`, default
+> `'en'`). Each layout mounts one provider carrying TWO values — `uiLang` (system text: the `/m`
+> layout sets the profile's language, the dashboard layout hard-sets `'en'`, ruling 2) and
+> `readerLang` (the profile's language on BOTH, ruling 3). A component never inspects its route.
+> Server components get the same pair from a per-request server helper (React context does not
+> reach them). Both layouts already select the profile (`app/m/layout.tsx:~93`,
+> `app/dashboard/layout.tsx:43`) and gain one column.
 
 **FILL-H.3** — ⚠️ **Which stored text counts as "user-entered".** Name every field, table by table:
 site-visit notes, measurements' labels, blockers, voice-note transcripts, chat messages, punch
 items, daily logs, change-order descriptions, estimate line names, internal notes. **For each, say
 whether a reader outside the company could ever see it** — that decides whether a translation is an
 internal convenience or something client-facing.
+
+> **FILLED-H.3.** Policies read live (`pg_policies`, rebuild-test).
+>
+> | table · free-text columns | who outside the company can read it |
+> | --- | --- |
+> | `site_visits.title` | ⚠️ **clients, indirectly** — copied to `estimates.name` (`20261650000000:456,495`) → proposal title (`proposal-template.tsx:158`) and email subject (`proposals/send/route.ts:128`) |
+> | `site_visit_notes.body`, `site_visit_measurements.{area_name,notes}`, `site_visit_voice_notes.{transcript,transcript_machine}` | nobody — no client-facing renderer references `site_visit` (0 hits) |
+> | `chat_messages.body` | client thread → portal (office posts only, `may_enter_client_thread`); sub thread → subcontractors, and mention emails (`mention-email.ts:80`) |
+> | `punch_list_items.{title,description,location,trade}`, `tasks.{title,description}` | assigned subcontractors; not the portal |
+> | `daily_logs.*` (8 columns), `daily_log_sub_entries.note` | nobody (internal PDF only) |
+> | `change_orders.{title,description,void_reason}`, CO line `{name,description}` | ⚠️ **clients** — portal, CO PDF (`co-template.tsx:170,201,215-217`), email. Authored by owner/admin/PM only |
+> | `estimates.{name,scope_summary,cover_letter,legal_description}`, line `{name,description}` | ⚠️ **clients** — proposal PDF + email. `internal_notes`, line `notes` are not rendered |
+> | `expenses.{description,supplier}` | ⚠️ **clients** — become `invoice_lines.description` (`invoices.ts:257`) → invoice PDF, portal at `full_detail` |
+> | `files.markup_data` text shapes | ⚠️ **clients** — portal photos (`portal.ts:421,693`); also rasterised into the derivative image, where no translation can reach it |
+> | `selection_messages.body` | clients |
+> | `purchase_order_items`, `estimate_sub_bid_requests` text | vendors/subs by email (office-authored) |
+> | `safety_incidents.*`, `deliveries`/`delivery_items` notes, `time_segments.note`, `contacts/subcontractors.notes` | nobody |
 
 **FILL-H.4** — ⚠️ **Where translation happens, and what is stored.** Two shapes, and the cost and
 correctness differ:
@@ -742,20 +791,84 @@ Measure both against real row counts and propose one. ⚠️ **The ORIGINAL IS N
 this follows S108's voice ruling, which keeps `transcript_machine` beside the editable `transcript`
 and keeps the spoken language at capture.
 
+> **FILLED-H.4.** **Volumes: rebuild-test cannot answer this** — 0 rows in all four
+> `site_visit_*` tables, 0 chat messages; `change_orders` 202 (27 chars avg), line items 35,
+> `time_segments.note` 25, expenses 17, daily logs 13 — fixture data, not production. **Production
+> query for Josh** (read-only; counts, 30-day counts, avg length, 30-day characters per field):
+> kept in `docs/sessions/S110-report.md` Step 4.
+>
+> **Cost does not separate the two** (FILLED-H.6: ~$0.00003 per 30-char translation at the price
+> read; 10,000/month ≈ $0.30). **Correctness does:**
+> - **on write** translates rows nobody reads, needs a language guess at save, must re-run on every
+>   edit of `transcript`, and never benefits from a better model;
+> - **on read + cache** keyed by `(sha256(source text), target language, model)`: an edit
+>   invalidates itself (the hash changes), only text read by someone whose language differs is
+>   translated, and a model change is a new key. The first reader waits — batched per screen.
+>
+> **Proposed: on read, with a persistent company-scoped cache table** (`text_translations`:
+> hash, source/target lang, model, translated text; RLS company-scoped; written by the service
+> role only). **The original is never overwritten** — `transcript_machine`/`transcript` and every
+> source column are untouched; translations live only in the cache. **→ ASK-H.C.**
+
 **FILL-H.5** — The voice interaction, stated: a Spanish voice note already transcribes to Spanish by
 ruling. Translation sits ON TOP of the transcript and does not change transcription. Confirm the
 S108 assertion that no `language` parameter and no `/audio/translations` call is ever used.
+
+> **FILLED-H.5. Confirmed.** `lib/site-visits/transcribe.ts:90` is the only call —
+> `getOpenAI().audio.transcriptions.create({ model: TRANSCRIPTION_MODEL, file })`, no `language`,
+> no `prompt`. Counts: `language` in the five transcription files **2** (both the comment at
+> `:16-17`); `translations` across `apps/web`, `packages`, `supabase` **1** (the same comment);
+> `audio\.translations` **0**; `audio\.transcriptions` **1**. Translation sits on top of
+> `transcript` and never changes transcription. **Finding:** `site_visit_voice_notes.transcript_language`
+> exists (`20261650000000:239`) and **nothing writes it** (0 references outside the migration) —
+> it is the natural home for the detected source language.
 
 **FILL-H.6** — Cost. Per the Module 3H rule: log to an `ai_*_logs` table, log the requested model,
 write a cost row **on failure too**. Estimate monthly cost from real `/m` row volumes, not guesses.
 ⚠️ **Do not assert a price you did not read from OpenAI's current pricing page; say so if unread.**
 
+> **FILLED-H.6.** Two log tables exist: `ai_tag_logs` (tokens in/out, `estimated_cost_usd
+> numeric(10,6)`, success, error) and `ai_transcription_logs` (`audio_seconds`, same cost column;
+> 23 rows on rebuild-test, $0.00385 total). Proposed **`ai_translation_logs`** in the tagging
+> shape plus `source_lang`/`target_lang`, append-only, owner/admin SELECT, a row on success AND
+> failure, the requested model logged.
+>
+> **Price, as read:** `openai.com/api/pricing/` → **403**; `platform.openai.com/docs/pricing` →
+> 301 → `developers.openai.com/api/docs/pricing`, read through WebFetch — ⚠️ **a summarising
+> model's extraction, not a verbatim copy; Josh should recheck.** It returned gpt-4o-mini
+> $0.15 in / $0.60 out per 1M tokens, gpt-4.1-nano $0.10 / $0.40, gpt-5-nano $0.05 / $0.40,
+> gpt-4o $2.50 / $10.00. **Monthly estimate cannot be made from real volumes** — rebuild-test has
+> none and production was not read; at ~40 tokens per short note plus ~150 of prompt, even
+> 10,000 translations a month is under $1 on gpt-4o-mini. The production query gives the real
+> number.
+
 **FILL-H.7** — ⚠️ **A guard against rot.** Every new `/m` screen will add English strings unless
 something stops it. Propose the mechanism and **prove it fires by adding a hardcoded string.**
 A guard that cannot fail is worthless.
 
+> **FILLED-H.7.** A unit test (CI's suite) using the TypeScript AST — the same walk as H.2 — over
+> `app/m` and every component it transitively mounts: it fails on any JSX text or listed
+> string attribute (`placeholder`, `aria-label`, `title`, `alt`, `label`) that is not a `t('key')`
+> call, with an allowlist of **exact strings** (brand name, `ft`, `×`, symbols) rather than
+> per-file exemptions. A companion assertion: every key used exists in both the `en` and `es`
+> dictionaries. Mirrors `test/brand-literals.test.ts` (fs walk, exact-occurrence allowlist) and
+> `test/m6m-pwa.test.ts` (already walks `app/m`). **Proof owed at build:** add a hardcoded string
+> to an `/m` screen → red; remove → green. Stated limit: it cannot see strings built outside
+> JSX (service error text, `RAISE EXCEPTION` messages) — those get their own list.
+
 **FILL-H.8** — What a Spanish-speaking user sees when translation fails or is pending: the original,
 never a blank. State it for each surface.
+
+> **FILLED-H.8.** One component renders all user text for a Spanish/English reader, on every
+> surface: it shows the translation when cached, and otherwise **the original, as typed**, with a
+> quiet "translating…" or "translation unavailable" line — never a blank, never a spinner in place
+> of text. Surfaces: `/m` — site-visit record, chat overlay, logs + detail, punch, CO detail,
+> tasks/up-next, schedule, safety, deliveries, timeclock notes, notifications. `/dashboard` — the
+> same `SiteVisitRecord` and chat, daily-log detail, safety incident detail, delivery detail,
+> punch, tasks, schedule, timesheet notes, expenses, CO pages, estimate builder.
+> ⚠️ **Notifications and web push store pre-rendered English with user text embedded**
+> (`site-visit-notify.ts:85`, `assignment-notify.ts:190`) — they cannot be translated at read
+> time without changing how notifications are built; proposed out of scope for S110 and filed.
 
 **FILL-H.9** — ⚠️ **The residual case RULED line 5 does not settle, and it is a real one.** A crew
 member types Spanish into a field that later appears on a CLIENT-FACING document — an estimate line
@@ -768,7 +881,43 @@ refuses to send until a person supplies English. ⚠️ **Do not choose silently
 a machine translation can reach a client's contract, which RULED line 5 exists to prevent.**
 Mark it **ASK-H.D**.
 
+> **FILLED-H.9.** Fields where it can happen **today**:
+> 1. **`site_visits.title` → `estimates.name`** → proposal PDF title + email subject — ⚠️ crew-typed on `/m` **now**.
+> 2. **`files.markup_data` text** → portal photos — crew-typed, and rasterised into the image.
+> 3. **`expenses.description/supplier`** → invoice line → invoice PDF, portal `full_detail`.
+> 4. **CO title/description, CO line name/description** → CO PDF, portal, email (office-authored; a PM can be a Spanish speaker).
+> 5. **Estimate line name/description, `scope_summary`, `cover_letter`** → proposal (office-authored).
+> 6. **Client chat thread, `selection_messages`** → portal (office and client).
+>
+> Checked and absent: no copy-notes-to-lines feature (`promote_site_visit` copies nothing but the
+> title), no weekly client summary, punch not in the portal.
+>
+> **The three behaviours:** (i) print the stored text as typed; (ii) print a machine translation;
+> (iii) refuse to send until a person supplies English.
+> **Proposed — (i) + (iii), never (ii):** every client-facing renderer prints the stored text
+> verbatim and **imports no translation code** (the AUDIT-8 test enforces it). At SEND, the send
+> path checks the client-facing fields of that document for a detected non-English language —
+> using the cache's detection only as a *block*, never as text — and refuses with "this field is
+> in Spanish; enter the English wording", so a person types the English. Machine output can stop
+> a send; it can never become words on the document. **→ ASK-H.D.**
+>
+> **Client-facing renderers (the list the AUDIT-8 test pins):** PDFs — `lib/proposal/proposal-template.tsx`,
+> `lib/services/proposal-service.ts`, `lib/change-orders/co-template.tsx`,
+> `lib/services/co-pdf-service.ts`, `lib/invoices/invoice-template.tsx`,
+> `lib/services/invoice-pdf-service.ts`, `lib/services/lien-release-pdf-service.ts`,
+> `lib/selections/spec-sheet-template.tsx`, `lib/services/selection-spec-pdf-service.ts`,
+> `lib/po/po-template.tsx`; portal/signing — `app/portal/**` (15 files), `lib/services/portal.ts`,
+> `portal-writes.ts`, `app/sign/[token]/*`, `app/sign-co/[token]/*`, `app/bid/[token]/*`; email —
+> `lib/email/templates/*` (13) and the senders under `app/api/{proposals,change-orders,invoices}`,
+> the two reminder crons, `lib/services/{signing,co-signing,invoice-delivery,selection-email}.ts`.
+> ⚠️ **Not found: a `contract_documents` renderer** — to be located before the AUDIT-8 test is
+> trusted.
+
 **ASK-H.B** — Is the original always shown beside the translation, or only on request?
+
+> **Recommended:** translation shown, with a one-tap "Translated from Spanish · show original"
+> line under it — the original is always one tap away and always shown when translation is
+> pending or failed (H.8). Side-by-side doubles the length of every note on a phone.
 
 **ASK-H.C** — On FILL-H.4: translate on write and store, or translate on read and cache.
 
@@ -782,10 +931,31 @@ Mark it **ASK-H.D**.
 any new constraint. ⚠️ **Rebuild-test only. Josh applies to production, attended, BEFORE the merge**
 — a merge to `main` deploys.
 
+> **FILLED-X.1.** Every migration, pending the rulings. **None adds a constraint that governs an
+> existing row.**
+>
+> | migration (proposed) | § | purpose | production count |
+> | --- | --- | --- | --- |
+> | `…_site_visit_access_widen.sql` | A | `site_visits.frozen_at` + backfill; estimates status-transition trigger; rewritten `enforce_site_visit_freeze()`; `site_visit_access()`; four SELECT policies; the RPC bodies | FILLED-A.8 queries 1–2 |
+> | `…_files_site_visit_capture.sql` | A (Q-A.D) | `files.site_visit_capture boolean DEFAULT false` + backfill + freeze trigger on flagged files | FILLED-A.8 query 3 |
+> | `…_reorder_estimate_line_rows.sql` | D1 | new SECURITY INVOKER RPC; no schema change | none governed |
+> | `…_profile_language.sql` | H | `profiles.language text DEFAULT 'en'` + CHECK `('en','es')` | ⚠️ the CHECK governs every profile row, but the column is new and filled by its default — `select count(*) from profiles;` for the record |
+> | `…_text_translations.sql` | H | cache table + `ai_translation_logs` (append-only) | none governed |
+>
+> C, E, F, B (unless desktop create needs one — it does not) need **no migration**.
+
 **FILL-X.2** — Build order, with dependencies stated. C, D and E are independent. B depends on A's
 read rule. F should land early so it guards the rest. ⚠️ **H comes last** — `SiteVisitRecord` is one
 component on three pages and Section A rewrites it, so translating its strings first means doing
 the work twice.
+
+> **FILLED-X.2.** **F → C → D → E → A → B → H.** F first so its registry guards the files routes A
+> is about to change. C, D, E are independent of each other and of A (E3 touches file-sheet sites,
+> not the estimate-files routes). **A before B**: B's list and nav follow A's read rule and Q-B.B.
+> **A before H**: `SiteVisitRecord` is rewritten by A. Within A: migration → live test inverted
+> and extended → route arms + route-order tests → record UI → e2e. Within H: `profiles.language`
+> + account toggle → provider → `/m` dictionaries + anti-rot guard → user-text translation +
+> cache + log → AUDIT-8 client-facing test last.
 
 ## Standing constraints
 Branch from `main`, commit path-scoped, never `git add -A`, push after every commit. Migrations
