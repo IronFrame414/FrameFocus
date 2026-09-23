@@ -46,7 +46,8 @@ export interface NewAddressInput {
 }
 
 /** Creates the visit through the server route, which calls create_site_visit
- *  on the caller's session and then notifies Owner/Admin/PM (ASK-A4). */
+ *  on the caller's session. It does NOT notify — the office is told at FINISH
+ *  (ASK-A4 amended, 2026-09-23). */
 export async function createSiteVisit(input: {
   title: string;
   contact_id?: string | null;
@@ -122,10 +123,14 @@ export async function updateVoiceTranscript(id: string, transcript: string): Pro
 
 /** FINISH — "done capturing, ready to price". NOT promotion: it stamps the
  *  money-free site_visits row and nothing else; no number, status unchanged.
- *  The office, or the recorder while it is still a visit. Idempotent. */
+ *  The office, or the recorder while it is still a visit. Idempotent.
+ *  Through the server route, which runs finish_site_visit on the caller's
+ *  session and then tells the office (ASK-A4 amended — notify at FINISH). */
 export async function finishSiteVisit(estimateId: string): Promise<Result> {
-  const r = await rpc('finish_site_visit', { p_estimate_id: estimateId });
-  return r.error ? { success: false, error: r.error } : { success: true };
+  const res = await fetch(`/api/site-visits/${estimateId}/finish`, { method: 'POST' });
+  if (res.ok) return { success: true };
+  const body = (await res.json().catch(() => ({}))) as { error?: string };
+  return { success: false, error: body.error ?? 'Could not finish the visit.' };
 }
 
 /** PROMOTE — owner/admin/PM only: assigns the estimate number and creates the

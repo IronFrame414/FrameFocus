@@ -1,15 +1,15 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
-import { getSupabaseAdmin } from '@/lib/supabase-admin';
-import { notifySiteVisitRecorded } from '@/lib/notify/site-visit-notify';
 
 // S108 Spec A — record a site visit.
 //
 // The visit is created by create_site_visit() ON THE CALLER'S SESSION: the RPC
-// decides who may (any internal role) and writes no money. This route exists
-// only because the office must be TOLD (ASK-A4), and notify() needs the
-// service-role client for push — an RPC cannot call application code. So the
-// service-role client is reached ONLY after the session RPC has succeeded.
+// decides who may (any internal role) and writes no money.
+//
+// [2026-09-23, ruling 1 — ASK-A4 amended] It NO LONGER notifies the office.
+// Creation is the moment nothing has been captured yet; the office is told at
+// FINISH instead (/api/site-visits/[id]/finish). This route stays the create
+// path so the phone's client code is unchanged.
 
 export async function POST(req: Request) {
   const supabase = await createClient();
@@ -47,14 +47,5 @@ export async function POST(req: Request) {
     );
   }
 
-  // Best-effort: a failed notification must not un-record the visit.
-  try {
-    await notifySiteVisitRecorded(getSupabaseAdmin(), estimateId as string, user.id);
-  } catch (e) {
-    console.error('[POST /api/site-visits] notify failed', {
-      estimateId,
-      message: e instanceof Error ? e.message : String(e),
-    });
-  }
   return NextResponse.json({ id: estimateId });
 }

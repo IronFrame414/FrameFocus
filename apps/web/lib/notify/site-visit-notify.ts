@@ -5,13 +5,23 @@ import type { CompanyRole } from '@framefocus/shared';
 import { notify, type NotifyRecipient } from '@/lib/notify/notify';
 import { getManagerNotifyRecipients } from '@/lib/notify/recipients';
 
-// S108 Spec A, ASK-A4 → A — a recorded site visit tells the OFFICE: Owner,
-// Admin and every Project Manager in the company. In-app + push, NOT emailed
-// (no email_types row; the selection_approved / po_item_missing precedent).
+// S108 Spec A, ASK-A4 → A, AMENDED [Josh, 2026-09-23, ruling 1] — a site
+// visit tells the OFFICE when it is FINISHED ("ready to price"), not when it
+// is created. Superseded: the notification fired at creation, before anything
+// had been captured, and told the office nothing. The TYPE is unchanged
+// (`site_visit_recorded` — no new type, no CHECK widening); only the moment
+// and the wording moved. A visit that is never finished notifies nobody —
+// accepted by the ruling. Called by /api/site-visits/[id]/finish, once, on the
+// FIRST finish only.
+//
+// Recipients: Owner, Admin and every Project Manager in the company. In-app +
+// push, NOT emailed (no email_types row; the selection_approved /
+// po_item_missing precedent).
 //
 // Every PM, not an assigned one: a visit has no project, so there is no
 // assignment to scope by — and any PM may be the one who prices it.
-// The recorder is excluded: telling someone about their own action is noise.
+// The person who tapped Finish is excluded: telling someone about their own
+// action is noise.
 // The body carries no money (a visit has none) — only who, what and where.
 
 async function companyPmRecipients(
@@ -32,10 +42,10 @@ async function companyPmRecipients(
   }));
 }
 
-export async function notifySiteVisitRecorded(
+export async function notifySiteVisitReadyToPrice(
   admin: SupabaseClient<Database>,
   estimateId: string,
-  recorderUserId: string
+  finisherUserId: string
 ): Promise<void> {
   const { data: visit } = await admin
     .from('site_visits')
@@ -47,7 +57,7 @@ export async function notifySiteVisitRecorded(
   const { data: recorder } = await admin
     .from('profiles')
     .select('id, first_name, last_name')
-    .eq('user_id', recorderUserId)
+    .eq('user_id', finisherUserId)
     .eq('is_deleted', false)
     .maybeSingle();
 
@@ -72,8 +82,8 @@ export async function notifySiteVisitRecorded(
     linkParams: { id: estimateId },
     source: { table: 'site_visits', id: estimateId },
     render: () => ({
-      title: `Site visit recorded: ${visit.title}`,
-      body: [`${who} recorded a site visit`, client ? `for ${client}` : null, where ? `at ${where}` : null]
+      title: `Site visit ready to price: ${visit.title}`,
+      body: [`${who} finished a site visit`, client ? `for ${client}` : null, where ? `at ${where}` : null]
         .filter(Boolean)
         .join(' ') + '.',
     }),
