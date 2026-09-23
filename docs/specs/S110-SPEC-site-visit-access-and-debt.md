@@ -21,6 +21,18 @@ largest and riskiest; it goes last so nothing else is in flight on the same surf
 `20261710000000` are on production and that `main` carries the S109 merge and the photo-regression
 fix (`fd5a1a5a`).
 
+> **FILLED-0 [S110 Phase 1].** `main` = `origin/main` = **`8bce4311`** (`git rev-parse --short
+> main origin/main` after `git fetch`). Tree clean at session start (`git status --short | wc -l`
+> → 0). Branch **`feature/s110-site-visit-access`**, cut from `8bce4311`. `git merge-base
+> --is-ancestor` confirms both **`d0e282e1`** (the S109 merge) and **`fd5a1a5a`** (the photo fix)
+> are in `main`. CLI link: `supabase/.temp/linked-project.json` → `nmyphyhmfttxkdoposvf`
+> (rebuild-test). **Production NOT measured by CC, and why:** `scripts/live-sql.mjs` refuses every
+> ref but rebuild-test by design and the MCP is pinned to rebuild-test. On **rebuild-test**,
+> `supabase_migrations.schema_migrations` holds `20261690000000`, `20261700000000`,
+> `20261710000000` (3 of 3). For production the session prompt records "verified by object"; Josh
+> can re-check with
+> `select version from supabase_migrations.schema_migrations where version in ('20261700000000','20261710000000');` → 2 rows.
+
 ---
 
 # SECTION A — site-visit access, rewritten [RULING CHANGE]
@@ -60,18 +72,117 @@ or rewritten on resend, void-and-reissue, or a status change back and forth? Nam
 and propose the alternative (a per-row `frozen_at` stamped by the send path, or a
 `site_visits.frozen_at`).
 
+> **FILLED-A.1.** ⚠️ **`estimates.sent_at` is NOT a reliable cutoff — not because it is
+> rewritten, but because a sent estimate can have NONE.**
+>
+> **Every writer, measured.** App code — `grep -rn "sent_at\s*[:=]" app lib components` (12
+> hits, 3 on `estimates`): `app/api/proposals/send/route.ts:213`, `lib/services/estimates-client.ts:691`
+> (Mark as Sent, draft only), `:774` (approve-and-send, review only). All three write `sent_at`
+> in the SAME UPDATE as `status: 'sent'`. `app/api/proposals/resend/route.ts` reads `sent_at`
+> (`:60`, `:136`) and **does not write it**. Database — `pg_proc` bodies containing `sent_at`
+> on rebuild-test: **2** (`client_proposals`, read-only; `enforce_estimate_immutability`).
+> Void-and-reissue does not mention it: the reissue is a NEW estimate with no `site_visits` row.
+>
+> **Once set, it cannot move.** `enforce_estimate_immutability` (latest body,
+> `20261650000000` §3) keeps `sent_at` OUT of its allowlist, so any change past draft/review
+> raises, and a sent estimate can never return to draft/review. **No thaw from rewriting.**
+>
+> **But it can be absent.** The same trigger lets `draft → accepted` (and any status) through
+> when OLD is draft/review, and `signing-service.ts:258` writes `status: 'accepted'`. On
+> rebuild-test **14 of 21** estimates past review have `sent_at IS NULL` (accepted 10/10,
+> converted 3/7, voided 1/2, sent 0/2). **A predicate keyed on `sent_at` would treat every one of
+> those as never sent, and their whole record would be editable.** That is the thaw, by a
+> different road.
+>
+> **Proposal: `site_visits.frozen_at timestamptz`, stamped by the DATABASE, not by a send path.**
+> An `AFTER UPDATE OF status ON estimates` trigger: when OLD.status ∈ {site_visit, draft, review}
+> and NEW.status ∉ that set, `UPDATE site_visits SET frozen_at = coalesce(frozen_at, now())`.
+> Keyed on the transition itself, so it fires for Send, Mark as Sent, approve-and-send, a direct
+> acceptance, and any writer added later — no app path can forget it. Set once (`coalesce`).
+> **Backfill:** every visit on an estimate already past review gets `frozen_at = now()` at
+> migration time — deliberately NOT `sent_at`, so nothing that is frozen today can thaw (see
+> FILL-A.8 for the count that would make the difference).
+
 **FILL-A.2** — Rewrite the trigger. It must permit INSERT always and refuse UPDATE/DELETE of a row
 that predates the send. ⚠️ **The service-role arm was deliberate — S108 proved it refuses a
 service-role write. State whether it stays.**
+
+> **FILLED-A.2.** `enforce_site_visit_freeze()` rewritten, still `BEFORE INSERT OR UPDATE` on
+> all four tables, still `SECURITY DEFINER`:
+>
+> | op | rule |
+> | --- | --- |
+> | INSERT | **always admitted**, at every status (ruling 3). `NEW.created_at := now()` is forced, so a row cannot be backdated to look like pre-send evidence (no RPC sets it today; the service-role voice insert could). |
+> | UPDATE, row with `OLD.created_at > frozen_at`, or `frozen_at IS NULL` | admitted (subject to ASK-A.C) — `created_at` itself may never change, so a post-send row cannot be backdated into the frozen set either. |
+> | UPDATE, row with `OLD.created_at <= frozen_at` | refused 42501 — **except** the two shapes admitted today (an FK moving TO NULL by `ON DELETE SET NULL`) **plus one new one**: `site_visits.frozen_at` being stamped by the estimates trigger. |
+> | soft DELETE | is an UPDATE of `is_deleted` → same rule. Hard DELETE stays untriggered (cascades), unchanged. |
+>
+> Frozen-ness is judged on `OLD.created_at` against the visit's `frozen_at`, read inside the
+> trigger — not on the estimate's status. **The service-role arm STAYS**: the trigger ignores
+> the caller's role, exactly as S108 built it, so `s108` 4.5d keeps its meaning (the service role
+> is refused on a pre-send row) and gains a pair (the service role may INSERT after send).
+>
+> `site_visit_access()` also changes (ASK-A.A), and it is the gate every RPC and both voice
+> routes consult. Proposed shape: it returns `'office'` (owner/admin/PM) or `'staff'`
+> (foreman/crew) for any visit in the company, at every status — "may add" — and the per-row
+> "may edit" is the trigger's `created_at` vs `frozen_at` test. The RPCs keep the
+> `site_visit`-only guards they have for the header, finish, abandon and promote, which are
+> about the visit, not the material.
+>
+> **One adjacent edge, proposed rather than decided:** a transcription still `pending` at the
+> moment of send is refused today (S108 "known edges"), and would be refused under this rule too
+> (the row predates `frozen_at`). Proposed: admit a service-role UPDATE that only moves
+> `transcript_status` from `pending` and writes `transcript_machine / transcript /
+> transcript_language / transcript_model / transcript_error / transcribed_at` — it records audio
+> that existed at send, it does not edit evidence. **Folded into Q-A.C for Josh.**
 
 **FILL-A.3** — ⚠️ **Rows created AFTER a send: who may edit them, and until when?** The ruling says
 they are not frozen. Say whether they freeze on a later send, never, or on some other event. This
 is not stated in the ruling; propose and mark it **ASK-A.C**.
 
+> **FILLED-A.3.** There is **no "later send"** to hang it on: an estimate is sent once
+> (`enforce_estimate_immutability` forbids returning to draft/review), Resend re-emails without
+> touching status or `sent_at`, and a reissue is a different estimate with no visit. So the real
+> choices are:
+>
+> - **(a) never** — a post-send addition stays editable forever by whoever may edit. Simplest;
+>   but then the post-send material is never evidence, which is the reason the freeze exists.
+> - **(b) the estimate's OUTCOME** — `frozen_at` moves forward (not `coalesce`) when the estimate
+>   reaches `accepted`, `declined`, `expired` or `voided`. Everything that existed at that moment
+>   freezes; anything added later is again open. Same mechanism, same trigger, one more
+>   transition. `viewed` is deliberately NOT an event — it fires when the client opens the email,
+>   which nobody on the crew controls or sees.
+> - **(c) a correction window** — each post-send row is editable for N hours after creation.
+>
+> **Recommended: (b).** It is the ruling's own principle ("the lock covers the material that
+> existed at the moment of X") applied at the next moment that matters, it needs no clock the
+> crew cannot see, and it reuses the column and trigger (a) and the send already need.
+> **→ ASK-A.C.**
+
 **FILL-A.4** — The SELECT policies. Widening read to every internal employee changes four policies.
 ⚠️ **Confirm against the Financial Visibility Floor that no `site_visit_*` table carries a money
 column and that nothing joins one to `estimates` in a way that ships a figure.** S108's live test
 asserted "no money key on any row" — extend it rather than replace it.
+
+> **FILLED-A.4.** **No money column on any `site_visit_*` table** — live on rebuild-test,
+> `information_schema.columns where table_name like 'site_visit%'`: 4 tables, 67 columns; the only
+> numerics are `length_ft`, `width_ft`, `square_feet` (measurements) and `duration_seconds`
+> (voice). **Nothing joins one to `estimates`:** `lib/services/site-visits.ts` `VISIT_SELECT`
+> embeds `contacts` and `contact_addresses` only, and its header says "NOTHING HERE READS
+> `estimates`". The desktop pages read the estimate separately, on an office session.
+>
+> **The four policies**, live (`pg_policies`): `{site_visits, site_visit_notes,
+> site_visit_measurements, site_visit_voice_notes}_select_scoped` — office company-wide;
+> foreman/crew `AND created_by = auth.uid()` **per table**. (A consequence nobody wrote down: a
+> crew recorder cannot read a note the OFFICE added to their own visit today.) The widening
+> replaces the foreman/crew arm with company-wide; subcontractor and client stay out because the
+> role list never names them. Proposed as ONE role list for all four so they cannot drift:
+> `get_my_role() = ANY (ARRAY['owner','admin','project_manager','foreman','crew_member'])`.
+>
+> **The live test is extended:** the S108 `MONEY` list and `moneyKeys()` stay; the extended case
+> reads, as a crew member who did NOT record it, another recorder's visit on all four tables and
+> asserts non-zero rows **and** zero money keys, plus zero `estimates` rows — and a sub and a
+> client read **0** on all four (the paired refusal).
 
 **FILL-A.5** — ⚠️ **Photos are `files` rows, OUTSIDE the four tables.** The freeze trigger has never
 covered them, and the files route refuses uploads to a non-draft estimate. Ruling 3 says adding
@@ -79,16 +190,113 @@ must work after send. State exactly what the files route does today for a sent e
 must do. **This is a route change, and the route is the only access control — see
 `s107-estimate-files-route-order.test.ts`, which must be EXTENDED, not replaced.**
 
+> **FILLED-A.5.** **Today** (`lib/site-visits/access.ts` `resolveEstimateFileAccess`, used by the
+> list, upload, per-file `/url` and voice routes):
+>
+> | caller on a SENT estimate | read | upload |
+> | --- | --- | --- |
+> | owner / admin | every file (office arm) | **403** — `canUpload` is `draft` or `site_visit` only |
+> | PM who owns the estimate | every file | 403 |
+> | PM who does NOT own it | **404** unless they recorded the visit (office arm = `estimates_select_authenticated`, "PM own") | 403 |
+> | foreman / crew recorder | own files only | 403 (`site_visit_access` ≠ recorder) |
+> | foreman / crew non-recorder | 404 | 404 |
+>
+> Voice upload (`app/api/site-visits/[id]/voice/route.ts:34-39`) uses the same `canUpload`.
+>
+> ⚠️ **The Floor problem, and it is real.** The route's office arm lists **every** file on the
+> estimate — and `ALLOWED_MIME` admits `application/pdf`. An estimate's Files tab is where an
+> estimator drops a vendor quote or a sub's price sheet. On rebuild-test the one live estimate file
+> is a PDF (category `other`, not on a visit). **Widening "read photos" to foreman and crew by
+> widening this route's arms would hand them every PDF on the estimate — money on paper.** So the
+> widening must be scoped to **site-visit material**, which `files` cannot identify today: there is
+> no marker, only `estimate_id`, mime and time.
+>
+> **Proposed:** `files.site_visit_capture boolean NOT NULL DEFAULT false`, set by the route when
+> the upload comes from `SiteVisitRecord` (a form field the record sends; the voice route always
+> sets it). A new arm, **visit staff**: any internal role on an estimate that has a `site_visits`
+> row may read files with `site_visit_capture = true` — and ONLY those — and may upload with the
+> flag set at every status (ruling 3). The office arm is unchanged, so owner/admin still see
+> every file and a non-owning PM gains site-visit material only. Backfill (on a DEFAULT-false
+> column — no constraint, cannot abort): images and voice-note audio on estimates with a
+> `site_visits` row, created at or before `promoted_at` (or with no promotion), plus every
+> `site_visit_voice_notes.file_id`. **→ Q-A.D**, because it is new schema and it decides what
+> "photos" means in ruling 1.
+>
+> **Freeze for files:** the trigger has never covered `files`. With `site_visit_capture`, a file
+> whose `created_at <= frozen_at` must refuse soft-delete/rename — proposed as a small `BEFORE
+> UPDATE` trigger on `files` scoped to `site_visit_capture = true`. (S108 "known edge": today an
+> owner/admin can delete a visit photo after send through the Files tab.)
+>
+> **Tests:** `s107-estimate-files-route-order.test.ts` and `s109-estimate-file-url-order.test.ts`
+> gain a mirror case per new arm (the admin client is never constructed before the session read
+> passes; the staff arm's lookup is scoped to `site_visit_capture = true`); nothing removed.
+
 **FILL-A.6** — `visitEraPhotos()` cuts at `promoted_at` (S108 ruling 4). If material may be added
 after send, state what the Site Visit tab shows and how it distinguishes what was found on site
 from what was added later. ⚠️ **Do not silently widen the cutoff** — quote the superseded ruling.
+
+> **FILLED-A.6.** _Superseded, quoted from `lib/site-visits/photos.ts` (S108 ruling 4):_ _"THE
+> CUTOFF IS PROMOTION (site_visits.promoted_at) … Promotion is the boundary the rest of the rules
+> already use: it is where the recorder loses upload."_ Ruling 2 removes the premise — promotion
+> no longer removes anything — so promotion stops being a meaningful boundary.
+>
+> **Proposed:** the Site Visit tab shows **site-visit material** (`site_visit_capture = true`,
+> FILL-A.5) rather than "images before promotion", in two groups split at `frozen_at`:
+> **"Captured before the estimate was sent"** and **"Added after it was sent"**, each item
+> date-stamped. Before send there is one group. Notes, measurements, blockers and voice notes
+> carry the same split and an "added {date}" line, because ruling 3 makes all five kinds
+> addable after send. Photos an estimator adds from the ordinary Files tab stay in Files, which is
+> what ruling 4 was protecting. **→ Q-A.D** (it depends on the marker).
 
 **FILL-A.7** — Every live test that encodes the behaviour being overturned. `s108-site-visit.live.ts`
 is 29 cases and several assert refusals that must now succeed. **Invert them in place with the
 superseded assertion quoted. Do not delete a test.**
 
+> **FILLED-A.7.** `grep -c "  it(" test/s108-site-visit.live.ts` → **29**. Cases whose
+> assertion is overturned (invert in place, superseded text quoted):
+>
+> | case | asserts today | becomes |
+> | --- | --- | --- |
+> | **1.5a** | foreman (non-recorder) finish → 42501 | foreman **may** finish (ruling 1), sub still refused |
+> | **2c** | foreman reads nothing, may not write | foreman reads the crew member's visit and may write (paired: sub/client 0) |
+> | **4b** | recorder LOST note/measurement/upload after promotion | recorder keeps every write after promotion (ruling 2) |
+> | **4b-ii** | recorder cannot finish after promotion (42501) | unchanged in effect — finish stays `site_visit`-only, error code 22023 for everyone; title re-worded |
+> | **4.5c** | office refused **every** write after send; access NULL | office refused EDIT of pre-send rows; **INSERT succeeds**; access still answers |
+> | **4.5d** | service role refused insert/update/title | service role refused UPDATE of pre-send rows; **INSERT succeeds** |
+> | **4.5f** | recorder reads own record after send | unchanged, plus a non-recorder reads it too |
+>
+> Unchanged: 1a–1c, 1.5b–1.5e, 2a, 2b, 2d–2f, 3a–3b, 4a, 4c, 4.5a, 4.5b, 4.5e, 5a, 5b.
+> Also swept by the S157 rule (grep for the table/function names across `test/` and `e2e/`):
+> `s108-visit-era-photos.test.ts` (4 cases, cutoff = promotion → rewritten to the new split),
+> `s109-site-visit-media.test.ts` (asserts "post-promotion photos … are not signed"),
+> `e2e/m-site-visit.spec.ts` (**FROZEN banner and no add controls after send**; tab shows 1 photo
+> after a post-promotion image), and `s107-estimate-files-route-order.test.ts` (recorder upload
+> refused after promotion). All four encode overturned behaviour; each is inverted in place.
+
 **FILL-A.8** — Production row counts for any new constraint, and the count of `site_visit_*` rows on
 estimates past `review`. **Give Josh the query.**
+
+> **FILLED-A.8.** **No new constraint** in Section A: `frozen_at` is a nullable column,
+> `files.site_visit_capture` is `DEFAULT false` with no CHECK, and the triggers govern future
+> writes only. Nothing can abort on apply. The backfill UPDATEs are the only statements that touch
+> existing rows. **Rebuild-test today: 0 rows in every `site_visit_*` table** (the S108 suites
+> clean up), and 14/21 estimates past review with `sent_at IS NULL`. Production, READ-ONLY, for
+> Josh:
+>
+> ```sql
+> -- 1. site-visit rows on estimates past review (S108 expected 0 — EST-107 is a draft)
+> select 'visits' t, count(*) from site_visits x join estimates e on e.id=x.estimate_id where e.status not in ('site_visit','draft','review')
+> union all select 'notes', count(*) from site_visit_notes x join estimates e on e.id=x.estimate_id where e.status not in ('site_visit','draft','review')
+> union all select 'measurements', count(*) from site_visit_measurements x join estimates e on e.id=x.estimate_id where e.status not in ('site_visit','draft','review')
+> union all select 'voice', count(*) from site_visit_voice_notes x join estimates e on e.id=x.estimate_id where e.status not in ('site_visit','draft','review');
+> -- 2. would a sent_at cutoff have thawed anything? (rows newer than their estimate's sent_at)
+> select count(*) from site_visit_notes n join estimates e on e.id=n.estimate_id
+>  where e.status not in ('site_visit','draft','review') and (e.sent_at is null or n.created_at > e.sent_at);
+> -- 3. the files the site_visit_capture backfill would mark
+> select count(*) from files f join site_visits sv on sv.estimate_id=f.estimate_id
+>  where not coalesce(f.is_deleted,false) and (f.mime_type like 'image/%' or f.mime_type like 'audio/%')
+>    and (sv.promoted_at is null or f.created_at <= sv.promoted_at);
+> ```
 
 **ASK-A.A** — Should read really be company-wide for foreman and crew, or scoped to the recorder
 plus the office? Josh said "any employee"; state the exposure it creates and let him confirm.
