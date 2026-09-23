@@ -149,6 +149,62 @@ describe('S108 A — 1. a CREW member records a visit, through the RPC only', ()
   });
 });
 
+// [S108 follow-up] FINISH is not PROMOTE. Josh's production visit became a
+// numbered draft because the only "done"-shaped control was the office's
+// promote button. finish_site_visit() is the recorder's "done": it stamps the
+// money-free site_visits row and changes NOTHING on `estimates`.
+describe('S108 A — 1.5 FINISH — the recorder\'s "done", which is NOT promotion', () => {
+  let finishedAt = '';
+
+  it('1.5a — someone who did not record it cannot finish it: the foreman and a sub are refused (42501)', async () => {
+    const f = await foremanC.rpc('finish_site_visit', { p_estimate_id: visitId });
+    expect(f.error?.code).toBe('42501');
+    const s = await subC.rpc('finish_site_visit', { p_estimate_id: visitId });
+    expect(s.error?.code).toBe('42501');
+    const { data } = await admin.from('site_visits').select('finished_at').eq('estimate_id', visitId).single();
+    expect((data as { finished_at: string | null }).finished_at, 'a refused finish still stamped the row').toBeNull();
+  });
+
+  it('1.5b — the CREW recorder finishes: stamped on site_visits; status STILL site_visit, NO number, sequence untouched', async () => {
+    const { data, error } = await crewC.rpc('finish_site_visit', { p_estimate_id: visitId });
+    expect(error, error?.message).toBeNull();
+    finishedAt = data as string;
+    expect(finishedAt).toBeTruthy();
+    const { data: sv } = await admin.from('site_visits').select('finished_at, finished_by, promoted_at').eq('estimate_id', visitId).single();
+    expect(sv).toMatchObject({ finished_by: crewUid, promoted_at: null });
+    const { data: e } = await admin.from('estimates').select('status, estimate_number').eq('id', visitId).single();
+    expect(e, 'FINISHING PROMOTED THE VISIT').toMatchObject({ status: 'site_visit', estimate_number: null });
+    expect(await sequence(), 'finishing consumed an estimate number').toBe(seqBefore);
+  });
+
+  it('1.5c — finishing is idempotent: a second tap keeps the FIRST stamp', async () => {
+    const { data, error } = await crewC.rpc('finish_site_visit', { p_estimate_id: visitId });
+    expect(error, error?.message).toBeNull();
+    expect(new Date(data as string).getTime()).toBe(new Date(finishedAt).getTime());
+  });
+
+  it('1.5d — after finishing, the crew member reads the stamp on their own row — and still ZERO estimate rows, no money key', async () => {
+    const reads = await assertCrewSeesNoMoney('finished');
+    expect(reads.site_visits).toBe(1);
+    const { data } = await crewC.from('site_visits').select('*').eq('estimate_id', visitId).single();
+    expect((data as { finished_at: string | null }).finished_at).not.toBeNull();
+  });
+
+  it('1.5e — finishing is a signal, not a lock (ASK-A8): the recorder can STILL correct a note until promotion', async () => {
+    const { data: n } = await crewC
+      .from('site_visit_notes')
+      .select('id, body')
+      .eq('estimate_id', visitId)
+      .eq('kind', 'condition')
+      .single();
+    const note = n as { id: string; body: string };
+    const r = await crewC.rpc('save_site_visit_note', {
+      p_estimate_id: visitId, p_note_id: note.id, p_kind: 'condition', p_body: `${note.body} (checked)`, p_resolved: false,
+    });
+    expect(r.error, r.error?.message).toBeNull();
+  });
+});
+
 async function assertCrewSeesNoMoney(phase: string) {
   // The estimate row — ZERO rows, on the crew session …
   const e = await crewC.from('estimates').select('*').eq('id', visitId);
@@ -246,6 +302,13 @@ describe('S108 A — 4. the FLOOR, AFTER promotion', () => {
     expect(a).toMatchObject({ ok: true, mode: 'recorder', canUpload: false, ownFilesOnly: true });
   });
 
+  it('4b-ii — after promotion the recorder cannot finish (42501) and the office cannot either (already an estimate)', async () => {
+    const c = await crewC.rpc('finish_site_visit', { p_estimate_id: visitId });
+    expect(c.error?.code).toBe('42501');
+    const o = await ownerC.rpc('finish_site_visit', { p_estimate_id: visitId });
+    expect(o.error?.code).toBe('22023');
+  });
+
   it('4c — nothing can turn the estimate back into a site visit', async () => {
     const r = await admin.from('estimates').update({ status: 'site_visit' }).eq('id', visitId);
     expect(r.error?.message ?? '').toMatch(/cannot be turned back into a site visit/);
@@ -262,6 +325,9 @@ describe('S108 A — 5. abandon, and the list', () => {
     expect(a.error, a.error?.message).toBeNull();
     const { data } = await admin.from('estimates').select('is_deleted, estimate_number, status').eq('id', second).single();
     expect(data).toMatchObject({ is_deleted: true, estimate_number: null, status: 'site_visit' });
+    // …and an abandoned visit cannot be finished.
+    const f = await crewC.rpc('finish_site_visit', { p_estimate_id: second });
+    expect(f.error?.code).toBe('42501');
   });
 
   it('5b — a site visit never appears in the ESTIMATES list query (getEstimates excludes the status)', async () => {
