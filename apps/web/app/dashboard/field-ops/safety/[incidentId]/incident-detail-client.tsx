@@ -11,6 +11,7 @@ import {
 } from '@/lib/services/safety-client';
 import { getFileSignedUrl } from '@/lib/services/daily-logs-client';
 import { useConfirm, useAlert } from '@/components/confirm/confirm-provider';
+import { useFileSheet } from '@/components/files/file-sheet';
 
 // 6C detail — client pieces: Owner/Admin resolution card (status/outcome,
 // §2 [S87]), the Owner/Admin retry banner for failed notifications (§4 /
@@ -158,16 +159,23 @@ export function IncidentPdfButton({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const openFile = useFileSheet();
+
   async function handleClick() {
     setBusy(true);
     setError(null);
     if (pdfPath) {
-      const url = await getFileSignedUrl(pdfPath, pdfName ?? 'incident-report.pdf');
-      if (url) {
-        window.open(url, '_blank');
-        setBusy(false);
-        return;
-      }
+      // S109 #161 [ruling 161.B] — VIEW, in the sheet over this record. This
+      // button used to FORCE A DOWNLOAD (Supabase's { download } option) into a
+      // new tab. The sheet's own Download action still saves under this name.
+      const path = pdfPath;
+      openFile({
+        fileName: pdfName ?? 'incident-report.pdf',
+        mimeType: 'application/pdf',
+        resolveUrl: () => getFileSignedUrl(path),
+      });
+      setBusy(false);
+      return;
     }
     const result = await generateIncidentPdf(incidentId);
     if (!result.success) setError(result.error ?? 'PDF generation failed');
@@ -183,7 +191,7 @@ export function IncidentPdfButton({
         onClick={() => void handleClick()}
         className="rounded-[9px] border border-[#e0e4ea] bg-white px-[15px] py-[9px] text-[13px] font-semibold text-[#374151] transition-colors hover:border-[#c9d2e4] disabled:opacity-50"
       >
-        {busy ? 'Working…' : pdfPath ? 'Download PDF' : 'Generate PDF'}
+        {busy ? 'Working…' : pdfPath ? 'View PDF' : 'Generate PDF'}
       </button>
       {error ? <p className="mt-1 text-[11px] text-[#c0362c]">{error}</p> : null}
     </div>

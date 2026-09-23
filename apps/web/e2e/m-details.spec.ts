@@ -363,7 +363,10 @@ test.describe('M-34 · a subcontractor DOES reach punch detail (D-52 corrected, 
 // M-16 — getSignedUrl actually gets called
 // ===========================================================================
 test.describe('M-16 · the file-open path exists (zero call sites before this pass)', () => {
-  test('tapping a file requests a signed URL and navigates to it', async ({ page }) => {
+  // [S109 #161] Superseded title, quoted: "tapping a file requests a signed URL
+  // and navigates to it". It no longer navigates — the file opens in the shared
+  // file sheet over the list (the S97 "in-app viewer" cut is overturned).
+  test('tapping a file requests a signed URL and opens it in the sheet, over the list', async ({ page }) => {
     await page.goto(`/m/p/${FILES_PROJECT}/files`);
     const open = page.getByTestId('m-file-open').first();
     if ((await open.count()) === 0) test.skip(true, 'no non-photo file visible to this identity');
@@ -382,6 +385,12 @@ test.describe('M-16 · the file-open path exists (zero call sites before this pa
     // ⚠️ INLINE, NOT DOWNLOAD — ruled in §4.11.16. `?download=` would force a
     // save; previewing a plan on site is the field need.
     expect(body.url).not.toContain('download=');
+
+    // The sheet is up and the LIST is still the page underneath it.
+    await expect(page.getByTestId('file-sheet')).toBeVisible();
+    await expect(page).toHaveURL(new RegExp(`/m/p/${FILES_PROJECT}/files`));
+    await page.getByTestId('file-sheet-close').click();
+    await expect(page.getByTestId('file-sheet')).toHaveCount(0);
   });
 
   test('a subcontractor gets no open control at all', async ({ page }) => {

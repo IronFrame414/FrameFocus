@@ -16,7 +16,7 @@ import {
   listSubcontractorOptions,
 } from '@/lib/services/subcontractors-client';
 import {
-  getFileSignedUrlClient,
+  getFileViewClient,
   uploadEstimateBidDocument,
 } from '@/lib/services/files-client';
 import {
@@ -30,6 +30,7 @@ import {
 import { fmtMoney } from '../labels';
 import { useAlert, useConfirm } from '@/components/confirm/confirm-provider';
 import type { TabProps } from './estimate-builder';
+import { useFileSheet } from '@/components/files/file-sheet';
 
 // 4D-rev Bidding tab — grouped by line item that carries a
 // subcontractor row across the whole estimate. Winner selection is
@@ -646,15 +647,15 @@ function BidDocCell({
 }) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [busy, setBusy] = useState(false);
+  const openFile = useFileSheet();
 
-  async function handleView() {
-    if (!bid.bid_document_file_id) return;
-    const url = await getFileSignedUrlClient(bid.bid_document_file_id);
-    if (!url) {
-      onError('Could not open the bid document.');
-      return;
-    }
-    window.open(url, '_blank', 'noopener');
+  // S109 #161 — the sub's bid document opens in the SHEET, over the bidding
+  // tab (it used to open a new tab). An unsignable file shows the sheet's own
+  // "could not be opened" state rather than an alert.
+  function handleView() {
+    const fileId = bid.bid_document_file_id;
+    if (!fileId) return;
+    openFile({ fileName: 'Bid document', resolveUrl: () => getFileViewClient(fileId) });
   }
 
   async function handleFile(file: File) {

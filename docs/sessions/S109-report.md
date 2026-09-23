@@ -180,3 +180,64 @@ Appended after every step; committed and pushed each time.
   `components/public/site-header.tsx`) are pre-existing — present in Step 1's build log too.
 - `TECH_DEBT.md`: #163 status line. **#13's stale open line struck** — it was CLOSED in
   `TECH_DEBT_CLOSED.md:42` but still listed open under UX Polish.
+
+## Step 5 — #161 files open in a sheet; the Estimate Files 300 s expiry
+
+- **The reusable modal** (ruling 161.A) — `components/sheet/modal-sheet.tsx`: portal, `role=dialog`
+  + `aria-modal` + labelled title, Escape and scrim close, **focus moved in, trapped, and restored
+  on close**, page scroll locked; full-screen on a phone, inset panel from `sm`. Owns no content.
+- **The file sheet on it** — `components/files/file-sheet.tsx`: `FileSheetProvider` mounted in
+  the dashboard layout (wrapping the whole shell, so the chat panel is inside) **and** the /m layout;
+  `useFileSheet()` → `openFile({ fileName, mimeType, resolveUrl })`. Takes a RESOLVER and signs on
+  open. Views by kind (`lib/files/file-view.ts`, pure): PDF = every page via pdf.js, lazily
+  (`components/files/pdf-pages.tsx`; same dynamic `legacy` import as the box editor); image; HEIC
+  tried, then no-preview if it will not decode; video/audio; **anything else → no-preview panel
+  with the same actions** (FILL-161.2). Actions are real `<a>`s over a URL the sheet already holds
+  (no post-`await` `window.open`): **Open in new tab**, **Download** (`withDownload`),
+  **Print** (same-origin blob → hidden iframe; on iOS, a new tab for the share sheet — FILL-161.3,
+  unverified on a device). Expiry (FILL-161.4): a failed load re-signs once silently, then shows
+  "could not be displayed — Reload"; the actions' URL is refreshed before the 7200 s TTL.
+- **Migrated (ruling 161.B scope):** desktop Files tab row · `/m` files (the S97 "no in-app viewer"
+  cut **superseded in place, quoted**; the 403/500 distinction kept) · estimate Files tab · bid
+  documents · compliance COI/W-9 · chat photos (shared; a plain click opens the sheet, a modified
+  click still opens a tab, the `href` stays) · the three forced-download buttons (daily log,
+  incident, delivery) now **"View PDF"** → sheet, whose Download still saves under the same name.
+  Invoice PDF left as a new tab (ruling 161.C).
+- **161.B's addition — sign on click.** New `GET /api/estimates/[id]/files/[fileId]/url`: the same
+  `resolveEstimateFileAccess()` floor, **before** the service-role client; file scoped to id +
+  estimate + company (+ own-files for the recorder arm); 7200 s. The list route now signs nothing
+  and no longer selects `file_path`.
+- `package.json` **`predev`** copies the pdf.js worker (FILL-161.2: before this the viewer failed
+  under `next dev` unless `npm run pdf:worker` had been run by hand). Seen working: the preflight
+  log shows `pdf.js worker 4.10.38 -> public/pdf.worker.min.mjs`.
+- **Tests:**
+  - `test/s109-file-sheet.test.ts` — the pure helpers; every migrated site imports the hook and
+    calls `openFile`, and none keeps `window.open(url, '_blank'` / `window.location.href`; both
+    layouts mount the provider; the three buttons say View; the /m supersession is quoted; the
+    list signs nothing; the invoice builder does not use the sheet.
+  - `test/s109-estimate-file-url-order.test.ts` — the s107 pattern for the new route: 401 and a
+    denied estimate never reach `getSupabaseAdmin`; the MIRROR does, signs at 7200, and scopes the
+    lookup to id + estimate + company + not-deleted; a file not on the estimate → 404.
+    Unit total: `UNIT_EXIT=0`, **103 files / 1385 tests**.
+  - `e2e/desktop-file-sheet-s109.spec.ts` (own estimate + three stored files: PDF, PNG, a Word
+    doc; all removed): S1 PDF opens over the tab, `role=dialog aria-modal`, URL unchanged, pdf.js
+    drew page 1 (`data-pages=1`), signed by the CLICK (the `/url` request 200), new tab / download
+    (`download=`) / print present · S2 the list returns 3 rows with **no `url`, no `file_path`** ·
+    S3 Escape closes and **focus returns to the row** · S4 the PNG decoded (`naturalWidth > 0`) ·
+    S5 the Word doc gets the no-preview panel with new tab + download and **no** print. `5/5`.
+    - Sabotage 1 — list-time signing restored → `SABOTAGE_LISTSIGN_EXIT=1`, S2: _"the list signed
+      a URL again"_. Restored, `cmp` identical.
+    - Sabotage 2 — focus restore removed from the modal → `SABOTAGE_FOCUS_EXIT=1`, S3 failed on
+      `toBeFocused`. Restored, `cmp` identical.
+  - Older test inverted, not deleted: `e2e/m-details.spec.ts` M-16 was titled _"…and navigates to
+    it"_ — superseded title quoted; it now also asserts the sheet is up over the list and closes.
+  - Regression: file-sheet + chat-photos + row-activation + m-details → `E2E_EXIT=0`, **40
+    passed**; M-16 ran (not skipped) and passed.
+- `tsc` 0 (one red on the way — the hook inserted into the wrong component in two files that
+  have two components; moved, green). `next build` → `BUILD_EXIT=0`, 129/129; only the two
+  pre-existing warnings.
+- `TECH_DEBT.md`: #161 status with the **sites NOT yet migrated listed by name** (lien releases,
+  contract/lien templates, delivery photos, receipts, **the portal**, signing activity, PO PDF,
+  the inline-only surfaces). Filed: **`#2-s109`** (the 300 s expiry — fixed here, closes on merge),
+  **`#3-s109`** (viewing a sent invoice re-stores its PDF — defect, ruling 161.C), **`#4-s109`**
+  (the `?download=` mechanisms, now five — #161 said it becomes its own entry if not collapsed).

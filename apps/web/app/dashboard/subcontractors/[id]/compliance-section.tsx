@@ -7,11 +7,12 @@ import {
   softDeleteComplianceDocument,
   uploadComplianceDocument,
 } from '@/lib/services/payables-client';
-import { getFileSignedUrlClient } from '@/lib/services/files-client';
+import { getFileViewClient } from '@/lib/services/files-client';
 import type { ComplianceDocWithStatus } from '@/lib/services/payables';
 import type { ComplianceDocType, ComplianceStatus } from '@/lib/services/payables-shared';
 import { cardStyle, color, font, microLabelStyle, primaryButtonStyle, secondaryButtonStyle } from '@/lib/theme';
 import { useConfirm } from '@/components/confirm/confirm-provider';
+import { useFileSheet } from '@/components/files/file-sheet';
 
 // 7C §4 screen 6 — compliance documents on the sub record.
 //
@@ -56,9 +57,12 @@ export function ComplianceSection({
 
   const refresh = () => startTransition(() => router.refresh());
 
-  async function openDoc(fileId: string) {
-    const url = await getFileSignedUrlClient(fileId);
-    if (url) window.open(url, '_blank', 'noopener');
+  const openFile = useFileSheet();
+
+  // S109 #161 — COI / W-9 open in the SHEET over the sub record (they used to
+  // open a new tab, and a failure did nothing at all).
+  function openDoc(fileId: string) {
+    openFile({ fileName: 'Compliance document', resolveUrl: () => getFileViewClient(fileId) });
   }
 
   async function remove(id: string) {

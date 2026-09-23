@@ -296,6 +296,27 @@ top of this file is advanced to `#164` in the same commit, which is what keeps t
   explicit **download** action is the natural place to collapse the four into one helper; if the
   sheet is built without doing so, this becomes its own entry.
 
+  **⚙️ S109 — BUILT on `feature/s109-debt-159-163`, scope per ruling 161.B; open until merge AND
+  until the rest of the call sites below are migrated.** `components/sheet/modal-sheet.tsx` (the
+  reusable modal — focus trap, Escape, focus restore, scroll lock; ruling 161.A) under
+  `components/files/file-sheet.tsx` (`FileSheetProvider` in the dashboard AND /m layouts,
+  `useFileSheet()`; PDF via pdf.js all pages lazily, image, HEIC-with-fallback, video/audio, and a
+  no-preview panel for everything else; new tab / print / download; signs on OPEN, re-signs once
+  on a failed load, then "Reload"). **Migrated:** desktop Files tab row, `/m` files (the S97 cut
+  superseded in place), estimate Files tab (+ ruling 161.B's sign-on-click fix, `#2-s109`), bid
+  documents, compliance docs, chat photos (both surfaces), and the three forced-download buttons —
+  daily log, incident, delivery — which now say **View PDF**. **Invoice PDF stays a new tab** by
+  ruling 161.C (`#3-s109`). `predev` now copies the pdf.js worker. See `S109-report.md` Step 5.
+  **NOT yet migrated — the remaining sites of this entry, still opening a new tab / inline:**
+  `file-row-actions.tsx:49` (explicit Download — arguably correct as is),
+  `releases-panel.tsx:81`, `lien-release-settings-form.tsx:260`, `contract-settings-form.tsx:420`,
+  `deliveries/d/[deliveryId]/page.tsx:186/223`, `review-popup.tsx:422`, **the portal**
+  (`portal/[projectId]/files/page.tsx:122`), `signing-activity.tsx:68`, `po-lines-panel.tsx:323`,
+  and the eight inline-only surfaces (two of which Phase 1 found stale — see the S109 spec,
+  FILL-161.1). Archive/export ZIPs are downloads, not viewables, and stay out.
+  ⚠️ **Print on iOS is unverified on a device** — the sheet hands iOS a new tab for the share
+  sheet by design (FILL-161.3); CC cannot run iOS Safari.
+
 - **#162 — no way for a user to change their own password. A change-password page EXISTS and
   WORKS; what is missing is any route to it.** ⚠️ **Verified before filing, per the request, and
   the verification changed what is owed** — this is not "build a change-password feature".
@@ -528,6 +549,35 @@ top of this file is advanced to `#164` in the same commit, which is what keeps t
   proven by sabotage — see `S109-report.md` Step 4.
 
 ### Branch-scoped, awaiting real numbers — `feature/s109-debt-159-163` [S109]
+
+- **#2-s109 — ✅ FIXED ON THIS BRANCH (filed by ruling 161.B, closes on merge): the Estimate
+  Files tab's links died five minutes after the tab loaded.** `GET /api/estimates/[id]/files`
+  signed every file with `createSignedUrl(f.file_path, 300)` at LIST time, and
+  `estimate-files-tab.tsx` only re-listed on mount or after an upload — so a click more than
+  300 s after opening the tab hit an expired link. Found in S109 Phase 1 (missed by #161's sweep).
+  **Fix:** the list returns no URL and no `file_path`; the click signs one file through the new
+  `GET /api/estimates/[id]/files/[fileId]/url` (7200 s, `SIGNED_URL_TTL_SECONDS`), behind the SAME
+  `resolveEstimateFileAccess()` floor, run before the service-role client
+  (`s109-estimate-file-url-order.test.ts`). Guarded by `e2e/desktop-file-sheet-s109.spec.ts` S2
+  (proven by sabotage). Sibling, not fixed: `api/bid/[token]/files/route.ts:101` also signs for
+  300 s at list time, but has no UI consumer today.
+
+- **#3-s109 — DEFECT: viewing a SENT invoice's PDF re-renders it and OVERWRITES the stored copy,
+  every time. RULED [Josh, S109 161.C]: filed as its own defect; the invoice PDF stays a new tab.**
+  `app/api/invoices/[id]/pdf/route.ts` generates the PDF on every request and, for a sent invoice,
+  calls `storeInvoicePdf` — so "Print / Preview PDF" (`invoice-builder.tsx:1891`) replaces the
+  stored document of record on each view. A sent invoice is a document someone was billed on; its
+  stored PDF should be written once, at send, and read thereafter. **Fix shape (not built):** store
+  at send only; the view path serves the stored file (a signed URL — which also lets it join the
+  file sheet) and renders only for drafts.
+
+- **#4-s109 — the `?download=` "convention" is still FOUR mechanisms, now FIVE.** Filed because
+  #161 said so: _"if the sheet is built without doing so, this becomes its own entry."_ S109
+  added `withDownload()` (`lib/files/file-view.ts`) for the sheet's Download action and did NOT
+  migrate the other four (`?download=` at `file-row-actions.tsx:47-49`, `&download=` at
+  `signing-activity-client.ts:79`, Supabase's `{ download }` option at three sites, `?download=1`
+  on the invoice route). Collapse them onto one helper; `withDownload()` is idempotent and handles
+  a signed URL's existing `?token=`, so it is the candidate.
 
 - **#1-s109 — DEFECT: a person deactivated on `/m/team` can still sign in. RULED [Josh, S109
   ASK-160.B]: filed separately, as a defect, not an idea.** `/m/team/[memberId]/edit/team-edit-form.tsx`

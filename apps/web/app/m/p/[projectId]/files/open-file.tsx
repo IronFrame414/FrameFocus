@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useFileSheet } from '@/components/files/file-sheet';
 
 // M6M §4.11.16 — "Opening a file from M-16 — the tap that does not exist today".
 //
@@ -39,8 +40,15 @@ import { useState } from 'react';
 // `/m` opens INLINE and does not append it: previewing a plan on site is the
 // field need, and saving to a phone's filesystem is not.
 //
-// CUT: an in-app document viewer. The browser handles the MIME type or it does
-// not — `files` permits arbitrary uploads and this spec designs no fallback.
+// ~~CUT: an in-app document viewer.~~ — ⚠️ OVERTURNED [Josh, S109 #161]. Superseded
+// text, quoted rather than rewritten: _"CUT: an in-app document viewer. The
+// browser handles the MIME type or it does not — `files` permits arbitrary
+// uploads and this spec designs no fallback."_ The file now opens in the SHARED
+// file sheet (`components/files/file-sheet.tsx`) over this screen, the same one
+// desktop uses. The fallback that was missing is the sheet's no-preview panel
+// (Word, ZIP, anything it cannot render: name + open in new tab + download).
+// §4.11.16's INLINE rule is untouched: the sheet shows the file inline, and
+// `?download=` appears only on the sheet's explicit Download action.
 //
 // ✅ TECH_DEBT #142 CLOSED [S122] — AND THE COPY BELOW CHANGED BECAUSE OF IT.
 // /api/files/signed-url used to answer 500 for everything, because
@@ -57,15 +65,25 @@ import { useState } from 'react';
 export function OpenFileButton({
   path,
   fileName,
+  mimeType,
   children,
   className,
 }: {
   path: string;
   fileName: string;
+  mimeType?: string | null;
   children: React.ReactNode;
   className?: string;
 }) {
   const [state, setState] = useState<'idle' | 'opening' | 'error' | 'denied'>('idle');
+  const openFile = useFileSheet();
+
+  async function sign(): Promise<string | null> {
+    const response = await fetch(`/api/files/signed-url?path=${encodeURIComponent(path)}`);
+    if (!response.ok) return null;
+    const body = (await response.json()) as { url?: string };
+    return body.url ?? null;
+  }
 
   async function open() {
     if (state === 'opening') return;
@@ -84,9 +102,26 @@ export function OpenFileButton({
         setState('error');
         return;
       }
-      // Same tab. A phone has no window management to speak of, and the back
-      // gesture returning to the list is the behaviour a field user expects.
-      window.location.href = body.url;
+      // S109 #161 — the SHEET, over this list. _Superseded, quoted: "Same tab. A
+      // phone has no window management to speak of, and the back gesture
+      // returning to the list is the behaviour a field user expects."_ The sheet
+      // keeps the list underneath, so the user never leaves it at all. The URL
+      // just signed is handed over for the first load; a re-sign (expiry) asks
+      // the route again.
+      setState('idle');
+      let first: string | null = body.url;
+      openFile({
+        fileName,
+        mimeType,
+        resolveUrl: async () => {
+          if (first) {
+            const u = first;
+            first = null;
+            return u;
+          }
+          return sign();
+        },
+      });
     } catch {
       setState('error');
     }

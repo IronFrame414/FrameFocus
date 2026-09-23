@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { useAlert } from '@/components/confirm/confirm-provider';
 import type { FileRecord } from '@/lib/services/files';
 import { hasMarkup } from '@framefocus/shared/utils/markup';
 import FavoriteToggle from './favorite-toggle';
@@ -9,6 +8,7 @@ import FileRowActions from './file-row-actions';
 import AiTagEditor from './ai-tag-editor';
 import type { TagOption } from '@/lib/services/tag-options';
 import { rowActivation } from '@/components/list-screen/row-activation';
+import { useFileSheet } from '@/components/files/file-sheet';
 
 export default function FileRow({
   file,
@@ -22,28 +22,31 @@ export default function FileRow({
   /** Redesign 6.1 — the renameable label; `file.category` stays the key. */
   categoryLabel: string;
 }) {
-  const alert = useAlert();
   const [hover, setHover] = useState(false);
-  const [busy, setBusy] = useState(false);
 
   // #100: an annotated photo opens/downloads as its flattened `.markup.jpg`
   // derivative so the marks are visible outside the editor (the route degrades
   // to the original if the derivative is missing).
   const annotated = hasMarkup(file.markup_data);
 
-  async function handleRowClick() {
-    if (busy) return;
-    setBusy(true);
-    const res = await fetch(
-      `/api/files/signed-url?path=${encodeURIComponent(file.file_path)}${annotated ? '&markup=1' : ''}`
-    );
-    setBusy(false);
-    if (!res.ok) {
-      void alert('Could not open file.');
-      return;
-    }
-    const { url } = await res.json();
-    window.open(url, '_blank');
+  const openFile = useFileSheet();
+
+  // S109 #161 — the row opens the file in the SHEET over this screen (it used
+  // to `window.open` a new tab). The sheet signs through the same route when it
+  // opens; an annotated photo still opens as its flattened derivative (#100).
+  function handleRowClick() {
+    openFile({
+      fileName: file.file_name,
+      mimeType: annotated ? 'image/jpeg' : file.mime_type,
+      resolveUrl: async () => {
+        const res = await fetch(
+          `/api/files/signed-url?path=${encodeURIComponent(file.file_path)}${annotated ? '&markup=1' : ''}`
+        );
+        if (!res.ok) return null;
+        const { url } = (await res.json()) as { url?: string };
+        return url ?? null;
+      },
+    });
   }
 
   const cellStyle = { padding: '0.75rem' };
@@ -53,12 +56,12 @@ export default function FileRow({
       // S109 #163 — was a bare onClick: mouse-only, unannounced. The per-cell
       // stopPropagation guards below stay; the primitive's own guard is the
       // second layer for any control added later without one.
-      {...rowActivation(() => void handleRowClick(), `Open ${file.file_name}`)}
+      {...rowActivation(handleRowClick, `Open ${file.file_name}`)}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
       style={{
         borderBottom: '1px solid #eee',
-        cursor: busy ? 'wait' : 'pointer',
+        cursor: 'pointer',
         background: hover ? '#f7f7f7' : 'transparent',
       }}
     >
