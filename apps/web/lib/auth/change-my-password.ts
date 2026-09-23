@@ -45,7 +45,14 @@ export async function changeMyPassword(input: {
     return { ok: false, error: 'Your current password is incorrect.' };
   }
 
-  const { error } = await supabase.auth.updateUser({ password: input.newPassword });
+  // [S110 E1] `current_password` passed through: measured on rebuild-test, with
+  // Supabase's "require current password" setting ON, updateUser WITHOUT it is
+  // refused (400 current_password_required). This keeps the Account page working
+  // whichever way that setting is switched.
+  const { error } = await supabase.auth.updateUser({
+    password: input.newPassword,
+    current_password: input.currentPassword,
+  });
   if (error) {
     console.error('[changeMyPassword] updateUser failed:', error.message);
     return { ok: false, error: error.message };

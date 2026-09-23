@@ -37,10 +37,20 @@ describe('S109 #162 — one password check, one form, both surfaces', () => {
     expect(read('../app/dashboard/settings/page.tsx')).not.toMatch(/PasswordForm/);
   });
 
+  // [S110 E1] Moved, not changed. The password change left the browser for the
+  // server action `resetPasswordFromPage` (recovery link OR current password),
+  // so the destination is computed THERE and the form pushes what it returns.
+  // _Superseded assertion, quoted:_ `page.tsx` matched
+  // `router.push(dashboardDeniedRedirect(profile?.role) ?? '/dashboard')`.
   it('/reset-password lands each role where it lives, via the middleware helper', () => {
-    const page = read('../app/reset-password/page.tsx');
-    expect(page).toMatch(/router\.push\(dashboardDeniedRedirect\(profile\?\.role\) \?\? '\/dashboard'\)/);
-    expect(page, "the hard-coded push to /dashboard is back").not.toMatch(/router\.push\('\/dashboard'\)/);
+    const action = read('../lib/auth/reset-password.ts');
+    const form = read('../app/reset-password/reset-password-form.tsx');
+    expect(action).toMatch(/next: dashboardDeniedRedirect\(profile\?\.role\) \?\? '\/dashboard'/);
+    expect(form).toMatch(/router\.push\(result\.next\)/);
+    expect(form, "the hard-coded push to /dashboard is back").not.toMatch(/router\.push\('\/dashboard'\)/);
+    // [S110 E1] …and the browser no longer changes the password itself.
+    expect(form, 'the page calls updateUser from the browser again').not.toMatch(/updateUser/);
+    expect(action).toMatch(/verifyCurrentPassword\(user\.email, current\)/);
     // And the helper's answers — the destinations the page now uses.
     expect(dashboardDeniedRedirect('subcontractor')).toBe('/m/projects');
     expect(dashboardDeniedRedirect('client')).toBe('/portal');

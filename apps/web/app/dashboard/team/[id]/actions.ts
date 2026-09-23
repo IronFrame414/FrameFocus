@@ -1,6 +1,8 @@
 'use server';
 
 import { createClient } from '@/lib/supabase-server';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import type { Database } from '@framefocus/shared/types/database';
 import { verifyCurrentPassword } from '@/lib/auth/verify-current-password';
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
 import { getStripe } from '@/lib/stripe';
@@ -95,8 +97,15 @@ export async function resetPasswordAction(targetId: string) {
   const target = assertIsTeamMember(await getTeamMember(supabase, targetId));
   assertCanEdit(profile.role, profile.id, target.id, target.role);
 
-  const redirectTo = `${process.env.NEXT_PUBLIC_APP_URL}/reset-password`;
-  await resetTeamMemberPassword(supabase, target.email, redirectTo);
+  // [S110 E1] Minted by the service role and landed on /auth/confirm — see
+  // resetTeamMemberPassword. The old PKCE call put the verifier in THIS
+  // admin's cookies, so the employee's link could never work.
+  await resetTeamMemberPassword(
+    getSupabaseAdmin() as SupabaseClient<Database>,
+    target.email,
+    process.env.NEXT_PUBLIC_APP_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_URL!
+  );
 }
 
 export async function transferOwnershipAction(
