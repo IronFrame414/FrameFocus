@@ -55,7 +55,7 @@ export default async function ProjectFilesPage({
           {docs.map((f) => (
             <ListRow key={f.id} testId="m-file-row">
               {canOpen && f.file_path ? (
-                <OpenFileButton path={f.file_path} fileName={f.file_name}>
+                <OpenFileButton path={f.file_path} fileName={f.file_name} mimeType={f.mime_type}>
                   <FileRowBody file={f} />
                 </OpenFileButton>
               ) : (

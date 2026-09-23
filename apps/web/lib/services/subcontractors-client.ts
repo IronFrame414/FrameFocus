@@ -157,6 +157,9 @@ export interface SubcontractorOption {
   company_name: string;
   /** For the 19c trade filter (§1.6). Nullable — many subs carry no trade. */
   trade_type: string | null;
+  /** S109 #159 — the bid-request dialog disables Send, with the reason, when
+   *  this is null; the send route refuses the same case with a 422. */
+  email: string | null;
 }
 
 export async function listSubcontractorOptions(): Promise<SubcontractorOption[]> {
@@ -164,7 +167,7 @@ export async function listSubcontractorOptions(): Promise<SubcontractorOption[]>
 
   const { data, error } = await supabase
     .from('subcontractors')
-    .select('id, company_name, trade_type')
+    .select('id, company_name, trade_type, email')
     .eq('is_deleted', false)
     .order('company_name', { ascending: true });
 

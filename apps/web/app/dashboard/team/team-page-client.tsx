@@ -20,6 +20,7 @@ import {
 } from '@/components/list-screen/list-screen';
 import type { Metric } from '@/components/list-screen/list-screen';
 import { badgeStyle, cardStyle, color, font, microLabelStyle, primaryButtonStyle } from '@/lib/theme';
+import { rowActivation } from '@/components/list-screen/row-activation';
 
 export default function TeamPageClient({
   userRole,
@@ -279,7 +280,11 @@ export default function TeamPageClient({
               return (
                 <tr
                   key={member.id}
-                  onClick={() => router.push(`/dashboard/team/${member.id}`)}
+                  // S109 #163 — was a bare onClick: mouse-only, unannounced.
+                  {...rowActivation(
+                    () => router.push(`/dashboard/team/${member.id}`),
+                    `Open ${member.first_name ?? ''} ${member.last_name ?? ''}`.trim()
+                  )}
                   style={{ borderBottom: `1px solid ${color.rowDivider}`, cursor: 'pointer' }}
                 >
                   <td style={{ ...td, paddingLeft: '20px', fontWeight: 600, color: color.navy }}>

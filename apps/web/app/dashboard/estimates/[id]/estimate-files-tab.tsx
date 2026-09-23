@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { fmtMoney } from '../labels';
+import { useFileSheet } from '@/components/files/file-sheet';
+import { rowActivation } from '@/components/list-screen/row-activation';
 
 // S106 Part C — the estimate Files tab. Lists + uploads through the service-role route
 // (/api/estimates/[id]/files); the ordinary files RLS blocks a PM on these project_id-NULL
@@ -13,7 +15,6 @@ interface EstimateFile {
   file_size: number;
   mime_type: string;
   created_at: string | null;
-  url: string | null;
 }
 
 const ALLOWED = 'application/pdf,image/jpeg,image/png,image/heic,image/heif';
@@ -31,6 +32,23 @@ export default function EstimateFilesTab({
   const [error, setError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const openFile = useFileSheet();
+
+  // S109 #161 — open in the SHEET, signed ON CLICK (ruling 161.B). The list no
+  // longer carries URLs; before this each one was signed for 300 s at load and
+  // died if clicked five minutes later.
+  function open(f: EstimateFile) {
+    openFile({
+      fileName: f.file_name,
+      mimeType: f.mime_type,
+      resolveUrl: async () => {
+        const res = await fetch(`/api/estimates/${estimateId}/files/${f.id}/url`);
+        if (!res.ok) return null;
+        const body = (await res.json()) as { url?: string };
+        return body.url ?? null;
+      },
+    });
+  }
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -143,16 +161,14 @@ export default function EstimateFilesTab({
           </thead>
           <tbody>
             {files.map((f) => (
-              <tr key={f.id} style={{ borderBottom: '1px solid #f1f3f7' }}>
-                <td style={cell}>
-                  {f.url ? (
-                    <a href={f.url} target="_blank" rel="noopener noreferrer" style={{ color: '#2f49d1', textDecoration: 'none' }}>
-                      {f.file_name}
-                    </a>
-                  ) : (
-                    f.file_name
-                  )}
-                </td>
+              <tr
+                key={f.id}
+                // #163 — the whole row opens the file; #161 — in the sheet.
+                {...rowActivation(() => open(f), `Open ${f.file_name}`)}
+                data-testid={`estimate-file-row-${f.id}`}
+                style={{ borderBottom: '1px solid #f1f3f7', cursor: 'pointer' }}
+              >
+                <td style={{ ...cell, color: '#2f49d1' }}>{f.file_name}</td>
                 <td style={{ ...cell, textAlign: 'right', fontFamily: 'var(--font-mono, monospace)' }}>
                   {fmtMoney(f.file_size / 1024 / 1024).replace('$', '')} MB
                 </td>

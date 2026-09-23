@@ -329,6 +329,25 @@ export async function getFileSignedUrlClient(
   return data?.signedUrl ?? null;
 }
 
+/** S109 #161 — the same signing as `getFileSignedUrlClient`, plus the name and
+ *  MIME type the file sheet needs to title and render it. Same RLS, same one
+ *  `files` read — it selects two more columns, it does not add a round trip. */
+export async function getFileViewClient(
+  fileId: string,
+  expiresIn = SIGNED_URL_TTL_SECONDS
+): Promise<{ url: string; fileName: string; mimeType: string | null } | null> {
+  const supabase = createClient();
+  const { data: row } = await supabase
+    .from('files')
+    .select('file_path, file_name, mime_type')
+    .eq('id', fileId)
+    .single();
+  if (!row?.file_path) return null;
+  const { data } = await supabase.storage.from(BUCKET).createSignedUrl(row.file_path, expiresIn);
+  if (!data?.signedUrl) return null;
+  return { url: data.signedUrl, fileName: row.file_name, mimeType: row.mime_type };
+}
+
 export async function updateFile(
   id: string,
   updates: {

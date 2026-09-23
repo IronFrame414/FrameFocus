@@ -253,9 +253,16 @@ describe('S159 — Subs & Vendors and Contacts behave the same way', () => {
       ['contacts', contactsList],
       ['subs', subsList],
     ] as const) {
-      expect(src, `${name}: the row does not open anything`).toContain('onClick={() => setOpenId(');
-      expect(src, `${name}: the row is not keyboard-operable`).toMatch(
-        /e\.key === 'Enter' \|\| e\.key === ' '/
+      // [S109 #163] Superseded assertions, quoted: `toContain('onClick={() => setOpenId(')`
+      // and a match on `e.key === 'Enter' || e.key === ' '` in each list. The click
+      // and the Enter/Space handling now live ONCE, in the shared row primitive
+      // (`components/list-screen/row-activation.tsx`, asserted by
+      // `s109-row-activation.test.tsx`); each list must route its row through it.
+      expect(src, `${name}: the row does not open anything`).toContain(
+        '{...rowActivation(() => setOpenId('
+      );
+      expect(src, `${name}: the row bypasses the shared primitive`).toMatch(
+        /import \{ rowActivation \} from '@\/components\/list-screen\/row-activation'/
       );
       expect(src, `${name}: an Actions column is back`).not.toContain('>Actions<');
     }

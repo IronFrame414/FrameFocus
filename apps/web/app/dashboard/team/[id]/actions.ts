@@ -1,7 +1,7 @@
 'use server';
 
 import { createClient } from '@/lib/supabase-server';
-import { createClient as createPlainClient } from '@supabase/supabase-js';
+import { verifyCurrentPassword } from '@/lib/auth/verify-current-password';
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
 import { getStripe } from '@/lib/stripe';
 import { revalidatePath } from 'next/cache';
@@ -151,15 +151,8 @@ export async function transferOwnershipAction(
   // report the existence of a profile the caller may not be entitled to see.
   if (!target) return { ok: false, error: 'Target not found' };
 
-  const plain = createPlainClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  );
-  const { error: pwErr } = await plain.auth.signInWithPassword({
-    email: callerEmail,
-    password,
-  });
-  if (pwErr) {
+  // S109 #162 — the shared re-verify (it now also revokes its throwaway session).
+  if (!(await verifyCurrentPassword(callerEmail, password))) {
     return { ok: false, error: 'Incorrect password' };
   }
 

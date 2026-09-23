@@ -129,6 +129,16 @@ top of this file is advanced to `#164` in the same commit, which is what keeps t
   `handleSendRequest`/send route, not a second mechanism — CLAUDE.md → PARITY), and keep the link
   for the copy-by-hand case, which is a deliberate supported path (`reply_mode = 'link'`).
 
+  **⚙️ S109 — BUILT on `feature/s109-debt-159-163`; open until Josh applies `20261700000000` to
+  production and merges.** `DROP DEFAULT` only — **no back-fill, by ruling** (production holds one
+  request, and it was really sent). `status DEFAULT 'sent'` left alone by ruling; the chip reads
+  "not yet emailed" when `sent_at IS NULL`. The dialog offers Send in both reply modes through the
+  same `handleSendRequest`, disabled with the reason when the sub has no email. ⚠️ **The
+  back-fill instrument in this entry was wrong as well as unverified:** `email_logs.status` is
+  advanced past `sent` by the Resend webhook (the one production row reads `delivered`), so
+  "a request with no matching `email_logs` row" must never be read as `status = 'sent'`. See
+  `docs/sessions/S109-report.md` Step 1.
+
 - **#160 — removing a team member leaves a ghost in `company_members`; the two tables do not
   agree.** `softDeleteTeamMember()` (`lib/services/team.ts:117-134`) marks
   `profiles.is_deleted = true` + `deleted_at` and bans the auth user — and **never touches
@@ -168,6 +178,16 @@ top of this file is advanced to `#164` in the same commit, which is what keeps t
   directory subs and vendors that were never linked to a profile (S113 counted 32 such roster
   rows). A trigger keyed on `profile_id` match touches none of them, which is the correct
   behaviour, and a fix written as a broad sweep instead would wipe the sub directory.
+
+  **⚙️ S109 — BUILT on `feature/s109-debt-159-163`; open until Josh applies `20261710000000` to
+  production and merges.** Trigger `profiles_sync_member_deleted` (AFTER UPDATE OF `is_deleted`),
+  both directions, fires only when `is_deleted` changes. ⚠️ **Constraint (b) above was incomplete:**
+  `handle_new_user()` links an invited sub user's profile to the sub DIRECTORY's member row, so
+  `member_type = 'subcontractor'` is excluded as well (ruling ASK-160.C; production has 7 such
+  rows). The migration also cleans existing ghosts and refuses to commit if any remain —
+  production has exactly one, **Jo B** (`jsbishop14+p3@gmail.com`, member
+  `3305f15b-4b28-48cf-8f88-6f84bbbe8661`), so **#160 was still producing ghosts at S109.** The
+  reverse direction is a separate defect: **`#1-s109`**. See `docs/sessions/S109-report.md` Step 2.
 
 - **#161 — a PDF opens in a new tab and the user loses their place. RULED [Josh]: it should open
   in a SHEET over the current screen by default**, with explicit actions for **open in new tab**,
@@ -276,6 +296,27 @@ top of this file is advanced to `#164` in the same commit, which is what keeps t
   explicit **download** action is the natural place to collapse the four into one helper; if the
   sheet is built without doing so, this becomes its own entry.
 
+  **⚙️ S109 — BUILT on `feature/s109-debt-159-163`, scope per ruling 161.B; open until merge AND
+  until the rest of the call sites below are migrated.** `components/sheet/modal-sheet.tsx` (the
+  reusable modal — focus trap, Escape, focus restore, scroll lock; ruling 161.A) under
+  `components/files/file-sheet.tsx` (`FileSheetProvider` in the dashboard AND /m layouts,
+  `useFileSheet()`; PDF via pdf.js all pages lazily, image, HEIC-with-fallback, video/audio, and a
+  no-preview panel for everything else; new tab / print / download; signs on OPEN, re-signs once
+  on a failed load, then "Reload"). **Migrated:** desktop Files tab row, `/m` files (the S97 cut
+  superseded in place), estimate Files tab (+ ruling 161.B's sign-on-click fix, `#2-s109`), bid
+  documents, compliance docs, chat photos (both surfaces), and the three forced-download buttons —
+  daily log, incident, delivery — which now say **View PDF**. **Invoice PDF stays a new tab** by
+  ruling 161.C (`#3-s109`). `predev` now copies the pdf.js worker. See `S109-report.md` Step 5.
+  **NOT yet migrated — the remaining sites of this entry, still opening a new tab / inline:**
+  `file-row-actions.tsx:49` (explicit Download — arguably correct as is),
+  `releases-panel.tsx:81`, `lien-release-settings-form.tsx:260`, `contract-settings-form.tsx:420`,
+  `deliveries/d/[deliveryId]/page.tsx:186/223`, `review-popup.tsx:422`, **the portal**
+  (`portal/[projectId]/files/page.tsx:122`), `signing-activity.tsx:68`, `po-lines-panel.tsx:323`,
+  and the eight inline-only surfaces (two of which Phase 1 found stale — see the S109 spec,
+  FILL-161.1). Archive/export ZIPs are downloads, not viewables, and stay out.
+  ⚠️ **Print on iOS is unverified on a device** — the sheet hands iOS a new tab for the share
+  sheet by design (FILL-161.3); CC cannot run iOS Safari.
+
 - **#162 — no way for a user to change their own password. A change-password page EXISTS and
   WORKS; what is missing is any route to it.** ⚠️ **Verified before filing, per the request, and
   the verification changed what is owed** — this is not "build a change-password feature".
@@ -321,6 +362,21 @@ top of this file is advanced to `#164` in the same commit, which is what keeps t
   explicit `signInWithPassword` re-verify before the update.
   (b) **The 8-character minimum is enforced in the page only** (`:19`), client-side, with no
   server or DB floor behind it. Any new entry point inherits that.
+
+  **⚙️ S109 — BUILT on `feature/s109-debt-159-163`; open until merge.** `PasswordForm`
+  (`components/account/password-form.tsx`) on both account pages → server action
+  `changeMyPassword` (`lib/auth/change-my-password.ts`), which **requires the current password**
+  (ruling ASK-162.A) through `verifyCurrentPassword` (`lib/auth/verify-current-password.ts`) —
+  the check extracted from transfer-ownership, which now calls it too. (a) is settled for the new
+  control; (b) is settled for it too — the length floor is `PASSWORD_MIN_LENGTH`, enforced on the
+  server. The re-verify's throwaway session is now revoked with `scope: 'local'` (supabase-js
+  defaults to `'global'`). `/reset-password` lands a subcontractor on `/m/projects` and a client
+  on `/portal`. Clients are out of scope (ruling 162.B — Module 9).
+  ⚠️ **NOT closed by S109, and a question for Josh:** `/reset-password` itself still changes the
+  password of **any live session with no current password** — it has to, because the recovery
+  link's user does not know their password, and the page cannot tell a recovery session from an
+  ordinary one without a design decision. So the unlocked-phone case the ruling addressed is closed
+  on the Account page and **still open at that URL**. See `S109-report.md` Step 3.
 
 - **#163 — only the text in a row is clickable, not the row. RULED [Josh]: the whole row is the
   click target wherever rows of items are listed** — files, contacts, and every other list — with
@@ -476,6 +532,68 @@ top of this file is advanced to `#164` in the same commit, which is what keeps t
   SATISFIED for its two named screens** (group (a) above), though it is still open in this file.
   Whoever lands #163 should close or amend #13 in the same pass rather than leaving a stale
   narrower duplicate. Not renumbered or merged here, per the request and per the immutability rule.
+
+  **⚙️ S109 — BUILT on `feature/s109-debt-159-163`; open until merge.** RULED option 1 (ASK-163.A):
+  **one shared row primitive**, `components/list-screen/row-activation.tsx` — `rowActivation()`
+  (spread onto an existing `<tr>`/`<div>`) and `ActivatableRow` (for the two server-component
+  pages). It owns click, Enter/Space, role/tabIndex/aria-label, and the guard against an event that
+  started inside an interactive child; it owns no columns, layout or data. Migrated: contacts, subs
+  (behaviour unchanged, now one mechanism), projects, team members, files, changes panel (all four
+  were mouse-only), estimates, invoices, project open-items (all three were text-only), catalog
+  (row opens Edit for a manager, ruling 163.B). **Left alone:** expenses stays inert (163.B);
+  daily logs was already correct; `portal-selections-ui.tsx` was mis-grouped — it is a `<label>`
+  that PICKS an option, not a row that opens one; the line-items card opens nothing and has no
+  click handler, by design. Title links demoted to text on estimates and invoices (the subs
+  precedent). The #13 line above, found still open while closed elsewhere, is struck here.
+  Traps: `test/s109-row-activation.test.tsx` + `e2e/desktop-row-activation-s109.spec.ts`, each
+  proven by sabotage — see `S109-report.md` Step 4.
+
+### Branch-scoped, awaiting real numbers — `feature/s109-debt-159-163` [S109]
+
+- **#2-s109 — ✅ FIXED ON THIS BRANCH (filed by ruling 161.B, closes on merge): the Estimate
+  Files tab's links died five minutes after the tab loaded.** `GET /api/estimates/[id]/files`
+  signed every file with `createSignedUrl(f.file_path, 300)` at LIST time, and
+  `estimate-files-tab.tsx` only re-listed on mount or after an upload — so a click more than
+  300 s after opening the tab hit an expired link. Found in S109 Phase 1 (missed by #161's sweep).
+  **Fix:** the list returns no URL and no `file_path`; the click signs one file through the new
+  `GET /api/estimates/[id]/files/[fileId]/url` (7200 s, `SIGNED_URL_TTL_SECONDS`), behind the SAME
+  `resolveEstimateFileAccess()` floor, run before the service-role client
+  (`s109-estimate-file-url-order.test.ts`). Guarded by `e2e/desktop-file-sheet-s109.spec.ts` S2
+  (proven by sabotage). Sibling, not fixed: `api/bid/[token]/files/route.ts:101` also signs for
+  300 s at list time, but has no UI consumer today.
+
+- **#3-s109 — DEFECT: viewing a SENT invoice's PDF re-renders it and OVERWRITES the stored copy,
+  every time. RULED [Josh, S109 161.C]: filed as its own defect; the invoice PDF stays a new tab.**
+  `app/api/invoices/[id]/pdf/route.ts` generates the PDF on every request and, for a sent invoice,
+  calls `storeInvoicePdf` — so "Print / Preview PDF" (`invoice-builder.tsx:1891`) replaces the
+  stored document of record on each view. A sent invoice is a document someone was billed on; its
+  stored PDF should be written once, at send, and read thereafter. **Fix shape (not built):** store
+  at send only; the view path serves the stored file (a signed URL — which also lets it join the
+  file sheet) and renders only for drafts.
+
+- **#4-s109 — the `?download=` "convention" is still FOUR mechanisms, now FIVE.** Filed because
+  #161 said so: _"if the sheet is built without doing so, this becomes its own entry."_ S109
+  added `withDownload()` (`lib/files/file-view.ts`) for the sheet's Download action and did NOT
+  migrate the other four (`?download=` at `file-row-actions.tsx:47-49`, `&download=` at
+  `signing-activity-client.ts:79`, Supabase's `{ download }` option at three sites, `?download=1`
+  on the invoice route). Collapse them onto one helper; `withDownload()` is idempotent and handles
+  a signed URL's existing `?token=`, so it is the candidate.
+
+- **#1-s109 — DEFECT: a person deactivated on `/m/team` can still sign in. RULED [Josh, S109
+  ASK-160.B]: filed separately, as a defect, not an idea.** `/m/team/[memberId]/edit/team-edit-form.tsx`
+  writes `is_deleted: active === 'inactive'` straight to `company_members` via `updateMember()`
+  (`members-client.ts:92`). It never touches `profiles` and never bans the auth user — so the
+  person leaves the pickers but **keeps a live login**, the reverse of #160's ghost. Desktop's
+  Remove (`softDeleteTeamMember()`) bans; `/m`'s Inactive does not — two surfaces, two meanings
+  for the same act (CLAUDE.md → PARITY).
+  **Why #160's trigger does not cover it:** that trigger runs profile → member. Running it the
+  other way (member → profile + ban) from a trigger cannot ban, since the ban is an auth admin
+  call, not SQL. **Fix shape (not built):** route `/m`'s Inactive through the same server action
+  as desktop Remove, so one mechanism deactivates, soft-deletes the profile and bans; #160's
+  trigger then brings the member row along. Measured on production at S109: **0** reverse ghosts
+  (query B, `S109-SPEC-debt-159-163.md` FILL-160.3) — the defect is latent, not yet hit.
+  ⚠️ **Build constraint already honoured by #160:** the trigger fires only when `is_deleted`
+  changes, so `/m`'s profile save in the same submit does not undo the member-only toggle today.
 
 ### Branch-scoped, awaiting real numbers — `feature/s106` [S106]
 
@@ -636,6 +754,20 @@ top of this file is advanced to `#164` in the same commit, which is what keeps t
   Fixed for P3 specifically: `on_auth_user_created_autoconfirm` (20261600000000) moves the confirm
   into the transaction; A1/A2 inverted with the superseded assertions quoted. Record:
   `docs/specs/S160-auth-email-hook.md` §6a.
+
+  **📋 S108 D2b CLASSIFICATION — recorded here at S109 (it had lived only in
+  `docs/sessions/S108-report.md:197-215`).** Every suspect in the class — tests that call a hook,
+  webhook or route handler directly — was asked this entry's question: _does this handler read
+  state that its caller is concurrently writing?_ **Result: the class has exactly one member, and it
+  is already fixed** — `s160-auth-email.live.ts` A1/A2, inverted to assert the
+  `on_auth_user_created_autoconfirm` trigger. `webhook-resend.live.ts` is timing-dependent and
+  **covered** (its case 6 is the event-beats-`logEmail()` race). Covered and not timing-dependent:
+  `auth-email-hook-signature-headers`, `s107-estimate-files-route-order`,
+  `s107-bid-request-send-order`, `email-unsubscribe`, `s146-generate-route`,
+  `s174-selections-email`, `s175-stage6`/`-stage7`, `signed-url-error-contract`. **One declared
+  gap, Josh's to close:** `card-signup-webhook.test.ts` covers the handler's logic but not the Stripe
+  event SHAPE (the file says so in its header) — a Stripe test-mode check. Whether that leaves this
+  entry closable is Josh's call; the classification is not a closure.
 
 - **#1-s106 — the invoicing→QuickBooks mapping must handle a NET-NEGATIVE line, now that
   one can originate upstream of invoicing.** S106 ruled a negative typed total legal on an
@@ -1595,7 +1727,11 @@ Decide once, for this AND the event log's identical prune (G1 #4 is the same rul
 - **#131 (original entry)** GitHub Actions repo secrets `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` were added pointing at **rebuild-test** so the Playwright job can boot the app (`.github/workflows/ci.yml:94-95`). **They are meant to be removed later, and the consequence of removing them is not a skipped test — it is a whole-suite failure that misreports its own cause.** Without them `next dev` still starts, but `middleware.ts` constructs its Supabase client from `process.env.NEXT_PUBLIC_SUPABASE_URL!` and `..._ANON_KEY!` (`:11-12`) — non-null assertions over `undefined` — so the client is built against nothing and **every matched route 500s**. The matcher covers `/dashboard/:path*`, `/sign-in` and `/sign-up`, and `e2e/auth.setup.ts` signs in through `/sign-in`, so **setup fails and every authenticated spec fails on `page.goto` rather than on its assertion**. A reader of that CI log sees fifty broken tests, not one missing secret. If they are removed, either give the e2e job placeholder values or gate the job on their presence and say so in the skip reason. Observed Session 100.
 ### UX Polish
 
-- **#13** Row click should open read-only detail view (contacts + subcontractors) — currently Edit button is only way in
+- ~~**#13** Row click should open read-only detail view (contacts + subcontractors) — currently Edit button is only way in~~
+  — **stale duplicate, struck [S109 #163].** #13 is **CLOSED in `TECH_DEBT_CLOSED.md:42`** (built
+  S140/S158/S159) but this open-register line was never removed, so the number lived in two
+  files, against this register's own rule. The line is kept struck rather than deleted; the
+  record is the closed entry. #163 (whole-row, every list) is its wider successor.
 - **#89** Vendors are mislabeled "(Sub)" in the project-scheduling New Task assignee dropdown. Both subcontractors and vendors from the Subs & Vendors list render with a "(Sub)" suffix, so a vendor (member_type='vendor') shows as "(Sub)" — the label doesn't match the record's type. Assignment itself works correctly; this is a display bug only. Fix: label each assignee by its actual type — "(Sub)" for subcontractors, "(Vendor)" for vendors. Likely a single dropdown-builder that hardcodes the "(Sub)" suffix instead of reading member_type. Observed Session 79 during manual testing.
 - **#100** Photo markup is invisible outside the markup editor. markup_data (JSONB on files, baseline :1386) renders only as an SVG overlay in markup-editor.tsx; the file grid, daily-log/incident/delivery photo strips, all three PDF services, and downloads all show the raw original. A user who marks up a photo sees no evidence of it anywhere afterward. Intent (Josh, S90): markup should persist as a non-destructive LAYER over the original — original bytes never overwritten, markup viewable wherever the photo is viewed. Fix shape: render the SVG overlay in every photo surface (grid, strips, viewer), and composite to flat JPEG/PNG only where the image must leave the app. Cross-ref #53 (flattened export for email/PDF — the leaving-the-app half of the same problem) and #55 (in-app fullscreen viewer, the natural host for layered display). Discovered Session 90 during markup testing.
 - **#101** Job/task switching is unreachable outside /dashboard/timeclock, and the dashboard shell has no mobile handling. ClockModal's modes are 'clock-in' | 'clock-out' only; the switch modal lives solely in timeclock-client.tsx, so a crew member on any other page must navigate to the timeclock page to switch jobs — and the 7A material-run expense prompt on the switch path only fires there. Compounding it, dashboard-shell.tsx has zero responsive handling: no media queries, no drawer, a shrink-0 236px sidebar that never collapses (~140px of usable content on a 375px phone), and a non-sticky header, so the global clock button scrolls out of view. Intent (Josh, S90): the clock control should be locked to the top on mobile, and switching should be reachable from it. Fix shape: add a 'switch' mode to ClockModal so the global button can switch, and make the header sticky + the shell responsive. Field crew on phones are the primary audience for 6A/7A capture. Cross-ref #30 (mobile app is a placeholder — this is the web shell that exists today). Discovered Session 90.

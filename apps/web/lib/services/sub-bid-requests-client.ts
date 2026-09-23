@@ -40,7 +40,9 @@ export interface CreateSubBidRequestInput {
   expiresInDays?: number;
 }
 
-type Result = { success: boolean; error?: string; token?: string };
+// S109 #159 — `id` is returned so the creation dialog can SEND the request it
+// just made (through the same send route as the chip's Send), not only show a link.
+type Result = { success: boolean; error?: string; token?: string; id?: string };
 
 /** The public reply URL for a request token. */
 export function bidReplyUrl(token: string): string {
@@ -69,11 +71,11 @@ export async function createSubBidRequest(input: CreateSubBidRequestInput): Prom
       site_visit_date: input.siteVisitDate ?? null,
       expires_at: expires.toISOString(),
     })
-    .select('token')
+    .select('id, token')
     .single();
 
   if (error) return { success: false, error: error.message };
-  return { success: true, token: data.token };
+  return { success: true, token: data.token, id: data.id };
 }
 
 /** Requests already sent for an estimate (newest first), to show status chips. */

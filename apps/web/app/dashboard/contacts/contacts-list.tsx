@@ -5,6 +5,7 @@ import Link from 'next/link';
 import type { Contact } from '@/lib/services/contacts';
 import { CONTACT_TYPE_LABELS } from '@framefocus/shared/constants';
 import { ContactDetailSheet } from './contact-detail-sheet';
+import { rowActivation } from '@/components/list-screen/row-activation';
 import {
   FilterChips,
   ListPageHeader,
@@ -181,21 +182,10 @@ export function ContactsList({ contacts, canEdit, jobs, portal }: ContactsListPr
                     <tr
                       key={c.id}
                       // The whole row, per the ruling — not a link on the name cell,
-                      // which is the shape the subs list uses and which leaves most
-                      // of the row inert.
-                      onClick={() => setOpenId(c.id)}
-                      // A clickable `<tr>` is invisible to the keyboard on its own.
-                      // These three are what make the row an actual control rather
-                      // than a mouse-only affordance.
-                      tabIndex={0}
-                      role="button"
-                      aria-label={`Open ${c.first_name} ${c.last_name}`}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          e.preventDefault();
-                          setOpenId(c.id);
-                        }
-                      }}
+                      // which leaves most of the row inert. Click, keyboard
+                      // (role/tabIndex/Enter/Space) and the interactive-child guard
+                      // come from the ONE shared row primitive [S109 #163].
+                      {...rowActivation(() => setOpenId(c.id), `Open ${c.first_name} ${c.last_name}`)}
                       data-testid={`contact-row-${c.id}`}
                       style={{ borderBottom: `1px solid ${color.rowDivider}`, cursor: 'pointer' }}
                     >

@@ -8,6 +8,7 @@ import { dashboardDeniedRedirect } from '@/lib/dashboard-access';
 import { DashboardShell } from './dashboard-shell';
 import { RegisterPushSw } from './register-push-sw';
 import { ConfirmProvider } from '@/components/confirm/confirm-provider';
+import { FileSheetProvider } from '@/components/files/file-sheet';
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient();
@@ -85,25 +86,29 @@ export default async function DashboardLayout({ children }: { children: React.Re
     unreadCountP,
   ]);
 
+  // S109 #161 — the file sheet wraps the WHOLE shell, not just the page, so the
+  // chat panel (rendered by the shell) opens attachments in the same sheet.
   return (
-    <DashboardShell
-      userName={`${profile.first_name} ${profile.last_name}`}
-      userRole={profile.role}
-      companyName={company.data?.name ?? 'My Company'}
-      openSession={openSession}
-      myMemberId={myMember?.id ?? null}
-      timeZone={timeSettings.timezone}
-      gpsMode={timeSettings.gpsClockMode}
-      unreadCount={unreadCount}
-      myProfileId={profile.id}
-    >
-      {/* ND-4 — registers the push-only desktop worker. Renders nothing, and
+    <FileSheetProvider>
+      <DashboardShell
+        userName={`${profile.first_name} ${profile.last_name}`}
+        userRole={profile.role}
+        companyName={company.data?.name ?? 'My Company'}
+        openSession={openSession}
+        myMemberId={myMember?.id ?? null}
+        timeZone={timeSettings.timezone}
+        gpsMode={timeSettings.gpsClockMode}
+        unreadCount={unreadCount}
+        myProfileId={profile.id}
+      >
+        {/* ND-4 — registers the push-only desktop worker. Renders nothing, and
           registering is not subscribing: no prompt fires from here. */}
-      <RegisterPushSw />
-      {/* S175 item 9 — the shared confirm/alert overlay behind useConfirm()/
+        <RegisterPushSw />
+        {/* S175 item 9 — the shared confirm/alert overlay behind useConfirm()/
           useAlert(), replacing native window.confirm/alert across the dashboard.
           Mounted here because every call site lives under /dashboard. */}
-      <ConfirmProvider>{children}</ConfirmProvider>
-    </DashboardShell>
+        <ConfirmProvider>{children}</ConfirmProvider>
+      </DashboardShell>
+    </FileSheetProvider>
   );
 }

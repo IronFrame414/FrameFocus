@@ -7,6 +7,7 @@ import type { ChatMessageWithPhotos } from '@/lib/chat/photos';
 import type { ThreadKind } from '@/lib/chat/threads';
 import { useChatThread } from './use-chat-thread';
 import { ChatComposer } from './chat-composer';
+import { useFileSheet } from '@/components/files/file-sheet';
 
 /**
  * THE thread view. One component, both desktop surfaces — A-C28.
@@ -69,6 +70,7 @@ export function ChatThreadView({
   } = useChatThread({ projectId, surface, kind });
 
   const scrollRef = useRef<HTMLDivElement>(null);
+  const openFile = useFileSheet();
   const [older, setOlder] = useState<ChatMessageWithPhotos[]>([]);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const lastSeenCount = useRef(0);
@@ -268,6 +270,16 @@ export function ChatThreadView({
                           href={photo.displayUrl!}
                           target="_blank"
                           rel="noopener noreferrer"
+                          // S109 #161 — a plain click opens the photo in the SHEET,
+                          // over the thread (shared by desktop and /m, so both get
+                          // it). The href stays: a modified click (Cmd/Ctrl, middle)
+                          // still opens a new tab, and the D-31 signed-URL test reads it.
+                          onClick={(e) => {
+                            if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+                            e.preventDefault();
+                            const url = photo.displayUrl!;
+                            openFile({ fileName: photo.fileName, mimeType: 'image/jpeg', resolveUrl: async () => url });
+                          }}
                           title={photo.fileName}
                           style={{
                             display: 'block',

@@ -14,6 +14,7 @@ import {
 } from '@/components/list-screen/list-screen';
 import type { Metric } from '@/components/list-screen/list-screen';
 import { badgeStyle, cardStyle, color, font, microLabelStyle, primaryButtonStyle } from '@/lib/theme';
+import { rowActivation } from '@/components/list-screen/row-activation';
 
 interface ProjectsListProps {
   projects: ProjectWithContact[];
@@ -246,7 +247,8 @@ export function ProjectsList({
             return (
               <div
                 key={p.id}
-                onClick={() => router.push(`/dashboard/projects/${p.id}`)}
+                // S109 #163 — was a bare onClick: mouse-only, unannounced.
+                {...rowActivation(() => router.push(`/dashboard/projects/${p.id}`), `Open ${p.name}`)}
                 onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = color.tableHeadBg)}
                 onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = restBg)}
                 style={{

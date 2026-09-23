@@ -12,6 +12,7 @@ import { memberColor } from '@/components/schedule/member-color';
 import { StatusControl } from './status-control';
 import { RateSummary } from './rate-summary';
 import { cardStyle, color, font, microLabelStyle } from '@/lib/theme';
+import { ActivatableRow } from '@/components/list-screen/row-activation';
 
 /**
  * ui-04 — 1a Project Overview: KPI row + schedule-progress stepper (derived
@@ -475,25 +476,37 @@ export default async function ProjectOverviewPage({ params }: { params: { id: st
                     {item.text}
                   </span>
                 );
-                return (
-                  <div key={i} style={{ display: 'flex', gap: '9px', alignItems: 'flex-start' }}>
-                    <span
-                      style={{
-                        width: '8px',
-                        height: '8px',
-                        borderRadius: '50%',
-                        backgroundColor: item.dot,
-                        marginTop: '5px',
-                        flexShrink: 0,
-                      }}
-                    />
-                    {item.href ? (
-                      <Link href={item.href} style={{ textDecoration: 'none' }}>
-                        {body}
-                      </Link>
-                    ) : (
-                      body
-                    )}
+                const dot = (
+                  <span
+                    style={{
+                      width: '8px',
+                      height: '8px',
+                      borderRadius: '50%',
+                      backgroundColor: item.dot,
+                      marginTop: '5px',
+                      flexShrink: 0,
+                    }}
+                  />
+                );
+                const rowStyle = { display: 'flex', gap: '9px', alignItems: 'flex-start' } as const;
+                // S109 #163 — an item that opens something is a WHOLE-ROW target
+                // (it was a Link on the text only). One with no href opens nothing
+                // and stays inert: a row that opens nothing has nothing to open.
+                return item.href ? (
+                  <ActivatableRow
+                    key={i}
+                    as="div"
+                    href={item.href}
+                    label={`${item.emphasis} ${item.text}`}
+                    style={rowStyle}
+                  >
+                    {dot}
+                    {body}
+                  </ActivatableRow>
+                ) : (
+                  <div key={i} style={rowStyle}>
+                    {dot}
+                    {body}
                   </div>
                 );
               })}

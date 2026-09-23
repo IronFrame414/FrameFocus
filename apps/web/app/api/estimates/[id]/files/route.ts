@@ -55,7 +55,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
   const admin = getSupabaseAdmin();
   let q = admin
     .from('files')
-    .select('id, file_name, file_path, file_size, mime_type, category, created_at')
+    .select('id, file_name, file_size, mime_type, category, created_at')
     .eq('estimate_id', estimateId)
     .eq('company_id', access.companyId)
     .eq('is_deleted', false)
@@ -72,18 +72,13 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     return NextResponse.json({ error: 'Could not list files' }, { status: 500 });
   }
 
-  // Signed URLs, admin-generated — the ordinary /api/files/signed-url route uses the
-  // SESSION client and is blocked on these project_id-NULL rows, same as the list. The
-  // route already proved the caller can see these rows, so signing here is in-scope.
-  const withUrls = await Promise.all(
-    (files ?? []).map(async (f) => {
-      const { data: signed } = await admin.storage
-        .from(BUCKET)
-        .createSignedUrl(f.file_path, 300);
-      return { ...f, url: signed?.signedUrl ?? null };
-    })
-  );
-  return NextResponse.json({ files: withUrls });
+  // S109 #161 [RULED 161.B] — NO URLs AT LIST TIME. _Superseded, quoted: "Signed
+  // URLs, admin-generated … signing here is in-scope"_ — correct about WHO may
+  // sign, wrong about WHEN: each URL lived 300 s and the tab only re-listed on
+  // mount/upload, so a click after five minutes hit a dead link. The client now
+  // signs one file on click via `./[fileId]/url`, behind this same floor.
+  // `file_path` is not returned either: nothing in the tab needs it.
+  return NextResponse.json({ files: files ?? [] });
 }
 
 // POST — upload a file to an estimate. EDIT rights: owner/admin any DRAFT, PM own DRAFT

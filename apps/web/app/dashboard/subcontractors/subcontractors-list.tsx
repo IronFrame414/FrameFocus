@@ -4,6 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import type { Subcontractor } from '@/lib/services/subcontractors';
 import { SubcontractorDetailSheet } from './subcontractor-detail-sheet';
+import { rowActivation } from '@/components/list-screen/row-activation';
 import {
   AlertStrip,
   FilterChips,
@@ -229,18 +230,9 @@ export function SubcontractorsList({
                   return (
                     <tr
                       key={s.id}
-                      onClick={() => setOpenId(s.id)}
-                      // A clickable `<tr>` is invisible to the keyboard without
-                      // these three. Same as the contacts list.
-                      tabIndex={0}
-                      role="button"
-                      aria-label={`Open ${s.company_name}`}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          e.preventDefault();
-                          setOpenId(s.id);
-                        }
-                      }}
+                      // Click, keyboard and the interactive-child guard: the ONE
+                      // shared row primitive [S109 #163]. Same as the contacts list.
+                      {...rowActivation(() => setOpenId(s.id), `Open ${s.company_name}`)}
                       data-testid={`sub-row-${s.id}`}
                       style={{ borderBottom: `1px solid ${color.rowDivider}`, cursor: 'pointer' }}
                     >
