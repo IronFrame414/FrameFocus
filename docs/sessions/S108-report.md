@@ -1530,3 +1530,70 @@ run before STEP 2's merge.
 
 **Real-money spend this session (OpenAI, test only):** the voice probe (two ~6 s transcriptions + two
 TTS clips), `s108-voice.live.ts` (three transcription calls), two e2e voice runs — cents in total.
+
+---
+
+## S108 FOLLOW-UP — two field defects from Josh's production test (2026-09-23)
+
+**Branch:** `feature/site-visit-finish-and-review`, cut from `main` @ `3b2f0eaa` (verified: `origin/main`
+tip `3b2f0eaa merge: per-company warming quota`; tree clean). CLI link checked:
+`supabase/.temp/linked-project.json` → `nmyphyhmfttxkdoposvf` (rebuild-test).
+
+### Step 1 — DEFECT 1 measured: what promoted EST-107
+
+**⚠️ NOT measured on production by CC, and why, in one line:** `scripts/live-sql.mjs` refuses every ref
+but rebuild-test *by design* ("an audit tool must not be pointable at production"), the Supabase MCP is
+pinned to `--project-ref nmyphyhmfttxkdoposvf`, and the standing constraint is "nothing touches
+production" — so I did not route around the guard. **The query is below for Josh to run.**
+
+**What the code establishes — read from `main` @ `3b2f0eaa`, the deployed tree:**
+
+1. **Exactly ONE writer of `site_visits.promoted_at` / `promoted_by` exists:** `promote_site_visit()`
+   (`20261650000000_site_visit.sql` §8f). It refuses any role but owner/admin/PM (42501), and in the
+   same statement sets `estimates.status='draft'`, calls `next_estimate_number()`, and **rewrites
+   `estimates.created_by` to the promoter**.
+2. **Exactly ONE caller of that RPC in the app:** `promoteSiteVisit()` ← the desktop button
+   **"Create estimate from this visit"** (`app/dashboard/estimates/site-visits/[id]/office-actions.tsx`,
+   `data-testid="sv-promote"`), behind a `confirm()`. No `/m` screen calls it; `SiteVisitRecord` has no
+   promote control; no server route, cron, trigger or offline-replay path calls it
+   (`grep promote_site_visit|promoteSiteVisit` over `app/ lib/ components/` = those two files only).
+3. **Nothing promotes on navigation.** No `useEffect`, unmount handler, `beforeunload`, redirect or
+   server page writes `estimates.status`. The builder page only READS status and redirects a visit to
+   its record (`[id]/page.tsx:48`).
+4. **The only other way to reach `draft`** is a direct owner/admin UPDATE through
+   `estimates_update_manager`; `enforce_estimate_immutability` permits `site_visit → draft`. No app
+   code issues one (`grep "status: 'draft'"` over `lib/`/`app/` finds no estimates write).
+
+**The most likely sequence, to be confirmed by the query:** Josh is the **Owner**, so the
+`site_visit_recorded` notification and the **Estimates → Open site visits** panel both lead him to the
+desktop record page — whose ONLY prominent action is a blue **"Create estimate from this visit"**.
+With no Finish control anywhere, that button is the one thing on either surface that looks like
+"done". If `promoted_by` = Josh's user id, the promotion was that tap plus the confirm, taken as
+"finish" — **a UI defect (no finish control, and promote was the only "done"-shaped affordance), not
+a database one.** If `promoted_at` is NULL while `status='draft'`, something wrote status outside
+the RPC and this conclusion is wrong — **stop and report**.
+
+**The query — READ-ONLY, production SQL editor:**
+
+```sql
+select e.estimate_number, e.status, e.created_at as est_created_at, e.updated_at as est_updated_at,
+       e.created_by as est_created_by, e.updated_by as est_updated_by,
+       sv.created_by as recorder, sv.created_at as visit_created_at,
+       sv.promoted_at, sv.promoted_by,
+       (sv.promoted_by = e.created_by) as promoter_is_est_author,   -- expect TRUE if the RPC ran
+       (sv.promoted_by = sv.created_by) as promoter_is_recorder,
+       pr.role as promoter_role, pr.email as promoter_email,
+       (select max(created_at) from site_visit_notes n where n.estimate_id = e.id) as last_note_at,
+       (select max(created_at) from site_visit_voice_notes v where v.estimate_id = e.id) as last_voice_at
+from estimates e
+join site_visits sv on sv.estimate_id = e.id
+left join profiles pr on pr.user_id = sv.promoted_by and not coalesce(pr.is_deleted,false)
+where e.id = 'd858b3c6-d86c-4c23-9a9b-f9ee7ef97678';
+```
+
+Reading it: `promoted_at` non-null **and** `promoter_is_est_author = true` ⇒ the RPC ran, at
+`promoted_at`, by `promoter_email`. `promoted_at` minus `last_voice_at` says how long after the last
+capture it happened.
+
+**Consequence for the fix — it does not depend on the answer.** Either way the phone needs a Finish
+control and promotion must be unmistakably a separate office decision.
