@@ -1,3 +1,5 @@
+import { LanguageProvider } from '@/components/i18n/language-provider';
+import { asLang } from '@/lib/i18n/lang';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase-server';
 import { getMembers } from '@/lib/services/members';
@@ -90,7 +92,9 @@ export default async function MobileLayout({ children }: { children: React.React
     // decide which bubbles are theirs. chat_messages.author_profile_id is a
     // profile id, so user.id is the wrong key and would align every bubble left.
     // `role` [#101] — gates the "Desktop site" toggle in the nav sheet.
-    .select('id, company_id, role')
+    // `language` [S110 H] — /m speaks the user's language (system text AND the
+    // text their team typed).
+    .select('id, company_id, role, language')
     .eq('user_id', user.id)
     .single();
 
@@ -110,20 +114,23 @@ export default async function MobileLayout({ children }: { children: React.React
   ]);
 
   // S109 #161 — the same file sheet as the dashboard (one viewer, both surfaces).
+  const lang = asLang(profile.language);
   return (
-    <FileSheetProvider>
-      {/* §7.2 — the service worker registers from THIS layout (A-26d), so it
+    <LanguageProvider uiLang={lang} readerLang={lang}>
+      <FileSheetProvider>
+        {/* §7.2 — the service worker registers from THIS layout (A-26d), so it
           exists exactly where /m exists and nowhere else. */}
-      <RegisterSw />
-      <MobileShell
-        companyName={companyResult.data?.name ?? 'My Company'}
-        teamCount={members?.length ?? null}
-        unreadCount={unreadCount}
-        myProfileId={profile.id}
-        role={profile.role}
-      >
-        {children}
-      </MobileShell>
-    </FileSheetProvider>
+        <RegisterSw />
+        <MobileShell
+          companyName={companyResult.data?.name ?? 'My Company'}
+          teamCount={members?.length ?? null}
+          unreadCount={unreadCount}
+          myProfileId={profile.id}
+          role={profile.role}
+        >
+          {children}
+        </MobileShell>
+      </FileSheetProvider>
+    </LanguageProvider>
   );
 }
