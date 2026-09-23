@@ -1597,3 +1597,34 @@ capture it happened.
 
 **Consequence for the fix — it does not depend on the answer.** Either way the phone needs a Finish
 control and promotion must be unmistakably a separate office decision.
+
+### Step 2 — FINISH, database half — **built and proven live** (`3bf20e43`)
+
+`20261680000000_site_visit_finish.sql` → `supabase db push` **`DBPUSH_EXIT=0`**, link checked
+(`nmyphyhmfttxkdoposvf`), the one pending file. Verified by object: `site_visits.finished_at`
+(timestamptz, nullable), `finished_by` (uuid, nullable); `finish_site_visit` `prosecdef=true`,
+`anon` execute **false**, `authenticated` **true**. `db:types` exit 0 (7 added lines, nothing else);
+`db:fingerprint` exit 0 (functions 304, constraints 1002, latest `20261680000000`); `db:verify`
+**exit 0, LEDGER CLEAN 229/229**.
+
+**Production row count owed before Josh applies it:** none governs a row — two nullable columns and
+a function, no constraint. For the record: `select count(*) from site_visits;` (every row reads
+`finished_at` NULL afterwards).
+
+| | FINISH (`finish_site_visit`) | PROMOTE (`promote_site_visit`, unchanged) |
+| --- | --- | --- |
+| means | "done capturing — ready to price" | "make it an estimate" |
+| who | office (owner/admin/PM), or the **recorder** while it is still a visit | owner / admin / PM only (ASK-A3) |
+| writes | `site_visits.finished_at/_by` only — **nothing on `estimates`** | `estimates.status='draft'`, the number, pricing defaults, `created_by` → promoter |
+| number | **none**; sequence untouched | `next_estimate_number()` |
+| after | recorder may still correct it (ASK-A8 is not changed) | recorder keeps READ, loses every write |
+| twice | idempotent — first stamp kept | refused |
+
+`s108-site-visit.live.ts` → **23/23, `LIVE_VITEST_EXIT_LINE=0`** (17 existing + 6 new): foreman and
+sub refused (42501) and the row stays unstamped; crew finish stamps `finished_by = crew`, **status
+still `site_visit`, number still NULL, sequence unchanged**; second finish keeps the first stamp;
+crew still reads **0** estimate rows and **1 visit / 3 notes / 1 measurement** with no money key;
+crew can still edit a note after finishing; after promotion crew finish → 42501 and owner finish →
+22023; an abandoned visit cannot be finished. Non-vacuous: §3a proves those same two fields DO
+change on promotion. ⚠️ Not proven by sabotage — altering the RPC on rebuild-test outside a
+migration would itself be drift; the assertions read the fields directly and are paired with §3a.
