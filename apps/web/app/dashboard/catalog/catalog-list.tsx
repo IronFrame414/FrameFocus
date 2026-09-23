@@ -177,7 +177,7 @@ export function CatalogList({ canManage, usage }: CatalogListProps) {
                           // S109 #163 (ruling 163.B) — the row opens EDIT, the only
                           // record view the catalog has. Only for a caller who can
                           // manage it; for anyone else there is nothing to open and
-                          // the row stays inert. The vendor link on the name, Edit
+                          // the row stays inert. The "Vendor ↗" link [S110 E2], Edit
                           // and Delete are interactive children — the primitive's
                           // guard leaves them to themselves.
                           {...(canManage
@@ -186,19 +186,35 @@ export function CatalogList({ canManage, usage }: CatalogListProps) {
                           data-testid={`catalog-row-${item.id}`}
                           style={{ borderBottom: `1px solid ${color.rowDivider}`, cursor: canManage ? 'pointer' : undefined }}
                         >
+                          {/* S110 E2 [RULED Josh, Q9 → A] — the vendor link is its OWN
+                              control. _Superseded, quoted:_ the name itself was
+                              `<a href={item.product_url}>`, so one row had two
+                              destinations — the name opened the vendor's site
+                              and the rest of the row opened Edit. The name is now
+                              plain text, and "Vendor ↗" is a separate link that
+                              every role can use (for non-managers it was the only
+                              thing on the row). */}
                           <td style={{ padding: '11px 12px 11px 20px', fontWeight: 600, color: color.navy }}>
+                            <span data-testid={`catalog-name-${item.id}`}>{item.name}</span>
                             {item.product_url ? (
                               <a
                                 href={item.product_url}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                style={{ color: color.primary, textDecoration: 'none' }}
+                                data-testid={`catalog-vendor-${item.id}`}
+                                aria-label={`Open the vendor page for ${item.name} (new tab)`}
+                                style={{
+                                  marginLeft: '10px',
+                                  color: color.primary,
+                                  textDecoration: 'none',
+                                  fontSize: '12.5px',
+                                  fontWeight: 600,
+                                  whiteSpace: 'nowrap',
+                                }}
                               >
-                                {item.name}
+                                Vendor ↗
                               </a>
-                            ) : (
-                              item.name
-                            )}
+                            ) : null}
                           </td>
                           <td style={{ ...cellText, padding: '11px 12px' }}>
                             {UNIT_LABELS[item.unit_of_measure]}
