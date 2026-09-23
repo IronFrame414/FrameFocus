@@ -241,3 +241,54 @@ Appended after every step; committed and pushed each time.
   the inline-only surfaces). Filed: **`#2-s109`** (the 300 s expiry — fixed here, closes on merge),
   **`#3-s109`** (viewing a sent invoice re-stores its PDF — defect, ruling 161.C), **`#4-s109`**
   (the `?download=` mechanisms, now five — #161 said it becomes its own entry if not collapsed).
+
+## Step 6 — housekeeping, and what is left for Josh
+
+- **`#1-deliv`** — the S108 D2b classification is now recorded **in its entry** (`TECH_DEBT.md`),
+  not only in the report. Not closed: whether the Stripe event-shape gap leaves it closable is Josh's.
+- **`.env.local.example` — NOT DONE, and not worked around.** The path is denied to CC by
+  `.claude/settings.json` (`Read(./.env.*)`), the same block S108 hit; the Read tool refused it
+  again this session. CC will not route around a deny rule Josh set. **Josh pastes the content
+  from `docs/sessions/S108-report.md:1039+`** (Q11 → A), as S108 intended.
+- Spec: AUDIT answered in place at the end of `S109-SPEC-debt-159-163.md`.
+
+### For Josh — in order
+
+1. **Production, attended, BEFORE the merge** — link the CLI to production for a supervised
+   release, then apply the two migrations:
+   - `20261700000000_bid_request_sent_at_no_default.sql` → afterwards,
+     `SELECT column_default FROM information_schema.columns WHERE table_name='estimate_sub_bid_requests' AND column_name='sent_at';`
+     must return **NULL**.
+   - `20261710000000_profile_member_delete_sync.sql` → the migration itself aborts if a ghost is
+     left. Afterwards query A from the spec (FILL-160.3) must return **0 rows**, and
+     `SELECT is_deleted FROM company_members WHERE id='3305f15b-4b28-48cf-8f88-6f84bbbe8661';`
+     must be **true**.
+   Then re-link the CLI to rebuild-test (`nmyphyhmfttxkdoposvf`).
+2. **Then decide the merge.** Not authorised; nothing here merges.
+3. **Paste `.env.local.example`** (above).
+4. **Rebuild the Codespace** when convenient — `gh` is configured but not installed until then.
+
+### Open — decisions not made here (stop rule 2)
+
+- **`/reset-password` still accepts any live session without the current password** (Step 3). It
+  must keep working for the recovery link; distinguishing the two is a design decision.
+- **Catalog:** the vendor link stays on the item name, so a click on the name opens the vendor page
+  and a click elsewhere in the row opens Edit. Ruling 163.B said "rows open Edit" and said nothing
+  about the link.
+- **#161's remaining call sites** (listed by name in its `TECH_DEBT.md` status line), including
+  **the client portal**.
+- **iOS print** from the sheet needs a real-device check (it opens a new tab for the share sheet by
+  design).
+- **`#1-deliv`** — closable or not.
+
+### Session totals
+
+Seven commits on `feature/s109-debt-159-163`, each pushed. Two migrations on rebuild-test. New
+tests: 3 live harnesses (`s109-bid-request-sent-at`, `s109-profile-member-sync`,
+`s109-change-password`), 6 committed unit files, 2 new Playwright specs; 2 older tests inverted
+(`s159-subs-sheet`, `m-details` M-16), none deleted. Every new test that guards a ruling was run
+against a sabotaged build and went red: 7 sabotage runs, 7 reds, every file restored `cmp`-identical
+and every DB change restored and hash-checked. Final unit suite 103 files / 1385 tests green;
+`next build` green on the final tree.
+⚠️ **Green means no regression, not a working feature.** Nothing was clicked by a person. The
+file sheet, the password form and the whole-row lists want Josh's hands on them before the merge.

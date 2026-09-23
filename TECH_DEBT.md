@@ -755,6 +755,20 @@ top of this file is advanced to `#164` in the same commit, which is what keeps t
   into the transaction; A1/A2 inverted with the superseded assertions quoted. Record:
   `docs/specs/S160-auth-email-hook.md` §6a.
 
+  **📋 S108 D2b CLASSIFICATION — recorded here at S109 (it had lived only in
+  `docs/sessions/S108-report.md:197-215`).** Every suspect in the class — tests that call a hook,
+  webhook or route handler directly — was asked this entry's question: _does this handler read
+  state that its caller is concurrently writing?_ **Result: the class has exactly one member, and it
+  is already fixed** — `s160-auth-email.live.ts` A1/A2, inverted to assert the
+  `on_auth_user_created_autoconfirm` trigger. `webhook-resend.live.ts` is timing-dependent and
+  **covered** (its case 6 is the event-beats-`logEmail()` race). Covered and not timing-dependent:
+  `auth-email-hook-signature-headers`, `s107-estimate-files-route-order`,
+  `s107-bid-request-send-order`, `email-unsubscribe`, `s146-generate-route`,
+  `s174-selections-email`, `s175-stage6`/`-stage7`, `signed-url-error-contract`. **One declared
+  gap, Josh's to close:** `card-signup-webhook.test.ts` covers the handler's logic but not the Stripe
+  event SHAPE (the file says so in its header) — a Stripe test-mode check. Whether that leaves this
+  entry closable is Josh's call; the classification is not a closure.
+
 - **#1-s106 — the invoicing→QuickBooks mapping must handle a NET-NEGATIVE line, now that
   one can originate upstream of invoicing.** S106 ruled a negative typed total legal on an
   estimate line (`estimate_line_rows.total_override` / `estimate_line_items.total_price_override`
