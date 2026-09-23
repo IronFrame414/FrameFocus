@@ -1628,3 +1628,55 @@ crew can still edit a note after finishing; after promotion crew finish → 4250
 22023; an abandoned visit cannot be finished. Non-vacuous: §3a proves those same two fields DO
 change on promotion. ⚠️ Not proven by sabotage — altering the RPC on rebuild-test outside a
 migration would itself be drift; the assertions read the fields directly and are paired with §3a.
+
+### Step 3 — FINISH, the screens (`998e2b53`) and DEFECT 2, the Site Visit tab (`9b5918af`)
+
+**Finish UI.** The control lives INSIDE `SiteVisitRecord`, so phone and desktop share one mechanism
+(PARITY [S122]). Promote stays OUTSIDE it, on the office's desktop page. It is two-step on purpose,
+because `/m` has no confirm provider: **Finish site visit** → a panel saying it does *not* become an
+estimate, with open blockers and held uploads counted → **Yes, finish the visit** / **Keep recording**.
+
+| after… | the phone shows |
+| --- | --- |
+| **Finish** | a green **Finished {time} — ready for the office to price. It becomes an estimate, and gets its number, only when the office creates one. Mistakes can still be fixed here until then.** Add controls stay (ASK-A8). The list moves it from *Recording* to **Finished · waiting for the office** |
+| **Promote** (office, desktop only) | the existing **"This visit is now an estimate. You can still read everything you captured."** No write controls, no `$`. The list shows it under *Became estimates* |
+
+On the desktop, the estimates panel badges each open visit **Finished** / **Still recording**. The
+record page states which one applies. Promote's confirm **warns when the recorder has not finished**.
+
+**DEFECT 2 — where, and why: a Site Visit TAB, right after Line Items.**
+- **Not a Details panel:** Details is the document's header (client, dates, health). Measurements,
+  scope and blockers are working material, and the estimator flips between them and Line Items
+  while pricing. A tab next to Line Items is one click away, and it does not push the header down.
+- **Not a Files sub-view:** most of the captured content is structured rows (notes, measurements,
+  blockers, transcripts), not files.
+- **Shown only when a `site_visits` row exists for the estimate.** An estimate that never was a
+  site visit has **no tab**: the filter keys on the row existing.
+- **Long after the visit:** it stays permanently as the record of what was found on site, which is
+  the change-order evidence the conditions-vs-scope ruling exists for. The header line reads
+  *captured {date} · finished {time} · became this estimate {date}*. An open-blockers count badge
+  shows on the tab label.
+- **Content** = the same `SiteVisitRecord` as the phone: Existing conditions and Proposed scope as
+  separate sections; measurements as `L × W ft = N sq ft` plus a total; blockers with checkbox and
+  strike-through when resolved; voice notes with an `<audio controls>` player (signed URL) and the
+  transcript, plus the edited marker.
+- **Data path:** `[id]/page.tsx` calls `getSiteVisit()` on the caller's SESSION. It reads the
+  money-free `site_visit_*` tables only, and adds nothing to what an office role could already
+  read. The builder itself is office-only (it redirects any other role).
+
+**Proof, the real UI** (`e2e/m-site-visit.spec.ts`, production build `next start`):
+the crew member taps Finish → banner shown, Finish gone, add-controls still present, and the DB reads
+`status site_visit, estimate_number NULL`. **Then navigates away to the list (the field defect's
+exact gesture)**: the row is `data-finished=true`, and the DB still reads `site_visit`/NULL. The
+owner sees *Finished*, promotes, and on the builder's **Site Visit tab** sees the crew member's
+condition and `12 × 14 ft = 168 sq ft`. A second test takes a scoped plain draft (owner's company,
+not a visit) and asserts **no tab**.
+
+| run | result |
+| --- | --- |
+| green | **`PW_EXIT_LINE=0`, 3 passed** |
+| sabotage 1 — tab filter forced true | **`SABOTAGE_PW_EXIT_LINE=1`**: exactly the no-tab test red, the other green |
+| sabotage 2 — page passes `siteVisit={null}` | **`SABOTAGE2_PW_EXIT_LINE=1`**: exactly the flow test red, at `est-tab-site_visit` |
+| reverted (grep: 0 sabotage lines), rebuilt | **`BUILD_EXIT_LINE=0`, `REVERTED_PW_EXIT_LINE=0`, 3 passed**. Fixtures: **0** `S108A-E2E` estimates left |
+
+`tsc` 0, `lint` 0 on every changed file.
