@@ -90,3 +90,27 @@ round-trip on rebuild-test proves it safe. Q16: the row-policy hole is fixed in 
 **Branch layout:** `feature/s110-site-visit-access` carries the spec and this report. Each section
 is built on its own branch cut from it (`feature/s110-f-route-guard`, …). Report appends land here,
 through a separate worktree, so the section branches never conflict over this file.
+
+## Phase 3 — Section F — branch `feature/s110-f-route-guard` @ `b624f58b` — **built and proven**
+
+- `lib/api-contracts/estimate-files.ts` — response types for the two estimate-files routes. Both
+  routes now `satisfies` them over a TYPED admin client (it was untyped, so `satisfies` would
+  have checked `any`). Consumers import them: `estimate-files-tab.tsx` and `media.ts` `ListedFile`
+  (now a `Pick` of the contract, previously hand-written — the #161 mechanism).
+- `lib/api-contracts/registry.ts` — three contract routes (list/upload, per-file `/url`,
+  `files/signed-url`), each with every consumer file and the fields it reads.
+- `test/s110-route-contracts.test.ts` (CI unit suite) — walks `app components lib e2e test`, no
+  truncation, asserts it read >400 files; per contract: consumer set exact both ways (1), every
+  registered field still produced (2a), every consumer field registered (2b). **10/10.**
+
+| proof | printed line |
+| --- | --- |
+| sabotage 1 — a new unregistered consumer (`lib/s110-sabotage-consumer.ts`) | `SABOTAGE1_EXIT_LINE=1`, test 1: _"unregistered consumers … ['lib/s110-sabotage-consumer.ts']"_; file removed |
+| sabotage 2 — the #161 shape: `created_at` dropped from the GET select | `SABOTAGE2_EXIT_LINE=1` (2a: _"no longer returns … ['created_at']"_) **and** `SABOTAGE2_TSC_EXIT_LINE=2` (route no longer satisfies the type); restored, `cmp` identical |
+| sabotage 3 — the follow-through: field removed from the registry and the type | `SABOTAGE3_EXIT_LINE=1` (2b: 2 consumers depend on it) **and** `SABOTAGE3_TSC_EXIT_LINE=2` — **red in `site-visit-record.tsx`**, the file #161 broke; restored, `cmp` identical |
+| unit suite | `UNIT_EXIT_LINE=0`, **105 files / 1404 tests** |
+| lint (changed files) | `LINT_EXIT_LINE=0` |
+| `next build` | `BUILD_EXIT_LINE=0`, 129/129, BUILD_ID `_V99NAVfSNR9hONdyXfpJ` |
+
+Limits, stated in the registry: a path built by concatenation or from a variable last segment is
+invisible to the walk, and is disallowed for contract routes. No migration. Merge: awaiting Josh.
