@@ -1680,3 +1680,36 @@ not a visit) and asserts **no tab**.
 | reverted (grep: 0 sabotage lines), rebuilt | **`BUILD_EXIT_LINE=0`, `REVERTED_PW_EXIT_LINE=0`, 3 passed**. Fixtures: **0** `S108A-E2E` estimates left |
 
 `tsc` 0, `lint` 0 on every changed file.
+
+### Step 4 — final gate on `feature/site-visit-finish-and-review`, and what Josh does next
+
+| check | printed line |
+| --- | --- |
+| type-check | `TSC_EXIT_LINE=0` |
+| lint (whole app) | `LINT_EXIT_LINE=0` |
+| `next build` | `BUILD_EXIT_LINE=0`, fresh `BUILD_ID`, on the final (post-revert) tree |
+| unit suite | `VITEST_EXIT_LINE=0`: **97 files, 1325 tests** (incl. the S107 route-order floor test) |
+| `s108-site-visit.live.ts` | `LIVE_VITEST_EXIT_LINE=0`: **23/23** |
+| `e2e/m-site-visit.spec.ts` | `REVERTED_PW_EXIT_LINE=0`: 3 passed; both new assertions proven by sabotage |
+| `e2e/m-site-visit-voice.spec.ts` | `VOICE_PW_EXIT_LINE=0`: 2 passed, `transcript_status=done` (real OpenAI, under a cent) |
+| test sweep (CLAUDE.md S157) | grep for site-visit / promote / tab test ids across `test/`, `e2e/`: no existing test encodes overturned behaviour. Nothing was overturned; Finish is additive |
+
+The server was stopped by PID, not `pkill`. Fixtures: 0 left. **Nothing touched production.**
+
+**To ship (Josh, in order):**
+1. **Run the Step 1 query on production** and confirm `promoted_by` / `promoter_is_est_author`.
+   If `promoted_at` is NULL while `status='draft'`, STOP: something outside the RPC wrote the status.
+2. **EST-107 itself is left as it is.** It is a real numbered draft now. The ruling forbids
+   turning an estimate back into a visit (the trigger raises), and its number is already
+   client-visible in the sequence. Once this ships, its Site Visit tab shows the two notes and the
+   voice note. No data repair is proposed.
+3. Apply `20261680000000_site_visit_finish.sql` to production (`supabase db push` with the link
+   switched and switched back, per the Spec E runbook). **Rows governed: none** (no constraint).
+   For the record: `select count(*) from site_visits;`. Verify:
+   `select column_name from information_schema.columns where table_name='site_visits' and column_name like 'finished%';`
+   → 2 rows.
+4. **Migration BEFORE merge.** The deployed code reads `site_visits.*`, and the new record
+   component reads `finished_at`. Without the column, `finished_at` is simply undefined (falsy), so
+   the pages render as "never finished" rather than error. But the Finish button would call a
+   missing RPC and show an error. Apply first.
+5. Merge `feature/site-visit-finish-and-review` → `main` (Josh's call).

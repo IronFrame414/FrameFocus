@@ -510,3 +510,19 @@ Evidence for every line: `docs/sessions/S108-report.md` → "SPEC A".
 
 **Voice (the ruled LAST piece): finished** — unit 6/6, live 5/5 against the real endpoint, and a
 real-screen e2e through the route. Nothing about it is deferred.
+
+---
+
+## FOLLOW-UP [2026-09-23] — two field defects from Josh's production test
+
+Evidence: `docs/sessions/S108-report.md` → "S108 FOLLOW-UP". **No ruling above is changed.**
+
+1. **No way to finish a visit.** The only "done"-shaped control anywhere was the office's
+   **Create estimate from this visit** (promote). **Added FINISH** (`finish_site_visit`,
+   `20261680000000`). It stamps `site_visits.finished_at/_by` and changes **nothing** on
+   `estimates`: status stays `site_visit`, there is no number, and the sequence is untouched.
+   The office may finish, or the recorder while it is still a visit. It is idempotent and not a
+   lock (ASK-A8 stands). Promotion is unchanged: owner/admin/PM, desktop, explicit.
+2. **The estimate showed none of the visit's data.** Added a **Site Visit tab** right after Line
+   Items, present only when a `site_visits` row exists. It renders the same `SiteVisitRecord`,
+   read on the office session from the money-free tables.
