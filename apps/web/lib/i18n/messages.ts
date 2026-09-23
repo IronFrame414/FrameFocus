@@ -1,4 +1,9 @@
 import type { Lang } from '@/lib/i18n/lang';
+import * as shell from '@/lib/i18n/areas/shell';
+import * as field from '@/lib/i18n/areas/field';
+import * as project from '@/lib/i18n/areas/project';
+import * as photos from '@/lib/i18n/areas/photos';
+import * as directory from '@/lib/i18n/areas/directory';
 
 // S110 H — SYSTEM TEXT, English and Spanish.
 //
@@ -11,7 +16,7 @@ import type { Lang } from '@/lib/i18n/lang';
 // key added in English and not in Spanish is a COMPILE error, not a blank.
 // `{name}` placeholders are filled by `format()`.
 
-export const en = {
+const core = {
   // ── account (shared: /m/account and /dashboard/account) ──
   'account.title': 'Your account',
   'account.password': 'Password',
@@ -39,9 +44,13 @@ export const en = {
   'usertext.unavailable': 'translation unavailable',
 } as const;
 
+// Each /m area keeps its own table (lib/i18n/areas/*), so screens can be
+// migrated independently; they are merged here.
+export const en = { ...core, ...shell.en, ...field.en, ...project.en, ...photos.en, ...directory.en };
+
 export type MsgKey = keyof typeof en;
 
-export const es: Record<MsgKey, string> = {
+const coreEs: Record<keyof typeof core, string> = {
   'account.title': 'Tu cuenta',
   'account.password': 'Contraseña',
   'account.language': 'Idioma',
@@ -64,6 +73,15 @@ export const es: Record<MsgKey, string> = {
   'usertext.showTranslation': 'ver traducción',
   'usertext.translating': 'traduciendo…',
   'usertext.unavailable': 'traducción no disponible',
+};
+
+export const es: Record<MsgKey, string> = {
+  ...coreEs,
+  ...shell.es,
+  ...field.es,
+  ...project.es,
+  ...photos.es,
+  ...directory.es,
 };
 
 const TABLES: Record<Lang, Record<MsgKey, string>> = { en, es };
