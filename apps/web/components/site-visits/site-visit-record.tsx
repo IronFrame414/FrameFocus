@@ -16,6 +16,7 @@ import {
 import { useOfflineSync } from '@/app/m/offline-sync';
 import { ErrorNotice, useOnline } from '@/app/m/write-ui';
 import { VoiceNotes } from './voice-notes';
+import { visitEraPhotos } from '@/lib/site-visits/photos';
 
 // S108 Spec A — THE SITE VISIT RECORD. ONE component, rendered by BOTH the
 // phone (/m/site-visits/[id]) and the desktop page (/dashboard/estimates/
@@ -227,6 +228,7 @@ interface PhotoFile {
   id: string;
   file_name: string;
   mime_type: string;
+  created_at: string | null;
   url: string | null;
 }
 
@@ -272,9 +274,11 @@ export function SiteVisitRecord({
     const res = await fetch(`/api/estimates/${estimateId}/files`);
     if (!res.ok) return;
     const body = (await res.json()) as { files: Array<PhotoFile & { id: string }> };
-    setPhotos(body.files.filter((f) => f.mime_type.startsWith('image/')));
+    // [ruling 4, 2026-09-23] VISIT-ERA photos only — cutoff = promotion, see
+    // lib/site-visits/photos.ts. Later photos live in the estimate's Files tab.
+    setPhotos(visitEraPhotos(body.files, detail.visit.promoted_at));
     setAudioUrls(Object.fromEntries(body.files.filter((f) => f.mime_type.startsWith('audio/')).map((f) => [f.id, f.url])));
-  }, [estimateId]);
+  }, [estimateId, detail.visit.promoted_at]);
   useEffect(() => {
     void loadFiles();
   }, [loadFiles]);
@@ -337,7 +341,11 @@ export function SiteVisitRecord({
           className="mb-[12px] rounded-[10px] border border-m6m-border bg-[#f5f7ff] px-[12px] py-[10px] text-[14px] text-m6m-navy"
         >
           This visit is now an estimate.{' '}
-          {canWrite ? 'The office can still update it here.' : 'You can still read everything you captured.'}
+          {canWrite
+            ? 'The office can still update it here until the estimate is sent.'
+            : office
+              ? 'The estimate has been sent, so this record is FROZEN — it is the evidence of what was found on site at the price quoted. Open blockers stay open.'
+              : 'You can still read everything you captured.'}
         </p>
       ) : null}
       {!promoted && finishedAt ? (
@@ -365,7 +373,7 @@ export function SiteVisitRecord({
       {/* PHOTOS */}
       <section data-testid="sv-section-photos" className="mt-[18px]">
         <h2 className="mb-[8px] font-mono text-[11px] font-medium uppercase tracking-wide text-m6m-muted">
-          Photos {photos.length > 0 ? `· ${photos.length}` : ''}
+          {promoted ? 'Photos taken during the visit' : 'Photos'} {photos.length > 0 ? `· ${photos.length}` : ''}
           {heldForThisVisit > 0 ? ` · ${heldForThisVisit} waiting for signal` : ''}
         </h2>
         {photos.length > 0 ? (
@@ -382,7 +390,12 @@ export function SiteVisitRecord({
         ) : (
           <p className="text-[14px] text-m6m-muted">No photos yet.</p>
         )}
-        {canWrite ? (
+        {promoted && office ? (
+          <p className="mt-[6px] text-[13px] text-m6m-muted">Photos added after it became an estimate are in Files.</p>
+        ) : null}
+        {/* After promotion new photos belong to the estimate (Files), not the
+            visit — so the record stops offering to add them. */}
+        {canWrite && !promoted ? (
           <label className="mt-[10px] flex h-[52px] cursor-pointer items-center justify-center rounded-[14px] bg-m6m-blue text-[16px] font-bold text-white">
             Add photos
             <input
