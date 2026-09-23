@@ -20,6 +20,7 @@ import {
   primaryButtonStyle,
   secondaryButtonStyle,
 } from '@/lib/theme';
+import { rowActivation } from '@/components/list-screen/row-activation';
 
 // ui-06 — 1a CO list. Badge map locked round 2: sent → "Awaiting sig.",
 // signed → "Signed", voided → "Voided" (visible), draft → "Draft". Negative
@@ -338,7 +339,13 @@ export function ChangesPanel({
             return (
               <div
                 key={co.id}
-                onClick={() => router.push(`/dashboard/projects/${projectId}/changes/${co.id}`)}
+                // S109 #163 — was a bare onClick: mouse-only, unannounced. The
+                // delete span's own stopPropagation stays; the primitive's guard
+                // is the second layer.
+                {...rowActivation(
+                  () => router.push(`/dashboard/projects/${projectId}/changes/${co.id}`),
+                  `Open change order ${co.co_number ?? ''}`.trim()
+                )}
                 onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = color.tableHeadBg)}
                 onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
                 style={{

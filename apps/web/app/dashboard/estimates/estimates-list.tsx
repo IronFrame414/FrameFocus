@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { rowActivation } from '@/components/list-screen/row-activation';
 import {
   Estimate,
   EstimateStatus,
@@ -82,6 +84,7 @@ export function EstimatesList({
    *  em-dash, not a fake 0%). */
   metrics: { winRate: number | null; cohortSize: number; expiringSoon: number };
 }) {
+  const router = useRouter();
   const [estimates, setEstimates] = useState<Estimate[]>([]);
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState<EstimateStatus | 'all'>('all');
@@ -196,13 +199,22 @@ export function EstimatesList({
                 const last = i === estimates.length - 1;
                 const cell = last ? { ...td, borderBottom: 'none' } : td;
                 return (
-                  <tr key={e.id}>
-                    {/* Number folds under the name — the 14a pattern. */}
+                  <tr
+                    key={e.id}
+                    // S109 #163 — the WHOLE row opens the estimate. It was an inert
+                    // <tr> whose only target was a Link on the name cell; five cells
+                    // were dead space. Clone is an interactive child, so the
+                    // primitive's guard leaves it alone.
+                    {...rowActivation(() => router.push(`/dashboard/estimates/${e.id}`), `Open ${e.name}`)}
+                    data-testid={`estimate-row-${e.id}`}
+                    style={{ cursor: 'pointer' }}
+                  >
+                    {/* Number folds under the name — the 14a pattern. The name is
+                        PLAIN TEXT now, not a Link: a link inside a row that is
+                        itself a control gives the same click two meanings (the
+                        subcontractors-list precedent). */}
                     <td style={{ ...cell, paddingLeft: '20px' }}>
-                      <Link
-                        href={`/dashboard/estimates/${e.id}`}
-                        style={{ textDecoration: 'none' }}
-                      >
+                      <span>
                         <span
                           style={{
                             display: 'block',
@@ -223,7 +235,7 @@ export function EstimatesList({
                         >
                           {e.estimate_number}
                         </span>
-                      </Link>
+                      </span>
                     </td>
                     <td style={cell}>
                       <StatusBadge status={e.status} />

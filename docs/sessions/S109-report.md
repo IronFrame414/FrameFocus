@@ -127,3 +127,56 @@ Appended after every step; committed and pushed each time.
   recovery path on production. So the unlocked-phone case is closed on the Account page and still
   open at that URL. The real floor would be GoTrue's hosted "secure password change" setting, which
   is not visible from the repo.
+
+## Step 4 — #163 the whole row opens the item: ONE shared primitive
+
+- **`components/list-screen/row-activation.tsx`** (ruling 163.A, option 1): `rowActivation(onOpen,
+  label)` returns role / tabIndex / aria-label / onClick / onKeyDown to spread onto the row a
+  screen already renders; `ActivatableRow` wraps it for server-component pages (href + router).
+  **The guard** `startedInInteractiveChild` — an event whose target sits inside an interactive
+  descendant (`INTERACTIVE_SELECTOR`: links, buttons, inputs, selects, labels, `[draggable]`,
+  ARIA widget roles, `[data-row-ignore]`) belongs to that child, for **click AND Enter/Space**.
+  It owns no columns, grid, cells or data — `list-screen.tsx`'s "no generic table" stands.
+- **Migrated (10 screens):**
+  | screen | before | now |
+  | --- | --- | --- |
+  | contacts, subs | whole-row + keyboard (inline copy) | same behaviour, via the primitive |
+  | projects, team members, files, changes panel | whole-row, **mouse-only** | + keyboard, announced, guarded |
+  | estimates, invoices, project open-items | **text-only** link | whole row; title link → plain text |
+  | catalog | no record target | row opens **Edit** for a manager (163.B); inert for others |
+  Left alone: **expenses** inert (163.B); daily logs (already a whole-card `<Link>`);
+  `portal-selections-ui.tsx` (a `<label>` that picks an option — Phase 1 correction); the
+  **line-items card** (opens nothing; no click handler, asserted).
+  Not ruled, so not changed: catalog's vendor `product_url` link stays on the name, so a click on
+  the name opens the vendor page and a click elsewhere in the row opens Edit.
+- **Tests:**
+  - `test/s109-row-activation.test.tsx` (committed suite, node — ruling 163.C, no jsdom): the
+    guard's decision against DOM-shaped stand-ins (`closest`/`contains`), including the icon inside
+    a button and the drag handle; the handlers for click **and** keys (Enter on a child is NOT
+    preventDefault'ed, so the child still activates); the selector's required entries (the
+    stand-in trusts the selector, so the selector is asserted); trap-3 markup; every adopter
+    routes through the primitive and none keeps a bare row `onClick={() => router.push`; expenses
+    and the line-items card stay without one. 21/21.
+  - Older tests inverted, not deleted: `s159-subs-sheet.test.tsx` asserted the inline
+    `onClick={() => setOpenId(` and an inline Enter/Space match — superseded text quoted in place,
+    now asserts both lists use the primitive. `s158` markup asserts unchanged and green.
+  - `e2e/desktop-row-activation-s109.spec.ts` (own draft estimate, 2 lines, torn down):
+    T3 focus+Enter opens · T3 a click on a formerly dead cell opens · T1 Clone owns its click
+    **and** its Enter, URL unchanged · T2 **click** the drag handle → nothing opens, handle
+    focused, ↓ writes the reorder (read back from the DB, 2 rows).
+    - Sabotage 1 — guard disabled in the primitive → `SABOTAGE_GUARD_EXIT=1`, T1 failed.
+      Restored, `cmp` identical.
+    - Sabotage 2 — a card-level `onClick` added to the line card → `SABOTAGE_CARD_EXIT=1`, T2
+      failed: _"clicking the handle navigated"_. Restored, `cmp` identical.
+    - Clean: `E2E_CLEAN_EXIT=0`, 4/4.
+  - Regression: every desktop spec that drives a migrated screen — dashboard-guard, confirms, lists,
+    payload, selections, team, chat-panel — `E2E_AFFECTED_EXIT=0`, **53 passed**.
+    `desktop-line-items-s108`: red once on its first run (30 s timeout on the cold dev-compile of
+    the estimate page — the CLAUDE.md dev-timing trap), `E2E108_EXIT=0` warm, 8.0 s. Items tab
+    unchanged.
+  - Full unit suite `UNIT_EXIT=0`, 101 files / 1360 tests. `tsc` 0.
+- Dev server started via `scripts/e2e-preflight.sh`, stopped by PID before the build.
+  `next build` → `BUILD_EXIT=0`, 129/129. Its two lint warnings (`m/capture/capture-screen.tsx`,
+  `components/public/site-header.tsx`) are pre-existing — present in Step 1's build log too.
+- `TECH_DEBT.md`: #163 status line. **#13's stale open line struck** — it was CLOSED in
+  `TECH_DEBT_CLOSED.md:42` but still listed open under UX Polish.

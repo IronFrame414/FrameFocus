@@ -1,4 +1,3 @@
-import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase-server';
 import { getRevisedContract } from '@/lib/services/contract-value';
@@ -11,6 +10,7 @@ import {
 } from '@/lib/services/invoices';
 import { cardStyle, color, font, h2Style, microLabelStyle } from '@/lib/theme';
 import { NewInvoiceButton } from './new-invoice-button';
+import { ActivatableRow } from '@/components/list-screen/row-activation';
 
 // Module 7D1 — the project's invoice list (docs/specs/7d1-spec.md §2, §9, §10).
 // Owner/Admin/PM only (§12); the invoices RLS policies enforce the same set,
@@ -251,16 +251,24 @@ export default async function InvoicesPage({ params }: { params: { id: string } 
               {invoices.map((invoice) => {
                 const badge = STATUS_BADGES[invoice.status] ?? STATUS_BADGES.draft;
                 return (
-                  <tr key={invoice.id}>
+                  // S109 #163 — the WHOLE row opens the invoice. It was an inert <tr>
+                  // with a Link on the number cell only. A server component cannot
+                  // attach a handler, so the row is the shared client primitive's
+                  // `ActivatableRow` (click, keyboard, interactive-child guard).
+                  <ActivatableRow
+                    key={invoice.id}
+                    href={`${base}/${invoice.id}`}
+                    label={`Open invoice ${invoice.invoice_number ?? 'draft'}`}
+                    testId={`invoice-row-${invoice.id}`}
+                  >
                     <td style={tdStyle}>
-                      <Link
-                        href={`${base}/${invoice.id}`}
-                        style={{ color: color.primary, fontWeight: 600, textDecoration: 'none' }}
-                      >
+                      {/* Plain text now: a link inside a row that is itself a
+                          control gives the same click two meanings. */}
+                      <span style={{ color: color.primary, fontWeight: 600 }}>
                         {/* §10 (S97) — a draft is unnumbered until it is sent,
                             so the series has no gaps. Show what it IS. */}
                         {invoice.invoice_number ?? 'Draft'}
-                      </Link>
+                      </span>
                       {invoice.title ? (
                         <span style={{ color: color.faint }}> — {invoice.title}</span>
                       ) : null}
@@ -317,7 +325,7 @@ export default async function InvoicesPage({ params }: { params: { id: string } 
                     >
                       {money(invoice.amount_receivable)}
                     </td>
-                  </tr>
+                  </ActivatableRow>
                 );
               })}
             </tbody>

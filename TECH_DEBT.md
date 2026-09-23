@@ -512,6 +512,21 @@ top of this file is advanced to `#164` in the same commit, which is what keeps t
   Whoever lands #163 should close or amend #13 in the same pass rather than leaving a stale
   narrower duplicate. Not renumbered or merged here, per the request and per the immutability rule.
 
+  **⚙️ S109 — BUILT on `feature/s109-debt-159-163`; open until merge.** RULED option 1 (ASK-163.A):
+  **one shared row primitive**, `components/list-screen/row-activation.tsx` — `rowActivation()`
+  (spread onto an existing `<tr>`/`<div>`) and `ActivatableRow` (for the two server-component
+  pages). It owns click, Enter/Space, role/tabIndex/aria-label, and the guard against an event that
+  started inside an interactive child; it owns no columns, layout or data. Migrated: contacts, subs
+  (behaviour unchanged, now one mechanism), projects, team members, files, changes panel (all four
+  were mouse-only), estimates, invoices, project open-items (all three were text-only), catalog
+  (row opens Edit for a manager, ruling 163.B). **Left alone:** expenses stays inert (163.B);
+  daily logs was already correct; `portal-selections-ui.tsx` was mis-grouped — it is a `<label>`
+  that PICKS an option, not a row that opens one; the line-items card opens nothing and has no
+  click handler, by design. Title links demoted to text on estimates and invoices (the subs
+  precedent). The #13 line above, found still open while closed elsewhere, is struck here.
+  Traps: `test/s109-row-activation.test.tsx` + `e2e/desktop-row-activation-s109.spec.ts`, each
+  proven by sabotage — see `S109-report.md` Step 4.
+
 ### Branch-scoped, awaiting real numbers — `feature/s109-debt-159-163` [S109]
 
 - **#1-s109 — DEFECT: a person deactivated on `/m/team` can still sign in. RULED [Josh, S109
@@ -1648,7 +1663,11 @@ Decide once, for this AND the event log's identical prune (G1 #4 is the same rul
 - **#131 (original entry)** GitHub Actions repo secrets `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` were added pointing at **rebuild-test** so the Playwright job can boot the app (`.github/workflows/ci.yml:94-95`). **They are meant to be removed later, and the consequence of removing them is not a skipped test — it is a whole-suite failure that misreports its own cause.** Without them `next dev` still starts, but `middleware.ts` constructs its Supabase client from `process.env.NEXT_PUBLIC_SUPABASE_URL!` and `..._ANON_KEY!` (`:11-12`) — non-null assertions over `undefined` — so the client is built against nothing and **every matched route 500s**. The matcher covers `/dashboard/:path*`, `/sign-in` and `/sign-up`, and `e2e/auth.setup.ts` signs in through `/sign-in`, so **setup fails and every authenticated spec fails on `page.goto` rather than on its assertion**. A reader of that CI log sees fifty broken tests, not one missing secret. If they are removed, either give the e2e job placeholder values or gate the job on their presence and say so in the skip reason. Observed Session 100.
 ### UX Polish
 
-- **#13** Row click should open read-only detail view (contacts + subcontractors) — currently Edit button is only way in
+- ~~**#13** Row click should open read-only detail view (contacts + subcontractors) — currently Edit button is only way in~~
+  — **stale duplicate, struck [S109 #163].** #13 is **CLOSED in `TECH_DEBT_CLOSED.md:42`** (built
+  S140/S158/S159) but this open-register line was never removed, so the number lived in two
+  files, against this register's own rule. The line is kept struck rather than deleted; the
+  record is the closed entry. #163 (whole-row, every list) is its wider successor.
 - **#89** Vendors are mislabeled "(Sub)" in the project-scheduling New Task assignee dropdown. Both subcontractors and vendors from the Subs & Vendors list render with a "(Sub)" suffix, so a vendor (member_type='vendor') shows as "(Sub)" — the label doesn't match the record's type. Assignment itself works correctly; this is a display bug only. Fix: label each assignee by its actual type — "(Sub)" for subcontractors, "(Vendor)" for vendors. Likely a single dropdown-builder that hardcodes the "(Sub)" suffix instead of reading member_type. Observed Session 79 during manual testing.
 - **#100** Photo markup is invisible outside the markup editor. markup_data (JSONB on files, baseline :1386) renders only as an SVG overlay in markup-editor.tsx; the file grid, daily-log/incident/delivery photo strips, all three PDF services, and downloads all show the raw original. A user who marks up a photo sees no evidence of it anywhere afterward. Intent (Josh, S90): markup should persist as a non-destructive LAYER over the original — original bytes never overwritten, markup viewable wherever the photo is viewed. Fix shape: render the SVG overlay in every photo surface (grid, strips, viewer), and composite to flat JPEG/PNG only where the image must leave the app. Cross-ref #53 (flattened export for email/PDF — the leaving-the-app half of the same problem) and #55 (in-app fullscreen viewer, the natural host for layered display). Discovered Session 90 during markup testing.
 - **#101** Job/task switching is unreachable outside /dashboard/timeclock, and the dashboard shell has no mobile handling. ClockModal's modes are 'clock-in' | 'clock-out' only; the switch modal lives solely in timeclock-client.tsx, so a crew member on any other page must navigate to the timeclock page to switch jobs — and the 7A material-run expense prompt on the switch path only fires there. Compounding it, dashboard-shell.tsx has zero responsive handling: no media queries, no drawer, a shrink-0 236px sidebar that never collapses (~140px of usable content on a 375px phone), and a non-sticky header, so the global clock button scrolls out of view. Intent (Josh, S90): the clock control should be locked to the top on mobile, and switching should be reachable from it. Fix shape: add a 'switch' mode to ClockModal so the global button can switch, and make the header sticky + the shell responsive. Field crew on phones are the primary audience for 6A/7A capture. Cross-ref #30 (mobile app is a placeholder — this is the web shell that exists today). Discovered Session 90.

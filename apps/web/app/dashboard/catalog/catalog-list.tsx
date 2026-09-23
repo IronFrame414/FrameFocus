@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { rowActivation } from '@/components/list-screen/row-activation';
 import type { CatalogCategory, CostCatalogItem } from '@/lib/services/cost-catalog-client';
 import { listCatalog, softDeleteCatalogItem } from '@/lib/services/cost-catalog-client';
 import { CATEGORY_LABELS, UNIT_LABELS } from './catalog-labels';
@@ -34,6 +36,7 @@ function isStale(lastVerifiedAt: string | null, now: number): boolean {
 }
 
 export function CatalogList({ canManage, usage }: CatalogListProps) {
+  const router = useRouter();
   const confirm = useConfirm();
   const alert = useAlert();
   const [items, setItems] = useState<CostCatalogItem[]>([]);
@@ -169,7 +172,20 @@ export function CatalogList({ canManage, usage }: CatalogListProps) {
                       const stale = isStale(item.last_verified_at, now);
                       const used = usage[item.id] ?? 0;
                       return (
-                        <tr key={item.id} style={{ borderBottom: `1px solid ${color.rowDivider}` }}>
+                        <tr
+                          key={item.id}
+                          // S109 #163 (ruling 163.B) — the row opens EDIT, the only
+                          // record view the catalog has. Only for a caller who can
+                          // manage it; for anyone else there is nothing to open and
+                          // the row stays inert. The vendor link on the name, Edit
+                          // and Delete are interactive children — the primitive's
+                          // guard leaves them to themselves.
+                          {...(canManage
+                            ? rowActivation(() => router.push(`/dashboard/catalog/${item.id}/edit`), `Edit ${item.name}`)
+                            : {})}
+                          data-testid={`catalog-row-${item.id}`}
+                          style={{ borderBottom: `1px solid ${color.rowDivider}`, cursor: canManage ? 'pointer' : undefined }}
+                        >
                           <td style={{ padding: '11px 12px 11px 20px', fontWeight: 600, color: color.navy }}>
                             {item.product_url ? (
                               <a
