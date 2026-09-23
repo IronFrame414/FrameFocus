@@ -90,11 +90,12 @@ describe('S110 E1 — the admin reset link, through /auth/confirm', () => {
   it('A — generateLink → GET /auth/confirm: session, redirect to /reset-password, marker set', async () => {
     const { data, error } = await admin.auth.admin.generateLink({ type: 'recovery', email: EMAIL });
     expect(error).toBeNull();
+    if (!data?.properties) throw new Error('generateLink returned no properties');
     recoveryClient = fresh();
     state.client = recoveryClient;
     state.jar.clear();
     const res = await confirmGET(
-      new Request(`http://localhost:3000/auth/confirm?token_hash=${data!.properties.hashed_token}&type=recovery`)
+      new Request(`http://localhost:3000/auth/confirm?token_hash=${data.properties.hashed_token}&type=recovery`)
     );
     expect(res.status).toBe(307);
     expect(res.headers.get('location')).toBe('http://localhost:3000/reset-password');
