@@ -785,3 +785,16 @@ push has run).**
     a regression the panel-level rework introduced — it had swallowed PM's old
     per-draft "Review & confirm" entry point; spec §4 preserves PM setup.
     (113c-spec §4; contracts-panel.tsx; commit `7fa48f4`.)
+
+## ⛔ REJECTED — TRUE BURST CAPTURE (an in-app `getUserMedia` camera) — **RULED [Josh, 2026-09-23]**
+
+**Do not propose replacing the native camera input again.** Recorded so a future session does not
+reopen it.
+
+- **What was proposed:** a `getUserMedia` in-app camera. It would remove the per-shot confirm step
+  of the native `<input type="file" capture>` flow (M6M burst capture and site-visit photos).
+- **Why it lost:** a `getUserMedia` stream caps capture resolution at roughly 1080p/4K video-frame
+  size, not the phone's full still-photo sensor. Josh ruled that **the confirm step is an
+  acceptable cost and photo quality wins.**
+- **What stays:** the native camera input, with its per-shot confirm, and the existing burst
+  capture / IndexedDB held-shot store around it.
