@@ -157,3 +157,65 @@ invisible to the walk, and is disallowed for contract routes. No migration. Merg
   `select count(*) from estimate_line_rows;` — Josh applies `20261720000000` before D merges.
 - **e2e `desktop-line-rows-s110.spec.ts` (R1 row, R2 line) and its sabotage (remove the
   `onMouseDown`) held** for the same CI-queue reason.
+
+## Phase 3 — Section E1 — branch `feature/s110-e-carried-debt` @ `12feaa6c` — **built and proven (live + sabotage)**
+
+### ⚠️ Q8's measurement — Supabase's password-change safeguards vs the emailed recovery link
+
+Done on **rebuild-test only** with a throwaway user (`scratchpad/recovery-probe.mjs`, `PROBE_EXIT_LINE=0`).
+Both settings were read first (`false`/`false`), toggled via the Management API, and **restored and
+re-read equal to the original**. The throwaway tenant the signup trigger created was removed (0
+users, 0 companies left). The round-trip used the **literal emailed link**
+(`GET /auth/v1/verify?token=<token_hash>&type=recovery`, 303 with a session) and the server-side
+`verifyOtp` path.
+
+| setting ON | recovery-link session sets a password | a FRESH password session, no current password / nonce |
+| --- | --- | --- |
+| neither (today) | OK | OK |
+| `security_update_password_require_reauthentication` (**"secure password change"**) | **OK — does not break recovery** | ⚠️ **OK — NOT stopped** (GoTrue exempts recent sessions) |
+| `security_update_password_require_current_password` | **OK — does not break recovery** | **REFUSED** `400 current_password_required`; with `current_password` → OK |
+
+**Report for Josh:** "secure password change" is **proven safe** for the recovery link, but it
+**does not close the unlocked-device case** for a session signed in recently. The setting that does
+is **"require current password"**. It is also proven safe for the recovery link, and it is the
+real floor under a direct API call. It would have broken the Account page's password change,
+which called `updateUser` without `current_password`. **That is fixed on this branch**:
+`changeMyPassword` and `/reset-password` pass it. So **after E merges**, switching on "require
+current password" in the production dashboard is safe by measurement. Switching it on **before**
+E merges would break the Account page. **Recommendation, not action:** enable it after the E
+merge. "Secure password change" adds little on top.
+
+**Also measured:** a recovery session's `amr` is `[{method:"otp"}]`, **not `recovery`**. Option B
+(`amr`) could not have told recovery from any other OTP sign-in. The ruled option A was the right
+one.
+
+### Built
+
+- **Admin reset fixed first** (`lib/services/team.ts`, `team/[id]/actions.ts`): `generateLink`
+  (no email, no PKCE verifier) → the SAME `handleAuthEmail` the hook uses (template, sender, rate
+  cap, `email_logs`), link → new **`/auth/confirm`**, which runs `verifyOtp` server-side on any
+  device. Recovery type only. _Old call quoted in place._ Outside production the send is
+  gated, and the action now **throws with the gate's reason** instead of silently "succeeding".
+- **`/auth/callback`** reads `redirectType === 'PASSWORD_RECOVERY'` (runtime field missing from the
+  public type — read via a commented cast) and sets the marker.
+- **`lib/auth/recovery-marker.ts`**: `ff_recovery`, httpOnly, HMAC (key HKDF-derived from the
+  service-role key — nothing new to provision), bound to user + session id, 15 min, spent on use.
+- **`/reset-password`**: a server page decides whether to show "Current password"; the change runs
+  in the server action `resetPasswordFromPage` — marker OR current password. The browser no longer
+  calls `updateUser`.
+
+### Proof
+
+| check | printed line |
+| --- | --- |
+| `s110-recovery-marker.test.ts` | `UNIT_E1_EXIT_LINE=0`, 7/7 (other session, other user, expired, edited body, bad/absent sig) |
+| `s110-reset-password.live.ts` — real `/auth/confirm` GET + real server action | `LIVE_E1_EXIT_LINE=0`, **8/8**: A confirm → 307 `/reset-password`, session, httpOnly marker; A2 non-recovery/missing token refused; **N** no marker → refused, unchanged; **X** the real marker copied onto a password session → refused; **F** forged sig → refused; **R** recovery + marker → set without current; **S** marker spent; **C** wrong current refused, right current changes |
+| sabotage 1 — `recovery = true \|\| …` | `SABOTAGE_E1_TRUST_EXIT_LINE=1`, 6 red (N, X, F first); restored `cmp` identical |
+| sabotage 2 — marker ignores the session id | `SABOTAGE_E1_BINDING_EXIT_LINE=1` (X red) and `SABOTAGE_E1_BINDING_UNIT_EXIT_LINE=1`; restored `cmp` identical |
+| clean re-run | `LIVE_E1_CLEAN_EXIT_LINE=0`, 8/8; fixtures 0 users / 0 companies |
+| `s109-change-password.live.ts` (now passes `current_password`) | `LIVE_S109_PW_EXIT_LINE=0`, 6/6 |
+| S157 sweep | `s109-password-wiring` asserted the redirect in `page.tsx` — **inverted in place**, old regex quoted; now also asserts the browser does not call `updateUser`. `s175` B6 unaffected. |
+
+⚠️ Not built, stated: a SELF-SERVICE reset link opened on a different device from the one that
+requested it still fails (PKCE verifier). This is the pre-existing limit named in S110 Phase 1, and
+not in Q8's scope.
