@@ -25,6 +25,7 @@ import {
   getCompanyMarginTarget,
   recalculateEstimateTotals,
   reorderEstimateLines,
+  reorderEstimateLineRows,
   updateEstimateCategory,
   updateEstimateLineItem,
   updateEstimateLineRow,
@@ -43,7 +44,14 @@ import {
   laborUnits,
   materialUnitsOfMeasure,
 } from '@framefocus/shared/validation/estimate-items';
-import { planLineMove, stepDestination, type LineDestination } from '@/lib/estimate-line-order';
+import {
+  planLineMove,
+  planRowMove,
+  rowsInOrder,
+  stepDestination,
+  stepRow,
+  type LineDestination,
+} from '@/lib/estimate-line-order';
 import {
   backsolveMarkupPercent,
   computeRowCost,
@@ -293,6 +301,82 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
       return;
     }
     void moveLine(lineId, dest);
+  }
+
+  // ── S110 D1 — drag-reorder of the ROWS inside one line ──
+  // Same mechanism as lines: a native-DnD grip that is also a focusable
+  // button stepping with ↑/↓. A row never leaves its line — the database
+  // refuses it (estimate_line_rows_containment) — so a drag over another
+  // line's rows is simply not a drop target.
+  const [draggingRow, setDraggingRow] = useState<{ lineId: string; rowId: string } | null>(null);
+  const [rowDropKey, setRowDropKey] = useState<string | null>(null);
+
+  function orderedRowIds(lineId: string): string[] {
+    return rowsInOrder(rows.filter((r) => r.line_item_id === lineId));
+  }
+
+  async function applyRowOrder(lineId: string, rowId: string, next: string[] | null) {
+    if (!next) return;
+    const r = await mutate(() => reorderEstimateLineRows(lineId, next), false);
+    if (!r.success) {
+      setError(r.error || 'Could not move that row');
+      return;
+    }
+    const name = rows.find((x) => x.id === rowId)?.name || 'Row';
+    setAnnouncement(`Moved ${name} to position ${next.indexOf(rowId) + 1} of ${next.length}.`);
+  }
+
+  function onRowHandleKeyDown(e: React.KeyboardEvent, lineId: string, rowId: string) {
+    if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
+    e.preventDefault();
+    const next = stepRow(orderedRowIds(lineId), rowId, e.key === 'ArrowUp' ? 'up' : 'down');
+    if (!next) {
+      setAnnouncement(e.key === 'ArrowUp' ? 'Already first.' : 'Already last.');
+      return;
+    }
+    void applyRowOrder(lineId, rowId, next);
+  }
+
+  /** Drop-target props for a row: the upper half drops BEFORE it, the lower
+   *  half AFTER it. Only a row of the SAME line is accepted. */
+  function rowDropTarget(lineId: string, rowId: string) {
+    if (!reorderEnabled) return {};
+    const beforeOf = (e: React.DragEvent): string | null => {
+      const box = (e.currentTarget as HTMLElement).getBoundingClientRect();
+      if (e.clientY < box.top + box.height / 2) return rowId;
+      const ids = orderedRowIds(lineId);
+      return ids[ids.indexOf(rowId) + 1] ?? null;
+    };
+    return {
+      onDragOver: (e: React.DragEvent) => {
+        if (!draggingRow || draggingRow.lineId !== lineId) return;
+        e.preventDefault();
+        e.stopPropagation();
+        e.dataTransfer.dropEffect = 'move';
+        const key = `${rowId}:${beforeOf(e) === rowId ? 'before' : 'after'}`;
+        if (rowDropKey !== key) setRowDropKey(key);
+      },
+      onDragLeave: () => {
+        if (rowDropKey?.startsWith(`${rowId}:`)) setRowDropKey(null);
+      },
+      onDrop: (e: React.DragEvent) => {
+        if (!draggingRow || draggingRow.lineId !== lineId) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const moved = draggingRow.rowId;
+        const before = beforeOf(e);
+        setDraggingRow(null);
+        setRowDropKey(null);
+        let next: string[] | null;
+        try {
+          next = planRowMove(orderedRowIds(lineId), moved, before);
+        } catch (err) {
+          setError(err instanceof Error ? err.message : 'Could not move that row');
+          return;
+        }
+        void applyRowOrder(lineId, moved, next);
+      },
+    };
   }
 
   /** Drop-target props for anything that accepts a dragged line. */
@@ -742,8 +826,44 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
   function lineRowTr(row: EstimateLineRow) {
     return (
       // #3 — rule between rows.
-      <tr key={row.id} style={{ borderBottom: '1px solid #f4f6fa' }}>
-        <td style={{ padding: '0.25rem 0.5rem' }}>
+      <tr
+        key={row.id}
+        data-row-id={row.id}
+        {...rowDropTarget(row.line_item_id, row.id)}
+        style={{
+          borderBottom: '1px solid #f4f6fa',
+          // S110 D1 — the insertion line while a row is dragged over this one.
+          boxShadow:
+            rowDropKey === `${row.id}:before`
+              ? 'inset 0 3px 0 0 #3b4ae0'
+              : rowDropKey === `${row.id}:after`
+                ? 'inset 0 -3px 0 0 #3b4ae0'
+                : undefined,
+          opacity: draggingRow?.rowId === row.id ? 0.45 : 1,
+        }}
+      >
+        <td style={{ padding: '0.25rem 0.5rem', whiteSpace: 'nowrap' }}>
+          {reorderEnabled && (
+            <ReorderGrip
+              testId={`row-handle-${row.id}`}
+              label={`Move row ${row.name || ROW_TYPE_BADGE[row.row_type].label}. Drag, or press Up or Down arrow.`}
+              size={14}
+              onKeyDown={(e) => onRowHandleKeyDown(e, row.line_item_id, row.id)}
+              onDragStart={(e) => {
+                // Not the line's drag: the card must not treat this as a line.
+                e.stopPropagation();
+                setDraggingRow({ lineId: row.line_item_id, rowId: row.id });
+                e.dataTransfer.effectAllowed = 'move';
+                e.dataTransfer.setData('text/plain', row.id);
+                const tr = (e.currentTarget as HTMLElement).closest('tr');
+                if (tr) e.dataTransfer.setDragImage(tr, 12, 12);
+              }}
+              onDragEnd={() => {
+                setDraggingRow(null);
+                setRowDropKey(null);
+              }}
+            />
+          )}
           <span
             style={{
               fontFamily: font.mono,
@@ -892,9 +1012,12 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
 
   function lineItemBlock(line: EstimateLineItem) {
     if (!sectionMatches(line)) return null; // 9b Find filter
+    // S110 D1 — the SAME stable order the row plan uses (sort_order, then id),
+    // so a duplicated sort_order cannot render one way and plan another.
+    const rowOrder = orderedRowIds(line.id);
     const lineRows = rows
       .filter((r) => r.line_item_id === line.id)
-      .sort((a, b) => a.sort_order - b.sort_order);
+      .sort((a, b) => rowOrder.indexOf(a.id) - rowOrder.indexOf(b.id));
     const hasOverride = line.total_price_override != null;
     // #5 — a section printing at $0 is tinted amber whole-card.
     const isUnpriced = Number(line.total_price) === 0;
@@ -953,12 +1076,9 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
             {/* S108 #5 — the grab handle, FAR LEFT. Drag it, or focus it and use
                 ↑/↓ (the keyboard and touch alternative). */}
             {reorderEnabled && (
-              <button
-                type="button"
-                draggable
-                data-testid={`line-handle-${line.id}`}
-                aria-label={`Move line ${line.name}. Drag, or press Up or Down arrow.`}
-                title="Drag to reorder — or focus and press ↑ / ↓"
+              <ReorderGrip
+                testId={`line-handle-${line.id}`}
+                label={`Move line ${line.name}. Drag, or press Up or Down arrow.`}
                 onKeyDown={(e) => onHandleKeyDown(e, line.id)}
                 onDragStart={(e) => {
                   setDraggingLineId(line.id);
@@ -971,23 +1091,7 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
                   setDraggingLineId(null);
                   setDropKey(null);
                 }}
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  width: '24px',
-                  height: '28px',
-                  marginLeft: '-6px',
-                  padding: 0,
-                  border: 'none',
-                  borderRadius: '6px',
-                  background: 'transparent',
-                  color: '#9aa4b8',
-                  cursor: 'grab',
-                }}
-              >
-                <GripVertical size={18} aria-hidden />
-              </button>
+              />
             )}
             <span style={{ fontWeight: 700, fontSize: '1rem' }}>
               <InlineText
@@ -1715,5 +1819,61 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
         />
       )}
     </div>
+  );
+}
+
+// S108 #5 / S110 D — THE GRAB HANDLE, one component for lines and rows.
+//
+// ⚠️ S110 D2: IT FOCUSES ITSELF ON MOUSEDOWN. Chromium focuses a <button> on
+// click; Safari and Firefox on macOS DO NOT (platform convention). The handle
+// relied on the browser, so click-then-↑/↓ did nothing for Josh while S109's T2
+// — run only in Chromium — asserted "focused" and passed. The test measured
+// Chromium's default, not this control. Focusing explicitly makes the keyboard
+// path independent of the browser; s110-grip-focus.test.ts fails if it goes.
+function ReorderGrip({
+  testId,
+  label,
+  size = 18,
+  onKeyDown,
+  onDragStart,
+  onDragEnd,
+}: {
+  testId: string;
+  label: string;
+  size?: number;
+  onKeyDown: (e: React.KeyboardEvent<HTMLButtonElement>) => void;
+  onDragStart: (e: React.DragEvent<HTMLButtonElement>) => void;
+  onDragEnd: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      draggable
+      data-testid={testId}
+      aria-label={label}
+      title="Drag to reorder — or focus and press ↑ / ↓"
+      onMouseDown={(e) => e.currentTarget.focus()}
+      onKeyDown={onKeyDown}
+      onDragStart={onDragStart}
+      onDragEnd={onDragEnd}
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        width: size + 6,
+        height: size + 10,
+        marginLeft: '-6px',
+        marginRight: size < 18 ? '2px' : 0,
+        padding: 0,
+        border: 'none',
+        borderRadius: '6px',
+        background: 'transparent',
+        color: '#9aa4b8',
+        cursor: 'grab',
+        verticalAlign: 'middle',
+      }}
+    >
+      <GripVertical size={size} aria-hidden />
+    </button>
   );
 }
