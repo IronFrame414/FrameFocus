@@ -376,6 +376,28 @@ claims a Settings link reading *"Your name and password →"* was built. ⚠️ 
 against the tree; if the link exists, find why it is unreachable in the installed app rather than
 adding a second one.**
 
+> **FILLED-C.1.** ⚠️ **The premise "nothing links to it" is wrong; the link exists and is on
+> `main`.** `grep -rn "Your name and password"` → 2 hits; the `/m` one is
+> `app/m/settings/page.tsx:85-91` (`href="/m/account"`, `data-testid="m-settings-edit-name"`),
+> present in `git show origin/main:…` (commit `021aa02b`, merged `d0e282e1`). **What is wrong is
+> the road to it:** the only nav entry for Settings is `app/m/mobile-shell.tsx:118` — the **7th
+> and last tile of the ☰ menu** — shown to every role (`:794-844`; subcontractors get the same
+> shell). The Settings page presents itself as read-only (`:7-25`) and its footer says company
+> settings are managed on desktop (`:118-120`), so nothing on the way says "your password is
+> here"; and inside a project or detail screen the ☰ is replaced by a back chevron (`:214-230`).
+> Not the PWA: manifest `start_url: '/m'`, no `scope` (`lib/crew-manifest.ts:74-75`); `sw.js`
+> is network-first for pages (`:138-160`). **No test ever clicked the link** (`grep` over
+> `e2e/`, `test/` → 1 hit, a source-text check). Cannot be excluded from the repo: that Josh's
+> phone was on a pre-merge build.
+>
+> **Fix (not a second link to the same page from the same place):** a **"Your account"** entry
+> in the ☰ menu itself (`NavSheet`, `mobile-shell.tsx:743-875`), every role — either an 8th tile
+> (changes the pinned tile list in `e2e/m-shell.spec.ts:33,263-267` and
+> `m-destinations.spec.ts:118-120`) or a full-width row above Sign out (tile tests untouched).
+> **Recommended: the row above Sign out** — account things sit with sign-out on every app Josh's
+> staff use, and it does not reshuffle the tile grid. The Settings card link stays. Plus an e2e
+> that CLICKS it as crew and as a subcontractor. **→ Q-C.A.**
+
 **RULED** — Every internal employee and every subcontractor must reach it from inside `/m`.
 
 ---
@@ -389,10 +411,48 @@ cannot be reordered.
 **FILL-D1** — Whether `reorder_estimate_lines()` can carry rows or a second RPC is owed; whether
 the containment trigger governs a row move the same way it governs a line move.
 
+> **FILLED-D1.** `reorder_estimate_lines(p_estimate_id uuid, p_moves jsonb) RETURNS integer` —
+> one definition (`20261640000000_line_item_containment_and_reorder.sql:107-144`), SECURITY
+> INVOKER; it writes only `estimate_line_items` and every move carries a `category_id`, which
+> rows do not have. **It cannot carry rows; a second RPC is owed.** `estimate_line_rows` (live):
+> `line_item_id NOT NULL → estimate_line_items ON DELETE CASCADE`, `sort_order integer NOT NULL`,
+> no uniqueness on it; **99 rows over 32 lines with 1 duplicate `(line_item_id, sort_order)`**,
+> and `addRow` numbers from 0 while lines start at 1 (`items-tab.tsx:519` vs `:476`) — so a
+> reorder renumbers the whole line, never swaps two values. **The containment trigger does not
+> govern rows** (`estimate_line_items_containment` is on items only); a within-line move changes
+> only `sort_order`, and RLS still confines it to drafts (PM own). **Proposed:**
+> `reorder_estimate_line_rows(p_line_item_id uuid, p_ordered_ids uuid[])`, SECURITY INVOKER,
+> writes `sort_order` 1…n, refuses if the id set is not exactly the line's rows (42501, the
+> same fail-loud shape). No cross-line row moves. UI: the same native handle as lines
+> (`items-tab.tsx:955-991`) on `lineRowTr` (`:742`), keyboard ↑/↓ included.
+>
+> ⚠️ **New finding, filed not fixed:** `estimate_line_rows_update_manager`'s WITH CHECK is company
+> + role only — the hole FILL-B5 closed for lines. A PM could re-parent a row onto a line in
+> another PM's or a sent estimate by direct PostgREST UPDATE. Not reachable from the UI. The
+> proposed RPC never changes `line_item_id`; the policy hole gets a provisional id
+> (`#1-s110`) in `TECH_DEBT.md`.
+
 **D2 — clicking a drag grip does not focus it.** Tab-then-arrow works; click-then-arrow does
 nothing. ⚠️ **CC's `e2e/desktop-row-activation-s109.spec.ts` T2 asserts "handle focused" after a
 click and passes.** Measure how the test focuses the handle versus what a real click does. **This
 is the campaign's named failure class; name it in the report.**
+
+> **FILLED-D2.** T2 (`e2e/desktop-row-activation-s109.spec.ts:135-158`) does
+> `getByTestId('line-handle-…').click()`, `expect(handle).toBeFocused()`, `ArrowDown`, and reads
+> the order from the DB. The handle is a `<button type="button" draggable>` with `onKeyDown`,
+> `onDragStart`, `onDragEnd` — **no `onMouseDown`/`onClick`, no `.focus()`**; it relies on the
+> browser focusing a button on click. `playwright.config.ts:146-163` defines **Chromium projects
+> only** (only Chromium installed). **Chromium focuses a button on mousedown; Safari and Firefox
+> on macOS do not** — platform convention. So T2 proved Chromium's default, not the handle.
+> (Josh's browser is not recorded in the repo — this is the most likely explanation, not a
+> measured one.)
+>
+> **The failure class, named: "the thing inspected must be the thing being judged" — the
+> WRONG-SCOPE form.** The instrument (Chromium) was not the environment being judged (Josh's
+> browser). **Fix:** `e.currentTarget.focus()` in the handle's `onMouseDown`, and a guard that
+> fails when it is removed — a WebKit Playwright project if its browser can be installed here,
+> otherwise a unit assertion on the handler plus the same T2. The same fix goes on the new row
+> handle (D1).
 
 ---
 
@@ -403,17 +463,103 @@ for the emailed recovery link, whose user does not know the password. **ASK-E.A*
 told apart — the JWT's `amr` recovery method, or another mechanism CC measures. ⚠️ **Getting this
 wrong breaks the only recovery path on production.**
 
+> **FILLED-E1.** `app/reset-password/page.tsx` is client-only: length + confirmation, then
+> `supabase.auth.updateUser({ password })` from the browser. **It checks nothing about the
+> session.** The recovery road: `forgot-password/page.tsx:19-21` → `resetPasswordForEmail(…,
+> { redirectTo: origin + '/auth/callback?next=/reset-password' })`; the email hook builds
+> `/auth/v1/verify?…type=recovery` (`lib/services/auth-email.ts:167-181`); PKCE is the default
+> (`@supabase/ssr` 0.5.2); `app/auth/callback/route.ts:6-13` calls `exchangeCodeForSession(code)`
+> and **discards the `redirectType` it returns**.
+>
+> **Two signals exist:**
+> 1. **`redirectType === 'PASSWORD_RECOVERY'`** from the code exchange — auth-js 2.100.1 stores the
+>    verifier as `<verifier>/PASSWORD_RECOVERY` (`lib/helpers.js:236-240`) and returns it
+>    (`GoTrueClient.js:1446-1475`). **Measured in the repo's own dependency**, server-side, at the
+>    callback.
+> 2. **JWT `amr`.** `AMRMethods` does not list `recovery` (open-ended type). `auth.flow_state` on
+>    rebuild-test tags 4 flows `authentication_method='recovery'`, but `auth.mfa_amr_claims` holds
+>    only `password` (262) — **what `amr` holds after a recovery exchange is NOT measured**;
+>    measuring needs a live recovery round-trip, which writes.
+>
+> **Options:** (A) the callback sets a short-lived httpOnly marker cookie when `redirectType` is
+> `PASSWORD_RECOVERY`; the password change moves to a server action that accepts **either** that
+> marker **or** the current password (reusing `verify-current-password.ts`), and clears the
+> marker. (B) the server action checks `amr` for a recent `recovery` entry — needs the live
+> measurement first. (C) GoTrue's "secure password change" project setting — the only one that
+> also covers a direct `updateUser` API call, not visible from the repo. **Recommended: (A),
+> and (C) switched on by Josh as well** — (A) is measured, and neither UI gate stops a direct API
+> call, which only (C) does.
+>
+> ⚠️ **New finding (from reading the code, not tested): the admin-initiated reset on the team
+> page is probably already broken.** `app/dashboard/team/[id]/actions.ts:98` sets `redirectTo`
+> to `${NEXT_PUBLIC_APP_URL}/reset-password` — skipping `/auth/callback` — and calls
+> `resetPasswordForEmail` on the **admin's** server client (`lib/services/team.ts:137-146`), so the
+> PKCE verifier lands in the admin's cookies. The employee opens `/reset-password?code=…` with no
+> verifier; no session is made; `updateUser` fails — unless that browser already had a session,
+> in which case it changes **that** session's password. Same verifier rule: a self-service reset
+> opened on a different device ends at `/sign-in?error=auth`. `grep` of the debt files for
+> resetPasswordAction/PKCE/code_verifier → 0 hits, so it is unfiled. **Fix it first** (route
+> through `/auth/callback` and generate the link server-side with `auth.admin.generateLink` so no
+> verifier is needed), or there is no working recovery path to protect. **→ Q-E.A covers both.**
+
 **E2 — catalog rows.** The vendor `product_url` link sits on the item name while the rest of the row
 opens Edit, so one row has two destinations. **ASK-E.B**: move the vendor link to its own control,
 or leave it.
+
+> **Measured for ASK-E.B.** `app/dashboard/catalog/catalog-list.tsx:189-199` —
+> `<a href={item.product_url} target="_blank">` wraps the name; the row opens Edit via
+> `rowActivation` (`:183-185`) **for managers only**. For everyone else the row is inert and the
+> name link is the only thing on it. Moving the link to its own small "Vendor ↗" control keeps
+> it for both.
 
 **E3 — `#161`'s remaining file-sheet sites**, listed by name in its `TECH_DEBT.md` status line:
 lien releases, contract and lien templates, delivery photos, receipts, **the client portal**,
 signing activity, the PO PDF. ⚠️ **The portal is client-facing — state what a client may reach
 through a sheet that they could not reach before.**
 
+> **FILLED-E3.** Remaining sites (`TECH_DEBT.md:310-316`), each measured:
+>
+> | site | opens today by |
+> | --- | --- |
+> | `projects/[id]/files/file-row-actions.tsx:49` | `window.open(url + ?download=)` |
+> | `lien-releases/releases-panel.tsx:81` | `window.open(url,'_blank','noopener')` |
+> | `settings/lien-release-settings-form.tsx:260`, `settings/contract-settings-form.tsx:420` | same |
+> | `field-ops/[projectId]/deliveries/d/[deliveryId]/page.tsx:186,223` | `<a target=_blank>` on photos |
+> | `dashboard/expenses/review-popup.tsx:422` | `<a target=_blank>` on receipts |
+> | **`portal/[projectId]/files/page.tsx:120-127`** | `<a href={url} target=_blank>Open` |
+> | `estimates/[id]/signing-activity.tsx:68` | `window.location.href = url` |
+> | `deliveries/[poId]/po-lines-panel.tsx:323` | `<a href="/api/pos/${poId}/pdf">` |
+> | + eight inline-only surfaces (`:315`) | no open at all |
+>
+> **The portal.** A client reaches, on their own session only (`portal.ts:8-24`, no service
+> role): client-visible non-image files as an "Open" link, and client-visible photos **inline
+> only** — the **marked-up `display_path`**, never the original — signed by `signPortalPaths`
+> (`:495-512`, 7200 s). RLS: client-visible + client of that project + full access.
+> `FileSheetProvider` is mounted in 2 layouts (`dashboard`, `m`), **not the portal**.
+>
+> **What a sheet would newly give a client:** with a resolver that returns the URL the page
+> already signed — **no new bytes**; but photos gain **Download and Print** where today they are
+> view-only on screen. **The real risk is a re-sign route:** the sheet re-signs on a failed load
+> and before expiry, and a portal re-sign route would be new client-facing surface — it must
+> use the client's session and sign **`display_path`, never `file_path`**, or an annotated
+> photo's unmarked original reaches the client. **Recommended:** migrate the eight staff sites;
+> for the portal, resolver = the already-signed URL, no new route, and **no sheet on portal
+> photos** (keeps them view-only as today). **→ Q-E.D.**
+
 **E4 — `#1-deliv`.** Closable now that its classification is recorded, or does the Stripe
 event-shape gap keep it open? **ASK-E.C** — Josh's call.
+
+> **Measured for ASK-E.C.** `#1-deliv` (`TECH_DEBT.md:718-771`) is a CLASS: a live test calling a
+> handler directly cannot reproduce one that runs mid-transaction. Its one instance (S160
+> auto-confirm) is fixed. S108 D2b's sweep re-checked: 14 test files import a route module; D2b
+> missed 3 (`s107-bid-upload-e2e.live.ts`, `s160-auth-email.test.tsx`,
+> `s109-estimate-file-url-order.test.ts`) — all read, none timing-dependent; the conclusion holds.
+> **The Stripe gap is a different class:** `test/card-signup-webhook.test.ts:1-9` is
+> "MOCK-VERIFIED, NOT ROUND-TRIP-VERIFIED" — a fidelity question, not a timing one, and D2b says
+> so. It is tracked nowhere else (`TECH_DEBT.md`, `GATED.md`, `STATE.md` → 0 trackers).
+> **Recommended: close `#1-deliv` AND in the same commit re-file the Stripe check on its own**
+> (`#2-s110`, "confirm the real `checkout.session.completed` `mode:'setup'` event in Stripe test
+> mode"), or closing loses it.
 
 ---
 

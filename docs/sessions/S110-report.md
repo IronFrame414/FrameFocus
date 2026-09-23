@@ -29,3 +29,20 @@ Branch `feature/s110-site-visit-access`, cut from `main` @ `8bce4311` (tree clea
 - **B:** the sidebar is flat with no children; every desktop road to a visit redirects foreman and
   crew away, which collides with Section A's widening → ASK-B.B added.
 - **G:** queries and the one-line seed fix prepared; nothing executed.
+
+### Step 3 — Sections C, D, E measured, written into the spec
+
+- **C:** the S109 claim holds — the `/m/settings` → `/m/account` link exists on `main`. What fails
+  is the road: Settings is the last ☰ tile, framed as read-only, and ☰ is absent on detail screens.
+  No test ever clicked the link.
+- **D2:** T2 ran only in Chromium, which focuses a button on click; Safari/Firefox on macOS do not,
+  and the handle never calls `.focus()`. Failure class: "the thing inspected must be the thing
+  judged" — the wrong-scope form.
+- **D1:** a second RPC is owed; rows have a duplicate `sort_order` on rebuild-test. New: the
+  `estimate_line_rows` UPDATE policy lacks the WITH CHECK that FILL-B5 gave lines.
+- **E1:** `redirectType === 'PASSWORD_RECOVERY'` from the code exchange is a measured signal; `amr`
+  after recovery is not measured. ⚠️ New, from code reading: the team-page admin reset likely
+  produces a link that cannot work (PKCE verifier in the admin's cookies).
+- **E3:** the portal can take the sheet with no new bytes if it reuses the already-signed URL;
+  a re-sign route would be new client surface.
+- **E4:** closable, provided the Stripe fidelity check is re-filed in the same commit.
