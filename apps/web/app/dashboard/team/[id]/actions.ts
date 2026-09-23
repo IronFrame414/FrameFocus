@@ -5,13 +5,13 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@framefocus/shared/types/database';
 import { verifyCurrentPassword } from '@/lib/auth/verify-current-password';
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
+import { resetTeamMemberPassword } from '@/lib/services/team-reset';
 import { getStripe } from '@/lib/stripe';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import {
   updateTeamMember,
   softDeleteTeamMember,
-  resetTeamMemberPassword,
   getTeamMember,
 } from '@/lib/services/team';
 
