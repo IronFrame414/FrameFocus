@@ -18,3 +18,14 @@ Branch `feature/s110-site-visit-access`, cut from `main` @ `8bce4311` (tree clea
   Proposal: `files.site_visit_capture` marker and a staff arm scoped to it (Q-A.D).
 - `s108-site-visit.live.ts`: 29 cases; 7 encode overturned behaviour. Four other test files do too.
 - Rebuild-test holds **0** rows in every `site_visit_*` table.
+
+### Step 2 — Sections B, F, G measured, written into the spec
+
+- **F:** the estimate-files list has 6 consumer files (3 app), the per-file route 5 (2 app).
+  ⚠️ A consumer-set allowlist alone would NOT have caught S109 — the consumer already existed and
+  a FIELD was removed — so the proposed guard registers fields per consumer as well. Of 99 routes,
+  19 have ≥2 consumers and a change since 2026-08-23; none but `estimates/[id]/files` removed a
+  response field.
+- **B:** the sidebar is flat with no children; every desktop road to a visit redirects foreman and
+  crew away, which collides with Section A's widening → ASK-B.B added.
+- **G:** queries and the one-line seed fix prepared; nothing executed.

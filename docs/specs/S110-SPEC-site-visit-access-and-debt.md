@@ -320,11 +320,49 @@ site visit on desktop."*
 **FILL-B.1** — Where it belongs in the desktop navigation, measured against how the sidebar is
 built today. A top-level entry, a child of Estimates, or a tab on the Estimates page.
 
+> **FILLED-B.1.** The sidebar is `NAV_ITEMS` in `app/dashboard/dashboard-shell.tsx` (~`:85`): a
+> **flat list, no children**, three sections (top, Reference, Admin — S130 order), per-item
+> `roles` filtered once (`:210`). Estimates is `['owner','admin','project_manager']`. Active
+> highlight is by prefix, so `/dashboard/estimates/site-visits/…` already lights Estimates. The
+> Estimates page redirects every other role to `/dashboard` (`page.tsx:62-64`), has no tabs (status
+> chips only, `estimates-list.tsx:29-39`), and its list excludes visits
+> (`estimates-client.ts:247`). **No `/dashboard/estimates/site-visits` index exists.** The record
+> page redirects non-office roles to `/m/site-visits/[id]`.
+>
+> ⚠️ **Section A collides with this.** A widens read/edit to foreman and crew; every desktop road
+> to a visit (sidebar, page, record page) sends them away. So:
+> - desktop site visits stay **office-only** → an index at `/dashboard/estimates/site-visits`,
+>   linked as a "Site visits" tab beside the Estimates list. No sidebar change.
+> - desktop site visits reach **foreman and crew too** → a **top-level** item
+>   `/dashboard/site-visits`, ungated like Field Ops, and the record page's redirect goes.
+>
+> **Recommended: top-level**, because Section A's whole point is that the office and the crew
+> work on the same record, and PARITY [S122] says one feature behaves the same on both surfaces.
+> **→ Q-B.B.**
+
 **FILL-B.2** — What the list shows and who may see it. ⚠️ **It must respect Section A's read
 rule** — build B after A, or state the dependency.
 
+> **FILLED-B.2.** Today: the desktop panel is `listSiteVisits({ openOnly: true })`
+> (`lib/services/site-visits.ts:42-50`) — not deleted, not promoted, newest first, badged
+> Finished / Still recording, hidden when empty. `/m/site-visits` calls the same function with no
+> filter and groups **Recording / Finished · waiting for the office / Became estimates**.
+> **Proposed desktop list:** the same function and the same three groups (parity), rows = title,
+> contact, address, date, state; promoted rows open the estimate for the office and the record for
+> everyone else; no money; abandoned excluded. Visibility is whatever Section A's SELECT policy
+> returns — the list adds no rule of its own. **Built after A.**
+
 **ASK-B.A** — ⚠️ **May a site visit be CREATED from the desktop?** Recording is mobile-only by
 design (S108). Creating at a computer is new capability, not a missing link. Josh decides.
+
+> **Measured for ASK-B.A.** `POST /api/site-visits` → `create_site_visit` enforces role only (any
+> internal role); **nothing restricts it to a phone**. The only form is `/m/site-visits/new`. The
+> S108 ruling is `S108-SPEC-A-site-visit.md:34`: _"Recorded on MOBILE, on site — a new `/m/`
+> screen."_ Desktop creation needs no DB or API change — a desktop form, or a link to the `/m`
+> form.
+>
+> **ASK-B.B** (added) — top-level entry reaching foreman/crew, or office-only tab under Estimates
+> (FILLED-B.1).
 
 ---
 
@@ -396,8 +434,65 @@ a test naming every consumer of the estimate files route, which fails when a new
 ⚠️ **A guard that passes today and could never fail is worthless — prove it fires by adding a
 consumer.**
 
+> **FILLED-F.1.** **Consumers, measured** — `grep -rnE "estimates/[^'\"\`]*/files" --include=*.ts
+> --include=*.tsx app components lib e2e test` → **23** lines (5 are the routes' own log lines);
+> cross-checked with `grep -rnE "api/estimates"` (26, the extra 2 unrelated routes) and a
+> `/files`-suffix sweep outside `app/api` (31, none an estimate-files consumer). No helper builds
+> the URL from a variable.
+>
+> | route | consumer files | app consumers |
+> | --- | --- | --- |
+> | `GET/POST /api/estimates/[id]/files` | **6** | `estimate-files-tab.tsx:57,88`, `site-visit-record.tsx:274`, `site-visits-client.ts:157` (POST) · plus `e2e/desktop-file-sheet-s109.spec.ts:147`, `test/s107-estimate-files-route-order.test.ts:87`, `test/s109-file-sheet.test.ts:105` |
+> | `GET …/files/[fileId]/url` | **5** | `estimate-files-tab.tsx:45`, `lib/site-visits/media.ts:41` · plus 3 tests |
+>
+> **The precedent:** `test/s123-still-clocked-in.test.ts` — `grep -rl` over fixed folders, sorted,
+> `toEqual` against a commented hand list; a new match fails naming it. Unit suite
+> (`apps/web/vitest.config.ts`), which CI runs — the guard belongs there, not in the live suite.
+>
+> ⚠️ **A consumer-SET allowlist alone would NOT have caught S109.** `site-visit-record.tsx` was
+> already a consumer; the break was a field removed from the response. So the guard is two layers:
+> 1. **`lib/api-contracts.ts`** — per contract route: path pattern, the response's fields, and
+>    each consumer file with the fields it reads. The test walks `app components lib e2e test`,
+>    strips comments, and fails if the consumer set differs from the registry (fires on a NEW
+>    consumer).
+> 2. The same test reads the route's `.select('…')` and `NextResponse.json` keys, requires them
+>    to equal the registered fields, and requires every field a consumer declares to be present.
+>    Removing `url` would have forced an edit to the registry, and `site-visit-record.tsx`'s
+>    declared `url` would have gone red — **the S109 case**.
+> 3. And the type: the list's response type moves to `lib/` (Next rejects non-route exports from
+>    `route.ts`), the route `satisfies` it, and `media.ts`'s hand-written `ListedFile` imports it,
+>    so `tsc` also catches a removed field.
+>
+> **Does it fire** — a scratchpad prototype found exactly 6 and 5; an injected consumer reading
+> `.url` made it 7. **The in-vitest proof (add a consumer → red; remove a field → red) is owed at
+> build.** Limits, stated: a path built from a variable last segment
+> (`selection-lifecycle.tsx:31`, `` `/api/selections/${id}/${path}` ``) or by concatenation is
+> invisible to it; the registry forbids both for contract routes.
+
 **FILL-F.2** — Whether any other route in the app has more than one consumer and a recently changed
 response shape. ⚠️ **Do not truncate the search. State the command and the full result count.**
+
+> **FILLED-F.2.** `find app/api -name route.ts | wc -l` → **99**. A script turned each route path
+> into a regex (dynamic segments match `${…}` or a literal), counted consumer files plus module
+> imports, and ran `git log --since=2026-08-23` per route (full output 177 lines, scratchpad
+> `f2.out`). **41** routes have ≥2 consumer files counting tests, **13** have ≥2 non-test
+> consumers, **44** changed in the window, **19** are in both. Every one of the 19 diffed at
+> `NextResponse.json` / `.select`:
+>
+> | route | app consumers | response change |
+> | --- | --- | --- |
+> | `estimates/[id]/files` | 3 | **removed `url`, `file_path` (#161, `247f6088`) — S109, fixed** |
+> | `estimates/[id]/files/[fileId]/url` | 2 | new route |
+> | `files/signed-url` | 3 | additive (`?markup=1`), same `{url}` |
+> | `stripe/checkout`, `stripe/portal` | 1 + allowlist | unchanged / `return_url` only |
+> | `resubscribe/checkout`, `bid/[token]/files` | 1 | new route / GET added |
+> | `selections/release` | 1 | additive (`emailed`, `emailError`) |
+> | 11 others | ≤1 each | new routes, error text, additions |
+>
+> **No other route combines ≥2 app consumers with a response change that REMOVED anything.** Seed
+> the registry with the two estimate-files routes and `files/signed-url` (3 consumers). Missed by
+> the count and noted: `selections/[id]/{offer,reopen,revise,withdraw}` are called through a
+> dynamic `${path}`; `offer` changed only additively and has one consumer.
 
 ---
 
@@ -408,11 +503,44 @@ CC prepares; **CC executes none of these.**
 **FILL-G.1** — `SCHEMA_DRIFT_COMPANY_ID` is unset in Vercel, so the daily drift cron notifies nobody.
 Give Josh the production query for the company id and the exact variable to set.
 
+> **FILLED-G.1.** Read at `lib/services/schema-drift.ts:87`. Unset (`:200-204`): the cron still
+> compares and `console.error`s drift, writes no notification, and says so in its response.
+> Production company `worth-properties` (`S108-SPEC-C:31`, `S108-SPEC-E:179`). READ-ONLY:
+> ```sql
+> select c.id, c.name, c.slug, p.email as owner_email
+> from companies c
+> join profiles p on p.company_id = c.id and p.role = 'owner' and p.is_deleted = false
+> where c.slug = 'worth-properties';
+> ```
+> One row, your email. **Vercel → Settings → Environment Variables → `SCHEMA_DRIFT_COMPANY_ID` =
+> that `id`, environment Production**, then redeploy.
+
 **FILL-G.2** — The seed script reports Company B slug drift: live `ridgeline-builders-test-co-2`,
 expected `ridgeline-test-co-2`. It matched by name. State the risk and the one-line fix.
 
+> **FILLED-G.2.** `scripts/seed-test-identities.mjs:49` `COMPANY_B_SLUG = 'ridgeline-test-co-2'`;
+> `:265-287` look up by slug, fall back to exact name with `.maybeSingle()` **and discard the
+> error**, then INSERT if both miss. Live: one company, `f079a1f4-…`, slug
+> `ridgeline-builders-test-co-2` (matches `STATE.md`); slug is UNIQUE, **name is not**. **Risk:** a
+> second row with that name makes `maybeSingle` error, the error is swallowed, and the script
+> silently creates a NEW Company B — the S164 duplicate-tenant shape, where both halves of every
+> isolation test pass in different companies. (Production is safe: `:22,35` refuse any URL but
+> rebuild-test's.) **Fix, one line, no DB write:** `:49` →
+> `const COMPANY_B_SLUG = 'ridgeline-builders-test-co-2';` — also the slug the signup trigger
+> derives from the name (`20260917000000_company_slug_no_hex.sql:71`). Slug references: 4 + 4,
+> only `:49` is code; the isolation tests resolve by name and are unaffected. **Josh's call per
+> Section G — CC does not execute it.**
+
 **FILL-G.3** — The S108 EST-107 query was never run. Restate it for Josh, and say what a NULL
 `promoted_at` on a `draft` row would mean.
+
+> **FILLED-G.3.** The query is verbatim in `docs/sessions/S108-report.md` (S108 FOLLOW-UP, Step 1),
+> keyed on `e.id = 'd858b3c6-d86c-4c23-9a9b-f9ee7ef97678'`, read-only. Expected: `promoted_at`
+> set and `promoter_is_est_author = true` → `promote_site_visit()` ran (its only writer) — most
+> likely the owner tapping "Create estimate from this visit" as "finish". **A NULL `promoted_at`
+> on a `draft` row** means the status was written outside that RPC — the only other road is a
+> direct owner/admin UPDATE (`estimates_update_manager` admits `site_visit → draft`), which no
+> app code issues — so S108's diagnosis would be wrong: **stop and report**.
 
 **Also outstanding, no work owed here:** the two Resend keys exposed in the S103 transcript
 (deferred seven times); QuickBooks production connect (Vercel has no `QBO_*`); the three old
