@@ -254,7 +254,11 @@ test.describe('A-3 · the sheet omits the three tab destinations', () => {
   }
 });
 
-test.describe('A-3b · the sheet holds exactly the seven named tiles + Sign out', () => {
+// [S110 C] Title superseded, quoted rather than rewritten: _"A-3b · the sheet
+// holds exactly the seven named tiles + Sign out"_. Ruling Q7 added a
+// full-width "Your account" row above Sign out, for every role. The seven tiles
+// are unchanged and still asserted exactly; the row is NOT a tile.
+test.describe('A-3b · the sheet holds exactly the seven named tiles + Your account + Sign out', () => {
   test('exactly seven tiles, in order, and nothing else', async ({ page }) => {
     await page.goto('/m/timeclock');
     await openSheet(page);
@@ -290,6 +294,25 @@ test.describe('A-3b · the sheet holds exactly the seven named tiles + Sign out'
     await expect(
       page.getByTestId('m-sheet-grid').getByText(/sign out/i)
     ).toHaveCount(0);
+  });
+
+  test('[S110 C] the full-width Your account row sits directly above Sign out, not in the grid', async ({
+    page,
+  }) => {
+    await page.goto('/m/timeclock');
+    await openSheet(page);
+    const account = page.getByTestId('m-sheet-account');
+    await expect(account).toBeVisible();
+    await expect(account).toHaveText('Your account');
+    await expect(account).toHaveAttribute('href', '/m/account');
+    await expect(page.getByTestId('m-sheet-grid').getByText('Your account')).toHaveCount(0);
+    const a = (await account.boundingBox())!;
+    const out = (await page.getByTestId('m-sign-out').boundingBox())!;
+    const sheet = (await page.getByTestId('m-nav-sheet').boundingBox())!;
+    expect(a.height).toBeCloseTo(58, 0);
+    expect(a.width).toBeCloseTo(sheet.width - 36, 0);
+    // Directly above: its bottom edge plus the 10px gap is Sign out's top.
+    expect(a.y + a.height + 10).toBeCloseTo(out.y, 0);
   });
 });
 
