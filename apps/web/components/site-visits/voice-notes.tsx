@@ -239,7 +239,7 @@ function VoiceRow({
         {mmss(Number(note.duration_seconds))}
         {note.transcript_edited_at ? ' · transcript edited' : ''}
       </div>
-      {url ? <audio controls preload="none" src={url} className="w-full" /> : null}
+      {url ? <audio data-testid="sv-voice-audio" controls preload="none" src={url} className="w-full" /> : null}
       {note.transcript_status === 'pending' ? (
         <p className="mt-[6px] text-[14px] text-m6m-muted">Transcribing…</p>
       ) : note.transcript_status === 'failed' ? (

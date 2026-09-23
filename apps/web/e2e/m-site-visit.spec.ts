@@ -39,6 +39,62 @@ async function sweep() {
 }
 
 test.beforeAll(sweep);
+
+// [S109 photo regression] The photo COUNT text below stayed right while every
+// photo rendered as a grey tile and every voice note lost its player — #161
+// stopped the files list signing URLs, and the record read `url` off it. The
+// count could not see that. These assert the MEDIA: the <img> decoded, and the
+// <audio> carries a signed src.
+async function expectMediaRendered(scope: import('@playwright/test').Locator) {
+  const photo = scope.getByTestId('sv-photo').first();
+  await expect(photo, 'the photo rendered as the grey fallback — no src').toBeVisible({ timeout: 30_000 });
+  await expect(scope.getByTestId('sv-photo-missing')).toHaveCount(0);
+  await expect
+    .poll(async () => photo.evaluate((el) => (el as HTMLImageElement).naturalWidth), { timeout: 20_000 })
+    .toBeGreaterThan(0);
+  const audio = scope.getByTestId('sv-voice-audio').first();
+  await expect(audio, 'the voice note has no player — no audio url').toBeAttached({ timeout: 30_000 });
+  expect(await audio.getAttribute('src')).toContain('/storage/v1/object/sign/');
+}
+
+// A voice note with its audio file, seeded as the crew recorder would leave it
+// (the file is theirs, so the recorder arm can read it). The browser cannot
+// record audio headlessly; the upload path is `test/s108-site-visit.live.ts`'s.
+async function seedVoiceNote(estimateId: string) {
+  const { data: crew } = await admin.from('profiles').select('user_id, company_id').eq('email', CREW).eq('is_deleted', false).single();
+  const c = crew as { user_id: string; company_id: string };
+  const path = `${c.company_id}/estimates/${estimateId}/${MARKER}-note.webm`;
+  const bytes = Buffer.from('s109 voice-note stand-in');
+  const { error: upErr } = await admin.storage.from('project-files').upload(path, bytes, { contentType: 'audio/webm', upsert: true });
+  expect(upErr, upErr?.message).toBeNull();
+  const { data: file, error: fErr } = await admin
+    .from('files')
+    .insert({
+      company_id: c.company_id,
+      estimate_id: estimateId,
+      category: 'other',
+      file_name: 'note.webm',
+      file_path: path,
+      file_size: bytes.length,
+      mime_type: 'audio/webm',
+      created_by: c.user_id,
+      updated_by: c.user_id,
+    })
+    .select('id')
+    .single();
+  expect(fErr, fErr?.message).toBeNull();
+  const { error: vErr } = await admin.from('site_visit_voice_notes').insert({
+    company_id: c.company_id,
+    estimate_id: estimateId,
+    file_id: (file as { id: string }).id,
+    duration_seconds: 3,
+    transcript_status: 'done',
+    transcript: 'S109 seeded voice note',
+    created_by: c.user_id,
+    updated_by: c.user_id,
+  });
+  expect(vErr, vErr?.message).toBeNull();
+}
 test.afterAll(sweep);
 
 test('S108 A — crew records, owner promotes, crew keeps reading with no money and no writes', async ({ page }) => {
@@ -71,6 +127,10 @@ test('S108 A — crew records, owner promotes, crew keeps reading with no money 
   // One photo, captured during the visit (a 1×1 PNG through the real input).
   await page.getByTestId('sv-photo-input').setInputFiles({ name: 'on-site.png', mimeType: 'image/png', buffer: PNG });
   await expect(page.getByTestId('sv-section-photos')).toContainText('Photos · 1', { timeout: 30_000 });
+  // [S109] …and the photo and a voice note actually RENDER on /m.
+  await seedVoiceNote(visitId);
+  await page.reload();
+  await expectMediaRendered(page.getByTestId('site-visit-record'));
 
   // [ASK-A4 AMENDED, ruling 1] Superseded assertion, quoted: "The office was
   // told (ASK-A4)" — a notification at CREATION. Inverted: creating and
@@ -104,6 +164,8 @@ test('S108 A — crew records, owner promotes, crew keeps reading with no money 
   await signInAs(page, OWNER);
   await page.goto(`/dashboard/estimates/site-visits/${visitId}`);
   await expect(page.getByTestId('sv-office-state')).toContainText('Finished');
+  // [S109] The third mount — the desktop standalone visit page — renders them too.
+  await expectMediaRendered(page.getByTestId('site-visit-record'));
   await page.getByTestId('sv-promote').click();
   await page.getByTestId('confirm-accept').click();
   await page.waitForURL(new RegExp(`/dashboard/estimates/${visitId}$`), { timeout: 60_000 });
@@ -132,6 +194,8 @@ test('S108 A — crew records, owner promotes, crew keeps reading with no money 
   await page.reload();
   await page.getByTestId('est-tab-site_visit').click();
   await expect(tab.getByTestId('sv-section-photos')).toContainText('Photos taken during the visit · 1', { timeout: 30_000 });
+  // [S109] …and on the desktop Site Visit tab they RENDER, not just count.
+  await expectMediaRendered(tab);
 
   // Ruling 3 — once SENT, the record is frozen: no add controls for the office.
   await expect(tab.getByTestId('sv-add-condition')).toHaveCount(1); // control: still a draft
@@ -154,6 +218,8 @@ test('S108 A — crew records, owner promotes, crew keeps reading with no money 
   await expect(page.getByTestId('sv-add-condition')).toHaveCount(0);
   await expect(page.getByTestId('sv-photo-input')).toHaveCount(0);
   await expect(page.getByTestId('site-visit-record')).not.toContainText('$');
+  // [S109] The recorder still sees their media after the freeze.
+  await expectMediaRendered(page.getByTestId('site-visit-record'));
 });
 
 test('S108 follow-up — an estimate that never was a site visit has NO Site Visit tab', async ({ page }) => {

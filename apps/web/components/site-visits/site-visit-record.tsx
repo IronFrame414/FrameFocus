@@ -16,7 +16,7 @@ import {
 import { useOfflineSync } from '@/app/m/offline-sync';
 import { ErrorNotice, useOnline } from '@/app/m/write-ui';
 import { VoiceNotes } from './voice-notes';
-import { visitEraPhotos } from '@/lib/site-visits/photos';
+import { resolveSiteVisitMedia, type ListedFile } from '@/lib/site-visits/media';
 
 // S108 Spec A — THE SITE VISIT RECORD. ONE component, rendered by BOTH the
 // phone (/m/site-visits/[id]) and the desktop page (/dashboard/estimates/
@@ -273,11 +273,15 @@ export function SiteVisitRecord({
   const loadFiles = useCallback(async () => {
     const res = await fetch(`/api/estimates/${estimateId}/files`);
     if (!res.ok) return;
-    const body = (await res.json()) as { files: Array<PhotoFile & { id: string }> };
+    const body = (await res.json()) as { files: ListedFile[] };
     // [ruling 4, 2026-09-23] VISIT-ERA photos only — cutoff = promotion, see
     // lib/site-visits/photos.ts. Later photos live in the estimate's Files tab.
-    setPhotos(visitEraPhotos(body.files, detail.visit.promoted_at));
-    setAudioUrls(Object.fromEntries(body.files.filter((f) => f.mime_type.startsWith('audio/')).map((f) => [f.id, f.url])));
+    // [S109 regression] The list carries NO url since #161 (161.B) — each photo
+    // and voice note is signed through the per-file route, in parallel; a failed
+    // one comes back url: null and renders the fallback tile. See media.ts.
+    const media = await resolveSiteVisitMedia(estimateId, body.files, detail.visit.promoted_at, (u) => fetch(u));
+    setPhotos(media.photos);
+    setAudioUrls(media.audioUrls);
   }, [estimateId, detail.visit.promoted_at]);
   useEffect(() => {
     void loadFiles();
@@ -381,9 +385,9 @@ export function SiteVisitRecord({
             {photos.map((p) =>
               p.url ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img key={p.id} src={p.url} alt={p.file_name} className="aspect-square w-full rounded-[8px] object-cover" />
+                <img key={p.id} data-testid="sv-photo" src={p.url} alt={p.file_name} className="aspect-square w-full rounded-[8px] object-cover" />
               ) : (
-                <div key={p.id} className="aspect-square rounded-[8px] bg-m6m-border" />
+                <div key={p.id} data-testid="sv-photo-missing" className="aspect-square rounded-[8px] bg-m6m-border" />
               )
             )}
           </div>
