@@ -219,3 +219,60 @@ one.
 ⚠️ Not built, stated: a SELF-SERVICE reset link opened on a different device from the one that
 requested it still fails (PKCE verifier). This is the pre-existing limit named in S110 Phase 1, and
 not in Q8's scope.
+
+## Phase 3 — Sections E2–E4, and E's final gate — branch `feature/s110-e-carried-debt`
+
+- **E2 (Q9 → A)** `catalog-list.tsx`: the name is plain text; a separate labelled **"Vendor ↗"**
+  link. `s110-catalog-vendor.test.ts` 3/3; sabotage (name re-wrapped in the link) →
+  `SABOTAGE_E2_EXIT_LINE=1`; restored `cmp` identical.
+- **E3 (Q10 → A)** — new `components/files/sheet-link.tsx` (real `href`, so a modified click still
+  opens a tab; a plain click opens the sheet; `fileId` re-signs on the staff session, and with no
+  `fileId` it reuses `href`). Eight staff sites migrated (project file **View**, lien releases,
+  both "View form"s, delivery photos, receipts, **View Signed Proposal** — no longer navigates
+  away — and PO **View PDF**, with `/api/pos/[id]/pdf` inline only for `?view=1`).
+  **Portal:** `FileSheetProvider` in `app/portal/layout.tsx`; Shared documents open the sheet with
+  **only the already-signed URL**; photos untouched and view-only.
+  `s110-file-sheet-sites.test.ts` 14/14 (+ `s109-file-sheet` 21/21 unchanged); sabotage (a
+  `fileId` on the portal link) → `SABOTAGE_E3_PORTAL_EXIT_LINE=1`; restored `cmp` identical.
+  ⚠️ **Proven by source assertion, not in a browser.** No e2e drives these nine sites yet.
+- **E4 (Q11)** `#1-deliv` → `TECH_DEBT_CLOSED.md` (summary + "full text in git history"); the
+  Stripe event-shape check **re-filed as `#2-s110` in the same commit**; `#161` status line
+  records the S110 migration and that the inline-only surfaces remain.
+
+### ⚠️ Two defects that the final gate caught, both mine, both fixed
+
+1. **`next build` failed: `BUILD_EXIT_LINE=1`** — `lib/services/team.ts` is imported by a CLIENT
+   component (`team-page-client.tsx`), and the E1 change pulled the server-only `handleAuthEmail`
+   into it. **`tsc` and the full unit suite were both green over it.** Fixed by moving
+   `resetTeamMemberPassword` to server-only `lib/services/team-reset.ts`. CI saw the same thing: runs
+   `35932967573` and `35933424621` failed at "Build (production)".
+2. **`tsc` failed on the E1 live test** (`data!.properties` possibly null). vitest does not
+   type-check, so the live run was green. CI run `35932967573` failed "Type check" on it. Fixed and
+   committed separately.
+
+### E final gate
+
+| check | printed line |
+| --- | --- |
+| unit (whole suite) | `UNIT_EXIT_LINE=0`, **107 files / 1418 tests** |
+| `tsc` | `TSC_EXIT_LINE=0` |
+| `next build` (after fix 1) | `BUILD_EXIT_LINE=0`, **130/130** (`/auth/confirm` is the new page), BUILD_ID `Jwtgu_rawAF1IvHEQL4Lf` |
+| lint (changed files) | `LINT_EXIT_LINE=0` |
+
+### C and D — `next build` now run (it had not been)
+
+| branch | printed line |
+| --- | --- |
+| `feature/s110-c-account-link` | `BUILD_EXIT_LINE=0`, 129/129, `6XzTzwtT6cHfUyyNqTuON` |
+| `feature/s110-d-line-rows` | `BUILD_EXIT_LINE=0`, 129/129, `4HL7mKLSMN6f59IcnmKGk` |
+
+### CI queue (Actions API), and why no local e2e
+
+F, C and D CI runs have been `in_progress` for 30+ minutes. That is four concurrent e2e suites on
+rebuild-test, one per pushed S110 branch, which is the "push after every commit" cost the S108
+report predicted. **Each runs the whole e2e suite, so the new C and D specs get a CI result
+there.** A local run on top would be the second heavy consumer the prompt forbids. D's UI sabotage
+(remove `onMouseDown`) still needs one local run once the queue is idle.
+
+## Section A — ⚠️ BLOCKED on Josh's production counts (FILLED-A.8 queries 1–3). B depends on A.
+Per Josh: not idling. Moving to Section H's parts that do not touch `SiteVisitRecord`.
