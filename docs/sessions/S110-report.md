@@ -276,3 +276,51 @@ there.** A local run on top would be the second heavy consumer the prompt forbid
 
 ## Section A — ⚠️ BLOCKED on Josh's production counts (FILLED-A.8 queries 1–3). B depends on A.
 Per Josh: not idling. Moving to Section H's parts that do not touch `SiteVisitRecord`.
+
+## Phase 3 — Section H (started early, A being blocked) — branch `feature/s110-h-language`
+
+Cut from the docs branch, then **C merged in** (`3c9988d1`) so H stacks on C's `mobile-shell.tsx`
+change instead of conflicting with it. Merge order F, C, D, E, A, B, H is unchanged.
+
+### Database — `20261750000000_language_and_translations.sql` → rebuild-test
+
+`profiles.language` (`'en'|'es'`, NOT NULL DEFAULT `'en'`, CHECK) and the self-edit guard admitting
+it; `text_translations` (the Q12 cache — RLS on, **no policies**, service role only);
+`ai_translation_logs` (3H cost log, owner/admin SELECT). Dry run listed exactly this file;
+`DBPUSH_EXIT_LINE=0`; column and RLS verified; all 10 rebuild-test profiles read `en`;
+`db:fingerprint` 0; `db:verify` 0 **LEDGER CLEAN**. The tenant-deletion walk gained
+`text_translations` (deleted with the tenant), and `ai_translation_logs` survives detached (S137 Q1).
+Census tests 46/46.
+⚠️ **Rebuild-test is shared by every section branch.** The push needed D's `20261720000000` present
+locally, so it was copied in **untracked** (never committed on H). **H's generated
+`database.ts` and fingerprints therefore include D's RPC.** Regenerate them (`npm run db:types`,
+`db:fingerprint`) when the branches land.
+**Production count owed:** `select count(*) from profiles;` — the CHECK governs every row, but every
+row takes the default `'en'`, which satisfies it.
+
+### Built, with proof
+
+| piece | proof |
+| --- | --- |
+| `LanguageForm`, ONE form on `/dashboard/account` and `/m/account` (ruling 1) | tsc/lint; drives `updateMyLanguage` (RLS + the column guard) |
+| `LanguageProvider` — `uiLang` (/m = user's, /dashboard pinned `en`, ruling 2) and `readerLang` (both surfaces, ruling 3) | layouts wired; shared components never inspect their route |
+| **anti-rot guard** `s110-m-i18n-guard.test.ts` (TS-AST scan of all 131 files /m can render; PENDING ratchet) | **`SABOTAGE_GUARD_EXIT_LINE=1`** — a hard-coded `<p>` on `/m/notifications` is named with its line |
+| **/m migrated**: 1011 strings / 80 files → `t()` in five area tables (5 parallel agents on disjoint files, then chips, gender agreement and 4 unowned labels by me) | guard 134/134; ratchet now holds **only** `site-visit-record.tsx` (60) and `voice-notes.tsx` (20), deferred until A |
+| `/api/translate` + `lib/translation/translate.ts` (Q12: on read, cached by company + sha256 + target + model; the original is never written; gpt-4o-mini; output validated; cost row on success and failure) | unit 5/5; **live 5/5 against the real model**: Spanish → English with a cost row, cache hit spends nothing, English → null, **a client refused 403 before any spend** |
+| `UserText` (Q13: translation + "Translated from Spanish · show original"; original while pending/failed) | built; wired into screens next |
+| **ruling 5** `s110-client-facing-english.test.ts` — from 19 roots + 14 root dirs, no import closure reaches translation, and nothing mounts a provider | 7/7; **two sabotages red** (UserText imported into the portal; a provider mounted in the portal layout) |
+| gate | unit **1540/1540**, `tsc` 0, lint 0, `next build` **130/130** `OY6oG28vQ1-syf43GX0Po` |
+
+### ⚠️ Twice this section, a sabotage that DID NOT APPLY read as a pass — caught, then redone
+
+1. **Translate route, client refusal.** `sed` matched nothing (Prettier had reflowed the `Set`), and
+   the run printed `SABOTAGE_TRANSLATE_CLIENT_EXIT_LINE=0`, a pass. The replacement count (`0`)
+   gave it away. Redone with a checked replacement → **`=1`**, X red.
+2. **Portal provider.** The anchor targeted E's portal layout, which is not on this branch.
+   `grep -c` printed `0` and the run passed. Redone against this branch's layout → **`=1`**.
+Both are the named class ("a probe that cannot fail"). **Every sabotage now prints its replacement
+count before its exit line.**
+
+Also measured and recorded in the test: under vitest 4, a `beforeEach` that resets or clears a
+mock makes a later throwing implementation fail the test **even though the code caught the
+error**. Reproduced with and without the hook; the test asserts call-count deltas instead.
