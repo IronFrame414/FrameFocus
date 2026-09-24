@@ -185,17 +185,22 @@ describe('S108 A — voice: who may edit the transcript', () => {
     expect((await note()).transcript).toContain('corregido');
   });
 
-  it('V5 — after PROMOTION the recorder may NOT edit it; the owner may', async () => {
+  // [S110 ruling 2] INVERTED IN PLACE. _Superseded title and assertion: "V5 —
+  // after PROMOTION the recorder may NOT edit it; the owner may" — crew → 42501._
+  // Promotion takes nothing away; the lock is at SEND (s108-site-visit 4.5h-ii
+  // proves a pre-send transcript is refused after the send).
+  it('V5 — after PROMOTION the recorder may STILL edit it, and so may the owner', async () => {
     const p = await ownerC.rpc('promote_site_visit', { p_estimate_id: visitId });
     expect(p.error, p.error?.message).toBeNull();
     const crew = await crewC.rpc('update_voice_note_transcript', { p_voice_note_id: voiceId, p_transcript: 'late' });
-    expect(crew.error?.code).toBe('42501');
+    expect(crew.error, crew.error?.message).toBeNull();
+    expect((await note()).transcript).toBe('late');
     const owner = await ownerC.rpc('update_voice_note_transcript', {
       p_voice_note_id: voiceId, p_transcript: 'Revisado por la oficina.',
     });
     expect(owner.error, owner.error?.message).toBeNull();
     expect((await note()).transcript).toBe('Revisado por la oficina.');
-    // And the recorder still READS it (money-free table, created_by = them).
+    // And the recorder still READS it (money-free table; every internal employee).
     const read = await crewC.from('site_visit_voice_notes').select('transcript').eq('id', voiceId);
     expect(read.data).toEqual([{ transcript: 'Revisado por la oficina.' }]);
   });
