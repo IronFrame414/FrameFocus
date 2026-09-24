@@ -859,6 +859,25 @@ function NavSheet({
           </button>
         ) : null}
 
+        {/* [S110 C, RULED Josh Q7] — "Your account", every role, above Sign out.
+            /m/account (name + password, #162) was linked ONLY from a card on
+            /m/settings, the LAST tile of this sheet, on a page that presents
+            itself as read-only — reachable in principle, never found in
+            practice. Account things sit beside Sign out. The Settings card link
+            stays; this is the road to it, not a second destination. */}
+        <Link
+          href="/m/account"
+          data-testid="m-sheet-account"
+          aria-current={pathname === '/m/account' ? 'page' : undefined}
+          className={`mt-[10px] flex h-[58px] w-full items-center justify-center rounded-[14px] bg-m6m-card text-[15px] font-bold ${
+            pathname === '/m/account'
+              ? 'border-[1.5px] border-m6m-blue text-m6m-blue'
+              : 'border border-m6m-border text-m6m-navy'
+          }`}
+        >
+          Your account
+        </Link>
+
         {/* §3.3 — full-width Sign out row, 58px, #c0362c text, #f0d4d1 border. */}
         <button
           type="button"
