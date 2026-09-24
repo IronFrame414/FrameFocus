@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation';
 import { createClient } from '@/lib/supabase-server';
 import { color, font } from '@/lib/theme';
 import { SIGNED_URL_TTL_SECONDS } from '@/lib/services/signed-url-ttl';
+import { SheetLink } from '@/components/files/sheet-link';
 import {
   getPortalDocuments,
   getPortalIdentity,
@@ -117,14 +118,20 @@ export default async function PortalFilesPage({
                   <span style={{ fontSize: '12.5px', color: color.muted }}>{day(f.created_at)}</span>
                 </span>
                 {url ? (
-                  <a
+                  // S110 E3 [RULED Q10 → A] — opens in the sheet over the portal,
+                  // with THIS already-signed URL and nothing else: no fileId, so
+                  // the sheet never re-signs (see SheetLink). _Superseded, quoted:_
+                  // `<a href={url} target="_blank">Open</a>` — a modified click
+                  // still does exactly that.
+                  <SheetLink
                     href={url}
-                    target="_blank"
-                    rel="noreferrer"
+                    fileName={f.category === 'selections' ? 'Specifications sheet' : f.file_name}
+                    mimeType={f.mime_type ?? null}
+                    testId={`portal-file-open-${f.id}`}
                     style={{ fontSize: '13px', fontWeight: 600, color: color.navy }}
                   >
                     Open
-                  </a>
+                  </SheetLink>
                 ) : (
                   <span style={{ fontSize: '12.5px', color: color.muted }}>Unavailable</span>
                 )}

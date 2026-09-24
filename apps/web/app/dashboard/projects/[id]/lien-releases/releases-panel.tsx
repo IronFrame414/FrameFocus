@@ -7,7 +7,8 @@ import {
   markReleaseSent,
   voidRelease,
 } from '@/lib/services/lien-releases-client';
-import { getFileSignedUrlClient } from '@/lib/services/files-client';
+import { getFileViewClient } from '@/lib/services/files-client';
+import { useFileSheet } from '@/components/files/file-sheet';
 import { brand } from '@/lib/brand';
 import { selectTemplate, type TemplateChoice } from '@/lib/services/lien-releases-shared';
 import type { LienRelease } from '@/lib/services/lien-releases';
@@ -76,9 +77,11 @@ export function ReleasesPanel({
   const refresh = () => startTransition(() => router.refresh());
   const invoiceById = new Map(invoices.map((i) => [i.id, i]));
 
-  async function open(fileId: string) {
-    const url = await getFileSignedUrlClient(fileId);
-    if (url) window.open(url, '_blank', 'noopener');
+  // S110 E3 [RULED Josh, Q10 → A] — opens in the SHEET (#161's remaining sites).
+  // _Superseded, quoted:_ `window.open(await getFileSignedUrlClient(fileId), '_blank')`.
+  const openFile = useFileSheet();
+  function open(fileId: string) {
+    openFile({ fileName: 'Lien release', mimeType: 'application/pdf', resolveUrl: () => getFileViewClient(fileId) });
   }
 
   async function doVoid(release: LienRelease) {

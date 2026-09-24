@@ -133,17 +133,10 @@ export async function softDeleteTeamMember(
   if (banError) throw banError;
 }
 
-/** Send a password recovery email to a team member. Caller authorization must be checked before calling. */
-export async function resetTeamMemberPassword(
-  supabase: SupabaseClient,
-  email: string,
-  redirectTo: string
-) {
-  const { error } = await supabase.auth.resetPasswordForEmail(email, {
-    redirectTo,
-  });
-  if (error) throw error;
-}
+// [S110 E1] `resetTeamMemberPassword` MOVED to `lib/services/team-reset.ts`,
+// which is server-only: it sends through `handleAuthEmail`, and this module is
+// imported by a client component (team-page-client.tsx) — `next build` refused
+// the server-only import here.
 
 /**
  * Fetch all active team members for the current user's company.

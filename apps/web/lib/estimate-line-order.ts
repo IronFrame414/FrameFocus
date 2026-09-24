@@ -191,3 +191,47 @@ export function stepDestination(
   }
   return null;
 }
+
+// ── S110 D1 — the ROWS inside one line ──────────────────────────────────────
+// A row never leaves its line (the estimate_line_rows_containment trigger), so
+// the plan is a permutation of ONE line's row ids. The RPC
+// reorder_estimate_line_rows() takes the COMPLETE list and renumbers 1..n —
+// sort_order is not unique and duplicates exist, so a two-value swap could be a
+// no-op; a full renumber never is.
+
+export interface OrderRow {
+  id: string;
+  sort_order: number;
+}
+
+/** The line's row ids in display order (sort_order, then id for a stable tie). */
+export function rowsInOrder(rows: OrderRow[]): string[] {
+  return [...rows]
+    .sort((a, b) => a.sort_order - b.sort_order || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+    .map((r) => r.id);
+}
+
+/** Move `rowId` to sit before `beforeRowId` (null = last). Returns the new full
+ *  order, or null when nothing would change. Throws on an id not in the list. */
+export function planRowMove(orderedIds: string[], rowId: string, beforeRowId: string | null): string[] | null {
+  if (!orderedIds.includes(rowId)) throw new Error('That row is not on this line');
+  if (beforeRowId !== null && !orderedIds.includes(beforeRowId)) {
+    throw new Error('That row is not on this line');
+  }
+  if (beforeRowId === rowId) return null;
+  const rest = orderedIds.filter((id) => id !== rowId);
+  const at = beforeRowId === null ? rest.length : rest.indexOf(beforeRowId);
+  const next = [...rest.slice(0, at), rowId, ...rest.slice(at)];
+  return next.every((id, i) => id === orderedIds[i]) ? null : next;
+}
+
+/** One keyboard step. null = already at that end. */
+export function stepRow(orderedIds: string[], rowId: string, dir: 'up' | 'down'): string[] | null {
+  const i = orderedIds.indexOf(rowId);
+  if (i < 0) throw new Error('That row is not on this line');
+  const j = dir === 'up' ? i - 1 : i + 1;
+  if (j < 0 || j >= orderedIds.length) return null;
+  const next = [...orderedIds];
+  [next[i], next[j]] = [next[j], next[i]];
+  return next;
+}

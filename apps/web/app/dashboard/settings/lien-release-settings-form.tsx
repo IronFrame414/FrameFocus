@@ -12,7 +12,8 @@ import {
 } from '@/lib/services/lien-releases-client';
 import { updateCompany } from '@/lib/services/company-client';
 import { brand } from '@/lib/brand';
-import { getFileSignedUrlClient } from '@/lib/services/files-client';
+import { getFileViewClient } from '@/lib/services/files-client';
+import { useFileSheet } from '@/components/files/file-sheet';
 import {
   VALUE_CATALOG,
   minWidthForReleaseKey,
@@ -76,6 +77,7 @@ export function LienReleaseSettingsForm({
   signatoryTitle: string | null;
   hasSignature: boolean;
 }) {
+  const openFile = useFileSheet(); // S110 E3 — 'View form' opens in the sheet
   const router = useRouter();
   const [, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -255,10 +257,15 @@ export function LienReleaseSettingsForm({
               <button
                 type="button"
                 style={{ ...secondaryButtonStyle, padding: '4px 10px', fontSize: '12px' }}
-                onClick={async () => {
-                  const url = await getFileSignedUrlClient(t.pdf_file_id as string);
-                  if (url) window.open(url, '_blank', 'noopener');
-                }}
+                onClick={() =>
+                  // S110 E3 [RULED Q10 → A] — the form opens in the SHEET.
+                  // _Superseded, quoted:_ `window.open(url, '_blank', 'noopener')`.
+                  openFile({
+                    fileName: t.name ?? 'Form',
+                    mimeType: 'application/pdf',
+                    resolveUrl: () => getFileViewClient(t.pdf_file_id as string),
+                  })
+                }
               >
                 View form
               </button>

@@ -3,6 +3,7 @@ import type { Metadata } from 'next';
 import { createClient } from '@/lib/supabase-server';
 import { dashboardDeniedRedirect } from '@/lib/dashboard-access';
 import { RegisterPortalSw } from './register-portal-sw';
+import { FileSheetProvider } from '@/components/files/file-sheet';
 
 /**
  * Module 9 stage 4 — the client portal, and the gate on it.
@@ -98,10 +99,15 @@ export default async function PortalLayout({ children }: { children: React.React
     redirect('/m/projects');
   }
 
+  // S110 E3 [RULED Josh, Q10 → A] — the file sheet, mounted for the portal's
+  // "Shared documents". It is given ONLY the URL the page already signed on the
+  // client's own session (SheetLink with no fileId/resolver): no new route, no
+  // re-sign, no new bytes. Portal PHOTOS do not use it and stay view-only — an
+  // annotated photo's unmarked original must never reach a client.
   return (
-    <>
+    <FileSheetProvider>
       <RegisterPortalSw />
       {children}
-    </>
+    </FileSheetProvider>
   );
 }

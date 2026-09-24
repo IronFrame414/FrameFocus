@@ -317,6 +317,17 @@ top of this file is advanced to `#164` in the same commit, which is what keeps t
   ⚠️ **Print on iOS is unverified on a device** — the sheet hands iOS a new tab for the share
   sheet by design (FILL-161.3); CC cannot run iOS Safari.
 
+  **⚙️ S110 E3 — the listed sites MIGRATED on `feature/s110-e-carried-debt` [RULED Josh, Q10 → A];
+  open until merge AND until the inline-only surfaces are decided.** `file-row-actions` (button now
+  **View**), `releases-panel`, both settings "View form"s, delivery photos, expense receipts, the
+  signed proposal (**View Signed Proposal** — no longer navigates away), the PO PDF (**View PDF**;
+  the route serves inline only for `?view=1`). **The portal's Shared documents** open the sheet with
+  ONLY the URL the page already signed — no new route, no re-sign — and **portal photos stay
+  view-only**, so an annotated photo's unmarked original cannot reach a client
+  (`test/s110-file-sheet-sites.test.ts` pins both; a `fileId` on the portal link turns it red).
+  New shared piece: `components/files/sheet-link.tsx`. **Still NOT migrated:** the eight
+  inline-only surfaces — not in Q10's scope.
+
 - **#162 — no way for a user to change their own password. A change-password page EXISTS and
   WORKS; what is missing is any route to it.** ⚠️ **Verified before filing, per the request, and
   the verification changed what is owed** — this is not "build a change-password feature".
@@ -548,6 +559,31 @@ top of this file is advanced to `#164` in the same commit, which is what keeps t
   Traps: `test/s109-row-activation.test.tsx` + `e2e/desktop-row-activation-s109.spec.ts`, each
   proven by sabotage — see `S109-report.md` Step 4.
 
+### Branch-scoped, awaiting real numbers — `feature/s110-d-line-rows` [S110]
+
+- **#1-s110 — ✅ FIXED ON THIS BRANCH (filed and fixed together, RULED Josh S110 Q16; closes on
+  merge): a row inside a line could be re-parented onto ANOTHER estimate's line.**
+  `estimate_line_rows_update_manager`'s USING checked the SOURCE (draft; a PM's own), but its WITH
+  CHECK was only company + role, so a direct PostgREST UPDATE of `line_item_id` could point a row at
+  a line on another PM's draft or a SENT estimate — the sibling of S108 FILL-B5 on
+  `estimate_line_items`. Not reachable from the UI (no app path writes `line_item_id` after insert),
+  but row reorder is the feature that would have made it reachable. **Fix:**
+  `20261720000000_line_row_reorder_and_containment.sql` — `estimate_line_rows_containment`, a BEFORE
+  UPDATE OF `line_item_id` trigger that makes it immutable (23514), service role included. Proven:
+  `test/s110-line-rows.live.ts` 4a–4d (a rename on the same row passes; owner, PM-to-SENT and
+  service-role re-parents refused, row stays put). ⚠️ **Production, before merge:** governs future
+  writes only, cannot abort; for the record `select count(*) from estimate_line_rows;`.
+### Branch-scoped, awaiting real numbers — `feature/s110-e-carried-debt` [S110]
+
+- **#2-s110 — the card-signup webhook is MOCK-VERIFIED, not round-trip-verified: confirm the real
+  `checkout.session.completed` (`mode: 'setup'`) event shape in Stripe TEST mode.** Re-filed on its
+  own when `#1-deliv` closed [RULED Josh, S110 Q11], because it is a different class — a question of
+  a mock's FIDELITY, not of timing — and nothing else tracked it (`TECH_DEBT.md`, `GATED.md`,
+  `STATE.md`: 0 trackers). `test/card-signup-webhook.test.ts:1-9` fakes the signature and the
+  payload, so it proves the handler's logic, not that Stripe sends that shape. **Owed (Josh — needs
+  the Stripe dashboard):** trigger a real test-mode setup checkout, capture the delivered event, and
+  either replace the fixture with it or record that they match.
+
 ### Branch-scoped, awaiting real numbers — `feature/s109-debt-159-163` [S109]
 
 - **#2-s109 — ✅ FIXED ON THIS BRANCH (filed by ruling 161.B, closes on merge): the Estimate
@@ -684,7 +720,7 @@ top of this file is advanced to `#164` in the same commit, which is what keeps t
   **The two errors, because the method matters more than the fact:**
   1. ⚠️ **A grep piped through `head -20` cut off before the file that drops it, and the truncated
      output was read as complete.** Same class as reading a wrapper's exit code — see the root-cause
-     note on `#1-deliv`.
+     note on `#1-deliv` (CLOSED S110 — now in `TECH_DEBT_CLOSED.md`).
   2. The generated `database.ts` was read as evidence of drift when it was simply correct.
 
 - **#3-deliv — A MULTI-ARM CONSTRAINT WRITTEN WITHOUT COUNTING THE ROWS IT WOULD GOVERN
@@ -714,60 +750,6 @@ top of this file is advanced to `#164` in the same commit, which is what keeps t
   state. `scripts/db-verify.mjs` does not catch this class and cannot: the constraint lives in a
   migration, so the tree and the database agree perfectly while the behaviour is broken. Only a test
   that performs the delete catches it — `s138-trial-deletion-run.live.ts` now does.
-
-- **#1-deliv — A LIVE TEST THAT DRIVES A HOOK, TRIGGER OR WEBHOOK HANDLER BY HAND CANNOT
-  REPRODUCE ONE CALLED MID-TRANSACTION. Filed as a CLASS, not an incident [Josh, 2026-09-11].**
-  `s160-auth-email.live.ts` A1/A2 asserted that P3 confirmed an invited user and suppressed their
-  confirmation email. **Both were green for eleven sessions over a feature that had never once
-  fired in production.** Measured 2026-09-10 21:41:04: `message: 'User not found'` — GoTrue's own
-  words — because the Send Email Hook is called DURING the signup request, before the `auth.users`
-  INSERT commits, and `updateUserById()` reaches GoTrue on a different connection.
-
-  **Why the test passed anyway, which is the transferable part:** the harness creates its user with
-  `admin.auth.admin.createUser()` and then calls `handleAuthEmail()` as a **separate, later step**.
-  By then the user is committed and the admin API can see them. **The harness's sequencing was
-  under test, not the product's.** Nothing was stubbed and nothing was wrong with the assertions —
-  the test simply could not construct the condition that breaks the code.
-
-  > **The shape:** wherever correctness depends on WHEN a handler is called — inside a transaction,
-  > before a commit, during another system's request — invoking it directly proves the opposite of
-  > what it appears to. The greener the test, the more confidently the gap is held open.
-
-  > ⚠️ **ROOT CAUSE RECORDED ALONGSIDE [Josh, 2026-09-11]:** `#2-deliv` was filed on a grep piped
-  > through `head -20` that cut off before the file contradicting it. **Trusting truncated output as
-  > complete is the same class as reading a wrapper's exit code** — in both, the thing inspected is
-  > not the thing being judged. `head`, `tail`, `| head -N`, a truncated tool result and a summary
-  > line are all the same trap. If a conclusion is "X does not exist anywhere", the search that
-  > supports it must be unbounded, and its completeness checked (`| wc -l`) before it is believed.
-
-  **Every direct-invocation test in this repo is suspect on the same grounds**, not wrong:
-  `/api/auth/send-email` (GoTrue, the confirmed case), `/api/webhooks/resend` (Resend delivery
-  events), `/api/webhooks/stripe`, and any `.live.ts` that imports a route module and calls its
-  `GET`/`POST` rather than issuing a request. **NOT SWEPT [Josh] — filed and named.**
-
-  **What a sweep should ask of each**, when one happens: does this handler read state that its
-  caller is concurrently writing? If yes, the direct-invocation test cannot see the failure, and the
-  cover has to come from somewhere else — an in-transaction assertion (a trigger, as the P3 fix
-  uses), an end-to-end exercise through the real caller, or an explicit note in the file that this
-  case is uncovered. **The third is a legitimate answer and far better than the present silence.**
-
-  Fixed for P3 specifically: `on_auth_user_created_autoconfirm` (20261600000000) moves the confirm
-  into the transaction; A1/A2 inverted with the superseded assertions quoted. Record:
-  `docs/specs/S160-auth-email-hook.md` §6a.
-
-  **📋 S108 D2b CLASSIFICATION — recorded here at S109 (it had lived only in
-  `docs/sessions/S108-report.md:197-215`).** Every suspect in the class — tests that call a hook,
-  webhook or route handler directly — was asked this entry's question: _does this handler read
-  state that its caller is concurrently writing?_ **Result: the class has exactly one member, and it
-  is already fixed** — `s160-auth-email.live.ts` A1/A2, inverted to assert the
-  `on_auth_user_created_autoconfirm` trigger. `webhook-resend.live.ts` is timing-dependent and
-  **covered** (its case 6 is the event-beats-`logEmail()` race). Covered and not timing-dependent:
-  `auth-email-hook-signature-headers`, `s107-estimate-files-route-order`,
-  `s107-bid-request-send-order`, `email-unsubscribe`, `s146-generate-route`,
-  `s174-selections-email`, `s175-stage6`/`-stage7`, `signed-url-error-contract`. **One declared
-  gap, Josh's to close:** `card-signup-webhook.test.ts` covers the handler's logic but not the Stripe
-  event SHAPE (the file says so in its header) — a Stripe test-mode check. Whether that leaves this
-  entry closable is Josh's call; the classification is not a closure.
 
 - **#1-s106 — the invoicing→QuickBooks mapping must handle a NET-NEGATIVE line, now that
   one can originate upstream of invoicing.** S106 ruled a negative typed total legal on an
