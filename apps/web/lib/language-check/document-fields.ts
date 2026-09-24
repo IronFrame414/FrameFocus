@@ -42,3 +42,55 @@ export async function proposalFieldsForCheck(
   });
   return fields;
 }
+
+/** A change order: its title and description, and every line. */
+export async function changeOrderFieldsForCheck(
+  supabase: SupabaseClient,
+  coId: string,
+  email: { subject?: string; body?: string }
+): Promise<CheckedField[]> {
+  const [{ data: co }, { data: lines }] = await Promise.all([
+    supabase.from('change_orders').select('title, description').eq('id', coId).maybeSingle(),
+    supabase
+      .from('change_order_line_items')
+      .select('name, description, sort_order')
+      .eq('change_order_id', coId)
+      .order('sort_order', { ascending: true })
+      .order('id', { ascending: true }),
+  ]);
+  const c = (co ?? {}) as Record<string, string | null>;
+  const fields: CheckedField[] = [
+    { field: 'Change order title', text: c.title },
+    { field: 'Change order description', text: c.description },
+    { field: 'Email subject', text: email.subject },
+    { field: 'Email message', text: email.body },
+  ];
+  (lines ?? []).forEach((l: { name: string | null; description: string | null }, i: number) => {
+    fields.push({ field: `Line ${i + 1} name`, text: l.name });
+    fields.push({ field: `Line ${i + 1} description`, text: l.description });
+  });
+  return fields;
+}
+
+/** An invoice: every line description — FILL-H.9 #3, an expense's crew-typed
+ *  description becomes an invoice line. */
+export async function invoiceFieldsForCheck(
+  supabase: SupabaseClient,
+  invoiceId: string,
+  email: { subject?: string; body?: string }
+): Promise<CheckedField[]> {
+  const { data: lines } = await supabase
+    .from('invoice_lines')
+    .select('description, sort_order')
+    .eq('invoice_id', invoiceId)
+    .order('sort_order', { ascending: true })
+    .order('id', { ascending: true });
+  const fields: CheckedField[] = [
+    { field: 'Email subject', text: email.subject },
+    { field: 'Email message', text: email.body },
+  ];
+  (lines ?? []).forEach((l: { description: string | null }, i: number) =>
+    fields.push({ field: `Line ${i + 1}`, text: l.description })
+  );
+  return fields;
+}

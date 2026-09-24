@@ -42,11 +42,28 @@ const core = {
   'usertext.showTranslation': 'show translation',
   'usertext.translating': 'translating…',
   'usertext.unavailable': 'translation unavailable',
+  // ── the send-time English check (S110 Q14) ──
+  'sendcheck.title': 'Some of this is not in English.',
+  'sendcheck.body':
+    'A client always receives the {doc} in English, exactly as written — nothing is translated for them. Check:',
+  'sendcheck.hint':
+    'If these are names, addresses or brands, send anyway. Otherwise cancel and edit them.',
+  'sendcheck.sendAnyway': 'Send anyway, as written',
+  'sendcheck.doc.proposal': 'proposal',
+  'sendcheck.doc.changeOrder': 'change order',
+  'sendcheck.doc.invoice': 'invoice',
 } as const;
 
 // Each /m area keeps its own table (lib/i18n/areas/*), so screens can be
 // migrated independently; they are merged here.
-export const en = { ...core, ...shell.en, ...field.en, ...project.en, ...photos.en, ...directory.en };
+export const en = {
+  ...core,
+  ...shell.en,
+  ...field.en,
+  ...project.en,
+  ...photos.en,
+  ...directory.en,
+};
 
 export type MsgKey = keyof typeof en;
 
@@ -73,6 +90,15 @@ const coreEs: Record<keyof typeof core, string> = {
   'usertext.showTranslation': 'ver traducción',
   'usertext.translating': 'traduciendo…',
   'usertext.unavailable': 'traducción no disponible',
+  'sendcheck.title': 'Parte de esto no está en inglés.',
+  'sendcheck.body':
+    'El cliente siempre recibe {doc} en inglés, tal como está escrito — no se le traduce nada. Revisa:',
+  'sendcheck.hint':
+    'Si son nombres, direcciones o marcas, envíalo de todos modos. Si no, cancela y corrígelos.',
+  'sendcheck.sendAnyway': 'Enviar de todos modos, tal como está',
+  'sendcheck.doc.proposal': 'la propuesta',
+  'sendcheck.doc.changeOrder': 'la orden de cambio',
+  'sendcheck.doc.invoice': 'la factura',
 };
 
 export const es: Record<MsgKey, string> = {

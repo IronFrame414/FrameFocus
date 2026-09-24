@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { TEMPLATE_VARIABLES } from '@/lib/proposal/proposal-defaults';
+import { NotEnglishWarning } from '@/components/language-check/not-english-warning';
 
 // Spec 2 (4E E5/E6, 4F F10) — email editor modal used by "Send
 // Proposal" (preview page), "Send to Client" / "Approve & Send"
@@ -160,50 +161,15 @@ export function SendProposalModal({
         </div>
 
         {notEnglish && (
-          <div
-            role="alert"
-            data-testid="send-not-english"
-            style={{
-              padding: '0.75rem 1rem',
-              borderRadius: '0.375rem',
-              marginBottom: '1rem',
-              backgroundColor: '#fffbeb',
-              border: '1px solid #f5cf8f',
-              color: '#7c4a03',
-              fontSize: '0.875rem',
+          <NotEnglishWarning
+            fields={notEnglish}
+            doc="proposal"
+            busy={busy}
+            onSendAnyway={() => {
+              setNotEnglish(null);
+              void handleSend(true);
             }}
-          >
-            <strong>Some of this is not in English.</strong> A client always receives the proposal
-            in English, exactly as written — nothing is translated for them. Check:
-            <ul style={{ margin: '0.5rem 0 0.5rem 1.25rem', listStyle: 'disc' }}>
-              {notEnglish.map((f) => (
-                <li key={f}>{f}</li>
-              ))}
-            </ul>
-            If these are names, addresses or brands, send anyway. Otherwise cancel and edit them.
-            <div style={{ marginTop: '0.5rem' }}>
-              <button
-                type="button"
-                data-testid="send-anyway"
-                onClick={() => {
-                  setNotEnglish(null);
-                  void handleSend(true);
-                }}
-                disabled={busy}
-                style={{
-                  padding: '0.375rem 0.75rem',
-                  fontSize: '0.8125rem',
-                  fontWeight: 600,
-                  backgroundColor: '#fff',
-                  border: '1px solid #d4a24c',
-                  borderRadius: '0.375rem',
-                  cursor: 'pointer',
-                }}
-              >
-                Send anyway, as written
-              </button>
-            </div>
-          </div>
+          />
         )}
 
         {error && (

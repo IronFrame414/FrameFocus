@@ -24,6 +24,9 @@ export const coSendSchema = z.object({
   contractor_signature_name: z.string().min(1).max(200).optional(),
   subject: z.string().max(200).optional(),
   body: z.string().max(5000).optional(),
+  // S110 H [RULED Q14] — the sender saw the "not in English" warning and chose
+  // to send anyway. Recorded with the send.
+  language_override: z.boolean().optional(),
 });
 
 export type CoDeclineInput = z.infer<typeof coDeclineSchema>;

@@ -1,5 +1,6 @@
 'use client';
 
+import { NotEnglishWarning } from '@/components/language-check/not-english-warning';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
@@ -157,19 +158,28 @@ export function CoActions({
 
   const signatureReady = !needsSignature || sigName.trim().length > 0;
 
-  async function send() {
+  // S110 H [RULED Q14] — non-English fields the server named (NotEnglishWarning).
+  const [notEnglish, setNotEnglish] = useState<string[] | null>(null);
+
+  async function send(languageOverride = false) {
     if (!online || !signatureReady) return;
     setBusy(true);
     setError(null);
+    setNotEnglish(null);
 
     const result = await sendChangeOrder(coId, {
       recipient_email: recipientEmail.trim() || undefined,
       ...(needsSignature
         ? { contractor_signature_mode: sigMode, contractor_signature_name: sigName.trim() }
         : {}),
+      ...(languageOverride ? { language_override: true } : {}),
     });
 
     setBusy(false);
+    if (result.notEnglish) {
+      setNotEnglish(result.notEnglish);
+      return;
+    }
     if (!result.success) {
       // The route's message verbatim — it distinguishes "no recipient email",
       // "no saved signature image" and a role refusal, and this component
@@ -318,7 +328,7 @@ export function CoActions({
             <PrimaryButton
               label={t('project.coActions.send')}
               busyLabel={t('project.coActions.sending')}
-              onClick={send}
+              onClick={() => void send()}
               disabled={!online || !signatureReady}
               busy={busy}
               testId="m-co-send-confirm"
@@ -449,6 +459,14 @@ export function CoActions({
         </div>
       ) : null}
 
+      {notEnglish ? (
+        <NotEnglishWarning
+          fields={notEnglish}
+          doc="changeOrder"
+          busy={busy}
+          onSendAnyway={() => void send(true)}
+        />
+      ) : null}
       {error ? <ErrorNotice message={error} testId="m-co-action-error" /> : null}
     </section>
   );
