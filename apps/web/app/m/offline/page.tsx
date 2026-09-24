@@ -6,6 +6,8 @@ import { WifiOff } from 'lucide-react';
 import { SetMobileHeader } from '../mobile-header';
 import { useOfflineSync } from '../offline-sync';
 import type { QueueEntry } from '@/lib/offline/queue';
+import { useT } from '@/components/i18n/language-provider';
+import type { MsgKey } from '@/lib/i18n/messages';
 
 // M6M §4.4 — M-4, the offline / failure state.
 //
@@ -29,16 +31,23 @@ function hhmm(d: Date): string {
   return `${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`;
 }
 
-const ENTITY_LABEL: Record<QueueEntry['entity'], string> = {
-  time_clock_session: 'Clock event',
-  time_segment: 'Time segment',
-  daily_log: 'Daily log',
-  photo: 'Photo',
-  site_visit_media: 'Site visit photo / voice note',
+// S110 H — message keys, resolved with t() at render time.
+const ENTITY_KEY: Record<QueueEntry['entity'], MsgKey> = {
+  time_clock_session: 'shell.entity.clockEvent',
+  time_segment: 'shell.entity.timeSegment',
+  daily_log: 'shell.entity.dailyLog',
+  photo: 'shell.entity.photo',
+  site_visit_media: 'shell.entity.siteVisitMedia',
 };
+
+/** Capture time — a format, not language (left en-US, as before). */
+function capturedAt(iso: string): string {
+  return new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+}
 
 export default function MobileOfflinePage() {
   const router = useRouter();
+  const t = useT();
   const offlineSync = useOfflineSync();
   const [lastTry, setLastTry] = useState<Date | null>(null);
   const [online, setOnline] = useState(true);
@@ -69,7 +78,10 @@ export default function MobileOfflinePage() {
 
   return (
     <div className="px-[18px] py-[18px]">
-      <SetMobileHeader title="Offline" sub={online ? 'Connection restored' : 'No connection'} />
+      <SetMobileHeader
+        title={t('shell.title.offline')}
+        sub={online ? t('shell.connectionRestored') : t('shell.noConnection')}
+      />
 
       {/* Centred block — §4.4. */}
       <div className="flex flex-col items-center pt-[24px] text-center">
@@ -87,14 +99,13 @@ export default function MobileOfflinePage() {
         </div>
 
         <h2 className="mt-[16px] text-[23px] font-extrabold leading-tight text-m6m-navy">
-          No connection
+          {t('shell.noConnection')}
         </h2>
         <p className="mt-[8px] max-w-[300px] text-[15px] leading-snug text-m6m-navy/80">
-          Keep working — everything you enter is saved on this phone and syncs when you&apos;re
-          back in signal.
+          {t('shell.keepWorkingBody')}
         </p>
         <p className="mt-[10px] font-mono text-[11px] text-m6m-muted">
-          last try {lastTry ? hhmm(lastTry) : '—'}
+          {t('shell.lastTry', { time: lastTry ? hhmm(lastTry) : '—' })}
         </p>
       </div>
 
@@ -104,12 +115,10 @@ export default function MobileOfflinePage() {
         className="mt-[22px] rounded-[15px] border border-m6m-border bg-m6m-card p-[14px]"
       >
         <h3 className="font-mono text-[11px] font-medium uppercase tracking-wide text-m6m-muted">
-          Waiting to sync
+          {t('shell.waitingToSync')}
         </h3>
         {entries.length === 0 ? (
-          <p className="mt-[8px] text-[15px] text-m6m-muted">
-            Nothing waiting. Anything you capture offline will be listed here.
-          </p>
+          <p className="mt-[8px] text-[15px] text-m6m-muted">{t('shell.nothingWaiting')}</p>
         ) : (
           <ul className="mt-[6px]">
             {entries.map((e) => (
@@ -121,13 +130,10 @@ export default function MobileOfflinePage() {
               >
                 <div className="min-w-0 flex-1">
                   <p className="text-[15px] font-semibold text-m6m-navy">
-                    {ENTITY_LABEL[e.entity]}
+                    {t(ENTITY_KEY[e.entity])}
                   </p>
                   <p className="font-mono text-[11px] text-m6m-muted">
-                    {new Date(e.captured_at).toLocaleTimeString('en-US', {
-                      hour: 'numeric',
-                      minute: '2-digit',
-                    })}
+                    {capturedAt(e.captured_at)}
                   </p>
                   {e.state === 'conflicted' ? (
                     // A-19e — names the record, states the outcome, offers no
@@ -136,8 +142,9 @@ export default function MobileOfflinePage() {
                       data-testid="m-conflict-message"
                       className="mt-[2px] text-[13px] text-m6m-navy/80"
                     >
-                      Someone edited this {ENTITY_LABEL[e.entity].toLowerCase()} after you
-                      loaded it. Your copy was kept and sent for review.
+                      {t('shell.conflictMessage', {
+                        thing: t(ENTITY_KEY[e.entity]).toLowerCase(),
+                      })}
                     </p>
                   ) : e.attempts > 0 && e.last_error ? (
                     <p
@@ -153,21 +160,21 @@ export default function MobileOfflinePage() {
                     data-testid="m-held-badge"
                     className="shrink-0 rounded-full border border-m6m-border bg-m6m-surface px-[8px] py-[2px] font-mono text-[11px] font-semibold text-m6m-muted"
                   >
-                    Held for review
+                    {t('shell.heldForReview')}
                   </span>
                 ) : e.attempts > 2 ? (
                   <span
                     data-testid="m-attention-badge"
                     className="shrink-0 rounded-full border border-m6m-danger-border bg-[#fdf1f0] px-[8px] py-[2px] font-mono text-[11px] font-semibold text-m6m-danger"
                   >
-                    Needs attention
+                    {t('shell.needsAttention')}
                   </span>
                 ) : (
                   <span
                     data-testid="m-queued-badge"
                     className="shrink-0 rounded-full bg-m6m-amber/20 px-[8px] py-[2px] font-mono text-[11px] font-semibold text-m6m-navy"
                   >
-                    Queued
+                    {t('shell.queued')}
                   </span>
                 )}
               </li>
@@ -184,7 +191,7 @@ export default function MobileOfflinePage() {
           onClick={tryAgain}
           className="h-[60px] w-full rounded-[14px] bg-m6m-blue text-[16px] font-bold text-white transition-transform duration-150 ease-out active:scale-[.99]"
         >
-          Try again
+          {t('shell.tryAgain')}
         </button>
         <button
           type="button"
@@ -192,7 +199,7 @@ export default function MobileOfflinePage() {
           onClick={() => router.back()}
           className="h-[60px] w-full rounded-[14px] border border-m6m-border bg-m6m-card text-[16px] font-bold text-m6m-navy transition-transform duration-150 ease-out active:scale-[.99]"
         >
-          Keep working offline
+          {t('shell.keepWorkingOffline')}
         </button>
       </div>
     </div>

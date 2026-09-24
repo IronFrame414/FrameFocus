@@ -17,6 +17,8 @@ import {
   TextField,
   useOnline,
 } from '../../../../write-ui';
+import { useT } from '@/components/i18n/language-provider';
+import type { MsgKey } from '@/lib/i18n/messages';
 
 // M6M §4.11.13 — M-33's form.
 //
@@ -56,11 +58,13 @@ import {
 
 const NEW_LIST = '__new__';
 
-const PRIORITIES: readonly { value: PunchItemPriority; label: string }[] = [
-  { value: 'low', label: 'Low' },
-  { value: 'medium', label: 'Medium' },
-  { value: 'high', label: 'High' },
-  { value: 'urgent', label: 'Urgent' },
+// Labels are resolved with t() at render; the value (and so the testid) is the
+// stable code.
+const PRIORITIES: readonly { value: PunchItemPriority; labelKey: MsgKey }[] = [
+  { value: 'low', labelKey: 'photos.punch.priority.low' },
+  { value: 'medium', labelKey: 'photos.punch.priority.medium' },
+  { value: 'high', labelKey: 'photos.punch.priority.high' },
+  { value: 'urgent', labelKey: 'photos.punch.priority.urgent' },
 ];
 
 export type ListOption = { id: string; name: string };
@@ -81,6 +85,7 @@ export function PunchItemForm({
   assignedMemberIds: string[];
 }) {
   const router = useRouter();
+  const t = useT();
   const online = useOnline();
 
   // NO DEFAULT. `null` is the unchosen state and the submit gate reads it —
@@ -137,11 +142,11 @@ export function PunchItemForm({
     // missing: "pick a list" is actionable, "enter a title" on a screen whose
     // real blocker is the list target is a wild goose chase.
     if (!listChosen) {
-      setError('Choose a list for this item, or create one.');
+      setError(t('photos.punchForm.chooseList'));
       return;
     }
     if (title.trim() === '') {
-      setError('Give the item a title.');
+      setError(t('photos.punchForm.giveTitle'));
       return;
     }
 
@@ -154,7 +159,7 @@ export function PunchItemForm({
       const created = await createPunchList(projectId, newListName.trim());
       if (!created.success || !created.id) {
         setBusy(false);
-        setError(created.error ?? 'The list could not be created.');
+        setError(created.error ?? t('photos.punchList.createFailed'));
         return;
       }
       // A const, so the narrowing above survives into the setState closure.
@@ -188,7 +193,7 @@ export function PunchItemForm({
 
     if (!result.success) {
       setBusy(false);
-      setError(result.error ?? 'The item could not be created.');
+      setError(result.error ?? t('photos.punchForm.createFailed'));
       return;
     }
 
@@ -258,27 +263,27 @@ export function PunchItemForm({
   const listOptions = [
     ...lists.map((l) => ({ value: l.id, label: l.name })),
     ...createdLists.map((l) => ({ value: l.id, label: l.name })),
-    { value: NEW_LIST, label: 'New list…' },
+    { value: NEW_LIST, label: t('photos.punchForm.newListOption') },
   ];
 
   return (
     <div className="px-[18px] pb-[18px] pt-[14px]">
-      <SetMobileHeader title="New punch item" sub={projectName} />
+      <SetMobileHeader title={t('photos.punchForm.title')} sub={projectName} />
 
-      <h1 className="text-[17px] font-bold leading-tight text-m6m-navy">New punch item</h1>
+      <h1 className="text-[17px] font-bold leading-tight text-m6m-navy">{t('photos.punchForm.title')}</h1>
 
       {!online ? (
         <div className="mt-[14px]">
-          <OfflineNotice what="Creating a punch item" testId="m-punch-offline" />
+          <OfflineNotice what={t('photos.punchForm.offlineWhat')} testId="m-punch-offline" />
         </div>
       ) : null}
 
       {/* ── THE LIST TARGET — above title, per D-60 ── */}
       <section data-testid="m-punch-list-target" className="mt-[14px]">
-        <FieldLabel required>List</FieldLabel>
+        <FieldLabel required>{t('photos.punchForm.list')}</FieldLabel>
         {lists.length === 0 ? (
           <p className="mb-[8px] text-[13px] text-m6m-muted">
-            This project has no punch lists yet — create the first one.
+            {t('photos.punchForm.noLists')}
           </p>
         ) : null}
         <OptionStack
@@ -289,45 +294,45 @@ export function PunchItemForm({
         />
         {listId === NEW_LIST ? (
           <TextField
-            label="New list name"
+            label={t('photos.punchForm.newListName')}
             value={newListName}
             onChange={setNewListName}
             testId="m-punch-new-list-name"
             required
-            placeholder="e.g. Second floor"
+            placeholder={t('photos.punchList.namePlaceholder')}
           />
         ) : null}
       </section>
 
       <TextField
-        label="Title"
+        label={t('photos.punchForm.titleLabel')}
         value={title}
         onChange={setTitle}
         testId="m-punch-title"
         required
-        placeholder="What needs doing"
+        placeholder={t('photos.punchForm.titlePlaceholder')}
       />
 
       <TextAreaField
-        label="Description"
+        label={t('photos.punch.description')}
         value={description}
         onChange={setDescription}
         testId="m-punch-description"
       />
 
       <TextField
-        label="Location"
+        label={t('photos.punch.location')}
         value={location}
         onChange={setLocation}
         testId="m-punch-location"
       />
 
-      <TextField label="Trade" value={trade} onChange={setTrade} testId="m-punch-trade" />
+      <TextField label={t('photos.punch.trade')} value={trade} onChange={setTrade} testId="m-punch-trade" />
 
       <div className="mt-[14px]">
-        <FieldLabel>Priority</FieldLabel>
+        <FieldLabel>{t('photos.punchForm.priority')}</FieldLabel>
         <OptionStack
-          options={PRIORITIES}
+          options={PRIORITIES.map((p) => ({ value: p.value, label: t(p.labelKey) }))}
           value={priority}
           onChange={setPriority}
           testIdPrefix="m-punch-priority"
@@ -369,16 +374,16 @@ export function PunchItemForm({
           ================================================================== */}
       {members.length > 0 ? (
         <div className="mt-[14px]">
-          <FieldLabel>Assign to</FieldLabel>
+          <FieldLabel>{t('photos.punchForm.assignTo')}</FieldLabel>
 
           {/* STEP 1. Not preselected: which side you want is a real question,
               and answering it for the user is how the flat list happened. */}
           <OptionStack
             options={[
-              { value: 'crew' as const, label: 'Team', sub: `${picker.crew.length}` },
+              { value: 'crew' as const, label: t('photos.punchForm.sideTeam'), sub: `${picker.crew.length}` },
               {
                 value: 'subcontractor' as const,
-                label: 'Sub / Vendor',
+                label: t('photos.punchForm.sideSub'),
                 sub: `${picker.subs.length}`,
               },
             ]}
@@ -412,8 +417,8 @@ export function PunchItemForm({
                       subcontract, and the copy names them instead of offering a
                       link that goes nowhere. Flagged for the next M-18 pass. */}
                   {picker.side === 'crew'
-                    ? 'Nobody from the team is assigned to this project yet. Assign them from the project’s Team tab on desktop.'
-                    : 'No subs or vendors are assigned to this project yet. Awarding a subcontract assigns them automatically, or add one from the Team tab on desktop.'}
+                    ? t('photos.punchForm.noCrew')
+                    : t('photos.punchForm.noSubs')}
                 </p>
               ) : (
                 <OptionStack
@@ -440,16 +445,17 @@ export function PunchItemForm({
           role="status"
           className="mt-[14px] rounded-[10px] border border-m6m-border bg-m6m-card px-[12px] py-[8px] text-center text-[13px] text-m6m-navy"
         >
-          {savedCount} item{savedCount === 1 ? '' : 's'} filed to this list. Add another, or use
-          Create item to finish.
+          {savedCount === 1
+            ? t('photos.punchForm.savedOne', { n: savedCount })
+            : t('photos.punchForm.savedMany', { n: savedCount })}
         </p>
       ) : null}
 
       {error ? <ErrorNotice message={error} testId="m-punch-create-error" /> : null}
 
       <PrimaryButton
-        label="Create item"
-        busyLabel="Creating…"
+        label={t('photos.punchForm.createItem')}
+        busyLabel={t('photos.punchList.creating')}
         onClick={() => submit('return')}
         // NOT disabled on a missing list — A-67 wants the refusal to SAY what
         // is missing, and a disabled button says nothing. Only the offline gate
@@ -463,7 +469,7 @@ export function PunchItemForm({
           batch work but a single correction is not, and the ruling keeps both;
           the outlined treatment says which one ends the task. */}
       <SecondaryButton
-        label="Save and add another"
+        label={t('photos.punchForm.saveAndAnother')}
         onClick={() => submit('again')}
         disabled={!online || busy}
         testId="m-punch-create-again"
@@ -471,7 +477,7 @@ export function PunchItemForm({
 
       {!ready ? (
         <p className="mt-[8px] text-center text-[12px] text-m6m-muted">
-          A list and a title are required.
+          {t('photos.punchForm.required')}
         </p>
       ) : null}
     </div>

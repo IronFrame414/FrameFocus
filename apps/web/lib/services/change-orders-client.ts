@@ -214,8 +214,10 @@ export async function sendChangeOrder(
     // route on first send; reused verbatim on re-send so omitted then.
     contractor_signature_mode?: 'saved_image' | 'typed_name';
     contractor_signature_name?: string;
+    // S110 H [RULED Q14] — sent anyway after the "not in English" warning.
+    language_override?: boolean;
   }
-): Promise<{ success: boolean; signingUrl?: string; error?: string }> {
+): Promise<{ success: boolean; signingUrl?: string; error?: string; notEnglish?: string[] }> {
   try {
     const res = await fetch(`/api/change-orders/${id}/send`, {
       method: 'POST',
@@ -223,6 +225,10 @@ export async function sendChangeOrder(
       body: JSON.stringify(input ?? {}),
     });
     const json = await res.json();
+    // [S110 H, Q14] the server named non-English fields; the caller warns.
+    if (res.status === 409 && json.code === 'NON_ENGLISH') {
+      return { success: false, error: json.error, notEnglish: Array.isArray(json.fields) ? json.fields : [] };
+    }
     if (!res.ok) return { success: false, error: json.error ?? 'Send failed' };
     return { success: true, signingUrl: json.signingUrl };
   } catch {

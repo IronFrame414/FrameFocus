@@ -6,6 +6,8 @@ import {
   CO_STATUS_LABELS,
 } from '@/lib/services/change-orders';
 import { getMyProfile } from '@/lib/services/profiles';
+import { getMobileT } from '@/lib/i18n/server';
+import type { MsgKey } from '@/lib/i18n/messages';
 import { canWriteCo, requireDetailAccess } from '@/app/m/detail-access';
 import { SectionHeader } from '../../section-header';
 import { DetailCard, DetailField, formatMoney, StatusPill } from '../../../../mobile-ui';
@@ -73,6 +75,14 @@ import { CoActions } from './co-actions';
 
 const MONEY_ROLES = ['owner', 'admin', 'project_manager'];
 
+// S110 H — status code → message key; unknown codes fall back to the label table.
+const CO_STATUS_KEY: Record<string, MsgKey> = {
+  draft: 'project.coStatus.draft',
+  sent: 'project.coStatus.sent',
+  signed: 'project.coStatus.signed',
+  voided: 'project.coStatus.voided',
+};
+
 export default async function ChangeOrderDetailPage({
   params,
 }: {
@@ -81,10 +91,11 @@ export default async function ChangeOrderDetailPage({
   const backTo = `/m/p/${params.projectId}/changes`;
   await requireDetailAccess('co', backTo);
 
-  const [co, profile, supersession] = await Promise.all([
+  const [co, profile, supersession, t] = await Promise.all([
     getChangeOrder(params.coId),
     getMyProfile(),
     getCoSupersession(params.coId),
+    getMobileT(),
   ]);
   if (!co) notFound();
 
@@ -106,40 +117,48 @@ export default async function ChangeOrderDetailPage({
 
   return (
     <div className="px-[18px] pb-[18px] pt-[14px]">
-      <SectionHeader projectId={params.projectId} title="Change Order" />
+      <SectionHeader projectId={params.projectId} title={t('project.co.title')} />
 
       <header className="mb-[14px]">
         <p className="font-mono text-[11px] font-semibold text-m6m-muted">{co.co_number}</p>
         <h1 className="mt-[2px] text-[17px] font-bold leading-tight text-m6m-navy">{co.title}</h1>
         <p className="mt-[6px] flex flex-wrap items-center gap-[6px]">
-          <StatusPill label={CO_STATUS_LABELS[co.status] ?? co.status} />
+          <StatusPill
+            label={
+              CO_STATUS_KEY[co.status]
+                ? t(CO_STATUS_KEY[co.status])
+                : (CO_STATUS_LABELS[co.status] ?? co.status)
+            }
+          />
           {co.author?.display_name ? (
             <span className="text-[13px] text-m6m-muted">{co.author.display_name}</span>
           ) : null}
         </p>
         {co.sent_at || co.signed_at ? (
           <p className="mt-[4px] font-mono text-[11px] text-m6m-muted">
-            {co.signed_at ? `signed ${co.signed_at.slice(0, 10)}` : `sent ${co.sent_at!.slice(0, 10)}`}
+            {co.signed_at
+              ? t('project.signedOn', { date: co.signed_at.slice(0, 10) })
+              : t('project.sentOn', { date: co.sent_at!.slice(0, 10) })}
           </p>
         ) : null}
       </header>
 
       <DetailCard testId="m-co-detail">
-        <DetailField label="Description" value={co.description} />
-        <DetailField label="Reason" value={co.reason_category} />
+        <DetailField label={t('project.co.description')} value={co.description} />
+        <DetailField label={t('project.co.reason')} value={co.reason_category} />
         <DetailField
-          label="Schedule impact"
+          label={t('project.co.scheduleImpact')}
           value={
             co.schedule_impact_days === null || co.schedule_impact_days === undefined
               ? null
-              : `${co.schedule_impact_days} days`
+              : t('project.co.days', { n: co.schedule_impact_days })
           }
           mono
         />
         {/* THE MONEY. Owner/Admin/PM only — see the header. */}
         {showMoney ? (
           <DetailField
-            label="Net delta"
+            label={t('project.co.netDelta')}
             value={formatMoney(co.net_delta)}
             mono
             testId="m-co-net-delta"
@@ -152,7 +171,7 @@ export default async function ChangeOrderDetailPage({
       {(co.line_items ?? []).length > 0 ? (
         <>
           <h2 className="mb-[8px] mt-[18px] font-mono text-[11px] font-medium uppercase tracking-wide text-m6m-muted">
-            Line items
+            {t('project.co.lineItems')}
           </h2>
           <ul
             data-testid="m-co-lines"
@@ -195,7 +214,7 @@ export default async function ChangeOrderDetailPage({
       {sessions.length > 0 ? (
         <>
           <h2 className="mb-[8px] mt-[18px] font-mono text-[11px] font-medium uppercase tracking-wide text-m6m-muted">
-            Signing
+            {t('project.co.signing')}
           </h2>
           <ul
             data-testid="m-co-signing"
@@ -207,10 +226,13 @@ export default async function ChangeOrderDetailPage({
                 className="border-b border-m6m-border py-[10px] font-mono text-[12px] text-m6m-muted last:border-b-0"
               >
                 {s.signed_at
-                  ? `signed ${s.signed_at.slice(0, 10)}`
+                  ? t('project.signedOn', { date: s.signed_at.slice(0, 10) })
                   : s.declined_at
-                    ? `declined ${s.declined_at.slice(0, 10)}`
-                    : `sent ${(s.created_at ?? '').slice(0, 10)} · expires ${(s.expires_at ?? '').slice(0, 10)}`}
+                    ? t('project.declinedOn', { date: s.declined_at.slice(0, 10) })
+                    : t('project.sentExpires', {
+                        sent: (s.created_at ?? '').slice(0, 10),
+                        expires: (s.expires_at ?? '').slice(0, 10),
+                      })}
               </li>
             ))}
           </ul>

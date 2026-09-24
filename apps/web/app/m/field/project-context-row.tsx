@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useState } from 'react';
 import { ChevronDown } from 'lucide-react';
+import { useT } from '@/components/i18n/language-provider';
 
 // M6M §4.7 — M-7's project context row: "a project context row (58px) naming
 // the project the tiles apply to, TAPPABLE TO SWITCH."
@@ -29,6 +30,7 @@ export function ProjectContextRow({
   choices: ProjectChoice[];
 }) {
   const [open, setOpen] = useState(false);
+  const t = useT();
 
   return (
     <div className="mb-[14px]">
@@ -43,7 +45,7 @@ export function ProjectContextRow({
       >
         <span className="min-w-0 flex-1">
           <span className="block font-mono text-[11px] uppercase tracking-wide text-m6m-muted">
-            Project
+            {t('field.hub.project')}
           </span>
           <span className="block truncate text-[16px] font-bold leading-tight text-m6m-navy">
             {current.name}

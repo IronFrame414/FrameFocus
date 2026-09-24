@@ -2,6 +2,8 @@ import { notFound } from 'next/navigation';
 import { getProjectPhotos, getReceiptFile, getUploaderNames } from '@/lib/services/photos';
 import { getMyProfile } from '@/lib/services/profiles';
 import { PhotoViewer, type ViewerPhoto } from './viewer';
+import { getMobileT } from '@/lib/i18n/server';
+import type { T } from '@/lib/i18n/messages';
 
 // M6M §4.9 — M-9 · Photo viewer.
 //
@@ -19,19 +21,20 @@ import { PhotoViewer, type ViewerPhoto } from './viewer';
 /** §4.9's Source row — the record the photo belongs to (A-25c). */
 function sourceLink(
   photo: { source: string | null; sourceId: string | null },
-  projectId: string
+  projectId: string,
+  t: T
 ): { label: string | null; href: string | null } {
   switch (photo.source) {
     case 'log':
       // M-6 is the logs list; a per-log mobile route is not in §1's tree, so
       // this lands on the list rather than inventing a destination.
-      return { label: 'Daily log', href: `/m/logs?project=${projectId}` };
+      return { label: t('photos.sourceRow.log'), href: `/m/logs?project=${projectId}` };
     case 'delivery':
-      return { label: 'Delivery', href: `/m/p/${projectId}/deliveries` };
+      return { label: t('photos.sourceRow.delivery'), href: `/m/p/${projectId}/deliveries` };
     case 'safety':
-      return { label: 'Safety incident', href: `/m/p/${projectId}/safety` };
+      return { label: t('photos.sourceRow.safety'), href: `/m/p/${projectId}/safety` };
     case 'punch':
-      return { label: 'Punch item', href: `/m/p/${projectId}/punch` };
+      return { label: t('photos.sourceRow.punch'), href: `/m/p/${projectId}/punch` };
     default:
       // §4.8: a photo's badge is its provenance — never invent one. A photo
       // with no link column has no source, and the row says so.
@@ -44,9 +47,10 @@ export default async function PhotoViewerPage({
 }: {
   params: { projectId: string; fileId: string };
 }) {
-  const [gallery, profile] = await Promise.all([
+  const [gallery, profile, t] = await Promise.all([
     getProjectPhotos(params.projectId),
     getMyProfile(),
+    getMobileT(),
   ]);
 
   // M-9's SUBJECT IS NOT ONLY THE GALLERY [S107].
@@ -69,7 +73,7 @@ export default async function PhotoViewerPage({
   const names = await getUploaderNames(photos.map((p) => p.created_by ?? '').filter(Boolean));
 
   const rows: ViewerPhoto[] = photos.map((p) => {
-    const link = sourceLink(p, params.projectId);
+    const link = sourceLink(p, params.projectId, t);
     return {
       id: p.id,
       file_name: p.file_name,

@@ -22,6 +22,8 @@ import {
   laborUnitLabels,
   laborUnits,
 } from '@framefocus/shared/validation/estimate-items';
+import { useT } from '@/components/i18n/language-provider';
+import type { MsgKey } from '@/lib/i18n/messages';
 import { SetMobileHeader } from '../../../../mobile-header';
 import { formatMoney } from '../../../../mobile-ui';
 import {
@@ -92,12 +94,13 @@ import {
 // there must not be one — a redundant check here would imply the route guard
 // were unreliable.
 
-const ROW_TYPES: readonly { value: CoRowType; label: string }[] = [
-  { value: 'labor', label: 'Labor' },
-  { value: 'material', label: 'Material' },
-  { value: 'allowance', label: 'Allowance' }, // [S170] fifth row type — parity with the desktop builder
-  { value: 'subcontractor', label: 'Sub' },
-  { value: 'other', label: 'Other' },
+// S110 H — message keys, resolved with t() at render time.
+const ROW_TYPES: readonly { value: CoRowType; labelKey: MsgKey }[] = [
+  { value: 'labor', labelKey: 'project.coEditor.rowLabor' },
+  { value: 'material', labelKey: 'project.coEditor.rowMaterial' },
+  { value: 'allowance', labelKey: 'project.coEditor.rowAllowance' }, // [S170] fifth row type — parity with the desktop builder
+  { value: 'subcontractor', labelKey: 'project.coEditor.rowSub' },
+  { value: 'other', labelKey: 'project.coEditor.rowOther' },
 ];
 
 /** A signed decimal, or null for an empty box. Credits are negative (D-2). */
@@ -123,6 +126,7 @@ export function CoEditor({
 }) {
   const router = useRouter();
   const online = useOnline();
+  const t = useT();
 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -160,7 +164,7 @@ export function CoEditor({
     const result = await action();
     if (!result.success) {
       setBusy(false);
-      setError(result.error ?? 'That change could not be saved.');
+      setError(result.error ?? t('project.coEditor.saveFailed'));
       return;
     }
 
@@ -170,7 +174,7 @@ export function CoEditor({
         setBusy(false);
         // The route's own message, verbatim. It distinguishes 401/403/404/422
         // and this component must not overwrite it with a guess.
-        setError(priced.error ?? 'The total could not be recalculated.');
+        setError(priced.error ?? t('project.coEditor.recalcFailed'));
         router.refresh();
         return;
       }
@@ -182,7 +186,7 @@ export function CoEditor({
 
   return (
     <div className="px-[18px] pb-[18px] pt-[14px]">
-      <SetMobileHeader title="Edit change order" sub={projectName} />
+      <SetMobileHeader title={t('project.coEditor.title')} sub={projectName} />
 
       <header className="mb-[6px]">
         <p className="font-mono text-[11px] font-semibold text-m6m-muted">{co.co_number}</p>
@@ -197,7 +201,7 @@ export function CoEditor({
         </p>
       </header>
 
-      {!online ? <OfflineNotice what="Editing a change order" testId="m-co-offline" /> : null}
+      {!online ? <OfflineNotice what={t('project.coEditor.offlineWhat')} testId="m-co-offline" /> : null}
 
       {!editable ? (
         // A sent or signed CO is not editable. Stated rather than silently
@@ -207,31 +211,34 @@ export function CoEditor({
           role="status"
           className="mb-[12px] rounded-[10px] border border-m6m-border bg-m6m-card px-[12px] py-[10px] text-[14px] text-m6m-navy"
         >
-          This change order has been sent and can no longer be edited. Void it and write a new one
-          to revise.
+          {t('project.coEditor.notEditable')}
         </p>
       ) : null}
 
       {/* ── LEVEL 1 — the change order itself ── */}
       {editable ? (
         <section data-testid="m-co-fields">
-          <TextField label="Title" value={title} onChange={setTitle} testId="m-co-edit-title" />
           <TextField
-            label="Description"
+            label={t('project.co.titleField')}
+            value={title} onChange={setTitle} testId="m-co-edit-title" />
+          <TextField
+            label={t('project.co.description')}
             value={description}
             onChange={setDescription}
             testId="m-co-edit-description"
           />
-          <TextField label="Reason" value={reason} onChange={setReason} testId="m-co-edit-reason" />
           <TextField
-            label="Schedule impact (days)"
+            label={t('project.co.reason')}
+            value={reason} onChange={setReason} testId="m-co-edit-reason" />
+          <TextField
+            label={t('project.co.scheduleImpactDays')}
             value={days}
             onChange={(v) => setDays(v.replace(/[^0-9-]/g, ''))}
             testId="m-co-edit-days"
             inputMode="numeric"
           />
           <SecondaryButton
-            label="Save details"
+            label={t('project.coEditor.saveDetails')}
             testId="m-co-save-fields"
             disabled={busy || !online}
             onClick={() =>
@@ -253,7 +260,7 @@ export function CoEditor({
 
       {/* ── LEVEL 2 — line items ── */}
       <h2 className="mb-[8px] mt-[20px] font-mono text-[11px] font-medium uppercase tracking-wide text-m6m-muted">
-        Line items
+        {t('project.co.lineItems')}
       </h2>
 
       {co.line_items.length === 0 ? (
@@ -261,7 +268,7 @@ export function CoEditor({
           data-testid="m-co-no-lines"
           className="rounded-[12px] border border-m6m-border bg-m6m-card px-[14px] py-[12px] text-[14px] text-m6m-muted"
         >
-          No line items yet — a change order with none is worth nothing.
+          {t('project.coEditor.noLines')}
         </p>
       ) : (
         <ul data-testid="m-co-edit-lines" className="flex flex-col gap-[10px]">
@@ -286,7 +293,7 @@ export function CoEditor({
             data-testid="m-co-new-line-name"
             value={newItemName}
             onChange={(e) => setNewItemName(e.target.value)}
-            placeholder="New line item"
+            placeholder={t('project.coEditor.newLinePlaceholder')}
             className="h-[48px] min-w-0 flex-1 rounded-[12px] border border-m6m-border bg-m6m-card px-[14px] text-[15px] text-m6m-navy"
           />
           <button
@@ -314,7 +321,7 @@ export function CoEditor({
             }
             className="flex h-[48px] shrink-0 items-center rounded-[12px] border border-m6m-border bg-m6m-card px-[16px] text-[15px] font-semibold text-m6m-navy disabled:opacity-40"
           >
-            Add
+            {t('project.coEditor.add')}
           </button>
         </div>
       ) : null}
@@ -322,8 +329,8 @@ export function CoEditor({
       {error ? <ErrorNotice message={error} testId="m-co-editor-error" /> : null}
 
       <PrimaryButton
-        label="Done — review and send"
-        busyLabel="Saving…"
+        label={t('project.coEditor.done')}
+        busyLabel={t('project.coEditor.saving')}
         onClick={() => router.push(`/m/p/${projectId}/changes/${co.id}`)}
         disabled={busy}
         busy={false}
@@ -356,6 +363,7 @@ function LineItemBlock({
     opts: { reprice: boolean }
   ) => Promise<void>;
 }) {
+  const t = useT();
   const [name, setName] = useState(item.name);
   const [addingType, setAddingType] = useState<CoRowType | null>(null);
 
@@ -374,7 +382,9 @@ function LineItemBlock({
         <span className="min-w-0 flex-1">
           <span className="block truncate text-[15px] font-bold text-m6m-navy">{item.name}</span>
           <span className="block font-mono text-[11px] text-m6m-muted">
-            {item.rows.length} {item.rows.length === 1 ? 'row' : 'rows'}
+            {item.rows.length === 1
+              ? t('project.coEditor.rowCountOne', { n: item.rows.length })
+              : t('project.coEditor.rowCountMany', { n: item.rows.length })}
           </span>
         </span>
         <span
@@ -405,26 +415,26 @@ function LineItemBlock({
               ))}
             </ul>
           ) : (
-            <p className="mt-[10px] text-[13px] text-m6m-muted">No rows on this line yet.</p>
+            <p className="mt-[10px] text-[13px] text-m6m-muted">{t('project.coEditor.noRows')}</p>
           )}
 
           {editable ? (
             <>
               <div className="mt-[12px] flex flex-wrap gap-[6px]">
-                {ROW_TYPES.map((t) => (
+                {ROW_TYPES.map((rt) => (
                   <button
-                    key={t.value}
+                    key={rt.value}
                     type="button"
-                    data-testid={`m-co-add-row-${t.value}`}
+                    data-testid={`m-co-add-row-${rt.value}`}
                     disabled={busy || !online}
-                    onClick={() => setAddingType(addingType === t.value ? null : t.value)}
+                    onClick={() => setAddingType(addingType === rt.value ? null : rt.value)}
                     className={`flex min-h-[44px] items-center rounded-[10px] border px-[12px] text-[13px] font-semibold disabled:opacity-40 ${
-                      addingType === t.value
+                      addingType === rt.value
                         ? 'border-m6m-blue bg-[#f5f7ff] text-m6m-blue'
                         : 'border-m6m-border text-m6m-navy'
                     }`}
                   >
-                    + {t.label}
+                    + {t(rt.labelKey)}
                   </button>
                 ))}
               </div>
@@ -459,12 +469,12 @@ function LineItemBlock({
                   }
                   className="flex h-[44px] shrink-0 items-center rounded-[10px] border border-m6m-border px-[14px] text-[14px] font-semibold text-m6m-navy disabled:opacity-40"
                 >
-                  Save
+                  {t('project.coEditor.save')}
                 </button>
                 <button
                   type="button"
                   data-testid="m-co-delete-line"
-                  aria-label={`Delete ${item.name}`}
+                  aria-label={t('project.coEditor.deleteNamed', { name: item.name })}
                   disabled={busy || !online}
                   onClick={() => write(() => deleteCoLineItem(item.id), { reprice: true })}
                   className="flex h-[44px] w-11 shrink-0 items-center justify-center rounded-[10px] border border-m6m-danger-border text-m6m-danger disabled:opacity-40"
@@ -504,6 +514,7 @@ function RowBlock({
     opts: { reprice: boolean }
   ) => Promise<void>;
 }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const [name, setName] = useState(row.name);
   const [rate, setRate] = useState(row.rate === null ? '' : String(row.rate));
@@ -551,19 +562,24 @@ function RowBlock({
 
       {open && editable ? (
         <div className="border-t border-m6m-border px-[12px] pb-[12px]">
-          <TextField label="Name" value={name} onChange={setName} testId="m-co-row-name" />
+          <TextField
+            label={t('project.coEditor.name')}
+            value={name}
+            onChange={setName}
+            testId="m-co-row-name"
+          />
 
           {row.row_type === 'labor' ? (
             <>
               <TextField
-                label="Rate"
+                label={t('project.coEditor.rate')}
                 value={rate}
                 onChange={(v) => setRate(moneyInput(v))}
                 testId="m-co-row-rate"
                 inputMode="decimal"
               />
               <TextField
-                label={`Quantity (${laborUnitLabel(row.labor_unit)})`}
+                label={t('project.coEditor.quantityUnit', { unit: laborUnitLabel(row.labor_unit) })}
                 value={quantity}
                 onChange={(v) => setQuantity(moneyInput(v))}
                 testId="m-co-row-quantity"
@@ -573,14 +589,14 @@ function RowBlock({
           ) : row.row_type === 'material' || row.row_type === 'allowance' ? (
             <>
               <TextField
-                label="Unit cost"
+                label={t('project.coEditor.unitCost')}
                 value={unitCost}
                 onChange={(v) => setUnitCost(moneyInput(v))}
                 testId="m-co-row-unit-cost"
                 inputMode="decimal"
               />
               <TextField
-                label={`Quantity (${row.unit_of_measure ?? 'each'})`}
+                label={t('project.coEditor.quantityUnit', { unit: row.unit_of_measure ?? 'each' })}
                 value={quantity}
                 onChange={(v) => setQuantity(moneyInput(v))}
                 testId="m-co-row-quantity"
@@ -589,7 +605,7 @@ function RowBlock({
             </>
           ) : (
             <TextField
-              label="Amount"
+              label={t('project.coEditor.amount')}
               value={amount}
               onChange={(v) => setAmount(moneyInput(v))}
               testId="m-co-row-amount"
@@ -605,12 +621,12 @@ function RowBlock({
               onClick={save}
               className="flex h-[44px] flex-1 items-center justify-center rounded-[10px] border border-m6m-border text-[14px] font-semibold text-m6m-navy disabled:opacity-40"
             >
-              Save row
+              {t('project.coEditor.saveRow')}
             </button>
             <button
               type="button"
               data-testid="m-co-delete-row"
-              aria-label={`Delete ${row.name}`}
+              aria-label={t('project.coEditor.deleteNamed', { name: row.name })}
               disabled={busy || !online}
               onClick={() => write(() => deleteCoLineRow(row.id), { reprice: true })}
               className="flex h-[44px] w-11 shrink-0 items-center justify-center rounded-[10px] border border-m6m-danger-border text-m6m-danger disabled:opacity-40"
@@ -652,6 +668,7 @@ function NewRowForm({
   ) => Promise<void>;
   onDone: () => void;
 }) {
+  const t = useT();
   const [name, setName] = useState('');
   const [rate, setRate] = useState('');
   const [quantity, setQuantity] = useState('');
@@ -672,12 +689,18 @@ function NewRowForm({
 
   return (
     <div data-testid="m-co-new-row" data-row-type={rowType} className="mt-[10px]">
-      <TextField label="Name" value={name} onChange={setName} testId="m-co-new-row-name" required />
+      <TextField
+        label={t('project.coEditor.name')}
+        value={name}
+        onChange={setName}
+        testId="m-co-new-row-name"
+        required
+      />
 
       {rowType === 'labor' ? (
         <>
           <TextField
-            label="Rate"
+            label={t('project.coEditor.rate')}
             value={rate}
             onChange={(v) => setRate(moneyInput(v))}
             testId="m-co-new-row-rate"
@@ -685,7 +708,7 @@ function NewRowForm({
             required
           />
           <TextField
-            label={`Quantity (${laborUnitLabels[laborUnit]})`}
+            label={t('project.coEditor.quantityUnit', { unit: laborUnitLabels[laborUnit] })}
             value={quantity}
             onChange={(v) => setQuantity(moneyInput(v))}
             testId="m-co-new-row-quantity"
@@ -693,7 +716,7 @@ function NewRowForm({
             required
           />
           <div className="mt-[14px]">
-            <FieldLabel>Unit</FieldLabel>
+            <FieldLabel>{t('project.coEditor.unit')}</FieldLabel>
             <select
               data-testid="m-co-new-row-labor-unit"
               value={laborUnit}
@@ -711,7 +734,7 @@ function NewRowForm({
       ) : rowType === 'material' || rowType === 'allowance' ? (
         <>
           <TextField
-            label="Unit cost"
+            label={t('project.coEditor.unitCost')}
             value={unitCost}
             onChange={(v) => setUnitCost(moneyInput(v))}
             testId="m-co-new-row-unit-cost"
@@ -719,7 +742,7 @@ function NewRowForm({
             required
           />
           <TextField
-            label="Quantity"
+            label={t('project.coEditor.quantity')}
             value={quantity}
             onChange={(v) => setQuantity(moneyInput(v))}
             testId="m-co-new-row-quantity"
@@ -729,7 +752,7 @@ function NewRowForm({
         </>
       ) : (
         <TextField
-          label="Amount"
+          label={t('project.coEditor.amount')}
           value={amount}
           onChange={(v) => setAmount(moneyInput(v))}
           testId="m-co-new-row-amount"
@@ -740,10 +763,10 @@ function NewRowForm({
 
       {/* A negative value is a CREDIT and is a normal row, not a special case
           (D-2). The minus sign is kept by `moneyInput` on purpose. */}
-      <p className="mt-[6px] text-[12px] text-m6m-muted">A negative value records a credit.</p>
+      <p className="mt-[6px] text-[12px] text-m6m-muted">{t('project.coEditor.creditHint')}</p>
 
       <SecondaryButton
-        label="Add row"
+        label={t('project.coEditor.addRow')}
         testId="m-co-save-new-row"
         disabled={busy || !online || !ready}
         onClick={() =>

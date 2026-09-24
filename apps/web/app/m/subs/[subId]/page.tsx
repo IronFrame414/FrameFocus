@@ -5,6 +5,8 @@ import { getMyProfile } from '@/lib/services/profiles';
 import { canEdit } from '@/app/m/detail-access';
 import { getCompanyTimeSettings } from '@/lib/services/company';
 import { companyToday } from '@framefocus/shared/utils/dates';
+import { getMobileT } from '@/lib/i18n/server';
+import type { MsgKey } from '@/lib/i18n/messages';
 import { SetMobileHeader } from '../../mobile-header';
 import { ContactActions, DeniedNotice, DetailCard, DetailField, StatusPill } from '../../mobile-ui';
 
@@ -65,10 +67,11 @@ import { ContactActions, DeniedNotice, DetailCard, DetailField, StatusPill } fro
 // move, so the columns render here. Recorded because the list's cut looks like
 // a data ruling and is not one.
 
-const STATUS_LABEL: Record<string, string> = {
-  active: 'Active',
-  inactive: 'Inactive',
-  archived: 'Archived',
+// S110 H — message keys, resolved with t() at render time.
+const STATUS_KEY: Record<string, MsgKey> = {
+  active: 'directory.status.active',
+  inactive: 'directory.status.inactive',
+  archived: 'directory.status.archived',
 };
 
 export default async function SubDetailPage({
@@ -93,6 +96,9 @@ export default async function SubDetailPage({
   // `getSubcontractor` already filters is_deleted, so a soft-deleted row
   // arrives as null and this is the only check needed.
   if (!sub) notFound();
+  const t = await getMobileT();
+  const editable = canEdit('sub', profile?.role);
+  const typeTag = sub.sub_type === 'vendor' ? t('directory.subs.vendor') : t('directory.subs.sub');
 
   // A CALENDAR comparison, so it must be the company's day rather than UTC's —
   // the same trap §4.12.5 hit. An insurance certificate that expires today is
@@ -100,7 +106,7 @@ export default async function SubDetailPage({
   const today = companyToday(timeSettings.timezone);
   const expired = sub.insurance_expiry != null && sub.insurance_expiry < today;
 
-  const name = sub.company_name ?? 'Unnamed';
+  const name = sub.company_name ?? t('directory.subs.unnamed');
   const contactName =
     [sub.contact_first_name, sub.contact_last_name].filter(Boolean).join(' ').trim() || null;
 
@@ -116,22 +122,17 @@ export default async function SubDetailPage({
 
   return (
     <div className="px-[18px] pb-[18px] pt-[14px]">
-      <SetMobileHeader title={name} sub={sub.sub_type === 'vendor' ? 'Vendor' : 'Sub'} />
+      <SetMobileHeader title={name} sub={typeTag} />
 
-      <DeniedNotice kind={searchParams.denied} />
+      <DeniedNotice kind={searchParams.denied} t={t} />
 
       <header className="mb-[14px]">
-        <h1
-          data-testid="m-sub-name"
-          className="text-[17px] font-bold leading-tight text-m6m-navy"
-        >
+        <h1 data-testid="m-sub-name" className="text-[17px] font-bold leading-tight text-m6m-navy">
           {name}
         </h1>
         <p className="mt-[4px] flex flex-wrap items-center gap-[6px]">
-          <StatusPill label={STATUS_LABEL[sub.status] ?? sub.status} />
-          <span className="font-mono text-[11px] font-semibold text-m6m-muted">
-            {sub.sub_type === 'vendor' ? 'Vendor' : 'Sub'}
-          </span>
+          <StatusPill label={STATUS_KEY[sub.status] ? t(STATUS_KEY[sub.status]) : sub.status} />
+          <span className="font-mono text-[11px] font-semibold text-m6m-muted">{typeTag}</span>
           {sub.trade_type ? (
             <span className="truncate font-mono text-[11px] text-m6m-muted">{sub.trade_type}</span>
           ) : null}
@@ -153,7 +154,7 @@ export default async function SubDetailPage({
               : 'border-m6m-border bg-m6m-card text-m6m-muted'
           }`}
         >
-          {expired ? 'Insurance expired ' : 'Insurance to '}
+          {expired ? t('directory.subs.insuranceExpired') : t('directory.subs.insuranceTo')}
           {sub.insurance_expiry}
         </p>
       ) : null}
@@ -162,7 +163,7 @@ export default async function SubDetailPage({
           list these sit beside the row; here they get their own block, and the
           44px floor applies to all three exactly as it does there. */}
       <div className="mb-[14px] flex items-center gap-[10px]">
-        <ContactActions phone={sub.phone} mobile={sub.mobile} email={sub.email} name={name} />
+        <ContactActions phone={sub.phone} mobile={sub.mobile} email={sub.email} name={name} t={t} />
       </div>
 
       {/* D-54 step 1 — HIDE the affordance. Step 2 (refusing the ROUTE) lives
@@ -170,30 +171,35 @@ export default async function SubDetailPage({
           hidden button is not a permission, because the URL survives a shared
           screenshot, a bookmark and a stale PWA cache. A build with only this
           link-hiding has shipped no permission at all. */}
-      {canEdit('sub', profile?.role) ? (
+      {editable ? (
         <Link
           href={`/m/subs/${sub.id}/edit`}
           data-testid="m-sub-edit"
           className="mb-[14px] flex min-h-[52px] w-full items-center justify-center rounded-[14px] border border-m6m-blue text-[15px] font-bold text-m6m-blue"
         >
-          Edit
+          {t('directory.edit')}
         </Link>
       ) : null}
 
       <DetailCard testId="m-sub-detail">
-        <DetailField label="Company" value={name} />
-        <DetailField label="Contact" value={contactName} />
-        <DetailField label="Type" value={sub.sub_type === 'vendor' ? 'Vendor' : 'Subcontractor'} />
-        <DetailField label="Trade" value={sub.trade_type} mono />
-        <DetailField label="Phone" value={sub.phone} mono />
-        <DetailField label="Mobile" value={sub.mobile} mono />
-        <DetailField label="Email" value={sub.email} />
-        <DetailField label="Licence" value={sub.license_number} mono />
+        <DetailField label={t('directory.field.company')} value={name} />
+        <DetailField label={t('directory.subs.field.contact')} value={contactName} />
         <DetailField
-          label="Address"
+          label={t('directory.field.type')}
           value={
-            address ? <span className="whitespace-pre-line">{address}</span> : null
+            sub.sub_type === 'vendor'
+              ? t('directory.subs.vendor')
+              : t('directory.subs.subcontractor')
           }
+        />
+        <DetailField label={t('directory.subs.field.trade')} value={sub.trade_type} mono />
+        <DetailField label={t('directory.field.phone')} value={sub.phone} mono />
+        <DetailField label={t('directory.field.mobile')} value={sub.mobile} mono />
+        <DetailField label={t('directory.field.email')} value={sub.email} />
+        <DetailField label={t('directory.subs.field.licence')} value={sub.license_number} mono />
+        <DetailField
+          label={t('directory.field.address')}
+          value={address ? <span className="whitespace-pre-line">{address}</span> : null}
         />
         {/* NOTHING BELOW THIS LINE. See the header: default_hourly_rate,
             default_markup_percent and ein are all in `sub` and all stay out of

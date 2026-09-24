@@ -10,6 +10,8 @@ import { saveMarkup, type MarkupSaveResult } from '@/lib/services/photos-client'
 // writes the SAME derivative from the SAME rasteriser. A flattener living under
 // /m implied mobile owned the format; it does not.
 import { drawShapes } from '@/lib/markup/flatten-shapes';
+import { useT } from '@/components/i18n/language-provider';
+import type { MsgKey } from '@/lib/i18n/messages';
 
 // M6M §4.10 — M-10 · Photo markup. Dark chrome #0d1220, inset 14px.
 //
@@ -38,12 +40,14 @@ type Tool = 'pen' | 'arrow' | 'rectangle' | 'text' | 'pin';
 /** §4.10's five swatches; red is selected by default. */
 const COLORS = ['#f2453d', '#ffd400', '#3ecf6a', '#4f8ff7', '#ffffff'];
 
-const TOOLS: { id: Tool; label: string }[] = [
-  { id: 'pen', label: 'Draw' },
-  { id: 'arrow', label: 'Arrow' },
-  { id: 'rectangle', label: 'Box' },
-  { id: 'text', label: 'Text' },
-  { id: 'pin', label: 'Pin' },
+// Tool names are editor CHROME, resolved with t() at render. Nothing here is
+// drawn into the image.
+const TOOLS: { id: Tool; labelKey: MsgKey }[] = [
+  { id: 'pen', labelKey: 'photos.markup.tool.draw' },
+  { id: 'arrow', labelKey: 'photos.markup.tool.arrow' },
+  { id: 'rectangle', labelKey: 'photos.markup.tool.box' },
+  { id: 'text', labelKey: 'photos.markup.tool.text' },
+  { id: 'pin', labelKey: 'photos.markup.tool.pin' },
 ];
 
 const MIN_STROKE = 6;
@@ -69,6 +73,7 @@ export function MarkupCanvas({
   returnHref: string;
 }) {
   const router = useRouter();
+  const t = useT();
   const svgRef = useRef<SVGSVGElement | null>(null);
 
   // -------------------------------------------------------------------------
@@ -297,8 +302,8 @@ export function MarkupCanvas({
     // user is told and is NOT navigated away as though it worked.
     setSaveNote(
       result.status === 'derivative_failed'
-        ? `Marks saved, but the marked-up image could not be generated — the photo will show unmarked until you save again. (${result.error})`
-        : `Save failed — nothing was written. (${result.error})`
+        ? t('photos.markup.derivativeFailed', { error: result.error })
+        : t('photos.markup.saveFailed', { error: result.error })
     );
   }
 
@@ -328,10 +333,10 @@ export function MarkupCanvas({
           className="flex min-h-[44px] min-w-[44px] items-center text-[15px] font-semibold"
           style={{ color: '#8fa0c4' }}
         >
-          Cancel
+          {t('photos.markup.cancel')}
         </button>
         <div className="min-w-0 flex-1 text-center">
-          <p className="text-[15px] font-bold leading-tight">Markup</p>
+          <p className="text-[15px] font-bold leading-tight">{t('photos.markup.title')}</p>
           <p className="truncate font-mono text-[11px] text-m6m-muted-navy">{fileName}</p>
         </div>
         <button
@@ -344,7 +349,7 @@ export function MarkupCanvas({
           className="flex min-h-[44px] min-w-[44px] items-center justify-end text-[15px] font-bold disabled:opacity-60"
           style={{ color: '#f59e0b' }}
         >
-          {saving ? 'Saving…' : 'Save'}
+          {saving ? t('photos.markup.saving') : t('photos.markup.save')}
         </button>
       </header>
 
@@ -381,7 +386,7 @@ export function MarkupCanvas({
             data-testid="m-text-input"
             value={textValue}
             onChange={(e) => setTextValue(e.target.value)}
-            placeholder="Callout text"
+            placeholder={t('photos.markup.calloutPlaceholder')}
             className="h-11 flex-1 rounded-[10px] border border-white/20 bg-[#161d2f] px-[12px] text-[15px] text-white placeholder:text-m6m-muted-navy"
           />
           <button
@@ -405,7 +410,7 @@ export function MarkupCanvas({
             }}
             className="flex h-11 items-center rounded-[10px] border border-white/20 px-[14px] text-[14px] font-semibold"
           >
-            Add
+            {t('photos.markup.add')}
           </button>
         </div>
       ) : null}
@@ -414,16 +419,16 @@ export function MarkupCanvas({
       {/* §4.10 5-TOOL ROW — 62px tiles                                     */}
       {/* ---------------------------------------------------------------- */}
       <div data-testid="m-tool-row" className="mt-[12px] grid grid-cols-5 gap-[7px]">
-        {TOOLS.map((t) => {
-          const on = tool === t.id;
+        {TOOLS.map((tl) => {
+          const on = tool === tl.id;
           return (
             <button
-              key={t.id}
+              key={tl.id}
               type="button"
-              data-testid={`m-tool-${t.id}`}
+              data-testid={`m-tool-${tl.id}`}
               data-active={on ? 'true' : 'false'}
               aria-pressed={on}
-              onClick={() => setTool(t.id)}
+              onClick={() => setTool(tl.id)}
               // A-24 — ACTIVE STATE CARRIES A BORDER AND A LABEL COLOUR CHANGE,
               // never tint alone. The border is the colour-independent signal;
               // a build that only swaps the fill fails, because tint alone is
@@ -441,8 +446,8 @@ export function MarkupCanvas({
                   : { backgroundColor: 'rgba(255,255,255,.06)', color: '#8fa0c4' }
               }
             >
-              <ToolGlyph tool={t.id} />
-              <span>{t.label}</span>
+              <ToolGlyph tool={tl.id} />
+              <span>{t(tl.labelKey)}</span>
             </button>
           );
         })}
@@ -459,7 +464,7 @@ export function MarkupCanvas({
               type="button"
               data-testid={`m-swatch-${c.replace('#', '')}`}
               data-active={color === c ? 'true' : 'false'}
-              aria-label={`Colour ${c}`}
+              aria-label={t('photos.markup.colour', { c })}
               onClick={() => setColor(c)}
               // 34px, 8px apart — §2's ONLY permitted sub-44px target, and A-5
               // exempts exactly this control and nothing else.
@@ -474,7 +479,7 @@ export function MarkupCanvas({
         <input
           type="range"
           data-testid="m-stroke-slider"
-          aria-label="Stroke width"
+          aria-label={t('photos.markup.strokeWidth')}
           min={MIN_STROKE}
           max={MAX_STROKE}
           value={strokeWidth}
@@ -510,7 +515,7 @@ export function MarkupCanvas({
           disabled={shapes.length === 0}
           className="flex h-[56px] flex-1 items-center justify-center rounded-[12px] border border-white/15 text-[15px] font-semibold text-white disabled:opacity-40"
         >
-          Undo
+          {t('photos.markup.undo')}
         </button>
         <button
           type="button"
@@ -520,7 +525,7 @@ export function MarkupCanvas({
           // A-24b — Redo renders DIMMED when the redo stack is empty.
           className="flex h-[56px] flex-1 items-center justify-center rounded-[12px] border border-white/15 text-[15px] font-semibold text-white disabled:opacity-40"
         >
-          Redo
+          {t('photos.markup.redo')}
         </button>
         <button
           type="button"
@@ -530,7 +535,7 @@ export function MarkupCanvas({
           className="flex h-[56px] items-center justify-center rounded-[12px] text-[15px] font-bold text-m6m-navy disabled:opacity-60"
           style={{ flex: 1.2, backgroundColor: '#f59e0b' }}
         >
-          Done
+          {t('photos.markup.done')}
         </button>
       </div>
 
@@ -538,10 +543,10 @@ export function MarkupCanvas({
         <div
           data-testid="m-cancel-confirm"
           role="dialog"
-          aria-label="Discard marks"
+          aria-label={t('photos.markup.discardMarks')}
           className="fixed inset-x-[14px] bottom-[14px] z-50 rounded-[14px] border border-white/15 bg-[#161d2f] p-[14px]"
         >
-          <p className="text-[15px] font-semibold text-white">Discard unsaved marks?</p>
+          <p className="text-[15px] font-semibold text-white">{t('photos.markup.discardConfirm')}</p>
           <div className="mt-[10px] flex gap-[8px]">
             <button
               type="button"
@@ -549,7 +554,7 @@ export function MarkupCanvas({
               onClick={() => router.push(returnHref)}
               className="flex min-h-[44px] flex-1 items-center justify-center rounded-[12px] bg-m6m-danger text-[15px] font-bold text-white"
             >
-              Discard
+              {t('photos.markup.discard')}
             </button>
             <button
               type="button"
@@ -557,7 +562,7 @@ export function MarkupCanvas({
               onClick={() => setConfirmCancel(false)}
               className="flex min-h-[44px] flex-1 items-center justify-center rounded-[12px] border border-white/25 text-[15px] font-semibold text-white"
             >
-              Keep editing
+              {t('photos.markup.keepEditing')}
             </button>
           </div>
         </div>

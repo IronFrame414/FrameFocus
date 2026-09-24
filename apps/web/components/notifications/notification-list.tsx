@@ -11,6 +11,7 @@ import {
   type NotificationListItem,
 } from '@/lib/services/notifications-client';
 import { resolveLink, type LinkParams, type Surface } from '@/lib/notify/links';
+import { useT } from '@/components/i18n/language-provider';
 
 /**
  * The notifications list. ONE component, both surfaces.
@@ -52,6 +53,7 @@ export function NotificationList({
   rollUpRepeats?: boolean;
 }) {
   const router = useRouter();
+  const t = useT();
   const [items, setItems] = useState(initial);
   const [, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -109,14 +111,14 @@ export function NotificationList({
           await markRead(item.id);
         } catch (err) {
           patch(item.id, { read_at: null });
-          setError(err instanceof Error ? err.message : 'Could not mark as read');
+          setError(err instanceof Error ? err.message : t('shell.notif.couldNotMarkRead'));
           return;
         }
       }
 
       if (href) startTransition(() => router.push(href));
     },
-    [patch, router, surface]
+    [patch, router, surface, t]
   );
 
   const onToggleStar = useCallback(
@@ -129,22 +131,25 @@ export function NotificationList({
         await setStarred(item.id, next);
       } catch (err) {
         patch(item.id, { starred: item.starred });
-        setError(err instanceof Error ? err.message : 'Could not update');
+        setError(err instanceof Error ? err.message : t('shell.notif.couldNotUpdate'));
       }
     },
-    [patch]
+    [patch, t]
   );
 
-  const onDismiss = useCallback(async (item: NotificationListItem) => {
-    const snapshot = item;
-    setItems((prev) => prev.filter((i) => i.id !== item.id));
-    try {
-      await dismiss(item.id);
-    } catch (err) {
-      setItems((prev) => [snapshot, ...prev]);
-      setError(err instanceof Error ? err.message : 'Could not dismiss');
-    }
-  }, []);
+  const onDismiss = useCallback(
+    async (item: NotificationListItem) => {
+      const snapshot = item;
+      setItems((prev) => prev.filter((i) => i.id !== item.id));
+      try {
+        await dismiss(item.id);
+      } catch (err) {
+        setItems((prev) => [snapshot, ...prev]);
+        setError(err instanceof Error ? err.message : t('shell.notif.couldNotDismiss'));
+      }
+    },
+    [t]
+  );
 
   const onMarkAllRead = useCallback(async () => {
     const snapshot = items;
@@ -154,9 +159,9 @@ export function NotificationList({
       await markAllRead();
     } catch (err) {
       setItems(snapshot);
-      setError(err instanceof Error ? err.message : 'Could not mark all as read');
+      setError(err instanceof Error ? err.message : t('shell.notif.couldNotMarkAllRead'));
     }
-  }, [items]);
+  }, [items, t]);
 
   if (items.length === 0) {
     // §10.1: "No notifications." No illustration.
@@ -164,10 +169,10 @@ export function NotificationList({
       <div data-testid="notifications-empty">
         <p>
           {filter === 'unread'
-            ? 'Nothing unread.'
+            ? t('shell.notif.nothingUnread')
             : filter === 'starred'
-              ? 'Nothing starred.'
-              : 'No notifications.'}
+              ? t('shell.notif.nothingStarred')
+              : t('shell.notif.none')}
         </p>
       </div>
     );
@@ -183,7 +188,7 @@ export function NotificationList({
 
       {unreadCount > 0 && (
         <button type="button" onClick={onMarkAllRead} data-testid="notifications-mark-all">
-          Mark all as read
+          {t('shell.notif.markAllRead')}
         </button>
       )}
 
@@ -199,7 +204,10 @@ export function NotificationList({
                   }
                   data-testid="notification-rollup-expand"
                 >
-                  {entry.count} more {entry.type.replace(/_/g, ' ')} — Expand
+                  {t('shell.notif.rollupMore', {
+                    n: entry.count,
+                    type: entry.type.replace(/_/g, ' '),
+                  })}
                 </button>
               </li>
             );
@@ -254,7 +262,7 @@ export function NotificationList({
                 type="button"
                 onClick={() => void onToggleStar(item)}
                 aria-pressed={item.starred}
-                aria-label={item.starred ? 'Unstar' : 'Star'}
+                aria-label={item.starred ? t('shell.notif.unstar') : t('shell.notif.star')}
                 data-testid="notification-star"
               >
                 {item.starred ? '★' : '☆'}
@@ -265,19 +273,19 @@ export function NotificationList({
                   type="button"
                   onClick={() => void onOpen(item)}
                   data-testid="notification-mark-read"
-                  aria-label="Mark as read"
+                  aria-label={t('shell.notif.markAsRead')}
                 >
-                  Mark read
+                  {t('shell.notif.markRead')}
                 </button>
               )}
 
               <button
                 type="button"
                 onClick={() => void onDismiss(item)}
-                aria-label="Dismiss"
+                aria-label={t('shell.notif.dismiss')}
                 data-testid="notification-dismiss"
               >
-                Dismiss
+                {t('shell.notif.dismiss')}
               </button>
             </li>
           );

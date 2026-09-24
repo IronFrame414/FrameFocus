@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { createChatPoll } from '@/lib/chat/poll';
 import type { ChatMessageWithPhotos } from '@/lib/chat/photos';
 import type { ChatThread, ThreadKind } from '@/lib/chat/threads';
+import { useT } from '@/components/i18n/language-provider';
 
 /**
  * One thread's state: open it, hold its messages, keep it current, send to it.
@@ -87,6 +88,11 @@ export function useChatThread({ projectId, surface, kind = 'crew' }: UseChatThre
   // and every later poll would ask for messages since the beginning of time.
   const threadRef = useRef<ChatThread | null>(null);
   const sinceRef = useRef<string | null>(null);
+  // S110 H — system text for the fallback errors. Held in a ref so the
+  // thread-open effect's dependencies (and so when it re-runs) are unchanged.
+  const uiT = useT();
+  const tRef = useRef(uiT);
+  tRef.current = uiT;
 
   const absorb = useCallback((incoming: ChatMessageWithPhotos[]) => {
     if (incoming.length === 0) return;
@@ -137,6 +143,7 @@ export function useChatThread({ projectId, surface, kind = 'crew' }: UseChatThre
     }
 
     let cancelled = false;
+    const t = tRef.current;
     setStatus('loading');
     setError(null);
     setMessages([]);
@@ -157,7 +164,7 @@ export function useChatThread({ projectId, surface, kind = 'crew' }: UseChatThre
 
         if (!res.ok) {
           setStatus(res.status === 403 ? 'denied' : 'error');
-          setError(json.error ?? 'Could not open this conversation.');
+          setError(json.error ?? t('shell.chat.couldNotOpen'));
           return;
         }
 
@@ -177,7 +184,7 @@ export function useChatThread({ projectId, surface, kind = 'crew' }: UseChatThre
       } catch {
         if (!cancelled) {
           setStatus('error');
-          setError('Could not reach the server.');
+          setError(t('shell.chat.couldNotReachServer'));
         }
       }
     })();
@@ -211,6 +218,7 @@ export function useChatThread({ projectId, surface, kind = 'crew' }: UseChatThre
   const send = useCallback(
     async (body: string, fileIds: string[] = []): Promise<SendOutcome> => {
       if (!projectId) return { ok: false, unresolved: [] };
+      const t = tRef.current;
 
       // ND-24: the optimistic row is kept OUT of `messages` on purpose. A-C21 —
       // a failed message is never displayed as sent — is much easier to hold
@@ -237,10 +245,8 @@ export function useChatThread({ projectId, surface, kind = 'crew' }: UseChatThre
         const json = await res.json().catch(() => ({}));
 
         if (!res.ok) {
-          setPending((p) =>
-            p.map((m) => (m.tempId === tempId ? { ...m, state: 'failed' } : m))
-          );
-          setError(json.error ?? 'Message not sent.');
+          setPending((p) => p.map((m) => (m.tempId === tempId ? { ...m, state: 'failed' } : m)));
+          setError(json.error ?? t('shell.chat.messageNotSent'));
           return { ok: false, unresolved: [] };
         }
 
@@ -253,7 +259,7 @@ export function useChatThread({ projectId, surface, kind = 'crew' }: UseChatThre
         return { ok: true, unresolved: json.unresolved ?? [] };
       } catch {
         setPending((p) => p.map((m) => (m.tempId === tempId ? { ...m, state: 'failed' } : m)));
-        setError('Message not sent.');
+        setError(t('shell.chat.messageNotSent'));
         return { ok: false, unresolved: [] };
       }
     },

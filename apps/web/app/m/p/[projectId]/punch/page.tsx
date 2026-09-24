@@ -3,6 +3,9 @@ import { getPunchLists, PUNCH_STATUS_LABELS, isItemClosed } from '@/lib/services
 import { getMyMember } from '@/lib/services/members';
 import { SectionHeader } from '../section-header';
 import { EmptyState, FilterChips, ListRowLink, StatusPill, type Chip } from '../../../mobile-ui';
+import { getMobileT } from '@/lib/i18n/server';
+import type { T } from '@/lib/i18n/messages';
+import type { MsgKey } from '@/lib/i18n/messages';
 
 // D-55 — every row opens M-34. NO ROLE GATE, and that is deliberate: D-52's
 // subcontractor exclusion was withdrawn [S110] and replaced by D-57's
@@ -24,11 +27,23 @@ import { EmptyState, FilterChips, ListRowLink, StatusPill, type Chip } from '../
 // awaiting verification is neither open NOR closed, so it appears under All and
 // under neither filter. M-14 must not invent a third definition to tidy that up.
 
-const CHIPS: readonly Chip[] = [
-  { value: 'mine', label: 'Mine' },
-  { value: 'open', label: 'Open' },
-  { value: null, label: 'All' },
-];
+// [S110 H] Labels translated; `testKey` keeps the English `m-chip-*` ids.
+function chips(t: T): readonly Chip[] {
+  return [
+    { value: 'mine', label: t('photos.punch.chip.mine'), testKey: 'Mine' },
+    { value: 'open', label: t('photos.punch.chip.open'), testKey: 'Open' },
+    { value: null, label: t('photos.punch.chip.all'), testKey: 'All' },
+  ];
+}
+
+// PUNCH_STATUS_LABELS (lib/services/punch) stays the English source; /m shows
+// the translated word for the same status value.
+const STATUS_KEYS: Record<string, MsgKey> = {
+  open: 'photos.punch.status.open',
+  in_progress: 'photos.punch.status.in_progress',
+  complete: 'photos.punch.status.complete',
+  verified: 'photos.punch.status.verified',
+};
 
 export default async function ProjectPunchPage({
   params,
@@ -37,6 +52,7 @@ export default async function ProjectPunchPage({
   params: { projectId: string };
   searchParams: { filter?: string };
 }) {
+  const t = await getMobileT();
   const raw = searchParams.filter;
   const active = raw === 'mine' || raw === 'open' ? raw : null;
 
@@ -70,17 +86,22 @@ export default async function ProjectPunchPage({
         : allItems;
 
   const emptyCopy =
-    active === 'mine' ? 'Nothing assigned to you.' : active === 'open' ? 'Nothing open.' : 'No punch items.';
+    active === 'mine'
+      ? t('photos.punchPage.emptyMine')
+      : active === 'open'
+        ? t('photos.punchPage.emptyOpen')
+        : t('photos.punchPage.emptyAll');
 
   return (
     <div className="px-[18px] pb-[18px] pt-[14px]">
-      <SectionHeader projectId={params.projectId} title="Punch List" />
+      <SectionHeader projectId={params.projectId} title={t('photos.punchPage.title')} />
 
       <FilterChips
-        chips={CHIPS}
+        chips={chips(t)}
         active={active}
         basePath={`/m/p/${params.projectId}/punch`}
         param="filter"
+        t={t}
       />
 
       {/* A-56 — the create controls, for EVERY role including subcontractors.
@@ -105,14 +126,14 @@ export default async function ProjectPunchPage({
           data-testid="m-punch-new"
           className="flex min-h-[52px] flex-1 items-center justify-center rounded-[14px] bg-m6m-blue text-[15px] font-bold text-white"
         >
-          New punch item
+          {t('photos.punchPage.newItem')}
         </Link>
         <Link
           href={`/m/p/${params.projectId}/punch/lists/new`}
           data-testid="m-punch-list-new"
           className="flex min-h-[52px] shrink-0 items-center justify-center rounded-[14px] border border-m6m-blue px-[14px] text-[15px] font-bold text-m6m-blue"
         >
-          New list
+          {t('photos.punchPage.newList')}
         </Link>
       </div>
 
@@ -143,7 +164,13 @@ export default async function ProjectPunchPage({
                     .join(' · ')}
                 </p>
                 <p className="mt-[3px] flex flex-wrap items-center gap-[6px]">
-                  <StatusPill label={PUNCH_STATUS_LABELS[item.status] ?? item.status} />
+                  <StatusPill
+                    label={
+                      STATUS_KEYS[item.status]
+                        ? t(STATUS_KEYS[item.status])
+                        : (PUNCH_STATUS_LABELS[item.status] ?? item.status)
+                    }
+                  />
                   {item.priority ? (
                     <span className="font-mono text-[11px] font-semibold text-m6m-muted">
                       {item.priority}
@@ -152,7 +179,7 @@ export default async function ProjectPunchPage({
                   {/* Inherited divergence, surfaced rather than tidied: an item
                       at 'complete' is not closed until verified. */}
                   {item.status === 'complete' && !isItemClosed(item) ? (
-                    <span className="font-mono text-[11px] text-m6m-muted">awaiting verification</span>
+                    <span className="font-mono text-[11px] text-m6m-muted">{t('photos.punchPage.awaitingVerification')}</span>
                   ) : null}
                 </p>
             </ListRowLink>

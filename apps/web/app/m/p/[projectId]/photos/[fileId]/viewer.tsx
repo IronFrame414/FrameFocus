@@ -7,6 +7,7 @@ import { ChevronLeft, ChevronRight, X, MoreVertical } from 'lucide-react';
 import { softDeleteFile } from '@/lib/services/files-client';
 import { shareTargetFor } from '@framefocus/shared/utils/markup';
 import { shareFailureNote, shareImages } from '@/lib/share-image';
+import { useT } from '@/components/i18n/language-provider';
 
 // M6M §4.9 — M-9 · Photo viewer. Dark canvas #0d1220.
 //
@@ -80,6 +81,7 @@ export function PhotoViewer({
   canMarkup?: boolean;
 }) {
   const router = useRouter();
+  const t = useT();
   const photo = photos[index];
 
   const [showOriginal, setShowOriginal] = useState(false);
@@ -252,14 +254,15 @@ export function PhotoViewer({
     setBusy(false);
     setConfirming(false);
     if (!result.success) {
-      setNote(result.error ?? 'Delete failed.');
+      setNote(result.error ?? t('photos.viewer.deleteFailed'));
       return;
     }
     router.push(`/m/p/${projectId}/photos`);
     router.refresh();
   }
 
-  const takenLabel = useMemo(() => {
+  // Date formatting, not copy — stays as is (the locale is the shared date rule).
+  const takenText = useMemo(() => {
     if (!photo.takenAt) return '—';
     return new Date(photo.takenAt).toLocaleString('en-US', {
       year: 'numeric',
@@ -279,7 +282,7 @@ export function PhotoViewer({
         <button
           type="button"
           data-testid="m-viewer-close"
-          aria-label="Close"
+          aria-label={t('photos.viewer.close')}
           onClick={close}
           className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-white"
           style={{ backgroundColor: 'rgba(255,255,255,.13)' }}
@@ -290,7 +293,7 @@ export function PhotoViewer({
         <div className="min-w-0 flex-1 text-center">
           <p className="truncate text-[15px] font-bold leading-tight">{photo.file_name}</p>
           <p data-testid="m-viewer-position" className="font-mono text-[11px] text-m6m-muted-navy">
-            {index + 1} of {photos.length}
+            {t('photos.viewer.position', { n: index + 1, total: photos.length })}
           </p>
         </div>
 
@@ -298,7 +301,7 @@ export function PhotoViewer({
           <button
             type="button"
             data-testid="m-viewer-overflow"
-            aria-label="More"
+            aria-label={t('photos.viewer.more')}
             aria-expanded={menuOpen}
             onClick={() => setMenuOpen((v) => !v)}
             className="flex h-11 w-11 items-center justify-center rounded-full text-white"
@@ -319,7 +322,7 @@ export function PhotoViewer({
                   role="menuitem"
                   className="flex min-h-[44px] items-center px-[14px] text-[15px] font-semibold text-white"
                 >
-                  Markup
+                  {t('photos.viewer.markup')}
                 </Link>
               ) : null}
               <button
@@ -328,7 +331,7 @@ export function PhotoViewer({
                 disabled
                 className="flex min-h-[44px] w-full items-center px-[14px] text-left text-[15px] text-m6m-muted-navy opacity-50"
               >
-                Set as cover
+                {t('photos.viewer.setAsCover')}
               </button>
               <button
                 type="button"
@@ -336,7 +339,7 @@ export function PhotoViewer({
                 disabled
                 className="flex min-h-[44px] w-full items-center px-[14px] text-left text-[15px] text-m6m-muted-navy opacity-50"
               >
-                Move
+                {t('photos.viewer.move')}
               </button>
               <button
                 type="button"
@@ -344,7 +347,7 @@ export function PhotoViewer({
                 disabled
                 className="flex min-h-[44px] w-full items-center px-[14px] text-left text-[15px] text-m6m-muted-navy opacity-50"
               >
-                Report
+                {t('photos.viewer.report')}
               </button>
             </div>
           ) : null}
@@ -408,7 +411,7 @@ export function PhotoViewer({
           <button
             type="button"
             data-testid="m-viewer-prev"
-            aria-label="Previous photo"
+            aria-label={t('photos.viewer.previous')}
             onClick={() => goto(prev)}
             className="absolute left-[14px] top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full text-white"
             style={{ backgroundColor: 'rgba(255,255,255,.13)' }}
@@ -420,7 +423,7 @@ export function PhotoViewer({
           <button
             type="button"
             data-testid="m-viewer-next"
-            aria-label="Next photo"
+            aria-label={t('photos.viewer.next')}
             onClick={() => goto(next)}
             className="absolute right-[14px] top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full text-white"
             style={{ backgroundColor: 'rgba(255,255,255,.13)' }}
@@ -451,13 +454,13 @@ export function PhotoViewer({
               className="flex h-11 min-w-[44px] items-center justify-center rounded-full px-[10px] font-mono text-[12px] font-semibold text-white"
               style={{ backgroundColor: 'rgba(255,255,255,.13)' }}
             >
-              Fit
+              {t('photos.viewer.fit')}
             </button>
           ) : null}
           <button
             type="button"
             data-testid="m-zoom-out"
-            aria-label="Zoom out"
+            aria-label={t('photos.viewer.zoomOut')}
             onClick={() => {
               const z = Math.max(MIN_ZOOM, zoom / ZOOM_STEP);
               setZoom(z);
@@ -471,7 +474,7 @@ export function PhotoViewer({
           <button
             type="button"
             data-testid="m-zoom-in"
-            aria-label="Zoom in"
+            aria-label={t('photos.viewer.zoomIn')}
             onClick={() => setZoom((z) => Math.min(MAX_ZOOM, z * ZOOM_STEP))}
             className="flex h-11 w-11 items-center justify-center rounded-full text-[20px] font-bold text-white"
             style={{ backgroundColor: 'rgba(255,255,255,.13)' }}
@@ -491,7 +494,7 @@ export function PhotoViewer({
             className="rounded-full px-[8px] py-[3px] font-mono text-[11px] font-semibold text-white"
             style={{ backgroundColor: 'rgba(20,33,61,.72)' }}
           >
-            Marked up
+            {t('photos.viewer.markedUp')}
           </span>
           <button
             type="button"
@@ -503,7 +506,7 @@ export function PhotoViewer({
             }}
             className="ml-auto flex min-h-[44px] items-center rounded-full border border-white/20 px-[14px] text-[14px] font-semibold text-white"
           >
-            {showOriginal ? 'Show markup' : 'Show original'}
+            {showOriginal ? t('photos.viewer.showMarkup') : t('photos.viewer.showOriginal')}
           </button>
         </div>
       ) : null}
@@ -515,7 +518,7 @@ export function PhotoViewer({
           className="mx-[18px] mt-[10px] rounded-[10px] px-[10px] py-[6px] text-[13px] text-[#f0908a]"
           style={{ backgroundColor: 'rgba(192,54,44,.16)' }}
         >
-          Markup image unavailable — showing the unmarked original.
+          {t('photos.viewer.derivativeMissing')}
         </p>
       ) : null}
 
@@ -566,14 +569,14 @@ export function PhotoViewer({
             rendered and no placeholder text is invented. */}
 
         <div className="flex flex-wrap gap-[6px]">
-          {photo.tags.map((t) => (
+          {photo.tags.map((tag) => (
             <span
-              key={t}
+              key={tag}
               data-testid="m-tag-pill"
               className="rounded-full px-[10px] py-[4px] text-[13px]"
               style={{ backgroundColor: 'rgba(47,73,209,.22)', color: '#9fb0f5' }}
             >
-              {t}
+              {tag}
             </span>
           ))}
           <button
@@ -582,16 +585,16 @@ export function PhotoViewer({
             disabled
             className="flex min-h-[44px] items-center rounded-full border border-dashed border-white/25 px-[12px] text-[13px] text-m6m-muted-navy opacity-60"
           >
-            + Tag
+            {t('photos.viewer.addTag')}
           </button>
         </div>
 
         <dl className="mt-[14px] border-t pt-[12px]" style={{ borderColor: 'rgba(255,255,255,.08)' }}>
-          <Row label="Taken" value={takenLabel} mono />
-          <Row label="By" value={photo.by ?? '—'} />
+          <Row label={t('photos.viewer.taken')} value={takenText} mono />
+          <Row label={t('photos.viewer.by')} value={photo.by ?? '—'} />
           {photo.sourceHref ? (
             <div className="flex items-center gap-[10px] py-[8px]">
-              <dt className="w-[70px] shrink-0 text-[13px] text-m6m-muted-navy">Source</dt>
+              <dt className="w-[70px] shrink-0 text-[13px] text-m6m-muted-navy">{t('photos.viewer.source')}</dt>
               {/* A-25c — tapping Source navigates to the record it came from. */}
               <dd className="min-w-0 flex-1">
                 <Link
@@ -604,7 +607,7 @@ export function PhotoViewer({
               </dd>
             </div>
           ) : (
-            <Row label="Source" value={photo.sourceLabel ?? '—'} />
+            <Row label={t('photos.viewer.source')} value={photo.sourceLabel ?? '—'} />
           )}
         </dl>
       </div>
@@ -626,17 +629,17 @@ export function PhotoViewer({
       >
         <ActionTile
           testId="m-action-save"
-          label="Save"
+          label={t('photos.viewer.save')}
           href={photo.displayUrl ?? undefined}
           download={photo.file_name}
         />
-        <ActionTile testId="m-action-share" label="Share" onClick={share} />
-        <ActionTile testId="m-action-comment" label="Comment" disabled />
+        <ActionTile testId="m-action-share" label={t('photos.viewer.share')} onClick={share} />
+        <ActionTile testId="m-action-comment" label={t('photos.viewer.comment')} disabled />
         {/* A-25d — absent entirely for a role files_delete_owner_admin refuses. */}
         {canDelete ? (
           <ActionTile
             testId="m-action-delete"
-            label="Delete"
+            label={t('photos.viewer.delete')}
             danger
             onClick={() => setConfirming(true)}
           />
@@ -649,10 +652,10 @@ export function PhotoViewer({
         <div
           data-testid="m-delete-confirm"
           role="dialog"
-          aria-label="Confirm delete"
+          aria-label={t('photos.viewer.confirmDelete')}
           className="fixed inset-x-[18px] bottom-[18px] z-50 rounded-[14px] border border-white/15 bg-[#161d2f] p-[14px]"
         >
-          <p className="text-[15px] font-semibold text-white">Delete this photo?</p>
+          <p className="text-[15px] font-semibold text-white">{t('photos.viewer.deleteConfirm')}</p>
           <div className="mt-[10px] flex gap-[8px]">
             <button
               type="button"
@@ -661,7 +664,7 @@ export function PhotoViewer({
               disabled={busy}
               className="flex min-h-[44px] flex-1 items-center justify-center rounded-[12px] bg-m6m-danger text-[15px] font-bold text-white disabled:opacity-60"
             >
-              {busy ? 'Deleting…' : 'Delete'}
+              {busy ? t('photos.viewer.deleting') : t('photos.viewer.delete')}
             </button>
             <button
               type="button"
@@ -669,7 +672,7 @@ export function PhotoViewer({
               onClick={() => setConfirming(false)}
               className="flex min-h-[44px] flex-1 items-center justify-center rounded-[12px] border border-white/25 text-[15px] font-semibold text-white"
             >
-              Keep
+              {t('photos.viewer.keep')}
             </button>
           </div>
         </div>

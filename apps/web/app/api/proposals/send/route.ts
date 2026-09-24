@@ -1,4 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
+import {
+  checkClientFacingEnglish,
+  nonEnglishResponseBody,
+} from '@/lib/language-check/english-check';
+import { proposalFieldsForCheck } from '@/lib/language-check/document-fields';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@framefocus/shared/types/database';
 import { sendProposalSchema } from '@framefocus/shared/validation/email';
@@ -38,10 +43,7 @@ export async function POST(request: NextRequest) {
     .eq('is_deleted', false)
     .single();
   if (!profile || !['owner', 'admin'].includes(profile.role)) {
-    return NextResponse.json(
-      { error: 'Only Owner or Admin can send proposals' },
-      { status: 403 }
-    );
+    return NextResponse.json({ error: 'Only Owner or Admin can send proposals' }, { status: 403 });
   }
 
   let parsed;
@@ -91,6 +93,21 @@ export async function POST(request: NextRequest) {
     .eq('id', estimate.company_id)
     .single();
   if (!company) return NextResponse.json({ error: 'Company not found' }, { status: 500 });
+
+  // ── S110 H [RULED Josh, Q14 → A + C, never B] — THE DOCUMENT GOES OUT IN
+  // ENGLISH. Before anything is minted or sent, name every client-facing field
+  // that is not English. The office sender may override (a street name, a brand
+  // or a proper noun is not a translation problem) and the override is recorded
+  // on this send's email log row. Nothing here changes a word of the document —
+  // the check returns language CODES only (lib/language-check). Fails open.
+  const languageCheck = await checkClientFacingEnglish(
+    admin,
+    estimate.company_id,
+    await proposalFieldsForCheck(supabase, estimate.id, input)
+  );
+  if (languageCheck.flagged.length > 0 && !input.language_override) {
+    return NextResponse.json(nonEnglishResponseBody(languageCheck.flagged), { status: 409 });
+  }
 
   const sentAt = new Date();
   const expiresAt = new Date(sentAt);
@@ -198,7 +215,16 @@ export async function POST(request: NextRequest) {
     sender_email: sender,
     subject,
     status: sendError ? 'failed' : 'sent',
-    metadata: sendError ? { error: sendError, body: bodyText } : { body: bodyText },
+    metadata: {
+      ...(sendError ? { error: sendError } : {}),
+      body: bodyText,
+      // [S110 H, Q14] the language check, and the override when there was one.
+      language_check: {
+        checked: languageCheck.checked,
+        flagged: languageCheck.flagged.map((f) => f.field),
+        overridden_by: languageCheck.flagged.length > 0 ? profile.id : null,
+      },
+    },
   });
 
   if (sendError) {

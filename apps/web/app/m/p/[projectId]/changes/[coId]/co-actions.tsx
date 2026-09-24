@@ -1,5 +1,6 @@
 'use client';
 
+import { NotEnglishWarning } from '@/components/language-check/not-english-warning';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
@@ -10,6 +11,7 @@ import {
   voidChangeOrder,
 } from '@/lib/services/change-orders-client';
 import type { ChangeOrderStatus } from '@/lib/services/change-orders-client';
+import { useT } from '@/components/i18n/language-provider';
 import {
   ErrorNotice,
   OfflineNotice,
@@ -69,9 +71,18 @@ import {
 // it: doing so would need a second read of `contacts` on a surface D-53 gates,
 // and would go stale between render and tap.
 
+// S110 H — message keys, resolved with t() at render time.
 const SIGNATURE_MODES = [
-  { value: 'typed_name' as const, label: 'Type my name', sub: 'the printed name is the signature' },
-  { value: 'saved_image' as const, label: 'Use saved signature', sub: 'from company settings' },
+  {
+    value: 'typed_name' as const,
+    labelKey: 'project.coActions.sigTyped' as const,
+    subKey: 'project.coActions.sigTypedSub' as const,
+  },
+  {
+    value: 'saved_image' as const,
+    labelKey: 'project.coActions.sigSaved' as const,
+    subKey: 'project.coActions.sigSavedSub' as const,
+  },
 ];
 
 export function CoActions({
@@ -104,6 +115,12 @@ export function CoActions({
 }) {
   const router = useRouter();
   const online = useOnline();
+  const t = useT();
+  const signatureModes = SIGNATURE_MODES.map((m) => ({
+    value: m.value,
+    label: t(m.labelKey),
+    sub: t(m.subKey),
+  }));
 
   const [mode, setMode] = useState<'send' | 'void' | null>(null);
   const [voidReasonInput, setVoidReasonInput] = useState('');
@@ -141,24 +158,33 @@ export function CoActions({
 
   const signatureReady = !needsSignature || sigName.trim().length > 0;
 
-  async function send() {
+  // S110 H [RULED Q14] — non-English fields the server named (NotEnglishWarning).
+  const [notEnglish, setNotEnglish] = useState<string[] | null>(null);
+
+  async function send(languageOverride = false) {
     if (!online || !signatureReady) return;
     setBusy(true);
     setError(null);
+    setNotEnglish(null);
 
     const result = await sendChangeOrder(coId, {
       recipient_email: recipientEmail.trim() || undefined,
       ...(needsSignature
         ? { contractor_signature_mode: sigMode, contractor_signature_name: sigName.trim() }
         : {}),
+      ...(languageOverride ? { language_override: true } : {}),
     });
 
     setBusy(false);
+    if (result.notEnglish) {
+      setNotEnglish(result.notEnglish);
+      return;
+    }
     if (!result.success) {
       // The route's message verbatim — it distinguishes "no recipient email",
       // "no saved signature image" and a role refusal, and this component
       // cannot tell them apart well enough to improve on it.
-      setError(result.error ?? 'The change order could not be sent.');
+      setError(result.error ?? t('project.coActions.sendFailed'));
       return;
     }
 
@@ -172,7 +198,7 @@ export function CoActions({
   async function doVoid() {
     if (!online) return;
     if (!voidReasonInput.trim()) {
-      setError('A reason is required to void a change order.');
+      setError(t('project.coActions.voidReasonRequired'));
       return;
     }
     setBusy(true);
@@ -181,7 +207,7 @@ export function CoActions({
     const result = await voidChangeOrder(coId, voidReasonInput);
     setBusy(false);
     if (!result.success) {
-      setError(result.error ?? 'The change order could not be voided.');
+      setError(result.error ?? t('project.coActions.voidFailed'));
       return;
     }
     setMode(null);
@@ -197,7 +223,7 @@ export function CoActions({
     const result = await reissueChangeOrder(coId);
     setBusy(false);
     if (!result.success || !result.id) {
-      setError(result.error ?? 'The change order could not be reissued.');
+      setError(result.error ?? t('project.coActions.reissueFailed'));
       return;
     }
     router.push(`/m/p/${projectId}/changes/${result.id}`);
@@ -211,7 +237,7 @@ export function CoActions({
     const result = await deleteChangeOrder(coId);
     if (!result.success) {
       setBusy(false);
-      setError(result.error ?? 'The change order could not be deleted.');
+      setError(result.error ?? t('project.coActions.deleteFailed'));
       return;
     }
     router.push(`/m/p/${projectId}/changes`);
@@ -228,11 +254,11 @@ export function CoActions({
           {/* [S168] A signed CO is no longer terminal — it can be voided. The
               only state that reaches this sentence now is a voided CO that has
               already been reissued and that this role cannot delete. */}
-          This change order is voided and has already been reissued.
+          {t('project.coActions.terminal')}
         </p>
       ) : null}
 
-      {!online ? <OfflineNotice what="Sending a change order" testId="m-co-offline" /> : null}
+      {!online ? <OfflineNotice what={t('project.coActions.offlineWhat')} testId="m-co-offline" /> : null}
 
       {signingUrl ? (
         <p
@@ -250,7 +276,7 @@ export function CoActions({
           data-testid="m-co-edit"
           className="flex h-[52px] w-full items-center justify-center rounded-[14px] border border-m6m-border bg-m6m-card text-[15px] font-semibold text-m6m-navy"
         >
-          Edit
+          {t('project.coActions.edit')}
         </Link>
       ) : null}
 
@@ -259,24 +285,26 @@ export function CoActions({
         mode === 'send' ? (
           <div className="mt-[12px] rounded-[14px] border border-m6m-border bg-m6m-card p-[14px]">
             <p className="text-[15px] font-bold text-m6m-navy">
-              {status === 'sent' ? 'Send again' : 'Send for signature'}
+              {status === 'sent'
+                ? t('project.coActions.sendAgain')
+                : t('project.coActions.sendForSignature')}
             </p>
 
             {needsSignature ? (
               <>
                 <p className="mt-[6px] text-[13px] text-m6m-muted">
-                  Sending is your acceptance of this change order.
+                  {t('project.coActions.acceptance')}
                 </p>
                 <div className="mt-[12px]">
                   <OptionStack
-                    options={SIGNATURE_MODES}
+                    options={signatureModes}
                     value={sigMode}
                     onChange={setSigMode}
                     testIdPrefix="m-co-sig-mode"
                   />
                 </div>
                 <TextField
-                  label="Printed name"
+                  label={t('project.coActions.printedName')}
                   value={sigName}
                   onChange={setSigName}
                   testId="m-co-sig-name"
@@ -285,28 +313,28 @@ export function CoActions({
               </>
             ) : (
               <p className="mt-[6px] text-[13px] text-m6m-muted">
-                Your signature from the first send is reused.
+                {t('project.coActions.signatureReused')}
               </p>
             )}
 
             <TextField
-              label="Recipient email (optional)"
+              label={t('project.coActions.recipientEmail')}
               value={recipientEmail}
               onChange={setRecipientEmail}
               testId="m-co-recipient-email"
-              placeholder="Defaults to the project contact"
+              placeholder={t('project.coActions.recipientPlaceholder')}
             />
 
             <PrimaryButton
-              label="Send"
-              busyLabel="Sending…"
-              onClick={send}
+              label={t('project.coActions.send')}
+              busyLabel={t('project.coActions.sending')}
+              onClick={() => void send()}
               disabled={!online || !signatureReady}
               busy={busy}
               testId="m-co-send-confirm"
             />
             <SecondaryButton
-              label="Cancel"
+              label={t('project.coActions.cancel')}
               testId="m-co-send-cancel"
               disabled={busy}
               onClick={() => {
@@ -317,7 +345,11 @@ export function CoActions({
           </div>
         ) : (
           <PrimaryButton
-            label={status === 'sent' ? 'Send again' : 'Send for signature'}
+            label={
+              status === 'sent'
+                ? t('project.coActions.sendAgain')
+                : t('project.coActions.sendForSignature')
+            }
             busyLabel=""
             onClick={() => {
               setMode('send');
@@ -336,25 +368,25 @@ export function CoActions({
       {voidable && mode !== 'send' ? (
         mode === 'void' ? (
           <div className="mt-[12px] rounded-[14px] border border-m6m-danger-border bg-[#fdf1f0] p-[14px]">
-            <p className="text-[15px] font-bold text-m6m-danger">Void this change order?</p>
+            <p className="text-[15px] font-bold text-m6m-danger">{t('project.coActions.voidConfirm')}</p>
             <p className="mt-[4px] text-[13px] text-m6m-navy">
               {status === 'signed'
-                ? 'This change order is signed. Voiding withdraws it — the signed copy stays on file.'
-                : 'Voiding withdraws this change order. You can reissue it as a new draft afterwards.'}
+                ? t('project.coActions.voidSignedWarning')
+                : t('project.coActions.voidWarning')}
             </p>
             {/* [S168] REQUIRED, and required identically on both surfaces —
                 Josh ruled against a signed/unsigned split: "user should give
                 reason for void." The reason is permanent once written. */}
             <TextAreaField
-              label="Reason (required)"
+              label={t('project.coActions.voidReason')}
               value={voidReasonInput}
               onChange={setVoidReasonInput}
               testId="m-co-void-reason"
               rows={2}
             />
             <PrimaryButton
-              label="Void"
-              busyLabel="Voiding…"
+              label={t('project.coActions.void')}
+              busyLabel={t('project.coActions.voiding')}
               onClick={doVoid}
               disabled={!online || !voidReasonInput.trim()}
               busy={busy}
@@ -362,7 +394,7 @@ export function CoActions({
               tone="danger"
             />
             <SecondaryButton
-              label="Cancel"
+              label={t('project.coActions.cancel')}
               testId="m-co-void-cancel"
               disabled={busy}
               onClick={() => {
@@ -373,7 +405,7 @@ export function CoActions({
           </div>
         ) : (
           <SecondaryButton
-            label="Void"
+            label={t('project.coActions.void')}
             testId="m-co-void"
             disabled={!online}
             onClick={() => {
@@ -390,8 +422,8 @@ export function CoActions({
       {reissuable && mode === null ? (
         <div className="mt-[12px]">
           <PrimaryButton
-            label="Reissue as a new draft"
-            busyLabel="Reissuing…"
+            label={t('project.coActions.reissue')}
+            busyLabel={t('project.coActions.reissuing')}
             onClick={doReissue}
             disabled={!online}
             busy={busy}
@@ -406,7 +438,7 @@ export function CoActions({
           data-testid="m-co-void-reason-shown"
           className="mt-[12px] rounded-[12px] border border-m6m-border bg-m6m-card px-[14px] py-[12px] text-[13px] text-m6m-navy"
         >
-          <span className="font-bold">Voided.</span> {voidReason}
+          <span className="font-bold">{t('project.coActions.voided')}</span> {voidReason}
         </p>
       ) : null}
 
@@ -416,17 +448,25 @@ export function CoActions({
       {deletable && mode === null ? (
         <div className="mt-[12px]">
           <SecondaryButton
-            label="Delete permanently"
+            label={t('project.coActions.deletePermanently')}
             testId="m-co-delete"
             disabled={!online || busy}
             onClick={doDelete}
           />
           <p className="mt-[6px] text-[12px] text-m6m-muted">
-            Deleting leaves no record. To keep one, void it instead.
+            {t('project.coActions.deleteNote')}
           </p>
         </div>
       ) : null}
 
+      {notEnglish ? (
+        <NotEnglishWarning
+          fields={notEnglish}
+          doc="changeOrder"
+          busy={busy}
+          onSendAnyway={() => void send(true)}
+        />
+      ) : null}
       {error ? <ErrorNotice message={error} testId="m-co-action-error" /> : null}
     </section>
   );

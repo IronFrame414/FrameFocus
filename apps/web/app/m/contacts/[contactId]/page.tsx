@@ -5,6 +5,8 @@ import { getContact } from '@/lib/services/contacts';
 import { getPrimaryAddress } from '@/lib/services/contact-addresses';
 import { getMyProfile } from '@/lib/services/profiles';
 import { canEdit, requireDetailAccess } from '@/app/m/detail-access';
+import { getMobileT } from '@/lib/i18n/server';
+import type { MsgKey } from '@/lib/i18n/messages';
 import { ContactActions, DeniedNotice, DetailCard, DetailField } from '../../mobile-ui';
 
 // M6M §4.11.16 — M-36 · Contact detail. Everyone except subcontractors.
@@ -62,13 +64,15 @@ export default async function ContactDetailPage({
     getMyProfile(),
   ]);
   if (!contact) notFound();
+  const t = await getMobileT();
+  const editable = canEdit('contact', profile?.role);
 
   // A-49b's fallback: first/last/company are all nullable and a company-only
   // contact is a real state, not a defensive check.
   const name =
     [contact.first_name, contact.last_name].filter(Boolean).join(' ').trim() ||
     contact.company_name?.trim() ||
-    'Unnamed contact';
+    t('directory.contacts.unnamed');
 
   // `zip`, not `postal_code` — the column is named zip on contact_addresses.
   const addressText = address
@@ -89,8 +93,9 @@ export default async function ContactDetailPage({
           <h1 className="text-[17px] font-bold leading-tight text-m6m-navy">{name}</h1>
           {contact.contact_type ? (
             <p className="mt-[2px] font-mono text-[11px] font-semibold text-m6m-muted">
-              {CONTACT_TYPE_LABELS[contact.contact_type as keyof typeof CONTACT_TYPE_LABELS] ??
-                contact.contact_type}
+              {contact.contact_type in CONTACT_TYPE_LABELS
+                ? t(`directory.contactType.${contact.contact_type}` as MsgKey)
+                : contact.contact_type}
             </p>
           ) : null}
         </div>
@@ -101,23 +106,24 @@ export default async function ContactDetailPage({
           mobile={contact.mobile}
           email={contact.email}
           name={name}
+          t={t}
         />
       </header>
 
-      <DeniedNotice kind={searchParams.denied} />
+      <DeniedNotice kind={searchParams.denied} t={t} />
 
       {/* D-54 step 1 — hide the affordance; step 2 refuses the ROUTE in the
           edit page. Both, because a hidden link is not a permission. Note this
           is a NARROWER test than the read guard above: `requireDetailAccess`
           excludes subcontractors only, `canEdit` also excludes foreman and
           crew. */}
-      {canEdit('contact', profile?.role) ? (
+      {editable ? (
         <Link
           href={`/m/contacts/${contact.id}/edit`}
           data-testid="m-contact-edit"
           className="mb-[14px] flex min-h-[52px] w-full items-center justify-center rounded-[14px] border border-m6m-blue text-[15px] font-bold text-m6m-blue"
         >
-          Edit
+          {t('directory.edit')}
         </Link>
       ) : null}
 
@@ -126,18 +132,18 @@ export default async function ContactDetailPage({
             standing in as the display name — otherwise the header and the first
             row say the same thing. */}
         <DetailField
-          label="Company"
+          label={t('directory.field.company')}
           value={
             contact.company_name && name !== contact.company_name.trim()
               ? contact.company_name
               : null
           }
         />
-        <DetailField label="Phone" value={contact.phone} mono />
-        <DetailField label="Mobile" value={contact.mobile} mono />
-        <DetailField label="Email" value={contact.email} />
+        <DetailField label={t('directory.field.phone')} value={contact.phone} mono />
+        <DetailField label={t('directory.field.mobile')} value={contact.mobile} mono />
+        <DetailField label={t('directory.field.email')} value={contact.email} />
         <DetailField
-          label="Address"
+          label={t('directory.field.address')}
           value={addressText ? <span className="whitespace-pre-line">{addressText}</span> : null}
         />
       </DetailCard>

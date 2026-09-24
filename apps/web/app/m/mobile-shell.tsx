@@ -35,6 +35,8 @@ import {
 } from './capture-store';
 import { getOpenClockProjectId } from '@/lib/services/time-tracking-client';
 import { MobileChatOverlay } from '@/components/chat/mobile-chat-overlay';
+import { useT } from '@/components/i18n/language-provider';
+import type { MsgKey, T } from '@/lib/i18n/messages';
 
 // M6M §3 — THE MOBILE SHELL.
 //
@@ -69,9 +71,11 @@ import { MobileChatOverlay } from '@/components/chat/mobile-chat-overlay';
 // costs hamburger → Logs → button.
 // ---------------------------------------------------------------------------
 const TABS = [
-  { href: '/m/projects', label: 'Projects', Icon: Folder },
-  { href: '/m/timeclock', label: 'Timeclock', Icon: Timer },
-  { href: '/m/field', label: 'Field', Icon: HardHat },
+  // S110 H — `slug` is the STABLE testid source (m-tab-${slug}); `msg` is the
+  // displayed, translated text.
+  { href: '/m/projects', slug: 'projects', msg: 'shell.tab.projects', Icon: Folder },
+  { href: '/m/timeclock', slug: 'timeclock', msg: 'shell.tab.timeclock', Icon: Timer },
+  { href: '/m/field', slug: 'field', msg: 'shell.tab.field', Icon: HardHat },
 ] as const;
 
 // ---------------------------------------------------------------------------
@@ -109,13 +113,21 @@ const TABS = [
 // to be un-pointed later, and A-12c's principle is that a tile goes where it says.
 // ---------------------------------------------------------------------------
 const SHEET_TILES = [
-  { href: '/m/logs', label: 'Logs', Icon: ClipboardList },
-  { href: '/m/schedule', label: 'Schedule', Icon: CalendarDays },
-  { href: '/m/expenses', label: 'Expenses', Icon: Receipt },
-  { href: '/m/subs', label: 'Subs & Vendors', Icon: Truck },
-  { href: '/m/team', label: 'Team', Icon: Users, badgeKey: 'team' as const },
-  { href: '/m/contacts', label: 'Contacts', Icon: Contact },
-  { href: '/m/settings', label: 'Settings', Icon: Settings },
+  // S110 H — `name` is the STABLE English testid source (m-sheet-tile-${name});
+  // `msg` is the displayed, translated text.
+  { href: '/m/logs', name: 'Logs', msg: 'shell.tile.logs', Icon: ClipboardList },
+  { href: '/m/schedule', name: 'Schedule', msg: 'shell.tile.schedule', Icon: CalendarDays },
+  { href: '/m/expenses', name: 'Expenses', msg: 'shell.tile.expenses', Icon: Receipt },
+  { href: '/m/subs', name: 'Subs & Vendors', msg: 'shell.tile.subs', Icon: Truck },
+  {
+    href: '/m/team',
+    name: 'Team',
+    msg: 'shell.tile.team',
+    Icon: Users,
+    badgeKey: 'team' as const,
+  },
+  { href: '/m/contacts', name: 'Contacts', msg: 'shell.tile.contacts', Icon: Contact },
+  { href: '/m/settings', name: 'Settings', msg: 'shell.tile.settings', Icon: Settings },
 ] as const;
 
 // `initials()` lived here and is GONE with the avatar (D-36). The desktop shell
@@ -255,14 +267,14 @@ export function isDarkCanvasScreen(pathname: string): boolean {
 }
 
 /** Fallback titles for screens that have not declared their own (see mobile-header.tsx). */
-function defaultTitle(pathname: string): string {
-  if (pathname.startsWith('/m/timeclock')) return 'Timeclock';
-  if (pathname.startsWith('/m/projects')) return 'Projects';
-  if (pathname.startsWith('/m/logs')) return 'Logs';
-  if (pathname.startsWith('/m/field')) return 'Field';
-  if (pathname.startsWith('/m/offline')) return 'Offline';
-  if (pathname.startsWith('/m/p/')) return 'Project';
-  return 'Field app';
+function defaultTitle(pathname: string, t: T): string {
+  if (pathname.startsWith('/m/timeclock')) return t('shell.tab.timeclock');
+  if (pathname.startsWith('/m/projects')) return t('shell.tab.projects');
+  if (pathname.startsWith('/m/logs')) return t('shell.tile.logs');
+  if (pathname.startsWith('/m/field')) return t('shell.tab.field');
+  if (pathname.startsWith('/m/offline')) return t('shell.title.offline');
+  if (pathname.startsWith('/m/p/')) return t('shell.title.project');
+  return t('shell.title.fieldApp');
 }
 
 export type MobileShellProps = {
@@ -321,6 +333,7 @@ function MobileShellInner({
   const [captureNotice, setCaptureNotice] = useState<string | null>(null);
   const declared = useMobileHeader();
   const capture = useCaptureStore();
+  const t = useT();
 
   /**
    * §6 — everything AFTER the shutter. Runs only once a file exists, which is
@@ -372,7 +385,7 @@ function MobileShellInner({
         // ⚠️ At capacity the store REFUSES rather than evicting. Surface it and
         // stop, so the user is not silently down a photo.
         if (!held.ok) {
-          setCaptureNotice(held.reason ?? 'That photo could not be held.');
+          setCaptureNotice(held.reason ?? t('shell.photoNotHeld'));
           break;
         }
       }
@@ -381,7 +394,7 @@ function MobileShellInner({
       // "take another" into a jarring reload of the screen you are looking at.
       if (pathname !== '/m/capture') router.push('/m/capture');
     },
-    [capture, pathname, router]
+    [capture, pathname, router, t]
   );
 
   /**
@@ -402,7 +415,7 @@ function MobileShellInner({
 
   const insideProject = showsBackChevron(pathname);
   const activeHref = activeTabHref(pathname);
-  const title = declared?.title ?? defaultTitle(pathname);
+  const title = declared?.title ?? defaultTitle(pathname, t);
   const sub = declared !== null ? declared.sub : companyName;
   const darkCanvas = isDarkCanvasScreen(pathname);
 
@@ -458,7 +471,7 @@ function MobileShellInner({
             <button
               type="button"
               data-testid="m-back"
-              aria-label="Back"
+              aria-label={t('shell.back')}
               onClick={() => router.back()}
               className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[11px] bg-white/[.13] text-white"
             >
@@ -468,7 +481,7 @@ function MobileShellInner({
             <button
               type="button"
               data-testid="m-hamburger"
-              aria-label="Menu"
+              aria-label={t('shell.menu')}
               aria-expanded={sheetOpen}
               aria-controls="m-nav-sheet"
               onClick={() => setSheetOpen((v) => !v)}
@@ -577,7 +590,7 @@ function MobileShellInner({
       )}
       <nav
         data-testid="m-tabbar"
-        aria-label="Primary"
+        aria-label={t('shell.primaryNav')}
         className="flex shrink-0 items-start justify-between border-t border-m6m-border bg-m6m-card px-[14px] pt-[10px] pb-[14px]"
         style={{ paddingBottom: 'calc(14px + env(safe-area-inset-bottom))' }}
       >
@@ -603,7 +616,7 @@ function MobileShellInner({
         <div className="flex shrink-0 items-start gap-[6px]">
           <label
             data-testid="m-camera"
-            aria-label="Camera"
+            aria-label={t('shell.camera')}
             className="-mt-[26px] flex h-[66px] w-[66px] shrink-0 cursor-pointer items-center justify-center rounded-full border-4 border-m6m-card bg-m6m-amber transition-transform duration-150 ease-out active:scale-95"
             style={{ boxShadow: '0 8px 20px rgba(245,158,11,.4)' }}
           >
@@ -620,7 +633,7 @@ function MobileShellInner({
 
           <label
             data-testid="m-camera-library"
-            aria-label="Photo library"
+            aria-label={t('shell.photoLibrary')}
             className="mt-[2px] flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-[11px] border border-m6m-border bg-m6m-card"
           >
             <input
@@ -676,13 +689,14 @@ function projectFromPath(pathname: string): string | null {
  * stay measurably identical — ND-14's arithmetic depends on it.
  */
 function ChatTabItem({ active, onClick }: { active: boolean; onClick: () => void }) {
+  const t = useT();
   return (
     <button
       type="button"
       data-testid="m-tab-chat"
       data-active={active}
       aria-pressed={active}
-      aria-label="Chat"
+      aria-label={t('shell.chat')}
       onClick={onClick}
       className="flex h-14 w-14 shrink-0 flex-col items-center justify-center gap-[3px] border-none bg-transparent p-0"
     >
@@ -699,7 +713,7 @@ function ChatTabItem({ active, onClick }: { active: boolean; onClick: () => void
             : 'text-[11px] font-semibold text-m6m-muted'
         }
       >
-        Chat
+        {t('shell.chat')}
       </span>
     </button>
   );
@@ -711,19 +725,22 @@ function ChatTabItem({ active, onClick }: { active: boolean; onClick: () => void
 // ---------------------------------------------------------------------------
 function TabItem({
   href,
-  label,
+  slug,
+  msg,
   Icon,
   active,
 }: {
   href: string;
-  label: string;
+  slug: string;
+  msg: MsgKey;
   Icon: LucideIcon;
   active: boolean;
 }) {
+  const t = useT();
   return (
     <Link
       href={href}
-      data-testid={`m-tab-${label.toLowerCase()}`}
+      data-testid={`m-tab-${slug}`}
       aria-current={active ? 'page' : undefined}
       className={`flex h-[56px] min-w-[56px] flex-col items-center justify-center gap-[3px] rounded-lg transition-transform duration-150 ease-out active:scale-95 ${
         active ? 'text-m6m-blue' : 'text-m6m-muted'
@@ -731,7 +748,7 @@ function TabItem({
     >
       <Icon size={23} strokeWidth={active ? 2.4 : 2} aria-hidden />
       <span className={`text-[11px] leading-none ${active ? 'font-bold' : 'font-semibold'}`}>
-        {label}
+        {t(msg)}
       </span>
     </Link>
   );
@@ -752,6 +769,7 @@ function NavSheet({
   onClose: () => void;
 }) {
   const router = useRouter();
+  const t = useT();
   const [signingOut, setSigningOut] = useState(false);
 
   const handleSignOut = useCallback(async () => {
@@ -769,7 +787,7 @@ function NavSheet({
       <button
         type="button"
         data-testid="m-sheet-scrim"
-        aria-label="Close menu"
+        aria-label={t('shell.closeMenu')}
         onClick={onClose}
         className="absolute inset-0 z-30 bg-[rgba(20,33,61,.5)]"
       />
@@ -782,16 +800,16 @@ function NavSheet({
         // design (§3.3, A-2), and aria-modal="true" would tell a screen reader
         // the opposite — that everything outside is inert.
         aria-modal="false"
-        aria-label="Go to"
+        aria-label={t('shell.goToLabel')}
         className="absolute inset-x-0 top-0 z-40 max-h-full overflow-y-auto rounded-b-[18px] bg-m6m-surface p-[18px] shadow-lg motion-safe:animate-[m6mSheetDrop_140ms_ease-out]"
       >
         <p className="mb-3 font-mono text-[11px] font-medium uppercase tracking-wide text-m6m-muted">
-          GO TO
+          {t('shell.goTo')}
         </p>
 
         {/* 2-column grid of 76px tiles. */}
         <div data-testid="m-sheet-grid" className="grid grid-cols-2 gap-[10px]">
-          {SHEET_TILES.map(({ href, label, Icon, ...rest }) => {
+          {SHEET_TILES.map(({ href, name, msg, Icon, ...rest }) => {
             // §3.3 — "Current location = 1.5px #2f49d1 border, label in blue."
             //
             // This CAN match now. The tiles point at /m routes (§4.13), so
@@ -813,7 +831,7 @@ function NavSheet({
               <Link
                 key={href}
                 href={href}
-                data-testid={`m-sheet-tile-${label}`}
+                data-testid={`m-sheet-tile-${name}`}
                 data-current={current ? 'true' : 'false'}
                 aria-current={current ? 'page' : undefined}
                 className={`relative flex h-[76px] flex-col justify-between rounded-[14px] bg-m6m-card p-[12px] transition-transform duration-150 ease-out active:scale-[.98] ${
@@ -828,7 +846,7 @@ function NavSheet({
                     current ? 'text-m6m-blue' : 'text-m6m-navy'
                   }`}
                 >
-                  {label}
+                  {t(msg)}
                 </span>
                 {badge !== null ? (
                   // §2 — every number is mono, badges included.
@@ -855,7 +873,7 @@ function NavSheet({
             onClick={() => setSurfaceAndGo('desktop', '/dashboard')}
             className="mt-[10px] flex h-[58px] w-full items-center justify-center rounded-[14px] border border-m6m-border bg-m6m-card text-[15px] font-bold text-m6m-navy"
           >
-            Desktop site
+            {t('shell.desktopSite')}
           </button>
         ) : null}
 
@@ -875,7 +893,7 @@ function NavSheet({
               : 'border border-m6m-border text-m6m-navy'
           }`}
         >
-          Your account
+          {t('shell.yourAccount')}
         </Link>
 
         {/* §3.3 — full-width Sign out row, 58px, #c0362c text, #f0d4d1 border. */}
@@ -886,7 +904,7 @@ function NavSheet({
           disabled={signingOut}
           className="mt-[10px] flex h-[58px] w-full items-center justify-center rounded-[14px] border border-m6m-danger-border bg-m6m-card text-[15px] font-bold text-m6m-danger disabled:opacity-60"
         >
-          {signingOut ? 'Signing out…' : 'Sign out'}
+          {signingOut ? t('shell.signingOut') : t('shell.signOut')}
         </button>
       </div>
     </>
@@ -912,6 +930,7 @@ function OfflineStrip() {
   const [offline, setOffline] = useState(false);
   const [lastOnline, setLastOnline] = useState<Date | null>(null);
   const offlineSync = useOfflineSync();
+  const t = useT();
   const queuedCount = offlineSync?.queuedCount ?? 0;
 
   useEffect(() => {
@@ -943,13 +962,13 @@ function OfflineStrip() {
         className="h-[8px] w-[8px] shrink-0 rounded-full bg-m6m-amber"
       />
       <span className="flex-1 font-mono text-[11px] font-medium text-m6m-navy">
-        Offline · last synced {lastOnline ? hhmm(lastOnline) : '—'}
+        {t('shell.offlineLastSynced', { time: lastOnline ? hhmm(lastOnline) : '—' })}
       </span>
       <span
         data-testid="m-queued-pill"
         className="shrink-0 rounded-full bg-m6m-amber/20 px-[8px] py-[2px] font-mono text-[11px] font-semibold text-m6m-navy"
       >
-        {queuedCount} queued
+        {t('shell.queuedCount', { n: queuedCount })}
       </span>
     </Link>
   );

@@ -14,6 +14,7 @@ import { ModalSheet } from '@/components/sheet/modal-sheet';
 import { PdfPages } from '@/components/files/pdf-pages';
 import { canPrint, fileViewKind, isIOS, withDownload, type FileViewKind } from '@/lib/files/file-view';
 import { SIGNED_URL_TTL_SECONDS } from '@/lib/services/signed-url-ttl';
+import { useT } from '@/components/i18n/language-provider';
 
 /**
  * S109 #161 — A FILE OPENS IN A SHEET OVER THE CURRENT SCREEN.
@@ -46,7 +47,10 @@ import { SIGNED_URL_TTL_SECONDS } from '@/lib/services/signed-url-ttl';
 
 /** What a resolver may return: a URL, or a URL plus the name/type it learned
  *  while signing (callers that hold only a file id), or null when it cannot sign. */
-export type ResolvedFile = string | { url: string; fileName?: string; mimeType?: string | null } | null;
+export type ResolvedFile =
+  | string
+  | { url: string; fileName?: string; mimeType?: string | null }
+  | null;
 
 export interface OpenFileRequest {
   /** Shown while resolving; replaced by the resolver's `fileName` if it returns one. */
@@ -110,35 +114,39 @@ export function FileSheet({ request, onClose }: { request: OpenFileRequest; onCl
   const [actionUrl, setActionUrl] = useState<string | null>(null);
   const [previewBroken, setPreviewBroken] = useState(false);
   const [printing, setPrinting] = useState(false);
+  const t = useT();
   const retried = useRef(false);
   const resolveRef = useRef(request.resolveUrl);
   resolveRef.current = request.resolveUrl;
 
-  const resolve = useCallback(async (reason: 'open' | 'retry' | 'reload') => {
-    if (reason !== 'retry') retried.current = false;
-    setView({ phase: 'resolving' });
-    setPreviewBroken(false);
-    let resolved: ResolvedFile = null;
-    try {
-      resolved = await resolveRef.current();
-    } catch {
-      resolved = null;
-    }
-    const url = urlOf(resolved);
-    if (resolved && typeof resolved === 'object') {
-      const r = resolved;
-      setMeta((m) => ({
-        fileName: r.fileName ?? m.fileName,
-        mimeType: r.mimeType !== undefined ? r.mimeType : m.mimeType,
-      }));
-    }
-    if (!url) {
-      setView({ phase: 'failed', message: 'This file could not be opened. You may not have access to it, or it is no longer available.' });
-      return;
-    }
-    setView({ phase: 'ready', url });
-    setActionUrl(url);
-  }, []);
+  const resolve = useCallback(
+    async (reason: 'open' | 'retry' | 'reload') => {
+      if (reason !== 'retry') retried.current = false;
+      setView({ phase: 'resolving' });
+      setPreviewBroken(false);
+      let resolved: ResolvedFile = null;
+      try {
+        resolved = await resolveRef.current();
+      } catch {
+        resolved = null;
+      }
+      const url = urlOf(resolved);
+      if (resolved && typeof resolved === 'object') {
+        const r = resolved;
+        setMeta((m) => ({
+          fileName: r.fileName ?? m.fileName,
+          mimeType: r.mimeType !== undefined ? r.mimeType : m.mimeType,
+        }));
+      }
+      if (!url) {
+        setView({ phase: 'failed', message: t('shell.file.couldNotOpen') });
+        return;
+      }
+      setView({ phase: 'ready', url });
+      setActionUrl(url);
+    },
+    [t]
+  );
 
   useEffect(() => {
     void resolve('open');
@@ -146,15 +154,16 @@ export function FileSheet({ request, onClose }: { request: OpenFileRequest; onCl
 
   // Keep the actions' URL fresh on a sheet left open; the VIEW keeps its bytes.
   useEffect(() => {
-    const t = setInterval(() => {
-      void resolveRef.current()
+    const timer = setInterval(() => {
+      void resolveRef
+        .current()
         .then((r) => {
           const u = urlOf(r);
           if (u) setActionUrl(u);
         })
         .catch(() => {});
     }, ACTION_REFRESH_MS);
-    return () => clearInterval(t);
+    return () => clearInterval(timer);
   }, []);
 
   /** A view that would not load: re-sign once, silently; then say so. */
@@ -171,9 +180,9 @@ export function FileSheet({ request, onClose }: { request: OpenFileRequest; onCl
         setPreviewBroken(true);
         return;
       }
-      setView({ phase: 'failed', message: `This file could not be displayed. ${message}`.trim() });
+      setView({ phase: 'failed', message: t('shell.file.couldNotDisplay', { message }).trim() });
     },
-    [kind, resolve]
+    [kind, resolve, t]
   );
 
   async function print() {
@@ -227,16 +236,26 @@ export function FileSheet({ request, onClose }: { request: OpenFileRequest; onCl
         className={actionClass}
         data-testid="file-sheet-new-tab"
       >
-        <span className="hidden sm:inline">Open in new tab</span>
-        <span className="sm:hidden">New tab</span>
+        <span className="hidden sm:inline">{t('shell.file.openInNewTab')}</span>
+        <span className="sm:hidden">{t('shell.file.newTab')}</span>
       </a>
       {canPrint(kind) && !previewBroken && (
-        <button type="button" onClick={() => void print()} disabled={printing} className={actionClass} data-testid="file-sheet-print">
-          {printing ? 'Preparing…' : 'Print'}
+        <button
+          type="button"
+          onClick={() => void print()}
+          disabled={printing}
+          className={actionClass}
+          data-testid="file-sheet-print"
+        >
+          {printing ? t('shell.file.preparing') : t('shell.file.print')}
         </button>
       )}
-      <a href={withDownload(actionUrl, meta.fileName)} className={actionClass} data-testid="file-sheet-download">
-        Download
+      <a
+        href={withDownload(actionUrl, meta.fileName)}
+        className={actionClass}
+        data-testid="file-sheet-download"
+      >
+        {t('shell.file.download')}
       </a>
     </>
   ) : null;
@@ -245,7 +264,7 @@ export function FileSheet({ request, onClose }: { request: OpenFileRequest; onCl
     <ModalSheet open onClose={onClose} title={meta.fileName} actions={actions} testId="file-sheet">
       {view.phase === 'resolving' && (
         <p className="p-6 text-center text-sm text-gray-500" data-testid="file-sheet-loading">
-          Loading…
+          {t('shell.loading')}
         </p>
       )}
       {view.phase === 'failed' && (
@@ -256,7 +275,7 @@ export function FileSheet({ request, onClose }: { request: OpenFileRequest; onCl
             onClick={() => void resolve('reload')}
             className="rounded-md bg-brand-500 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-600"
           >
-            Reload
+            {t('shell.file.reload')}
           </button>
         </div>
       )}
@@ -273,16 +292,25 @@ export function FileSheet({ request, onClose }: { request: OpenFileRequest; onCl
               alt={meta.fileName}
               data-testid="file-sheet-image"
               className="max-h-full max-w-full object-contain"
-              onError={() => onViewFailed('The image would not load.')}
+              onError={() => onViewFailed(t('shell.file.imageWouldNotLoad'))}
             />
           </div>
         ) : kind === 'video' ? (
           <div className="flex min-h-full items-center justify-center p-3">
-            <video src={view.url} controls className="max-h-full max-w-full" onError={() => onViewFailed('The video would not load.')} />
+            <video
+              src={view.url}
+              controls
+              className="max-h-full max-w-full"
+              onError={() => onViewFailed(t('shell.file.videoWouldNotLoad'))}
+            />
           </div>
         ) : (
           <div className="flex min-h-full items-center justify-center p-6">
-            <audio src={view.url} controls onError={() => onViewFailed('The audio would not load.')} />
+            <audio
+              src={view.url}
+              controls
+              onError={() => onViewFailed(t('shell.file.audioWouldNotLoad'))}
+            />
           </div>
         ))}
     </ModalSheet>
@@ -290,15 +318,14 @@ export function FileSheet({ request, onClose }: { request: OpenFileRequest; onCl
 }
 
 function NoPreview({ fileName }: { fileName: string }) {
+  const t = useT();
   return (
     <div className="flex min-h-full flex-col items-center justify-center gap-2 p-8 text-center" data-testid="file-sheet-no-preview">
       <div className="text-4xl" aria-hidden>
         📄
       </div>
       <p className="text-sm font-semibold text-gray-900">{fileName}</p>
-      <p className="max-w-sm text-sm text-gray-600">
-        This file can’t be previewed here. Open it in a new tab or download it.
-      </p>
+      <p className="max-w-sm text-sm text-gray-600">{t('shell.file.noPreview')}</p>
     </div>
   );
 }

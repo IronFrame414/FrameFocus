@@ -2,6 +2,7 @@ import { getNotifications, type NotificationFilter } from '@/lib/services/notifi
 import { NotificationList } from '@/components/notifications/notification-list';
 import { PushEnrolment } from '@/components/notifications/push-enrolment';
 import { SetMobileHeader } from '../mobile-header';
+import { getMobileT } from '@/lib/i18n/server';
 
 // Mobile notifications surface — spec §10.3, ND-13.
 //
@@ -40,10 +41,11 @@ export default async function MobileNotificationsPage({
 }) {
   const filter = parseFilter(searchParams.filter);
   const items = await getNotifications(filter);
+  const t = await getMobileT();
 
   return (
     <>
-      <SetMobileHeader title="Notifications" />
+      <SetMobileHeader title={t('shell.notifications')} />
       <div style={{ padding: '18px' }}>
         <NotificationList initial={items} surface="mobile" filter={filter} compact />
 

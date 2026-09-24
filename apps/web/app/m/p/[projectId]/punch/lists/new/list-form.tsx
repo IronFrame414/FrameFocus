@@ -11,6 +11,7 @@ import {
   TextField,
   useOnline,
 } from '../../../../../write-ui';
+import { useT } from '@/components/i18n/language-provider';
 
 // M6M — M-41 · NEW PUNCH LIST. D-63 [S121, Josh].
 //
@@ -61,6 +62,7 @@ export function PunchListForm({
   existingNames: string[];
 }) {
   const router = useRouter();
+  const t = useT();
   const online = useOnline();
 
   const [name, setName] = useState('');
@@ -85,7 +87,7 @@ export function PunchListForm({
     const result = await createPunchList(projectId, trimmed);
     if (!result.success) {
       setBusy(false);
-      setError(result.error ?? 'The list could not be created.');
+      setError(result.error ?? t('photos.punchList.createFailed'));
       return;
     }
 
@@ -99,23 +101,23 @@ export function PunchListForm({
 
   return (
     <div className="px-[18px] pb-[18px] pt-[14px]">
-      <SetMobileHeader title="New punch list" sub={projectName} />
+      <SetMobileHeader title={t('photos.punchList.newTitle')} sub={projectName} />
 
-      <h1 className="text-[17px] font-bold leading-tight text-m6m-navy">New punch list</h1>
+      <h1 className="text-[17px] font-bold leading-tight text-m6m-navy">{t('photos.punchList.newTitle')}</h1>
 
       {!online ? (
         <div className="mt-[14px]">
-          <OfflineNotice what="Creating a punch list" testId="m-punch-list-offline" />
+          <OfflineNotice what={t('photos.punchList.offlineWhat')} testId="m-punch-list-offline" />
         </div>
       ) : null}
 
       <TextField
-        label="List name"
+        label={t('photos.punchList.nameLabel')}
         value={name}
         onChange={setName}
         testId="m-punch-list-name"
         required
-        placeholder="e.g. Second floor"
+        placeholder={t('photos.punchList.namePlaceholder')}
       />
 
       {duplicate ? (
@@ -123,23 +125,22 @@ export function PunchListForm({
           data-testid="m-punch-list-duplicate"
           className="mt-[8px] rounded-[10px] border border-m6m-strip-border bg-m6m-strip-bg px-[12px] py-[8px] text-[13px] text-m6m-navy"
         >
-          This project already has a list with that name. That is allowed — check you did not
-          mean the existing one.
+          {t('photos.punchList.duplicate')}
         </p>
       ) : null}
 
       {error ? <ErrorNotice message={error} testId="m-punch-list-error" /> : null}
 
       <PrimaryButton
-        label="Create list"
-        busyLabel="Creating…"
+        label={t('photos.punchList.create')}
+        busyLabel={t('photos.punchList.creating')}
         onClick={submit}
         disabled={!online}
         busy={busy}
         testId="m-punch-list-create"
       />
       {!ready ? (
-        <p className="mt-[8px] text-center text-[12px] text-m6m-muted">A name is required.</p>
+        <p className="mt-[8px] text-center text-[12px] text-m6m-muted">{t('photos.punchList.nameRequired')}</p>
       ) : null}
     </div>
   );

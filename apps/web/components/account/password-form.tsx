@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { changeMyPassword } from '@/lib/auth/change-my-password';
 import { PASSWORD_MIN_LENGTH, passwordTooShortMessage } from '@/lib/auth/password-policy';
+import { useT } from '@/components/i18n/language-provider';
 
 // S109 #162 — change your own password, no email. Shared by /dashboard/account
 // and /m/account (parity: one form, one server action, both surfaces), beside
@@ -18,6 +19,7 @@ export function PasswordForm() {
   const [confirm, setConfirm] = useState('');
   const [status, setStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [error, setError] = useState('');
+  const t = useT();
 
   function edit(setter: (v: string) => void) {
     return (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -35,7 +37,7 @@ export function PasswordForm() {
     }
     if (next !== confirm) {
       setStatus('error');
-      setError('The new passwords do not match.');
+      setError(t('shell.account.passwordsDontMatch'));
       return;
     }
     setStatus('saving');
@@ -60,7 +62,7 @@ export function PasswordForm() {
     <form onSubmit={handleSubmit} className="space-y-4" data-testid="password-form">
       <div>
         <label htmlFor="currentPassword" className="block text-sm font-medium text-gray-700 mb-1">
-          Current password
+          {t('shell.account.currentPassword')}
         </label>
         <input
           id="currentPassword"
@@ -74,7 +76,7 @@ export function PasswordForm() {
       </div>
       <div>
         <label htmlFor="newPassword" className="block text-sm font-medium text-gray-700 mb-1">
-          New password
+          {t('shell.account.newPassword')}
         </label>
         <input
           id="newPassword"
@@ -83,13 +85,13 @@ export function PasswordForm() {
           required
           value={next}
           onChange={edit(setNext)}
-          placeholder={`At least ${PASSWORD_MIN_LENGTH} characters`}
+          placeholder={t('shell.account.atLeastChars', { n: PASSWORD_MIN_LENGTH })}
           className={inputClass}
         />
       </div>
       <div>
         <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700 mb-1">
-          Confirm new password
+          {t('shell.account.confirmNewPassword')}
         </label>
         <input
           id="confirmPassword"
@@ -107,7 +109,7 @@ export function PasswordForm() {
       )}
       {status === 'saved' && (
         <div className="rounded-lg bg-green-50 p-3 text-sm text-green-700">
-          Your password was changed.
+          {t('shell.account.passwordChanged')}
         </div>
       )}
 
@@ -116,7 +118,7 @@ export function PasswordForm() {
         disabled={status === 'saving' || !current || !next || !confirm}
         className="rounded-lg bg-brand-500 px-5 py-2.5 text-sm font-semibold text-white hover:bg-brand-600 disabled:cursor-not-allowed disabled:opacity-50"
       >
-        {status === 'saving' ? 'Changing…' : 'Change password'}
+        {status === 'saving' ? t('shell.account.changing') : t('shell.account.changePassword')}
       </button>
     </form>
   );

@@ -3,6 +3,8 @@ import { getPhases, getTasks } from '@/lib/services/tasks';
 import { formatSiteAddress, getProjectSiteAddress } from '@/lib/services/contact-addresses';
 import { rollupPhases } from '@/lib/services/tasks-shared';
 import { SectionHeader } from '../section-header';
+import { getMobileT } from '@/lib/i18n/server';
+import type { MsgKey } from '@/lib/i18n/messages';
 import { EmptyState, SectionLabel } from '../../../mobile-ui';
 
 // M6M §4.11.1 — M-11 · Overview.
@@ -23,6 +25,14 @@ import { EmptyState, SectionLabel } from '../../../mobile-ui';
 // lifecycle transition on a phone all six roles reach (D-11) is a permission
 // surface this spec has not designed. Read-only.
 
+// S110 H — project_type code → message key; unknown codes fall back to the
+// English label table, then the raw code.
+const PROJECT_TYPE_KEY: Record<string, MsgKey> = {
+  fixed_price: 'project.type.fixed_price',
+  time_and_materials: 'project.type.time_and_materials',
+  cost_plus: 'project.type.cost_plus',
+};
+
 export default async function ProjectOverviewPage({
   params,
 }: {
@@ -32,18 +42,19 @@ export default async function ProjectOverviewPage({
   // it. Who may see it is `contact_addresses_select_scoped`'s decision, not this
   // page's: staff always, an ASSIGNED subcontractor for this project only, a
   // client never. A caller with no claim gets null and the block is not drawn.
-  const [project, phases, tasks, siteAddress] = await Promise.all([
+  const [project, phases, tasks, siteAddress, t] = await Promise.all([
     getProject(params.projectId),
     getPhases(params.projectId),
     getTasks(params.projectId),
     getProjectSiteAddress(params.projectId),
+    getMobileT(),
   ]);
 
   if (!project) {
     return (
       <div className="px-[18px] py-[18px]">
-        <SectionHeader projectId={params.projectId} title="Overview" />
-        <EmptyState>Project not found.</EmptyState>
+        <SectionHeader projectId={params.projectId} title={t('project.tile.overview')} />
+        <EmptyState>{t('project.overview.notFound')}</EmptyState>
       </div>
     );
   }
@@ -58,17 +69,18 @@ export default async function ProjectOverviewPage({
     return rollups.findIndex((r) => r.status !== 'complete');
   })();
 
-  const dates: Array<[string, string | null]> = [
-    ['Start', project.start_date],
-    ['Target end', project.target_end_date],
-    ['Actual end', project.actual_end_date],
+  // S110 H — [message key, value]. The key doubles as the stable React key.
+  const dates: Array<[MsgKey, string | null]> = [
+    ['project.overview.start', project.start_date],
+    ['project.overview.targetEnd', project.target_end_date],
+    ['project.overview.actualEnd', project.actual_end_date],
   ];
 
   return (
     <div className="px-[18px] pb-[18px]">
-      <SectionHeader projectId={params.projectId} title="Overview" />
+      <SectionHeader projectId={params.projectId} title={t('project.tile.overview')} />
 
-      <SectionLabel>Dates</SectionLabel>
+      <SectionLabel>{t('project.overview.dates')}</SectionLabel>
       <ul className="rounded-[15px] border border-m6m-border bg-m6m-card px-[12px]">
         {dates.map(([label, value]) => (
           <li
@@ -76,7 +88,7 @@ export default async function ProjectOverviewPage({
             data-testid="m-date-row"
             className="flex min-h-[44px] items-center justify-between gap-[10px] border-b border-m6m-border py-[10px] last:border-b-0"
           >
-            <span className="text-[15px] text-m6m-navy">{label}</span>
+            <span className="text-[15px] text-m6m-navy">{t(label)}</span>
             {/* §2 — every date is mono. Em-dash where null, never a blank slot. */}
             <span className="font-mono text-[13px] text-m6m-muted">{value ?? '—'}</span>
           </li>
@@ -88,7 +100,7 @@ export default async function ProjectOverviewPage({
           heading over an em-dash, which would advertise that an address exists. */}
       {siteAddress ? (
         <>
-          <SectionLabel>Site address</SectionLabel>
+          <SectionLabel>{t('project.overview.siteAddress')}</SectionLabel>
           <div
             data-testid="m-site-address"
             className="rounded-[15px] border border-m6m-border bg-m6m-card p-[14px]"
@@ -100,9 +112,9 @@ export default async function ProjectOverviewPage({
         </>
       ) : null}
 
-      <SectionLabel>Schedule</SectionLabel>
+      <SectionLabel>{t('project.overview.schedule')}</SectionLabel>
       {rollups.length === 0 ? (
-        <EmptyState>No phases yet.</EmptyState>
+        <EmptyState>{t('project.overview.noPhases')}</EmptyState>
       ) : (
         <ol
           data-testid="m-stepper"
@@ -133,10 +145,12 @@ export default async function ProjectOverviewPage({
         </ol>
       )}
 
-      <SectionLabel>Details</SectionLabel>
+      <SectionLabel>{t('project.overview.details')}</SectionLabel>
       <div className="rounded-[15px] border border-m6m-border bg-m6m-card p-[14px]">
         <p className="text-[15px] text-m6m-navy">
-          {PROJECT_TYPE_LABELS[project.project_type] ?? project.project_type}
+          {PROJECT_TYPE_KEY[project.project_type]
+            ? t(PROJECT_TYPE_KEY[project.project_type])
+            : (PROJECT_TYPE_LABELS[project.project_type] ?? project.project_type)}
         </p>
         {project.scope_summary ? (
           <p className="mt-[8px] whitespace-pre-line text-[15px] leading-snug text-m6m-navy/80">

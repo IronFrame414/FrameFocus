@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { TEMPLATE_VARIABLES } from '@/lib/proposal/proposal-defaults';
+import { NotEnglishWarning } from '@/components/language-check/not-english-warning';
 
 // Spec 2 (4E E5/E6, 4F F10) — email editor modal used by "Send
 // Proposal" (preview page), "Send to Client" / "Approve & Send"
@@ -33,8 +34,11 @@ export function SendProposalModal({
   const [body, setBody] = useState(defaultBody);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // S110 H [RULED Q14] — fields the server found not in English. The sender may
+  // edit them, or send anyway (recorded on the send).
+  const [notEnglish, setNotEnglish] = useState<string[] | null>(null);
 
-  async function handleSend() {
+  async function handleSend(languageOverride = false) {
     setError(null);
     if (!subject.trim() || !body.trim()) {
       setError('Subject and body are required.');
@@ -49,10 +53,13 @@ export function SendProposalModal({
           estimate_id: estimateId,
           subject: subject.trim(),
           body: body.trim(),
+          ...(languageOverride ? { language_override: true } : {}),
         }),
       });
       const json = await res.json();
-      if (!res.ok) {
+      if (res.status === 409 && json.code === 'NON_ENGLISH') {
+        setNotEnglish(Array.isArray(json.fields) ? json.fields : []);
+      } else if (!res.ok) {
         setError(json.error || 'Send failed');
       } else {
         onSent();
@@ -153,6 +160,18 @@ export function SendProposalModal({
           ))}
         </div>
 
+        {notEnglish && (
+          <NotEnglishWarning
+            fields={notEnglish}
+            doc="proposal"
+            busy={busy}
+            onSendAnyway={() => {
+              setNotEnglish(null);
+              void handleSend(true);
+            }}
+          />
+        )}
+
         {error && (
           <div
             style={{
@@ -186,7 +205,7 @@ export function SendProposalModal({
           </button>
           <button
             type="button"
-            onClick={handleSend}
+            onClick={() => void handleSend()}
             disabled={busy || !recipientEmail}
             style={{
               padding: '0.5rem 1.25rem',

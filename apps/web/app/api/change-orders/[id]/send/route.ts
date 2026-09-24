@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { checkClientFacingEnglish, nonEnglishResponseBody } from '@/lib/language-check/english-check';
+import { changeOrderFieldsForCheck } from '@/lib/language-check/document-fields';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@framefocus/shared/types/database';
 import { coSendSchema } from '@framefocus/shared/validation/co-signing';
@@ -95,6 +97,19 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
   if (!company) {
     console.error('COMPANY LOOKUP FAILED', { company_id: co.company_id, companyError });
     return NextResponse.json({ error: 'Company not found' }, { status: 500 });
+  }
+
+  // ── S110 H [RULED Q14] — the document goes out in English. Warn on any
+  // non-English field BEFORE the signature, the link or the email; the office
+  // sender may override, and it is recorded on the email log. Codes only; fails
+  // open. See app/api/proposals/send/route.ts for the same check.
+  const languageCheck = await checkClientFacingEnglish(
+    admin,
+    co.company_id,
+    await changeOrderFieldsForCheck(supabase, co.id, { subject: input.subject, body: input.body })
+  );
+  if (languageCheck.flagged.length > 0 && !input.language_override) {
+    return NextResponse.json(nonEnglishResponseBody(languageCheck.flagged), { status: 409 });
   }
 
   // ── Contractor signature (spec §4.2) ─────────────────────────────────────
@@ -303,7 +318,16 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     sender_email: sender,
     subject,
     status: sendError ? 'failed' : 'sent',
-    metadata: sendError ? { error: sendError, body: bodyText } : { body: bodyText },
+    metadata: {
+      ...(sendError ? { error: sendError } : {}),
+      body: bodyText,
+      // [S110 H, Q14] the language check, and the override when there was one.
+      language_check: {
+        checked: languageCheck.checked,
+        flagged: languageCheck.flagged.map((f) => f.field),
+        overridden_by: languageCheck.flagged.length > 0 ? profile.id : null,
+      },
+    },
   });
 
   // The CO is sent (D-4) and the tokenized link is live regardless: the

@@ -16,6 +16,9 @@ export const sendProposalSchema = z.object({
   estimate_id: z.string().uuid(),
   subject: z.string().min(1, 'Subject is required').max(200),
   body: z.string().min(1, 'Body is required').max(5000),
+  // S110 H [RULED Q14] — the sender saw the "not in English" warning and chose
+  // to send anyway. Recorded with the send.
+  language_override: z.boolean().optional(),
 });
 
 export type ReminderScheduleInput = z.infer<typeof reminderScheduleSchema>;

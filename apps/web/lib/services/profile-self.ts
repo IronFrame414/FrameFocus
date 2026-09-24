@@ -53,3 +53,27 @@ export async function updateMyName(input: {
   revalidatePath('/m', 'layout');
   return { ok: true };
 }
+
+// S110 H [RULED Josh, ruling 1] — a person's own language, 'en' | 'es'. Same
+// shape as updateMyName: RLS (profiles_update_self) admits only the caller's
+// row, and enforce_profiles_self_column_scope admits only name + language
+// (20261750000000) — so this function being wrong could not change anything else.
+export type UpdateMyLanguageResult = { ok: true } | { ok: false; error: string };
+
+export async function updateMyLanguage(language: string): Promise<UpdateMyLanguageResult> {
+  if (language !== 'en' && language !== 'es') return { ok: false, error: 'Unsupported language.' };
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: 'You are not signed in.' };
+  const { error } = await supabase.from('profiles').update({ language }).eq('user_id', user.id);
+  if (error) {
+    console.error('[updateMyLanguage] update failed', { message: error.message });
+    return { ok: false, error: 'Could not save your language.' };
+  }
+  // Both shells read it in their layout.
+  revalidatePath('/dashboard', 'layout');
+  revalidatePath('/m', 'layout');
+  return { ok: true };
+}

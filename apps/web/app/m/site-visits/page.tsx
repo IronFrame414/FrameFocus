@@ -3,27 +3,31 @@ import { DASHBOARD_ROLES } from '@framefocus/shared/constants/roles';
 import type { CompanyRole } from '@framefocus/shared';
 import { getMyProfile } from '@/lib/services/profiles';
 import { listSiteVisits } from '@/lib/services/site-visits';
+import { groupSiteVisits } from '@/lib/site-visits/groups';
 import { SetMobileHeader } from '../mobile-header';
 import { EmptyState, ListRowLink, SectionLabel } from '../mobile-ui';
+import { getMobileT } from '@/lib/i18n/server';
 
 // S108 Spec A — the site visits list on the phone.
 //
 // WHO: any INTERNAL role (owner, admin, PM, foreman, crew) — RULED. Not a
 // subcontractor, not a client: they are told plainly, and the RPCs and RLS
 // refuse them regardless of this screen.
-// WHAT: office roles see every visit in the company; a foreman or crew member
-// sees the visits THEY recorded (site_visits_select_scoped). No money on this
+// WHAT: every internal employee sees every visit in the company [S110 A, Q1]
+// (site_visits_select_internal). _Superseded: "a foreman or crew member sees the
+// visits THEY recorded (site_visits_select_scoped)."_ No money on this
 // screen or in its payload — it never reads `estimates`.
 
 export default async function SiteVisitsPage() {
+  const t = await getMobileT();
   const profile = await getMyProfile();
   const internal = !!profile && DASHBOARD_ROLES.includes(profile.role as CompanyRole);
 
   if (!internal) {
     return (
       <div className="px-[18px] pb-[18px] pt-[14px]">
-        <SetMobileHeader title="Site visits" sub={null} />
-        <EmptyState>Site visits are recorded by company staff.</EmptyState>
+        <SetMobileHeader title={t('photos.sv.listTitle')} sub={null} />
+        <EmptyState>{t('photos.sv.staffOnly')}</EmptyState>
       </div>
     );
   }
@@ -32,9 +36,8 @@ export default async function SiteVisitsPage() {
   // Three states, never two: RECORDING (still capturing), FINISHED (the
   // recorder's "done" — no number, not an estimate), and BECAME ESTIMATES
   // (the office promoted it). [S108 follow-up — finish is not promotion.]
-  const open = visits.filter((v) => !v.promoted_at && !v.finished_at);
-  const finished = visits.filter((v) => !v.promoted_at && v.finished_at);
-  const done = visits.filter((v) => v.promoted_at);
+  // [S110 B] the SAME grouping as the desktop list (parity) — one helper.
+  const { recording: open, finished, estimates: done } = groupSiteVisits(visits);
 
   const row = (v: (typeof visits)[number]) => {
     const who = v.contact ? `${v.contact.first_name} ${v.contact.last_name}`.trim() : null;
@@ -59,28 +62,28 @@ export default async function SiteVisitsPage() {
 
   return (
     <div className="px-[18px] pb-[18px] pt-[14px]">
-      <SetMobileHeader title="Site visits" sub={null} />
+      <SetMobileHeader title={t('photos.sv.listTitle')} sub={null} />
       <Link
         href="/m/site-visits/new"
         data-testid="m-site-visit-new"
         className="flex h-[56px] w-full items-center justify-center rounded-[14px] bg-m6m-blue text-[16px] font-bold text-white"
       >
-        Record a site visit
+        {t('photos.sv.record')}
       </Link>
 
-      <SectionLabel>Recording · {open.length}</SectionLabel>
-      {open.length === 0 ? <EmptyState>No open site visits.</EmptyState> : <ul>{open.map(row)}</ul>}
+      <SectionLabel>{t('photos.sv.recording', { n: open.length })}</SectionLabel>
+      {open.length === 0 ? <EmptyState>{t('photos.sv.noneOpen')}</EmptyState> : <ul>{open.map(row)}</ul>}
 
       {finished.length > 0 ? (
         <>
-          <SectionLabel>Finished · waiting for the office · {finished.length}</SectionLabel>
+          <SectionLabel>{t('photos.sv.finished', { n: finished.length })}</SectionLabel>
           <ul>{finished.map(row)}</ul>
         </>
       ) : null}
 
       {done.length > 0 ? (
         <>
-          <SectionLabel>Became estimates · {done.length}</SectionLabel>
+          <SectionLabel>{t('photos.sv.becameEstimates', { n: done.length })}</SectionLabel>
           <ul>{done.map(row)}</ul>
         </>
       ) : null}

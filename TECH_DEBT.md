@@ -559,6 +559,26 @@ top of this file is advanced to `#164` in the same commit, which is what keeps t
   Traps: `test/s109-row-activation.test.tsx` + `e2e/desktop-row-activation-s109.spec.ts`, each
   proven by sabotage — see `S109-report.md` Step 4.
 
+### Branch-scoped, awaiting real numbers — `feature/s110-h-language` [S110]
+
+- **#3-s110 — notifications and web push are not translated for the reader. OUT OF SCOPE for S110
+  by ruling [Josh, S110 Q15].** They store PRE-RENDERED English with user text embedded —
+  `Site visit ready to price: ${visit.title}` (`lib/notify/site-visit-notify.ts:85`), a punch title
+  as the body (`lib/notify/assignment-notify.ts:190`) — so neither the system words nor the user
+  text can be localised at read time without changing how notifications are built (store a type +
+  parameters, render at read). A Spanish user's bell list and push banners stay English until then.
+
+- **#4-s110 — ruling 3 is wired on the core surfaces, not yet on EVERY one.** `UserText` shows
+  user-entered text in the reader's language on: chat (both surfaces), the /m daily-log detail and
+  list, the /m punch item, and the desktop daily-log detail (`test/s110-usertext-wiring.test.ts`
+  pins them), and — after Section A — **the site-visit record** (notes, measurement areas, voice
+  transcripts; both surfaces). **Not yet wired** (FILL-H.8's list): tasks / up-next, schedule, safety incidents
+  (/m list, desktop detail), deliveries, timesheet segment notes, expenses, change-order pages,
+  the estimate builder's internal notes. Each is `<UserText text={…} />` at the render site, and
+  must NEVER be added to anything client-facing (`s110-client-facing-english.test.ts`).
+  Also found: `site_visit_voice_notes.transcript_language` exists and nothing writes it — the
+  natural home for the detected source language of a voice note.
+
 ### Branch-scoped, awaiting real numbers — `feature/s110-d-line-rows` [S110]
 
 - **#1-s110 — ✅ FIXED ON THIS BRANCH (filed and fixed together, RULED Josh S110 Q16; closes on
@@ -573,6 +593,7 @@ top of this file is advanced to `#164` in the same commit, which is what keeps t
   `test/s110-line-rows.live.ts` 4a–4d (a rename on the same row passes; owner, PM-to-SENT and
   service-role re-parents refused, row stays put). ⚠️ **Production, before merge:** governs future
   writes only, cannot abort; for the record `select count(*) from estimate_line_rows;`.
+
 ### Branch-scoped, awaiting real numbers — `feature/s110-e-carried-debt` [S110]
 
 - **#2-s110 — the card-signup webhook is MOCK-VERIFIED, not round-trip-verified: confirm the real

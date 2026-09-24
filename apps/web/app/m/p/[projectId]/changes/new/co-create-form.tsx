@@ -3,6 +3,8 @@
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { createChangeOrder, type ChangeOrderType } from '@/lib/services/change-orders-client';
+import { useT } from '@/components/i18n/language-provider';
+import type { MsgKey } from '@/lib/i18n/messages';
 import { SetMobileHeader } from '../../../../mobile-header';
 import {
   ErrorNotice,
@@ -43,10 +45,23 @@ import {
 // CUT: company_id, author_member_id, created_by — all column defaults, and
 //      §4.11.12 is explicit that the page must not set them.
 
-const CO_TYPES: readonly { value: ChangeOrderType; label: string; sub: string }[] = [
-  { value: 'fixed_price', label: 'Fixed price', sub: 'a agreed lump sum' },
-  { value: 'cost_plus', label: 'Cost plus', sub: 'cost with markup applied' },
-  { value: 'time_and_materials', label: 'Time & materials', sub: 'billed as worked' },
+// S110 H — message keys, resolved with t() at render time.
+const CO_TYPES: readonly { value: ChangeOrderType; labelKey: MsgKey; subKey: MsgKey }[] = [
+  {
+    value: 'fixed_price',
+    labelKey: 'project.coCreate.typeFixed',
+    subKey: 'project.coCreate.typeFixedSub',
+  },
+  {
+    value: 'cost_plus',
+    labelKey: 'project.coCreate.typeCostPlus',
+    subKey: 'project.coCreate.typeCostPlusSub',
+  },
+  {
+    value: 'time_and_materials',
+    labelKey: 'project.coCreate.typeTm',
+    subKey: 'project.coCreate.typeTmSub',
+  },
 ];
 
 export function CoCreateForm({
@@ -60,6 +75,8 @@ export function CoCreateForm({
 }) {
   const router = useRouter();
   const online = useOnline();
+  const t = useT();
+  const coTypes = CO_TYPES.map((c) => ({ value: c.value, label: t(c.labelKey), sub: t(c.subKey) }));
 
   const [title, setTitle] = useState('');
   const [coType, setCoType] = useState<ChangeOrderType>(defaultType);
@@ -90,7 +107,7 @@ export function CoCreateForm({
 
     if (!result.success || !result.id) {
       setBusy(false);
-      setError(result.error ?? 'The change order could not be created.');
+      setError(result.error ?? t('project.coCreate.failed'));
       return;
     }
 
@@ -103,34 +120,34 @@ export function CoCreateForm({
 
   return (
     <div className="px-[18px] pb-[18px] pt-[14px]">
-      <SetMobileHeader title="New change order" sub={projectName} />
+      <SetMobileHeader title={t('project.changes.new')} sub={projectName} />
 
-      <h1 className="text-[17px] font-bold leading-tight text-m6m-navy">New change order</h1>
+      <h1 className="text-[17px] font-bold leading-tight text-m6m-navy">{t('project.changes.new')}</h1>
       <p className="mt-[2px] font-mono text-[11px] text-m6m-muted">
-        the number is assigned on save
+        {t('project.coCreate.numberAssigned')}
       </p>
 
       {!online ? (
         <div className="mt-[14px]">
-          <OfflineNotice what="Creating a change order" testId="m-co-offline" />
+          <OfflineNotice what={t('project.coCreate.offlineWhat')} testId="m-co-offline" />
         </div>
       ) : null}
 
       <TextField
-        label="Title"
+        label={t('project.co.titleField')}
         value={title}
         onChange={setTitle}
         testId="m-co-title"
         required
-        placeholder="What is changing"
+        placeholder={t('project.coCreate.titlePlaceholder')}
       />
 
       <div className="mt-[14px]">
         <p className="mb-[6px] font-mono text-[11px] font-medium uppercase tracking-wide text-m6m-muted">
-          Type
+          {t('project.coCreate.type')}
         </p>
         <OptionStack
-          options={CO_TYPES}
+          options={coTypes}
           value={coType}
           onChange={setCoType}
           testIdPrefix="m-co-type"
@@ -138,22 +155,22 @@ export function CoCreateForm({
       </div>
 
       <TextAreaField
-        label="Description"
+        label={t('project.co.description')}
         value={description}
         onChange={setDescription}
         testId="m-co-description"
       />
 
       <TextField
-        label="Reason"
+        label={t('project.co.reason')}
         value={reason}
         onChange={setReason}
         testId="m-co-reason"
-        placeholder="Why it is needed"
+        placeholder={t('project.coCreate.reasonPlaceholder')}
       />
 
       <TextField
-        label="Schedule impact (days)"
+        label={t('project.co.scheduleImpactDays')}
         value={scheduleDays}
         onChange={(v) => setScheduleDays(v.replace(/[^0-9-]/g, ''))}
         testId="m-co-schedule-days"
@@ -167,11 +184,11 @@ export function CoCreateForm({
           "commit to a number in front of a client" are never one tap
           (§4.11.12). */}
       <p className="mt-[14px] text-center text-[12px] text-m6m-muted">
-        Saves a draft — you add the pricing next
+        {t('project.coCreate.savesDraft')}
       </p>
       <PrimaryButton
-        label="Create draft"
-        busyLabel="Creating…"
+        label={t('project.coCreate.createDraft')}
+        busyLabel={t('project.coCreate.creating')}
         onClick={submit}
         disabled={!ready || !online}
         busy={busy}
