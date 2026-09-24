@@ -8,7 +8,7 @@ import { PoDocument } from '@/lib/po/po-template';
 // the caller's session (RLS answers reach); any project-viewer who can read
 // the PO can download it — a PO is cost, the broadly-visible tier (§1).
 
-export async function GET(_request: Request, { params }: { params: { id: string } }) {
+export async function GET(request: Request, { params }: { params: { id: string } }) {
   const supabase = await createClient();
   const {
     data: { user },
@@ -21,11 +21,16 @@ export async function GET(_request: Request, { params }: { params: { id: string 
     return NextResponse.json({ error: error ?? 'Not found' }, { status: 404 });
   }
 
+  const q = new URL(request.url).searchParams;
+  const inline = q.get('view') === '1' && !q.has('download');
   const buffer = await renderToBuffer(PoDocument({ data }));
   return new NextResponse(new Uint8Array(buffer), {
     headers: {
       'Content-Type': 'application/pdf',
-      'Content-Disposition': `attachment; filename="${data.poNumber.replace(/[^\w-]+/g, '_')}.pdf"`,
+      // S110 E3 — `?view=1` (the file sheet, and its "open in new tab") serves it
+      // INLINE; everything else — including the sheet's Download, which adds
+      // `download=` — keeps the attachment it always had.
+      'Content-Disposition': `${inline ? 'inline' : 'attachment'}; filename="${data.poNumber.replace(/[^\w-]+/g, '_')}.pdf"`,
     },
   });
 }

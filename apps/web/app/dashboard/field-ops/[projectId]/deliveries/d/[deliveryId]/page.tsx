@@ -10,6 +10,7 @@ import {
 import { getMyMember } from '@/lib/services/members';
 import { FieldTabs } from '@/components/field/field-tabs';
 import { DeleteDeliveryButton, DownloadDeliveryPdfButton } from './delivery-actions';
+import { SheetLink } from '@/components/files/sheet-link';
 import { SIGNED_URL_TTL_SECONDS } from '@/lib/services/signed-url-ttl';
 
 // 6D — single delivery read view (primarily the orderless check-ins' home;
@@ -183,14 +184,20 @@ export default async function DeliveryDetailPage({
                     {linePhotos.map((photo) => {
                       const url = urlByPath.get(photo.file_path);
                       return url ? (
-                        <a key={photo.id} href={url} target="_blank" rel="noreferrer">
+                        <SheetLink
+                          key={photo.id}
+                          href={url}
+                          fileName={photo.file_name}
+                          mimeType={photo.mime_type}
+                          fileId={photo.id}
+                        >
                           {/* eslint-disable-next-line @next/next/no-img-element -- signed URL, not optimizable */}
                           <img
                             src={url}
                             alt={photo.file_name}
                             className="h-[72px] w-[96px] rounded-[7px] object-cover"
                           />
-                        </a>
+                        </SheetLink>
                       ) : (
                         <span
                           key={photo.id}
@@ -220,14 +227,20 @@ export default async function DeliveryDetailPage({
               {generalPhotos.map((photo) => {
                 const url = urlByPath.get(photo.file_path);
                 return url ? (
-                  <a key={photo.id} href={url} target="_blank" rel="noreferrer">
+                  <SheetLink
+                    key={photo.id}
+                    href={url}
+                    fileName={photo.file_name}
+                    mimeType={photo.mime_type}
+                    fileId={photo.id}
+                  >
                     {/* eslint-disable-next-line @next/next/no-img-element -- signed URL, not optimizable */}
                     <img
                       src={url}
                       alt={photo.file_name}
                       className="h-[72px] w-[96px] rounded-[7px] object-cover"
                     />
-                  </a>
+                  </SheetLink>
                 ) : (
                   <span
                     key={photo.id}

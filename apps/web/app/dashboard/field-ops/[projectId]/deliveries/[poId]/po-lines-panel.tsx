@@ -16,6 +16,7 @@
 //     none and the panel simply isn't there (less, not nothing).
 
 import { useMemo, useState } from 'react';
+import { SheetLink } from '@/components/files/sheet-link';
 import { useRouter } from 'next/navigation';
 import {
   assignMemberToPoItem,
@@ -319,12 +320,18 @@ export function PoLinesPanel({
       {/* R-L4 — after issue, both offers. Disabled states carry their reason. */}
       {poStatus === 'issued' && (
         <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-[#f4f6fa] pt-3">
-          <a
-            href={`/api/pos/${poId}/pdf`}
+          {/* S110 E3 [RULED Q10 → A] — the PO opens in the SHEET (`?view=1` serves
+              it inline); the sheet's Download keeps the attachment. _Superseded,
+              quoted:_ `<a href={`/api/pos/${poId}/pdf`}>Download PDF</a>`. */}
+          <SheetLink
+            href={`/api/pos/${poId}/pdf?view=1`}
+            fileName="Purchase order.pdf"
+            mimeType="application/pdf"
+            testId="po-view-pdf"
             className="rounded-[8px] border border-[#d5dae4] px-[13px] py-[7px] text-[12.5px] font-bold text-[#3f4a60]"
           >
-            Download PDF
-          </a>
+            View PDF
+          </SheetLink>
           {canIssue &&
             (vendorEmailState === 'ok' ? (
               <button

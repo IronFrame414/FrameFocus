@@ -13,6 +13,21 @@
 
 ## Closed Tech Debt
 
+- **#1-deliv ✅ CLOSED [S110, RULED Josh Q11]** — a live test that drives a hook, trigger or
+  webhook handler BY HAND cannot reproduce one called mid-transaction. Filed as a CLASS
+  [2026-09-11] after `s160-auth-email.live.ts` A1/A2 stayed green for eleven sessions over P3, which
+  had never fired in production (the Send Email Hook runs before the `auth.users` INSERT commits).
+  **Closed because the class is fully classified and has one member, already fixed:** S108 D2b
+  asked every direct-invocation suspect "does this handler read state its caller is concurrently
+  writing?"; S110 Phase 1 re-checked the sweep (14 files import a route module; D2b had missed 3 —
+  `s107-bid-upload-e2e.live.ts`, `s160-auth-email.test.tsx`, `s109-estimate-file-url-order.test.ts`
+  — all read, none timing-dependent). The one declared gap left, the Stripe event SHAPE, is a
+  fidelity question, not a timing one, and is **re-filed on its own as `#2-s110`** in the same
+  commit so closing this loses nothing. **The lesson it carried stays in force** and lives in
+  `CLAUDE.md` → "The thing inspected must be the thing being judged" (direct invocation; truncated
+  output read as complete — the root-cause note that stood here). Full entry text in git history
+  (the commit before this closure).
+
 - **#157 ✅ CLOSED [S108, 2026-09-22]** — `desktop-chat-switcher.spec.ts:62` (CI #304) was
   **run-against-run contention on the shared `rebuild-test`, not a defect in the per-thread unread
   count.** Decided exactly as the entry said it would be — one solo run on an idle database:

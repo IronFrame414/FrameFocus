@@ -286,6 +286,21 @@ export async function reorderEstimateLines(
   return { success: true };
 }
 
+/** S110 D1 — reorder the rows INSIDE one line, in ONE call. `orderedIds` is the
+ *  line's COMPLETE row list in its new order (planRowMove / stepRow). SECURITY
+ *  INVOKER: RLS (draft only; a PM only their own draft) is the authority, and the
+ *  RPC raises rather than silently updating nothing — and refuses a stale list. */
+export async function reorderEstimateLineRows(lineItemId: string, orderedIds: string[]): Promise<Result> {
+  if (orderedIds.length < 2) return { success: true };
+  const supabase = createClient();
+  const { error } = await supabase.rpc('reorder_estimate_line_rows', {
+    p_line_item_id: lineItemId,
+    p_ordered_ids: orderedIds,
+  });
+  if (error) return { success: false, error: error.message };
+  return { success: true };
+}
+
 /** Flat-priced lines still missing a cost basis — the S-6 pre-flight list. */
 export async function listFlatLinesMissingCost(
   estimateId: string

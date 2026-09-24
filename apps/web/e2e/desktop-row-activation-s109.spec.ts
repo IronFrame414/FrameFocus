@@ -14,6 +14,13 @@ import { OWNER, signIn } from './chat-fixture';
 //       and ↓ still reorders. A card-level click handler would break this; the
 //       line card has none, and this is the test that fails if one is added.
 //
+//   ⚠️ [S110 D2] T2's "handle focused" is CHROMIUM EVIDENCE ONLY. Chromium
+//   focuses a <button> on mousedown by itself; Safari/Firefox on macOS do not,
+//   and on Josh's machine click-then-↓ did nothing while this passed. T2 still
+//   guards what it was written for (no card-level click), but the focus claim
+//   is carried by desktop-line-rows-s110 R2 (synthetic mousedown, which no
+//   browser focuses by default) and s110-line-rows.test.ts.
+//
 // Own fixture: one draft estimate, one category, two lines, removed in afterAll.
 // (Pattern: `desktop-line-items-s108.spec.ts`.)
 

@@ -1,5 +1,6 @@
 'use client';
 import { useState } from 'react';
+import { useFileSheet } from '@/components/files/file-sheet';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useConfirm, useAlert } from '@/components/confirm/confirm-provider';
@@ -25,6 +26,7 @@ export default function FileRowActions({
   const confirm = useConfirm();
   const alert = useAlert();
   const [busy, setBusy] = useState(false);
+  const openFile = useFileSheet();
   const isImage = mimeType?.startsWith('image/') ?? false;
 
   async function getSignedUrl(): Promise<string | null> {
@@ -36,17 +38,12 @@ export default function FileRowActions({
     return url;
   }
 
-  async function handleDownload() {
-    setBusy(true);
-    const url = await getSignedUrl();
-    setBusy(false);
-    if (!url) {
-      void alert('Could not generate download link.');
-      return;
-    }
-    // Append ?download=<filename> to force browser to download with original name.
-    const separator = url.includes('?') ? '&' : '?';
-    window.open(`${url}${separator}download=${encodeURIComponent(fileName)}`, '_blank');
+  // S110 E3 [RULED Josh, Q10 → A] — the last forced download on this row now
+  // opens the SHEET, like the row itself (S109) and the three S109 buttons.
+  // _Superseded, quoted:_ `window.open(url + '?download=' + fileName, '_blank')`.
+  // The sheet's own Download action still saves under the original name.
+  function handleDownload() {
+    openFile({ fileName, mimeType, resolveUrl: getSignedUrl });
   }
 
   async function handleDelete() {
@@ -84,8 +81,8 @@ export default function FileRowActions({
           Markup
         </Link>
       )}
-      <button onClick={handleDownload} disabled={busy} style={btnStyle}>
-        Download
+      <button onClick={handleDownload} disabled={busy} style={btnStyle} data-testid={`file-view-${fileId}`}>
+        View
       </button>
       <button onClick={handleDelete} disabled={busy} style={{ ...btnStyle, color: '#c00' }}>
         Delete
