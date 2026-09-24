@@ -411,3 +411,72 @@ CI runs (the #157 fingerprint), not E. The server was stopped by PID.
 | H | `feature/s110-h-language` (stacked on C) | **built and proven except `SiteVisitRecord`** (deferred until A by the prompt's order). ⚠️ migration `20261750000000` owed to production |
 
 **Nothing merged. Nothing touched production.** Rebuild-test holds D's and H's migrations.
+
+---
+
+# Stretch 2 — A, B, and H's site-visit record [Josh: "Section A is unblocked"]
+
+**Production counts (Josh, 2026-09-23):** FILL-A.8 q1 visits 0 / notes 0 / measurements 0 / voice 0;
+q2 would-unfreeze 0; q3 backfill covers **6 files**. G.1 company `dc4da2a7-b636-4b56-9a30-39861109c827`
+/ worth-properties / josh@worthprop.com.
+**Josh on q2:** a zero on today's tiny dataset is not evidence a `sent_at` cutoff is safe. FILLED-A.1
+stands, so `frozen_at` is stamped as proposed.
+**New rule for this stretch: ONE branch's CI at a time.** Report pushes carry `[skip ci]`.
+
+## A — `feature/s110-a-site-visit-access` (cut from F) — **built; DB proven live; pushed alone**
+
+`20261730000000_site_visit_access_widen.sql` → rebuild-test (`--include-all`, because D's and H's
+later-numbered migrations were already applied; both copied in untracked, never committed on A).
+Dry run listed exactly this file; `DBPUSH_EXIT_LINE=0`; triggers 2/2, policies 4/4, columns 2/2
+verified. `database.ts` on A carries **only A's slice** (10 lines, picked from the generator's diff).
+Fingerprints were NOT regenerated on A: rebuild-test holds D and H too, and a baseline including
+H would report false drift on production between A's merge and H's apply. **Regenerate them after the
+last of A, D and H is applied.**
+
+- **frozen_at** is stamped by an `AFTER UPDATE OF status` trigger on the transition out of
+  draft/review (`coalesce`, first send), and **moved forward** at accepted/declined/expired/voided (Q3).
+  It never reads `sent_at`.
+- **The freeze** admits INSERT always, forcing `created_at := now()` so nothing can be backdated.
+  `created_at` is immutable. It refuses UPDATE of rows created at or before `frozen_at`, service role
+  included, except for: the stamp itself; FK→NULL; a pending transcription completing; the seed of its
+  editable copy.
+- **Reads:** one role list (five internal roles) on all four tables.
+- **`site_visit_access()`** returns `office` / `staff` / NULL at every status. Editing a note
+  no longer requires being its author. Rename, finish and abandon stay **office-or-recorder**. That is a
+  stated choice, not a ruling: ruling 1 names notes, measurements, blockers and photos, not visit-level acts.
+- **Files:** `site_visit_capture` (backfill as q3), plus a file freeze trigger. A user session can never
+  flip the flag. The routes gain a **VISIT arm** that lists and signs captures only (the Floor). An
+  ordinary upload still needs the office arm. `capture=1` uploads from the record at every status.
+- **The record:** add at every status; edit anything not frozen; "added after the estimate was sent"
+  markers; photos grouped before/after the send. S108 ruling 4's promotion cutoff is quoted, superseded,
+  in `photos.ts`.
+
+| proof | printed line |
+| --- | --- |
+| live `s108-site-visit` + `s108-voice` | **`LIVE_A_EXIT_LINE=0`, 40/40**, fixtures 0. Inverted in place: 2b, 2c, 4b, 4b-ii, 4.5c, 4.5d, 4.5f, voice V5 (old assertions quoted). New: 2c-ii (sub and client read 0, paired with the foreman reading all), stamp with no `sent_at`, backdated service-role insert forced to now(), post-send note editable until the outcome, pending transcript completes but cannot then be edited, pre-send capture photo cannot be deleted or renamed (a tags update on the same file passes as the control) |
+| unit (route order, both routes, Floor case + office mirror; photos; media) | `UNIT_EXIT_LINE=0` — A's full suite **105 files / 1410** |
+| lint / `next build` | `LINT_EXIT_LINE=0`; `BUILD_EXIT_LINE=0` 129/129 |
+| e2e `m-site-visit` (freeze case inverted) | in A's CI run, pushed after the docs run finished |
+| **UI sabotage** (AUDIT 3) | owed: local run after A's CI finishes (one consumer at a time) |
+
+## B — `feature/s110-b-desktop-site-visits` (cut from A) — **built; not yet pushed**
+
+A top-level **Site visits** item for the five internal roles, beside Estimates (Notifications stays
+last in the top layer). `/dashboard/site-visits` shows the phone's three groups through a shared helper
+(`lib/site-visits/groups.ts`, now also used by `/m`). The record moved to
+`/dashboard/site-visits/[id]` for everyone; office actions are office-only. The old path redirects.
+Links, the notification link and the S109 mount list were updated; there is no desktop recording (Q6).
+The S130 nav-order tests (unit + e2e) were inverted in place: 13→14 items, Notifications 8th→9th,
+still last.
+New `e2e/desktop-site-visits-s110.spec.ts`: B1 crew via sidebar; B2 owner office actions; B3 old URL;
+**B4 the Floor in a browser** (crew list lacks the non-captured vendor PDF, the owner's control list
+has it).
+⚠️ **F's guard caught a real miss:** B4 is a new consumer of the estimate-files list and was not
+registered. B's own full unit suite had not been run, only its nav tests; the guard fired when B was
+merged into H. Registered on B; B's suite **1410/1410**, build 130/130.
+
+## H — the site-visit record, after A — on `feature/s110-h-language` (B merged in) — **built; not yet pushed**
+
+The record and voice notes are translated (86 strings → `visit.*`, English byte-identical), and notes,
+measurement areas and transcripts go through `UserText`; the edit boxes keep the original.
+**The anti-rot ratchet is now EMPTY.** H unit **110 files / 1570**, `next build` 131/131.
