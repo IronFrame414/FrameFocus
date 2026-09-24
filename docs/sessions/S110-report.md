@@ -372,3 +372,22 @@ back). Its `afterAll` resets the shared crew identity to `en` through the servic
 | D `feature/s110-d-line-rows` | `35931975526` | **success**, so `desktop-line-rows-s110` R1/R2 passed in CI |
 | C `feature/s110-c-account-link` | `35931389397` | **failure: 1 failed, 4 flaky, 569 passed.** The failure is `desktop-chat-switcher.spec.ts:62` (per-thread unread), the #157 contention fingerprint. That run overlapped 4 other S110 CI runs on the one database. C's own specs are in neither the failed nor the flaky list; the log names only those, so this is not direct evidence. **To be confirmed by a local run on an idle database.** |
 | E | `35933826436` | in progress at the time of writing (earlier E runs failed at build/type-check on the two defects already fixed) |
+
+### Local e2e on an idle database (Actions API: 0 runs active), production builds (`next start`)
+
+| run | printed line |
+| --- | --- |
+| H branch (contains C): `m-account-link-s110` + `m-shell` + `m-language-s110` | `PW_EXIT_LINE=0`, 57 passed, **1 flaky**: my own new A-3b case read a 0.6px "gap". Separate `boundingBox()` calls had landed in different frames of the sheet's 140ms drop animation. Fixed (wait for the animation, read all rects in one frame), committed on **C** `f6ec75f0` and merged into H; `--repeat-each=5 --retries=0` → 6 passed |
+| **sabotage C + H** (row removed; `/m` uiLang pinned `en`) — one build, each spec red at its own assertion | `SABOTAGE_C_H_PW_EXIT_LINE=1`: both account-link cases time out waiting for `m-sheet-account`; L1 received `"Projects"` for `/Proyectos/`. Crew language read back `en` (afterAll reset works) |
+| restored (`cmp` identical), rebuilt | `REVERTED_PW_EXIT_LINE=0`, 4 passed |
+| **sabotage D** (`onMouseDown` focus removed), D branch build | `SABOTAGE_D_PW_EXIT_LINE=1`: R1 and R2 red at "did not focus itself on mousedown". **The synthetic-mousedown test measures the handle, not Chromium.** |
+| D restored (`cmp` identical), rebuilt, + S109 row-activation | `REVERTED_D_PW_EXIT_LINE=0`, 6 passed; fixtures 0; server stopped by PID |
+
+**C is now proven in a browser**, which CI could not show: CI's log names only failed and flaky tests.
+
+### CI — E
+
+`35933826436` (E head `8ebf5f74`): Lint & Type Check **success**; e2e **1 failed** —
+`desktop-chat-switcher.spec.ts:31` (thread ORDER), 2 flaky, 568 passed. Same file and fingerprint
+as C's CI failure and as the S108 #157 contention record. E touches no chat code. **Not yet
+confirmed**: a solo local run of that spec on E once the database is idle.
