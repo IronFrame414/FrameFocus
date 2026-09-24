@@ -480,3 +480,28 @@ merged into H. Registered on B; B's suite **1410/1410**, build 130/130.
 The record and voice notes are translated (86 strings → `visit.*`, English byte-identical), and notes,
 measurement areas and transcripts go through `UserText`; the edit boxes keep the original.
 **The anti-rot ratchet is now EMPTY.** H unit **110 files / 1570**, `next build` 131/131.
+
+### A's CI, and the UI sabotage (idle database, clean production builds)
+
+| run | printed line |
+| --- | --- |
+| **A CI** `35949517577` (head `9e452c9c`) — the only run active | **success** (incl. the rewritten `m-site-visit`) |
+| A baseline, `rm -rf .next` + build | `A_BASELINE_PW_EXIT_LINE=0`, 3 passed |
+| **sabotage A1** — the record's freeze check always false | `SABOTAGE_A1_PW_EXIT_LINE=1`, red at `:217` "a note that existed at send is still editable"; restored `cmp` identical |
+| **sabotage A2** — add controls hidden after send | `SABOTAGE_A2_PW_EXIT_LINE=1`, red at `:216` "the office can no longer ADD after send"; restored `cmp` identical; fixtures 0 |
+| H clean build (A+B inside) — `m-site-visit` | `H_SV_PW_EXIT_LINE=0`, 3 passed |
+| H build — B + nav + language + account-link specs | `H_B_PW_EXIT_LINE=0`, **18 passed** |
+| **sabotage B** — nav item removed + list route's capture filter removed (one build, two tests) | `SABOTAGE_B_PW_EXIT_LINE=1`: **B1** red waiting for the sidebar link; **B4 (the Floor)** red; B2/B3 green; restored `cmp` identical; fixtures 0 |
+
+⚠️ **A first sabotage attempt proved nothing, and is recorded because it is the named class.**
+`false && …` did not type-check. **`BUILD_EXIT_LINE=1` was printed and the run went ahead anyway**,
+against whatever `.next` held. It went red, which looked like success. `next build` writes the
+compiled client bundle BEFORE it type-checks, so a failed build can leave a half-new `.next` behind.
+Redone with `rm -rf .next` before every build and a sabotage that compiles. **Rule applied from
+here: read `BUILD_EXIT_LINE` before trusting the e2e line that follows it.**
+
+**B pushed** once the Actions API showed 0 active runs. H is pushed after B's run finishes.
+
+**Found, not touched:** `feature/s110-d-line-rows` carries a commit that is not this session's —
+`423b9ab7` "[Data] Home Depot South Florida cost catalog - 282 verified items" (01:43 UTC, one CSV,
+same git identity). It will ride along when D merges.
