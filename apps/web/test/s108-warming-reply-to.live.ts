@@ -7,12 +7,24 @@
  * for warming mail — because that company's `companies.email` is NULL and
  * `resolveCompanyReplyTo()` falls back to the OWNER'S PROFILE EMAIL.
  *
+ * ⚠️ AMENDED [Josh, 2026-09-24 — companies.email is REQUIRED, 20261760000000].
+ * A NULL company email can no longer exist, so case 2 can no longer be built
+ * the way it was (sign up, then CLEAR the company email). The hazard did not go
+ * away — it MOVED: `handle_new_user` now writes the SIGNUP address into
+ * `companies.email`, and the backfill wrote the owner's address onto every
+ * company that had none. So an owner who signed up with a personal gmail has a
+ * company email that IS that gmail, reached through the resolver's FIRST arm.
+ * Case 2 is now that shape: company email = the owner's personal address, set
+ * by signup, not cleared. The assertion is unchanged — warming mail must still
+ * never reply to it.
+ *
  * ⚠️ AND WHY THE NULL CASE IS THE WHOLE POINT. A test that only covered a
  * company WITH `companies.email` set would have been green against the broken
  * code, because that arm resolves to a company address that at least looks
  * plausible. The failure lived entirely in the FALLBACK. So case 2 below is
  * not "another company for coverage" — it is the case that was broken, and it
- * is constructed deliberately: company email NULL, owner email on gmail.com.
+ * is constructed deliberately: company email = the owner's gmail.com address,
+ * exactly as the signup trigger now leaves it.
  *
  * NOTHING IS EMAILED. `sendEmail` and `logEmail` are mocked, and the mock on
  * `logEmail` is load-bearing beyond politeness: `runEmailWarming` counts this
@@ -62,6 +74,9 @@ vi.mock('@/lib/services/email-service', async (importOriginal) => {
 });
 
 let withEmailId = '';
+/** Historical name: this company's Reply-To resolves to the OWNER'S personal
+ *  address. It was built with a NULL companies.email until that became
+ *  impossible [2026-09-24]; it now carries the owner's signup address. */
 let nullEmailId = '';
 let ownerUserId = '';
 
@@ -133,8 +148,9 @@ beforeAll(async () => {
   withEmailId = (a as { id: string }).id;
 
   // ── Case 2 — ⚠️ THE CASE THAT WAS BROKEN ────────────────────────────────
-  // companies.email NULL, and a REAL OWNER PROFILE carrying a personal address
-  // the resolver falls back to.
+  // A company whose Reply-To resolves to the OWNER'S PERSONAL address. Was: a
+  // NULL companies.email falling back to the owner's profile. Now [2026-09-24]:
+  // companies.email IS the owner's signup address, written by handle_new_user.
   //
   // ⚠️ BUILT THROUGH THE APP'S OWN SIGNUP PATH, not by inserting a profile.
   // `profiles.user_id` is NOT NULL with a UNIQUE index and an FK to
@@ -160,19 +176,27 @@ beforeAll(async () => {
   nullEmailId = (prof as { company_id: string }).company_id;
 
   // The fixture's own preconditions, asserted rather than assumed — if
-  // handle_new_user ever stops writing the owner's email onto the profile, the
-  // fallback this file is about would not exist and cases 2/4 would pass
-  // vacuously.
+  // handle_new_user ever stops writing the owner's email onto the profile or
+  // the company, the hazard this file is about would not exist and cases 2/4
+  // would pass vacuously.
   expect((prof as { role: string }).role, 'handle_new_user did not make them owner').toBe('owner');
   expect((prof as { email: string }).email.toLowerCase()).toBe(OWNER_PERSONAL_EMAIL.toLowerCase());
+  const { data: co, error: coErr } = await admin
+    .from('companies').select('email').eq('id', nullEmailId).single();
+  must('company created by handle_new_user', coErr);
+  expect(
+    (co as { email: string | null }).email?.toLowerCase(),
+    'handle_new_user did not write the signup address into companies.email'
+  ).toBe(OWNER_PERSONAL_EMAIL.toLowerCase());
 
+  // The company email is LEFT as signup wrote it. The slug is renamed only so
+  // the sends below can be told apart by their From line.
   must(
-    'arm the NULL-email company',
+    'arm the owner-address company',
     (
       await admin
         .from('companies')
         .update({
-          email: null,
           email_warming_enabled: true,
           slug: `${MARKER.toLowerCase()}-null-email`,
         })
@@ -205,10 +229,10 @@ describe('S108 C1 — warming Reply-To never leaves the warming domain', () => {
     );
   });
 
-  it("2 — ⚠️ the NULL-company-email case replies to the warming domain, NOT the owner's personal inbox", async () => {
+  it("2 — ⚠️ the company whose email is the OWNER'S personal address replies to the warming domain, NOT that inbox", async () => {
     await runTick();
     const row = sent.find((s) => s.from.includes(`${MARKER.toLowerCase()}-null-email`));
-    expect(row, 'no send for the null-email company').toBeTruthy();
+    expect(row, 'no send for the owner-address company').toBeTruthy();
     expect(row!.replyTo).toBe(row!.from);
     expect(row!.replyTo).toContain(`@${SENDING_DOMAIN}`);
     // The whole reason this file exists.
@@ -231,7 +255,7 @@ describe('S108 C1 — warming Reply-To never leaves the warming domain', () => {
 });
 
 describe('S108 C1 — and NO OTHER email type changed', () => {
-  it('4 — ⚠️ the shared resolver is UNTOUCHED: it still falls back to the owner, off-domain', async () => {
+  it('4 — ⚠️ the shared resolver is UNTOUCHED: it still resolves to the owner\'s personal address, off-domain', async () => {
     // The counterfactual that makes cases 1-3 meaningful. If this went green by
     // the resolver having been "fixed" to return a domain address, every real
     // client email — proposals, invoices, change orders, the three reminder
@@ -243,7 +267,11 @@ describe('S108 C1 — and NO OTHER email type changed', () => {
     >('@/lib/services/email-service');
 
     const resolved = await resolveCompanyReplyTo(nullEmailId);
-    expect(resolved, 'the resolver no longer falls back to the owner').toBe(OWNER_PERSONAL_EMAIL);
+    // [2026-09-24] Reached through companies.email (the signup address), not
+    // the owner fallback — see the file header. Same address, same hazard.
+    expect(resolved, 'the resolver no longer resolves to the owner address').toBe(
+      OWNER_PERSONAL_EMAIL
+    );
     expect(resolved, 'the resolver was rewritten to the sending domain').not.toContain(
       SENDING_DOMAIN
     );

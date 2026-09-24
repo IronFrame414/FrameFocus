@@ -98,7 +98,7 @@ beforeAll(async () => {
 
   const { data: co, error } = await admin
     .from('companies')
-    .insert({ name: `S178 Probe ${Date.now()}`, slug: `s178-probe-${Date.now()}` })
+    .insert({ name: `S178 Probe ${Date.now()}`, slug: `s178-probe-${Date.now()}`, email: 'fixture-office@qa-noreply.ezcontractorbinder.com' })
     .select('id')
     .single();
   if (error) throw new Error(`probe company: ${error.message}`);

@@ -294,7 +294,7 @@ beforeAll(async () => {
   // ── the SPARED company: locked, delete_after in the FUTURE ────────────────
   const { data: spared, error: spErr } = await admin
     .from('companies')
-    .insert({ name: `S138 Spared Co ${Date.now()}`, slug: `s138-spared-${Date.now()}` })
+    .insert({ name: `S138 Spared Co ${Date.now()}`, slug: `s138-spared-${Date.now()}`, email: 'fixture-office@qa-noreply.ezcontractorbinder.com' })
     .select('id')
     .single();
   if (spErr) throw new Error(`spared company: ${spErr.message}`);

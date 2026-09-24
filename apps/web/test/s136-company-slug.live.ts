@@ -111,7 +111,7 @@ describe('collisions resolve numerically, and only on collision', () => {
     for (const s of [base, `${base}-2`]) {
       const { data } = await admin
         .from('companies')
-        .insert({ name: s, slug: s })
+        .insert({ name: s, slug: s, email: 'fixture-office@qa-noreply.ezcontractorbinder.com' })
         .select('id')
         .single();
       madeCompanyIds.push((data as { id: string }).id);
@@ -143,7 +143,7 @@ describe('⚠️ idempotency — the property that makes the backfill safe to re
     const bare = await slugFor(name);
     const { data } = await admin
       .from('companies')
-      .insert({ name, slug: bare })
+      .insert({ name, slug: bare, email: 'fixture-office@qa-noreply.ezcontractorbinder.com' })
       .select('id')
       .single();
     const id = (data as { id: string }).id;

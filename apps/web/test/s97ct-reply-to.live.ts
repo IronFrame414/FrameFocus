@@ -10,6 +10,20 @@
  * and that it works for EVERY company, not just Sabal Point Construction — the
  * ruling is platform-wide.
  *
+ * ⚠️ AMENDED [Josh, 2026-09-24 — companies.email is REQUIRED]. Cases 2 and 4
+ * USED to prove the fallback arms against real rows: case 2 cleared Bishop's
+ * email and expected the OWNER's address; case 4 inserted an "Orphan Co" with
+ * neither and expected null. Both states are now impossible —
+ * `companies_email_required_check` (20261760000000) refuses a blank email on
+ * INSERT and on UPDATE. So both cases are INVERTED, not deleted: they now assert
+ * the refusal, and are the live regression guard for the ruling.
+ *
+ * The fallback arms themselves still exist in `resolveCompanyReplyTo` (ruling 2
+ * keeps them as a safety net if the constraint is ever dropped). Their coverage
+ * moved to a unit test against a mocked row:
+ * `lib/services/company-reply-to-resolver.test.ts`. With the constraint in place
+ * they are unreachable in practice — not a live path.
+ *
  * NOTHING IS EMAILED. Only the resolver is called.
  */
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
@@ -19,8 +33,6 @@ const MARKER = 'S97REPLYTO';
 
 let bishopId: string;
 let ridgelineId: string;
-/** A company with NO owner and no email — the "neither" case. */
-let orphanCompanyId: string;
 let bishopEmailBefore: string | null = null;
 
 const must = (label: string, error: { message: string } | null) => {
@@ -97,14 +109,10 @@ beforeAll(async () => {
   const { data: ridgeline } = await admin
     .from('companies').select('id').eq('name', 'Ridgeline Builders (TEST CO 2)').single();
   ridgelineId = ridgeline!.id;
-
-  const { data: orphan, error } = await admin
-    .from('companies')
-    .insert({ name: `${MARKER} Orphan Co`, slug: `${MARKER.toLowerCase()}-orphan` })
-    .select('id').single();
-  must('orphan company', error);
-  orphanCompanyId = orphan!.id;
 }, 180_000);
+
+/** PostgREST surfaces a CHECK violation as SQLSTATE 23514. */
+const CHECK_VIOLATION = '23514';
 
 describe('S97CT-REPLYTO — resolution order against the real schema', () => {
   it('1. companies.email is the source of truth when it is set', async () => {
@@ -114,34 +122,74 @@ describe('S97CT-REPLYTO — resolution order against the real schema', () => {
     expect(await resolve(bishopId)).toBe('office@bishopcontracting.com');
   });
 
-  it('2. FALLS BACK to the OWNER when companies.email is empty — the branch that runs today', async () => {
-    // The column exists but no company on rebuild-test has filled it in, so
-    // this is the path that actually executes. No company column was invented.
-    must('clear email', (await admin
-      .from('companies').update({ email: null }).eq('id', bishopId)).error);
+  // ⚠️ INVERTED [2026-09-24]. Was: "2. FALLS BACK to the OWNER when
+  // companies.email is empty — the branch that runs today". It cleared Bishop's
+  // email and expected the owner's. Clearing is now refused (ruling 3), which is
+  // the whole fix: the blank that stranded a real client's reply cannot be
+  // written, by any role, including the service role used here.
+  it('2. CLEARING companies.email is REFUSED — NULL, empty and whitespace alike', async () => {
+    must('set a known email', (await admin
+      .from('companies').update({ email: 'office@bishopcontracting.com' }).eq('id', bishopId)).error);
 
-    const resolved = await resolve(bishopId);
-    expect(resolved).toBe('josh+test50@worthprop.com');
+    for (const blank of [null, '', '   ']) {
+      const { error } = await admin.from('companies').update({ email: blank }).eq('id', bishopId);
+      expect(error?.code, `clearing to ${JSON.stringify(blank)} was accepted`).toBe(CHECK_VIOLATION);
+      expect(error?.message).toContain('companies_email_required_check');
+    }
 
-    // and it really is the OWNER, not just any profile
-    const { data: owner } = await admin
-      .from('profiles').select('email')
-      .eq('company_id', bishopId).eq('role', 'owner').eq('is_deleted', false).single();
-    expect(resolved).toBe(owner!.email);
+    // The row really is unchanged — the refusal is the fact, not the error text.
+    const { data: after } = await admin
+      .from('companies').select('email').eq('id', bishopId).single();
+    expect(after!.email).toBe('office@bishopcontracting.com');
   });
 
-  it('3. PLATFORM-WIDE — the second company resolves to ITS OWN owner, not Bishop\'s', async () => {
+  it('3. PLATFORM-WIDE — the second company resolves to ITS OWN address, not Bishop\'s', async () => {
     // The ruling is not Bishop-specific. A cross-company leak here would send
     // one company's client replies to another company's inbox.
+    //
+    // [2026-09-24] Ridgeline's companies.email was NULL until 20261760000000
+    // backfilled it with its owner's address, so the value is unchanged; it now
+    // arrives through the FIRST arm (companies.email), not the fallback.
     const resolved = await resolve(ridgelineId);
     expect(resolved).toBe('josh+qa-b-owner@worthprop.com');
-    expect(resolved).not.toBe('josh+test50@worthprop.com');
+    expect(resolved).not.toBe('office@bishopcontracting.com');
   });
 
-  it('4. a company with NEITHER an email nor an owner resolves to null', async () => {
-    // Must not throw and must not invent an address — the send goes without a
-    // Reply-To header.
-    expect(await resolve(orphanCompanyId)).toBeNull();
+  // ⚠️ INVERTED [2026-09-24]. Was: "4. a company with NEITHER an email nor an
+  // owner resolves to null", built on an inserted "Orphan Co" with no email.
+  // That company can no longer be created (ruling 1). The null arm is unit-
+  // tested in company-reply-to-resolver.test.ts.
+  it('4. INSERTING a company with no email is REFUSED — NULL, empty and whitespace alike', async () => {
+    const attempts: Array<{ label: string; email?: string | null }> = [
+      { label: 'omitted' },
+      { label: 'null', email: null },
+      { label: 'empty', email: '' },
+      { label: 'whitespace', email: '   ' },
+    ];
+    for (const a of attempts) {
+      const slug = `${MARKER.toLowerCase()}-blank-${a.label}`;
+      const row: { name: string; slug: string; email?: string | null } = {
+        name: `${MARKER} Blank ${a.label}`,
+        slug,
+      };
+      if ('email' in a) row.email = a.email;
+      const { error } = await admin.from('companies').insert(row);
+      expect(error?.code, `an insert with email ${a.label} was accepted`).toBe(CHECK_VIOLATION);
+
+      // Counted, not inferred from the error.
+      const { data: landed } = await admin.from('companies').select('id').eq('slug', slug);
+      expect(landed, `a company with email ${a.label} landed`).toEqual([]);
+    }
+
+    // ⚠️ THE CONTROL THAT MUST SUCCEED. Without it every refusal above passes
+    // on an insert that fails for some unrelated reason (a slug clash, a new
+    // NOT NULL column) — a probe that cannot fail.
+    const { error: okErr } = await admin.from('companies').insert({
+      name: `${MARKER} Has Email`,
+      slug: `${MARKER.toLowerCase()}-has-email`,
+      email: `${MARKER.toLowerCase()}-office@qa-noreply.ezcontractorbinder.com`,
+    });
+    expect(okErr, 'the control insert WITH an email was refused').toBeNull();
   });
 
   it('5. the resolved address is never a CLIENT address', async () => {
@@ -172,8 +220,9 @@ afterAll(async () => {
   }
 
   // Clears the seeded templates first — see purgeMarkerCompanies. Keyed on the
-  // NAME rather than on `orphanCompanyId`, so a run that died before the insert
-  // still cleans up whatever a previous one left.
+  // NAME rather than on an id, so a run that died mid-case still cleans up
+  // whatever a previous one left — including a blank-email company, should the
+  // constraint ever be dropped and case 4's inserts land.
   try {
     await purgeMarkerCompanies();
   } catch (e) {
