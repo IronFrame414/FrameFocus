@@ -560,8 +560,8 @@ top of this file is advanced to `#164` in the same commit, which is what keeps t
 - **#4-s110 — ruling 3 is wired on the core surfaces, not yet on EVERY one.** `UserText` shows
   user-entered text in the reader's language on: chat (both surfaces), the /m daily-log detail and
   list, the /m punch item, and the desktop daily-log detail (`test/s110-usertext-wiring.test.ts`
-  pins them). **Not yet wired** (FILL-H.8's list): `SiteVisitRecord` (deferred until Section A
-  rewrites it — then it is the most important one), tasks / up-next, schedule, safety incidents
+  pins them), and — after Section A — **the site-visit record** (notes, measurement areas, voice
+  transcripts; both surfaces). **Not yet wired** (FILL-H.8's list): tasks / up-next, schedule, safety incidents
   (/m list, desktop detail), deliveries, timesheet segment notes, expenses, change-order pages,
   the estimate builder's internal notes. Each is `<UserText text={…} />` at the render site, and
   must NEVER be added to anything client-facing (`s110-client-facing-english.test.ts`).

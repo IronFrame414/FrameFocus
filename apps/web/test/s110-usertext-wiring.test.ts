@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 // [RULED Josh: "User-entered text is translated for the READER, wherever it is
 // displayed — /m AND /dashboard … a /m-only translation of user content would
 // deliver none of the value."] Pins each wired surface so a refactor cannot
-// quietly drop it. SiteVisitRecord joins after Section A rewrites it.
+// quietly drop it. SiteVisitRecord joined after Section A rewrote it.
 
 const read = (rel: string) => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), 'utf8');
 
@@ -19,6 +19,10 @@ const SURFACES: Array<[string, RegExp]> = [
   ['../app/m/p/[projectId]/punch/[itemId]/page.tsx', /<UserText text=\{item\.title\} \/>/],
   // /dashboard — Josh reads the crew's Spanish in English
   ['../app/dashboard/field-ops/[projectId]/daily-logs/[logId]/page.tsx', /<UserText text=\{log\.work_performed\} \/>/],
+  // [S110 H after A] the site-visit record — one component, /m and both desktop
+  // mounts: the notes, the measurement areas and the voice transcripts.
+  ['../components/site-visits/site-visit-record.tsx', /<UserText text=\{note\.body\} \/>/],
+  ['../components/site-visits/voice-notes.tsx', /<UserText text=\{/],
 ];
 
 describe('S110 H — user-entered text is shown in the reader\'s language', () => {

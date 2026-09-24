@@ -19,6 +19,8 @@ import { VoiceNotes } from './voice-notes';
 import { resolveSiteVisitMedia } from '@/lib/site-visits/media';
 import { addedAfterSend, type Phase } from '@/lib/site-visits/photos';
 import type { EstimateFileListResponse } from '@/lib/api-contracts/estimate-files';
+import { useT } from '@/components/i18n/language-provider';
+import { UserText } from '@/components/i18n/user-text';
 
 // S108 Spec A — THE SITE VISIT RECORD. ONE component, rendered by BOTH the
 // phone (/m/site-visits/[id]) and the desktop page (/dashboard/estimates/
@@ -54,23 +56,13 @@ import type { EstimateFileListResponse } from '@/lib/api-contracts/estimate-file
 // one row. Notes and measurements are online-only — disabled with a message
 // when offline, never silently dropped.
 
-const KIND_LABEL: Record<SiteVisitNoteKind, { title: string; add: string; placeholder: string }> = {
-  condition: {
-    title: 'Existing conditions',
-    add: 'Add condition',
-    placeholder: 'What is there now — e.g. "Tile is cracked, subfloor may be soft"',
-  },
-  scope: {
-    title: 'Proposed scope',
-    add: 'Add scope item',
-    placeholder: 'What the work is — e.g. "Demo tile, level, install LVP"',
-  },
-  blocker: {
-    title: 'Blockers — what stops a price',
-    add: 'Add blocker',
-    placeholder: 'e.g. "Need access to the crawlspace", "Permit question"',
-  },
-};
+// [S110 H] System text is t('visit.…') — lib/i18n/areas/visit.ts. English on
+// /dashboard (its provider pins 'en'), the user's language on /m. Text a person
+// TYPED (note bodies, area names) is <UserText>: the READER's language, both
+// surfaces. The edit textareas always hold the ORIGINAL, never a translation.
+//
+// The per-kind labels were a module-level table (KIND_LABEL); they are now keys
+// `visit.kind.<kind>.{title,add,placeholder}`, resolved with t() at render time.
 
 
 interface NoteCtx {
@@ -88,15 +80,16 @@ interface NoteCtx {
 // on every render, so React would remount it and discard a half-typed note.
 function NoteSection({ kind, ctx }: { kind: SiteVisitNoteKind; ctx: NoteCtx }) {
   const { estimateId, canWrite, busy, online, run, mayEdit } = ctx;
+  const t = useT();
   const [draft, setDraft] = useState('');
   const items = ctx.notes.filter((n) => n.kind === kind);
   return (
     <section data-testid={`sv-section-${kind}`} className="mt-[18px]">
       <h2 className="mb-[8px] font-mono text-[11px] font-medium uppercase tracking-wide text-m6m-muted">
-        {KIND_LABEL[kind].title}
+        {t(`visit.kind.${kind}.title` as const)}
       </h2>
       {items.length === 0 ? (
-        <p className="text-[14px] text-m6m-muted">None yet.</p>
+        <p className="text-[14px] text-m6m-muted">{t('visit.noneYet')}</p>
       ) : (
         <ul className="flex flex-col gap-[8px]">
           {items.map((n) => (
@@ -110,7 +103,7 @@ function NoteSection({ kind, ctx }: { kind: SiteVisitNoteKind; ctx: NoteCtx }) {
             data-testid={`sv-new-${kind}`}
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
-            placeholder={KIND_LABEL[kind].placeholder}
+            placeholder={t(`visit.kind.${kind}.placeholder` as const)}
             rows={2}
             className="w-full rounded-[12px] border border-m6m-border bg-m6m-card px-[12px] py-[10px] text-[15px] text-m6m-navy"
           />
@@ -123,7 +116,7 @@ function NoteSection({ kind, ctx }: { kind: SiteVisitNoteKind; ctx: NoteCtx }) {
             }}
             className="h-[48px] rounded-[12px] border border-m6m-blue bg-[#f5f7ff] text-[15px] font-semibold text-m6m-blue disabled:opacity-40"
           >
-            {KIND_LABEL[kind].add}
+            {t(`visit.kind.${kind}.add` as const)}
           </button>
         </div>
       ) : null}
@@ -134,6 +127,7 @@ function NoteSection({ kind, ctx }: { kind: SiteVisitNoteKind; ctx: NoteCtx }) {
 
 function NoteRow({ note, editable, ctx }: { note: SiteVisitNote; editable: boolean; ctx: NoteCtx }) {
   const { estimateId, busy, online, run } = ctx;
+  const t = useT();
   const [editing, setEditing] = useState(false);
   const [body, setBody] = useState(note.body);
   const isBlocker = note.kind === 'blocker';
@@ -147,7 +141,7 @@ function NoteRow({ note, editable, ctx }: { note: SiteVisitNote; editable: boole
         {isBlocker ? (
           <input
             type="checkbox"
-            aria-label={note.resolved ? 'Resolved — tap to reopen' : 'Mark resolved'}
+            aria-label={note.resolved ? t('visit.blocker.resolvedReopen') : t('visit.blocker.markResolved')}
             data-testid="sv-blocker-toggle"
             checked={note.resolved}
             disabled={!editable || busy || !online}
@@ -178,10 +172,10 @@ function NoteRow({ note, editable, ctx }: { note: SiteVisitNote; editable: boole
               isBlocker && note.resolved ? 'text-m6m-muted line-through' : 'text-m6m-navy'
             }`}
           >
-            {note.body}
+            <UserText text={note.body} />
             {addedAfterSend(note.created_at, ctx.frozenAt) ? (
               <span data-testid="sv-added-after" className="mt-[2px] block text-[12px] text-m6m-muted">
-                Added after the estimate was sent
+                {t('visit.addedAfterSend')}
               </span>
             ) : null}
           </p>
@@ -204,7 +198,7 @@ function NoteRow({ note, editable, ctx }: { note: SiteVisitNote; editable: boole
                 }}
                 className="h-[40px] rounded-[10px] bg-m6m-blue px-[14px] text-[14px] font-semibold text-white disabled:opacity-40"
               >
-                Save
+                {t('visit.save')}
               </button>
               <button
                 type="button"
@@ -214,7 +208,7 @@ function NoteRow({ note, editable, ctx }: { note: SiteVisitNote; editable: boole
                 }}
                 className="h-[40px] rounded-[10px] border border-m6m-border px-[14px] text-[14px]"
               >
-                Cancel
+                {t('visit.cancel')}
               </button>
             </>
           ) : (
@@ -224,7 +218,7 @@ function NoteRow({ note, editable, ctx }: { note: SiteVisitNote; editable: boole
                 onClick={() => setEditing(true)}
                 className="h-[40px] rounded-[10px] border border-m6m-border px-[14px] text-[14px]"
               >
-                Edit
+                {t('visit.edit')}
               </button>
               <button
                 type="button"
@@ -232,7 +226,7 @@ function NoteRow({ note, editable, ctx }: { note: SiteVisitNote; editable: boole
                 onClick={() => run(() => deleteSiteVisitNote(note.id))}
                 className="h-[40px] rounded-[10px] border border-[#f1c4bf] px-[14px] text-[14px] text-m6m-danger disabled:opacity-40"
               >
-                Remove
+                {t('visit.remove')}
               </button>
             </>
           )}
@@ -266,6 +260,7 @@ export function SiteVisitRecord({
   office: boolean;
 }) {
   const router = useRouter();
+  const t = useT();
   const online = useOnline();
   const offlineSync = useOfflineSync();
   const [error, setError] = useState<string | null>(null);
@@ -287,7 +282,7 @@ export function SiteVisitRecord({
     setError(null);
     const r = await fn();
     setBusy(false);
-    if (!r.success) setError(r.error ?? 'That did not save.');
+    if (!r.success) setError(r.error ?? t('visit.didNotSave'));
     else refresh();
     return r.success;
   }
@@ -329,7 +324,7 @@ export function SiteVisitRecord({
       // A weak signal reads as online and fails — the same fallback as M6M
       // capture: ANY failure is held, never dropped.
       if (!offlineSync) {
-        setError('A photo did not upload and cannot be held on this device. Try again.');
+        setError(t('visit.photo.cannotHold'));
         continue;
       }
       await offlineSync.enqueue({
@@ -343,7 +338,7 @@ export function SiteVisitRecord({
       held += 1;
     }
     if (fileInput.current) fileInput.current.value = '';
-    if (held > 0) setError(`${held} photo${held === 1 ? '' : 's'} saved on this phone — they upload when signal returns.`);
+    if (held > 0) setError(t(held === 1 ? 'visit.photo.heldOne' : 'visit.photo.heldMany', { n: held }));
     await loadFiles();
   }
 
@@ -373,12 +368,12 @@ export function SiteVisitRecord({
           data-testid="sv-promoted-banner"
           className="mb-[12px] rounded-[10px] border border-m6m-border bg-[#f5f7ff] px-[12px] py-[10px] text-[14px] text-m6m-navy"
         >
-          This visit is now an estimate.{' '}
+          {t('visit.promoted.title')}{' '}
           {frozenAt
             ? null
             : canWrite
-              ? 'The team can still add to it and fix it here until the estimate is sent.'
-              : 'You can still read everything captured on it.'}
+              ? t('visit.promoted.canWrite')
+              : t('visit.promoted.readOnly')}
         </p>
       ) : null}
       {frozenAt ? (
@@ -386,9 +381,8 @@ export function SiteVisitRecord({
           data-testid="sv-frozen-banner"
           className="mb-[12px] rounded-[10px] border border-[#f5cf8f] bg-[#fffbeb] px-[12px] py-[10px] text-[14px] text-m6m-navy"
         >
-          <strong>The estimate has been sent.</strong> What was captured before then is frozen — it is the
-          record of what was found on site at the price quoted.
-          {canWrite ? ' You can still add notes, measurements, photos and voice notes; they are marked as added after the send.' : ''}
+          <strong>{t('visit.frozen.title')}</strong> {t('visit.frozen.body')}
+          {canWrite ? ` ${t('visit.frozen.canAdd')}` : ''}
         </p>
       ) : null}
       {!promoted && finishedAt ? (
@@ -396,30 +390,30 @@ export function SiteVisitRecord({
           data-testid="sv-finished-banner"
           className="mb-[12px] rounded-[10px] border border-[#b7e4c7] bg-[#ecfdf5] px-[12px] py-[10px] text-[14px] text-m6m-navy"
         >
-          <strong>Finished</strong> {new Date(finishedAt).toLocaleString()} — ready for the office to price.
-          It becomes an estimate, and gets its number, only when the office creates one.
-          {canWrite ? ' Mistakes can still be fixed here until then.' : ''}
+          <strong>{t('visit.finished.title')}</strong> {new Date(finishedAt).toLocaleString()} {t('visit.finished.body')}
+          {canWrite ? ` ${t('visit.finished.canFix')}` : ''}
         </p>
       ) : null}
       {!online && canWrite ? (
         <p role="status" className="mb-[12px] rounded-[10px] border border-m6m-border bg-m6m-card px-[12px] py-[10px] text-[14px]">
-          No signal — photos and voice notes are saved on this phone and upload later. Notes and
-          measurements need a connection.
+          {t('visit.offline')}
         </p>
       ) : null}
       {error ? <ErrorNotice message={error} testId="sv-error" /> : null}
 
       <p data-testid="sv-blockers-open" className="text-[14px] text-m6m-navy">
-        {blockersOpen === 0 ? 'Nothing blocking a price.' : `${blockersOpen} blocker${blockersOpen === 1 ? '' : 's'} still open.`}
+        {blockersOpen === 0
+          ? t('visit.blockers.none')
+          : t(blockersOpen === 1 ? 'visit.blockers.openOne' : 'visit.blockers.openMany', { n: blockersOpen })}
       </p>
 
       {/* PHOTOS */}
       <section data-testid="sv-section-photos" className="mt-[18px]">
         <h2 className="mb-[8px] font-mono text-[11px] font-medium uppercase tracking-wide text-m6m-muted">
-          Photos {photos.length > 0 ? `· ${photos.length}` : ''}
-          {heldForThisVisit > 0 ? ` · ${heldForThisVisit} waiting for signal` : ''}
+          {t('visit.photos.title')} {photos.length > 0 ? `· ${photos.length}` : ''}
+          {heldForThisVisit > 0 ? ` · ${t('visit.waitingForSignal', { n: heldForThisVisit })}` : ''}
         </h2>
-        {photos.length === 0 ? <p className="text-[14px] text-m6m-muted">No photos yet.</p> : null}
+        {photos.length === 0 ? <p className="text-[14px] text-m6m-muted">{t('visit.photos.none')}</p> : null}
         {(['before', 'after'] as const).map((phase) => {
           const group = phase === 'before' ? photosBefore : photosAfter;
           if (group.length === 0) return null;
@@ -427,7 +421,7 @@ export function SiteVisitRecord({
             <div key={phase} data-testid={`sv-photos-${phase}`} className="mt-[6px]">
               {frozenAt ? (
                 <p className="mb-[4px] text-[12px] text-m6m-muted">
-                  {phase === 'before' ? 'Captured before the estimate was sent' : 'Added after it was sent'} · {group.length}
+                  {phase === 'before' ? t('visit.photos.before') : t('visit.photos.after')} · {group.length}
                 </p>
               ) : null}
               <div className="grid grid-cols-3 gap-[6px]">
@@ -444,12 +438,12 @@ export function SiteVisitRecord({
           );
         })}
         {promoted && office ? (
-          <p className="mt-[6px] text-[13px] text-m6m-muted">Files added from the estimate&apos;s Files tab stay there.</p>
+          <p className="mt-[6px] text-[13px] text-m6m-muted">{t('visit.photos.filesTabStays')}</p>
         ) : null}
         {/* [S110 ruling 3] ADDING stays open at every status. */}
         {canWrite ? (
           <label className="mt-[10px] flex h-[52px] cursor-pointer items-center justify-center rounded-[14px] bg-m6m-blue text-[16px] font-bold text-white">
-            Add photos
+            {t('visit.photos.add')}
             <input
               ref={fileInput}
               data-testid="sv-photo-input"
@@ -469,10 +463,11 @@ export function SiteVisitRecord({
       {/* MEASUREMENTS — structured (ASK-A5): area, L × W, sq ft computed. */}
       <section data-testid="sv-section-measurements" className="mt-[18px]">
         <h2 className="mb-[8px] font-mono text-[11px] font-medium uppercase tracking-wide text-m6m-muted">
-          Measurements {detail.measurements.length > 0 ? `· ${totalSqft.toLocaleString()} sq ft total` : ''}
+          {t('visit.measurements.title')}{' '}
+          {detail.measurements.length > 0 ? t('visit.measurements.total', { n: totalSqft.toLocaleString() }) : ''}
         </h2>
         {detail.measurements.length === 0 ? (
-          <p className="text-[14px] text-m6m-muted">None yet.</p>
+          <p className="text-[14px] text-m6m-muted">{t('visit.noneYet')}</p>
         ) : (
           <ul className="flex flex-col gap-[6px]">
             {detail.measurements.map((m) => (
@@ -482,13 +477,19 @@ export function SiteVisitRecord({
                 className="flex items-center justify-between gap-[8px] rounded-[12px] border border-m6m-border bg-m6m-card px-[12px] py-[10px]"
               >
                 <span className="min-w-0">
-                  <span className="block text-[15px] font-semibold text-m6m-navy">{m.area_name}</span>
+                  <span className="block text-[15px] font-semibold text-m6m-navy">
+                    <UserText text={m.area_name} />
+                  </span>
                   <span className="block font-mono text-[12px] text-m6m-muted">
-                    {Number(m.length_ft)} × {Number(m.width_ft)} ft = {Number(m.square_feet)} sq ft
+                    {t('visit.measurements.row', {
+                      l: Number(m.length_ft),
+                      w: Number(m.width_ft),
+                      sqft: Number(m.square_feet),
+                    })}
                   </span>
                   {addedAfterSend(m.created_at, frozenAt) ? (
                     <span data-testid="sv-added-after" className="block text-[12px] text-m6m-muted">
-                      Added after the estimate was sent
+                      {t('visit.addedAfterSend')}
                     </span>
                   ) : null}
                 </span>
@@ -499,7 +500,7 @@ export function SiteVisitRecord({
                     onClick={() => run(() => deleteSiteVisitMeasurement(m.id))}
                     className="h-[40px] shrink-0 rounded-[10px] border border-[#f1c4bf] px-[12px] text-[14px] text-m6m-danger disabled:opacity-40"
                   >
-                    Remove
+                    {t('visit.remove')}
                   </button>
                 ) : null}
               </li>
@@ -512,7 +513,7 @@ export function SiteVisitRecord({
               data-testid="sv-m-area"
               value={area}
               onChange={(e) => setArea(e.target.value)}
-              placeholder="Area (e.g. Kitchen)"
+              placeholder={t('visit.measurements.area')}
               className="h-[48px] rounded-[12px] border border-m6m-border px-[10px] text-[15px]"
             />
             <input
@@ -520,7 +521,7 @@ export function SiteVisitRecord({
               value={len}
               onChange={(e) => setLen(e.target.value.replace(/[^0-9.]/g, ''))}
               inputMode="decimal"
-              placeholder="L ft"
+              placeholder={t('visit.measurements.length')}
               className="h-[48px] rounded-[12px] border border-m6m-border px-[10px] font-mono text-[15px]"
             />
             <input
@@ -528,7 +529,7 @@ export function SiteVisitRecord({
               value={wid}
               onChange={(e) => setWid(e.target.value.replace(/[^0-9.]/g, ''))}
               inputMode="decimal"
-              placeholder="W ft"
+              placeholder={t('visit.measurements.width')}
               className="h-[48px] rounded-[12px] border border-m6m-border px-[10px] font-mono text-[15px]"
             />
             <button
@@ -548,7 +549,9 @@ export function SiteVisitRecord({
               }}
               className="col-span-3 h-[48px] rounded-[12px] border border-m6m-blue bg-[#f5f7ff] text-[15px] font-semibold text-m6m-blue disabled:opacity-40"
             >
-              {previewSqft === null ? 'Add measurement' : `Add measurement · ${previewSqft} sq ft`}
+              {previewSqft === null
+                ? t('visit.measurements.add')
+                : t('visit.measurements.addWithPreview', { n: previewSqft })}
             </button>
           </div>
         ) : null}
@@ -574,11 +577,13 @@ export function SiteVisitRecord({
           {confirmingFinish ? (
             <div className="flex flex-col gap-[8px]">
               <p className="text-[14px] text-m6m-navy">
-                Finish this visit? The office sees it is ready to price. It does <strong>not</strong> become an
-                estimate yet — the office does that. You can still fix mistakes until then.
-                {blockersOpen > 0 ? ` ${blockersOpen} blocker${blockersOpen === 1 ? ' is' : 's are'} still open.` : ''}
+                {t('visit.finish.confirmBefore')} <strong>{t('visit.finish.confirmStrong')}</strong>{' '}
+                {t('visit.finish.confirmAfter')}
+                {blockersOpen > 0
+                  ? ` ${t(blockersOpen === 1 ? 'visit.finish.blockersOne' : 'visit.finish.blockersMany', { n: blockersOpen })}`
+                  : ''}
                 {heldForThisVisit > 0
-                  ? ` ${heldForThisVisit} photo or voice note${heldForThisVisit === 1 ? ' is' : 's are'} still on this phone and will upload when signal returns.`
+                  ? ` ${t(heldForThisVisit === 1 ? 'visit.finish.heldOne' : 'visit.finish.heldMany', { n: heldForThisVisit })}`
                   : ''}
               </p>
               <button
@@ -590,14 +595,14 @@ export function SiteVisitRecord({
                 }}
                 className="h-[52px] rounded-[14px] bg-m6m-navy text-[16px] font-bold text-white disabled:opacity-40"
               >
-                Yes, finish the visit
+                {t('visit.finish.yes')}
               </button>
               <button
                 type="button"
                 onClick={() => setConfirmingFinish(false)}
                 className="h-[48px] rounded-[12px] border border-m6m-border text-[15px]"
               >
-                Keep recording
+                {t('visit.finish.keepRecording')}
               </button>
             </div>
           ) : (
@@ -608,10 +613,10 @@ export function SiteVisitRecord({
               onClick={() => setConfirmingFinish(true)}
               className="h-[52px] w-full rounded-[14px] bg-m6m-navy text-[16px] font-bold text-white disabled:opacity-40"
             >
-              Finish site visit
+              {t('visit.finish.start')}
             </button>
           )}
-          {!online ? <p className="mt-[6px] text-[13px] text-m6m-muted">Finishing needs a connection.</p> : null}
+          {!online ? <p className="mt-[6px] text-[13px] text-m6m-muted">{t('visit.finish.needsConnection')}</p> : null}
         </section>
       ) : null}
 

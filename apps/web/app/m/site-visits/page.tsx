@@ -3,6 +3,7 @@ import { DASHBOARD_ROLES } from '@framefocus/shared/constants/roles';
 import type { CompanyRole } from '@framefocus/shared';
 import { getMyProfile } from '@/lib/services/profiles';
 import { listSiteVisits } from '@/lib/services/site-visits';
+import { groupSiteVisits } from '@/lib/site-visits/groups';
 import { SetMobileHeader } from '../mobile-header';
 import { EmptyState, ListRowLink, SectionLabel } from '../mobile-ui';
 import { getMobileT } from '@/lib/i18n/server';
@@ -12,8 +13,9 @@ import { getMobileT } from '@/lib/i18n/server';
 // WHO: any INTERNAL role (owner, admin, PM, foreman, crew) — RULED. Not a
 // subcontractor, not a client: they are told plainly, and the RPCs and RLS
 // refuse them regardless of this screen.
-// WHAT: office roles see every visit in the company; a foreman or crew member
-// sees the visits THEY recorded (site_visits_select_scoped). No money on this
+// WHAT: every internal employee sees every visit in the company [S110 A, Q1]
+// (site_visits_select_internal). _Superseded: "a foreman or crew member sees the
+// visits THEY recorded (site_visits_select_scoped)."_ No money on this
 // screen or in its payload — it never reads `estimates`.
 
 export default async function SiteVisitsPage() {
@@ -34,9 +36,8 @@ export default async function SiteVisitsPage() {
   // Three states, never two: RECORDING (still capturing), FINISHED (the
   // recorder's "done" — no number, not an estimate), and BECAME ESTIMATES
   // (the office promoted it). [S108 follow-up — finish is not promotion.]
-  const open = visits.filter((v) => !v.promoted_at && !v.finished_at);
-  const finished = visits.filter((v) => !v.promoted_at && v.finished_at);
-  const done = visits.filter((v) => v.promoted_at);
+  // [S110 B] the SAME grouping as the desktop list (parity) — one helper.
+  const { recording: open, finished, estimates: done } = groupSiteVisits(visits);
 
   const row = (v: (typeof visits)[number]) => {
     const who = v.contact ? `${v.contact.first_name} ${v.contact.last_name}`.trim() : null;

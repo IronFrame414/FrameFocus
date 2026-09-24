@@ -8,8 +8,6 @@
 // prompt: "translating its strings before A has rewritten them means doing the
 // work twice"]: components/site-visits/site-visit-record.tsx, voice-notes.tsx.
 export const PENDING: Record<string, number> = {
-  // Held until Section A rewrites them (see the header). Everything else /m can
-  // render is migrated [S110 H]: the ratchet started at 1011 strings in 80 files.
-  'components/site-visits/site-visit-record.tsx': 60,
-  'components/site-visits/voice-notes.tsx': 20,
+  // EMPTY [S110 H]: every file /m can render is migrated. The ratchet started at
+  // 1011 strings in 80 files; the two site-visit components followed Section A.
 };

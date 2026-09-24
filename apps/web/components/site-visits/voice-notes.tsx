@@ -10,6 +10,9 @@ import {
 } from '@/lib/services/site-visits-client';
 import { useOfflineSync } from '@/app/m/offline-sync';
 import { useOnline } from '@/app/m/write-ui';
+import { useT } from '@/components/i18n/language-provider';
+import { UserText } from '@/components/i18n/user-text';
+import { makeT, type T } from '@/lib/i18n/messages';
 
 // S108 Spec A — VOICE NOTES [RULED, voice ruling].
 //
@@ -20,7 +23,11 @@ import { useOnline } from '@/app/m/write-ui';
 //     queue with the same id, never dropped.
 //   · Transcribed SERVER-SIDE after the audio is stored. A failed transcription
 //     shows here with a retry; the audio is never lost or altered.
-//   · The transcript keeps the SPOKEN language — no translation anywhere.
+//   · The transcript is STORED in the spoken language and never overwritten by
+//     a translation. [S110 H, ruling 3] it is DISPLAYED through <UserText> —
+//     the reader's language — while the edit box always holds the original.
+//     _Superseded, quoted: "The transcript keeps the SPOKEN language — no
+//     translation anywhere."_ (Storage half still stands.)
 //   · The recorder edits the transcript until promotion; owner/admin/PM after.
 //     The machine transcript is kept separately and never overwritten.
 
@@ -39,10 +46,13 @@ function mmss(s: number): string {
   return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`;
 }
 
-/** Pure, and exported for the unit suite: may this recording be sent? */
-export function voiceLengthRefusal(seconds: number): string | null {
-  if (!(seconds > 0)) return 'That recording is empty.';
-  if (seconds > MAX_SECONDS) return 'Voice notes are limited to 10 minutes. This one was not sent — record it in shorter parts.';
+/**
+ * Pure, and exported for the unit suite: may this recording be sent? The
+ * message is in the caller's language; without a `t` it is English.
+ */
+export function voiceLengthRefusal(seconds: number, t: T = makeT('en')): string | null {
+  if (!(seconds > 0)) return t('visit.voice.empty');
+  if (seconds > MAX_SECONDS) return t('visit.voice.tooLong');
   return null;
 }
 
@@ -63,6 +73,7 @@ export function VoiceNotes({
   frozenAt: string | null;
   onChanged: () => void | Promise<void>;
 }) {
+  const t = useT();
   const online = useOnline();
   const offlineSync = useOfflineSync();
   const [recording, setRecording] = useState(false);
@@ -78,7 +89,7 @@ export function VoiceNotes({
   useEffect(
     () => () => {
       if (tick.current) clearInterval(tick.current);
-      recRef.current?.stream.getTracks().forEach((t) => t.stop());
+      recRef.current?.stream.getTracks().forEach((track) => track.stop());
     },
     []
   );
@@ -112,7 +123,7 @@ export function VoiceNotes({
         }
       }, 250);
     } catch {
-      setMessage('The microphone is not available. Allow microphone access and try again.');
+      setMessage(t('visit.voice.noMic'));
     }
   }
 
@@ -122,7 +133,7 @@ export function VoiceNotes({
 
   async function finish(mime: string) {
     if (tick.current) clearInterval(tick.current);
-    recRef.current?.stream.getTracks().forEach((t) => t.stop());
+    recRef.current?.stream.getTracks().forEach((track) => track.stop());
     setRecording(false);
     const measured = Math.round(((Date.now() - startedAt.current) / 1000) * 10) / 10;
     // Stopped BY the cap → it is exactly the cap (the stop lands a few hundred
@@ -130,7 +141,7 @@ export function VoiceNotes({
     // (a backgrounded tab) while the microphone kept going — a genuinely long
     // recording, and the ruling refuses it before upload.
     const seconds = cappedRef.current ? MAX_SECONDS : measured;
-    const refusal = voiceLengthRefusal(seconds);
+    const refusal = voiceLengthRefusal(seconds, t);
     if (refusal) {
       setMessage(refusal);
       return;
@@ -142,13 +153,13 @@ export function VoiceNotes({
     setBusy(false);
     if (r.success) {
       if ('transcriptStatus' in r && r.transcriptStatus === 'failed') {
-        setMessage('Saved. The transcript did not come through — tap "Try again" on the note.');
+        setMessage(t('visit.voice.transcriptFailedSaved'));
       }
       await onChanged();
       return;
     }
     if (!offlineSync) {
-      setMessage('The recording did not upload and cannot be held on this device. Record it again with signal.');
+      setMessage(t('visit.voice.cannotHold'));
       return;
     }
     await offlineSync.enqueue({
@@ -159,7 +170,7 @@ export function VoiceNotes({
       payload: { kind: 'voice', estimate_id: estimateId, id, blob, duration_seconds: seconds },
       captured_at: new Date().toISOString(),
     });
-    setMessage('Saved on this phone — it uploads and transcribes when signal returns.');
+    setMessage(t('visit.voice.heldOnPhone'));
   }
 
   const held = (offlineSync?.entries ?? []).filter(
@@ -172,15 +183,15 @@ export function VoiceNotes({
   return (
     <section data-testid="sv-section-voice" className="mt-[18px]">
       <h2 className="mb-[8px] font-mono text-[11px] font-medium uppercase tracking-wide text-m6m-muted">
-        Voice notes {voiceNotes.length > 0 ? `· ${voiceNotes.length}` : ''}
-        {held > 0 ? ` · ${held} waiting for signal` : ''}
+        {t('visit.voice.title')} {voiceNotes.length > 0 ? `· ${voiceNotes.length}` : ''}
+        {held > 0 ? ` · ${t('visit.waitingForSignal', { n: held })}` : ''}
       </h2>
       {message ? (
         <p data-testid="sv-voice-message" role="status" className="mb-[8px] text-[14px] text-m6m-navy">
           {message}
         </p>
       ) : null}
-      {voiceNotes.length === 0 ? <p className="text-[14px] text-m6m-muted">None yet.</p> : null}
+      {voiceNotes.length === 0 ? <p className="text-[14px] text-m6m-muted">{t('visit.noneYet')}</p> : null}
       <ul className="flex flex-col gap-[8px]">
         {voiceNotes.map((v) => (
           <VoiceRow
@@ -207,10 +218,14 @@ export function VoiceNotes({
               recording ? 'bg-m6m-danger' : 'bg-m6m-blue'
             }`}
           >
-            {busy ? 'Saving…' : recording ? `Stop · ${mmss(elapsed)} / 10:00` : 'Record a voice note'}
+            {busy
+              ? t('visit.voice.saving')
+              : recording
+                ? t('visit.voice.stop', { time: mmss(elapsed) })
+                : t('visit.voice.record')}
           </button>
         ) : (
-          <p className="mt-[8px] text-[14px] text-m6m-muted">This browser cannot record audio.</p>
+          <p className="mt-[8px] text-[14px] text-m6m-muted">{t('visit.voice.unsupported')}</p>
         )
       ) : null}
     </section>
@@ -230,6 +245,7 @@ function VoiceRow({
   addedAfterSend: boolean;
   onChanged: () => void | Promise<void>;
 }) {
+  const t = useT();
   const online = useOnline();
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState(note.transcript ?? '');
@@ -244,16 +260,16 @@ function VoiceRow({
     >
       <div className="mb-[6px] font-mono text-[12px] text-m6m-muted">
         {mmss(Number(note.duration_seconds))}
-        {note.transcript_edited_at ? ' · transcript edited' : ''}
-        {after ? <span data-testid="sv-added-after"> · added after the estimate was sent</span> : null}
+        {note.transcript_edited_at ? ` · ${t('visit.voice.transcriptEdited')}` : ''}
+        {after ? <span data-testid="sv-added-after"> · {t('visit.voice.addedAfterSend')}</span> : null}
       </div>
       {url ? <audio data-testid="sv-voice-audio" controls preload="none" src={url} className="w-full" /> : null}
       {note.transcript_status === 'pending' ? (
-        <p className="mt-[6px] text-[14px] text-m6m-muted">Transcribing…</p>
+        <p className="mt-[6px] text-[14px] text-m6m-muted">{t('visit.voice.transcribing')}</p>
       ) : note.transcript_status === 'failed' ? (
         <div className="mt-[6px]">
           <p data-testid="sv-voice-failed" className="text-[14px] text-m6m-danger">
-            The transcript did not come through. The recording is saved.
+            {t('visit.voice.failed')}
           </p>
           {editable ? (
             <button
@@ -265,12 +281,12 @@ function VoiceRow({
                 setErr(null);
                 const r = await retryTranscription(note.id);
                 setBusy(false);
-                if (!r.success) setErr(r.error ?? 'Still did not come through.');
+                if (!r.success) setErr(r.error ?? t('visit.voice.stillFailed'));
                 await onChanged();
               }}
               className="mt-[6px] h-[44px] rounded-[10px] border border-m6m-blue px-[14px] text-[14px] font-semibold text-m6m-blue disabled:opacity-40"
             >
-              {busy ? 'Trying…' : 'Try again'}
+              {busy ? t('visit.voice.trying') : t('visit.voice.tryAgain')}
             </button>
           ) : null}
         </div>
@@ -292,7 +308,7 @@ function VoiceRow({
                 setErr(null);
                 const r = await updateVoiceTranscript(note.id, text);
                 setBusy(false);
-                if (!r.success) setErr(r.error ?? 'Could not save.');
+                if (!r.success) setErr(r.error ?? t('visit.voice.couldNotSave'));
                 else {
                   setEditing(false);
                   await onChanged();
@@ -300,7 +316,7 @@ function VoiceRow({
               }}
               className="h-[40px] rounded-[10px] bg-m6m-blue px-[14px] text-[14px] font-semibold text-white disabled:opacity-40"
             >
-              Save
+              {t('visit.save')}
             </button>
             <button
               type="button"
@@ -310,14 +326,14 @@ function VoiceRow({
               }}
               className="h-[40px] rounded-[10px] border border-m6m-border px-[14px] text-[14px]"
             >
-              Cancel
+              {t('visit.cancel')}
             </button>
           </div>
         </div>
       ) : (
         <>
           <p data-testid="sv-voice-transcript" className="mt-[6px] whitespace-pre-wrap text-[15px] text-m6m-navy">
-            {note.transcript || '(nothing heard)'}
+            {note.transcript ? <UserText text={note.transcript} /> : t('visit.voice.nothingHeard')}
           </p>
           {editable ? (
             <button
@@ -325,7 +341,7 @@ function VoiceRow({
               onClick={() => setEditing(true)}
               className="mt-[6px] h-[40px] rounded-[10px] border border-m6m-border px-[14px] text-[14px]"
             >
-              Edit transcript
+              {t('visit.voice.editTranscript')}
             </button>
           ) : null}
         </>
