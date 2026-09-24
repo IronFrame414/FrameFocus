@@ -71,6 +71,9 @@ export const ROUTE_CONTRACTS: RouteContract[] = [
       'lib/services/site-visits-client.ts': [],
       // S2 asserts the list carries NO url and NO file_path (161.B).
       'e2e/desktop-file-sheet-s109.spec.ts': ['id'],
+      // [S110 B4] the Floor in a browser: a crew member's list has no
+      // non-captured file; the owner's control list does.
+      'e2e/desktop-site-visits-s110.spec.ts': ['file_name'],
       // Import the route module / read its source.
       'test/s107-estimate-files-route-order.test.ts': [],
       'test/s109-file-sheet.test.ts': [],
