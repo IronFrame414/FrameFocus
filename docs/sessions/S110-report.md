@@ -391,3 +391,23 @@ back). Its `afterAll` resets the shared crew identity to `en` through the servic
 `desktop-chat-switcher.spec.ts:31` (thread ORDER), 2 flaky, 568 passed. Same file and fingerprint
 as C's CI failure and as the S108 #157 contention record. E touches no chat code. **Not yet
 confirmed**: a solo local run of that spec on E once the database is idle.
+
+### E's CI failure — decided on an idle database
+
+Solo run on E's production build, Actions API showing 0 active runs, `--workers=1 --retries=0`:
+`E_CHAT_SWITCHER_PW_EXIT_LINE=0`, **5/5**, `:31` and `:62` included. Contention between concurrent
+CI runs (the #157 fingerprint), not E. The server was stopped by PID.
+
+## STATUS AT PAUSE — what is built, what is blocked, what is owed
+
+| § | branch | state |
+| --- | --- | --- |
+| F | `feature/s110-f-route-guard` | **built and proven** (3 sabotages); CI green |
+| C | `feature/s110-c-account-link` | **built and proven** (browser + sabotage); CI red only on #157 contention |
+| D | `feature/s110-d-line-rows` | **built and proven** (live 11/11, e2e + sabotage); CI green. ⚠️ migration `20261720000000` owed to production |
+| E | `feature/s110-e-carried-debt` | **built and proven** (E1 live + 2 sabotages; E2/E3 by source assertion — **E3's sheets not driven in a browser**); CI red only on #157 contention (proven solo) |
+| A | — | ⚠️ **BLOCKED** on Josh's production counts (FILLED-A.8 queries 1–3) |
+| B | — | blocked on A |
+| H | `feature/s110-h-language` (stacked on C) | **built and proven except `SiteVisitRecord`** (deferred until A by the prompt's order). ⚠️ migration `20261750000000` owed to production |
+
+**Nothing merged. Nothing touched production.** Rebuild-test holds D's and H's migrations.
