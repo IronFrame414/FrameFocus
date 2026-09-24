@@ -182,7 +182,7 @@ const LINKS: Record<string, LinkDef> = {
   // with promote/abandon). The notification goes to the office.
   site_visit: {
     mobile: (p) => (p.id ? `/m/site-visits/${p.id}` : null),
-    desktop: (p) => (p.id ? `/dashboard/estimates/site-visits/${p.id}` : null),
+    desktop: (p) => (p.id ? `/dashboard/site-visits/${p.id}` : null),
   },
   // `trial_warning` — REGISTERED [S138]. S137 shipped `linkKey: 'trial_warning'`
   // in lifecycle.ts with no entry here, so `resolveLink()` returned null for

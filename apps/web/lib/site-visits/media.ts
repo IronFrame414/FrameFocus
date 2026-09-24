@@ -1,4 +1,5 @@
-import { visitEraPhotos } from '@/lib/site-visits/photos';
+import { sitePhotos, type Phase } from '@/lib/site-visits/photos';
+import type { EstimateFileListItem, EstimateFileUrlResponse } from '@/lib/api-contracts/estimate-files';
 
 /**
  * S109 photo regression — the site-visit record signs its OWN media.
@@ -18,20 +19,19 @@ import { visitEraPhotos } from '@/lib/site-visits/photos';
  * record already renders as its fallback; it never throws and never takes
  * the rest of the grid with it.
  *
- * REQUEST COUNT: 1 list request + 1 per visit-era photo + 1 per audio file.
- * Only files the record DISPLAYS are signed — later (post-promotion) photos,
- * PDFs and the like are not.
+ * REQUEST COUNT: 1 list request + 1 per captured photo + 1 per audio file.
+ * Only files the record DISPLAYS are signed — Files-tab uploads, PDFs and the
+ * like are not. [S110 A: "visit-era" (before promotion) became "captured".]
  */
 
-export interface ListedFile {
-  id: string;
-  file_name: string;
-  mime_type: string;
-  created_at: string | null;
-}
+// [S110 F] Derived from the route's CONTRACT, not hand-written: this interface
+// was a hand-written copy that still said nothing about `url` being gone.
+export type ListedFile = Pick<EstimateFileListItem, 'id' | 'file_name' | 'mime_type' | 'created_at' | 'site_visit_capture'>;
 
 export interface ResolvedMediaFile extends ListedFile {
   url: string | null;
+  /** [S110 A] captured before the estimate was sent, or added after. */
+  phase: Phase;
 }
 
 type FetchLike = (input: string) => Promise<{ ok: boolean; json: () => Promise<unknown> }>;
@@ -40,7 +40,7 @@ async function resolveOne(estimateId: string, fileId: string, fetchImpl: FetchLi
   try {
     const res = await fetchImpl(`/api/estimates/${estimateId}/files/${fileId}/url`);
     if (!res.ok) return null;
-    const body = (await res.json()) as { url?: unknown };
+    const body = (await res.json()) as Partial<EstimateFileUrlResponse>;
     return typeof body.url === 'string' ? body.url : null;
   } catch {
     return null;
@@ -50,11 +50,12 @@ async function resolveOne(estimateId: string, fileId: string, fetchImpl: FetchLi
 export async function resolveSiteVisitMedia(
   estimateId: string,
   files: ListedFile[],
-  promotedAt: string | null,
+  frozenAt: string | null,
   fetchImpl: FetchLike
 ): Promise<{ photos: ResolvedMediaFile[]; audioUrls: Record<string, string | null> }> {
-  const photoFiles = visitEraPhotos(files, promotedAt);
-  const audioFiles = files.filter((f) => f.mime_type.startsWith('audio/'));
+  // [S110 A] captures only, grouped at the send (lib/site-visits/photos.ts).
+  const photoFiles = sitePhotos(files, frozenAt);
+  const audioFiles = files.filter((f) => f.site_visit_capture && f.mime_type.startsWith('audio/'));
 
   const [photoUrls, audioList] = await Promise.all([
     Promise.all(photoFiles.map((f) => resolveOne(estimateId, f.id, fetchImpl))),

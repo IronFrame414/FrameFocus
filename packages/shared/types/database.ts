@@ -4596,6 +4596,7 @@ export type Database = {
           mime_type: string
           project_id: string | null
           safety_incident_id: string | null
+          site_visit_capture: boolean
           supersedes_id: string | null
           tags: string[] | null
           updated_at: string | null
@@ -4626,6 +4627,7 @@ export type Database = {
           mime_type: string
           project_id?: string | null
           safety_incident_id?: string | null
+          site_visit_capture?: boolean
           supersedes_id?: string | null
           tags?: string[] | null
           updated_at?: string | null
@@ -4656,6 +4658,7 @@ export type Database = {
           mime_type?: string
           project_id?: string | null
           safety_incident_id?: string | null
+          site_visit_capture?: boolean
           supersedes_id?: string | null
           tags?: string[] | null
           updated_at?: string | null
@@ -8873,6 +8876,7 @@ export type Database = {
           estimate_id: string
           finished_at: string | null
           finished_by: string | null
+          frozen_at: string | null
           id: string
           is_deleted: boolean | null
           promoted_at: string | null
@@ -8892,6 +8896,7 @@ export type Database = {
           estimate_id: string
           finished_at?: string | null
           finished_by?: string | null
+          frozen_at?: string | null
           id?: string
           is_deleted?: boolean | null
           promoted_at?: string | null
@@ -8911,6 +8916,7 @@ export type Database = {
           estimate_id?: string
           finished_at?: string | null
           finished_by?: string | null
+          frozen_at?: string | null
           id?: string
           is_deleted?: boolean | null
           promoted_at?: string | null
@@ -10638,6 +10644,10 @@ export type Database = {
         Returns: boolean
       }
       site_visit_access: { Args: { p_estimate_id: string }; Returns: string }
+      site_visit_assert_owner_of_visit: {
+        Args: { p_access: string; p_estimate_id: string }
+        Returns: undefined
+      }
       strip_sql_line_comments: { Args: { p_src: string }; Returns: string }
       submit_delivery_check_in: {
         Args: { p_delivery_id: string }

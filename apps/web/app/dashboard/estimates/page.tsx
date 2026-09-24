@@ -17,7 +17,7 @@ function SiteVisitsPanel({ visits }: { visits: SiteVisit[] }) {
       <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
         {visits.map((v) => (
           <li key={v.id} style={{ padding: '0.4rem 0', borderTop: '1px solid #f4f6fa' }}>
-            <Link href={`/dashboard/estimates/site-visits/${v.estimate_id}`} style={{ color: '#3b4ae0', fontWeight: 600 }}>
+            <Link href={`/dashboard/site-visits/${v.estimate_id}`} style={{ color: '#3b4ae0', fontWeight: 600 }}>
               {v.title}
             </Link>
             <span

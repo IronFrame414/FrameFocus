@@ -16,7 +16,9 @@ import {
 import { useOfflineSync } from '@/app/m/offline-sync';
 import { ErrorNotice, useOnline } from '@/app/m/write-ui';
 import { VoiceNotes } from './voice-notes';
-import { resolveSiteVisitMedia, type ListedFile } from '@/lib/site-visits/media';
+import { resolveSiteVisitMedia } from '@/lib/site-visits/media';
+import { addedAfterSend, type Phase } from '@/lib/site-visits/photos';
+import type { EstimateFileListResponse } from '@/lib/api-contracts/estimate-files';
 
 // S108 Spec A — THE SITE VISIT RECORD. ONE component, rendered by BOTH the
 // phone (/m/site-visits/[id]) and the desktop page (/dashboard/estimates/
@@ -34,6 +36,17 @@ import { resolveSiteVisitMedia, type ListedFile } from '@/lib/site-visits/media'
 // Writes go to the database only through the site-visit RPCs and the two file
 // routes; the database decides who may write (site_visit_access()). `canWrite`
 // here only hides controls the database would refuse anyway.
+//
+// [S110 Section A, RULED Josh] — every internal employee reads and edits every
+// visit; the lock is at SEND (site_visits.frozen_at), not at promotion; what
+// existed at send is frozen, and ADDING stays open at every status. So:
+//   · `canWrite` = "may ADD" — true at every status for any internal employee;
+//   · an item is editable unless it was created at or before `frozen_at`;
+//   · items added after the send are marked, and photos are grouped
+//     "captured before the estimate was sent" / "added after it was sent".
+// _Superseded, quoted: "a recorder only their own"; "After promotion new photos
+// belong to the estimate (Files), not the visit — so the record stops offering
+// to add them"; "this record is FROZEN … Open blockers stay open."_
 //
 // OFFLINE [voice ruling: "held offline like photos"]: photos and voice notes
 // that fail to upload are held in the M6M offline queue (entity
@@ -67,7 +80,8 @@ interface NoteCtx {
   busy: boolean;
   online: boolean;
   run: (fn: () => Promise<{ success: boolean; error?: string }>) => Promise<boolean>;
-  mayEdit: (n: { created_by: string | null }) => boolean;
+  mayEdit: (n: { created_at: string | null }) => boolean;
+  frozenAt: string | null;
 }
 
 // Module-level on purpose: a component DEFINED INSIDE the parent is a new type
@@ -165,6 +179,11 @@ function NoteRow({ note, editable, ctx }: { note: SiteVisitNote; editable: boole
             }`}
           >
             {note.body}
+            {addedAfterSend(note.created_at, ctx.frozenAt) ? (
+              <span data-testid="sv-added-after" className="mt-[2px] block text-[12px] text-m6m-muted">
+                Added after the estimate was sent
+              </span>
+            ) : null}
           </p>
         )}
       </div>
@@ -230,6 +249,7 @@ interface PhotoFile {
   mime_type: string;
   created_at: string | null;
   url: string | null;
+  phase: Phase;
 }
 
 export function SiteVisitRecord({
@@ -239,10 +259,10 @@ export function SiteVisitRecord({
   office,
 }: {
   detail: SiteVisitDetail;
-  /** site_visit_access() said this viewer may still write. */
+  /** site_visit_access() said this viewer may ADD — every status [S110 A]. */
   canWrite: boolean;
   viewerUserId: string;
-  /** Owner/Admin/PM — may edit anyone's notes; a recorder only their own. */
+  /** Owner/Admin/PM. Finishing the visit is the office's or the recorder's. */
   office: boolean;
 }) {
   const router = useRouter();
@@ -253,6 +273,11 @@ export function SiteVisitRecord({
   const estimateId = detail.visit.estimate_id;
   const promoted = detail.visit.promoted_at != null;
   const finishedAt = detail.visit.finished_at;
+  // [S110 A] stamped by the database when the estimate is sent (and moved
+  // forward at its outcome). Everything created at or before it is frozen.
+  const frozenAt = detail.visit.frozen_at ?? null;
+  const isFrozen = (createdAt: string | null) => !!frozenAt && !!createdAt && createdAt <= frozenAt;
+  const recordedByMe = detail.visit.created_by === viewerUserId;
   const [confirmingFinish, setConfirmingFinish] = useState(false);
 
   const refresh = useCallback(() => router.refresh(), [router]);
@@ -273,16 +298,17 @@ export function SiteVisitRecord({
   const loadFiles = useCallback(async () => {
     const res = await fetch(`/api/estimates/${estimateId}/files`);
     if (!res.ok) return;
-    const body = (await res.json()) as { files: ListedFile[] };
-    // [ruling 4, 2026-09-23] VISIT-ERA photos only — cutoff = promotion, see
-    // lib/site-visits/photos.ts. Later photos live in the estimate's Files tab.
+    const body = (await res.json()) as EstimateFileListResponse;
+    // [S110 A, Q4] site-visit CAPTURES only, grouped before/after the send —
+    // lib/site-visits/photos.ts (S108 ruling 4's promotion cutoff is quoted
+    // there, superseded). Files-tab uploads stay in Files.
     // [S109 regression] The list carries NO url since #161 (161.B) — each photo
     // and voice note is signed through the per-file route, in parallel; a failed
     // one comes back url: null and renders the fallback tile. See media.ts.
-    const media = await resolveSiteVisitMedia(estimateId, body.files, detail.visit.promoted_at, (u) => fetch(u));
+    const media = await resolveSiteVisitMedia(estimateId, body.files, frozenAt, (u) => fetch(u));
     setPhotos(media.photos);
     setAudioUrls(media.audioUrls);
-  }, [estimateId, detail.visit.promoted_at]);
+  }, [estimateId, frozenAt]);
   useEffect(() => {
     void loadFiles();
   }, [loadFiles]);
@@ -323,7 +349,8 @@ export function SiteVisitRecord({
 
   // ── notes ─────────────────────────────────────────────────────────────
   const notesOf = (kind: SiteVisitNoteKind) => detail.notes.filter((n) => n.kind === kind);
-  const mayEdit = (n: { created_by: string | null }) => canWrite && (office || n.created_by === viewerUserId);
+  // [S110 ruling 1] anyone who may add may edit — anything not frozen at send.
+  const mayEdit = (n: { created_at: string | null }) => canWrite && !isFrozen(n.created_at);
 
   // ── measurements ──────────────────────────────────────────────────────
   const [area, setArea] = useState('');
@@ -334,7 +361,9 @@ export function SiteVisitRecord({
   const previewSqft = lenN > 0 && widN > 0 ? Math.round(lenN * widN * 100) / 100 : null;
   const totalSqft = detail.measurements.reduce((s, m) => s + Number(m.square_feet ?? 0), 0);
 
-  const noteCtx: NoteCtx = { estimateId, notes: detail.notes, canWrite, busy, online, run, mayEdit };
+  const noteCtx: NoteCtx = { estimateId, notes: detail.notes, canWrite, busy, online, run, mayEdit, frozenAt };
+  const photosBefore = photos.filter((p) => p.phase === 'before');
+  const photosAfter = photos.filter((p) => p.phase === 'after');
   const blockersOpen = notesOf('blocker').filter((n) => !n.resolved).length;
 
   return (
@@ -345,11 +374,21 @@ export function SiteVisitRecord({
           className="mb-[12px] rounded-[10px] border border-m6m-border bg-[#f5f7ff] px-[12px] py-[10px] text-[14px] text-m6m-navy"
         >
           This visit is now an estimate.{' '}
-          {canWrite
-            ? 'The office can still update it here until the estimate is sent.'
-            : office
-              ? 'The estimate has been sent, so this record is FROZEN — it is the evidence of what was found on site at the price quoted. Open blockers stay open.'
-              : 'You can still read everything you captured.'}
+          {frozenAt
+            ? null
+            : canWrite
+              ? 'The team can still add to it and fix it here until the estimate is sent.'
+              : 'You can still read everything captured on it.'}
+        </p>
+      ) : null}
+      {frozenAt ? (
+        <p
+          data-testid="sv-frozen-banner"
+          className="mb-[12px] rounded-[10px] border border-[#f5cf8f] bg-[#fffbeb] px-[12px] py-[10px] text-[14px] text-m6m-navy"
+        >
+          <strong>The estimate has been sent.</strong> What was captured before then is frozen — it is the
+          record of what was found on site at the price quoted.
+          {canWrite ? ' You can still add notes, measurements, photos and voice notes; they are marked as added after the send.' : ''}
         </p>
       ) : null}
       {!promoted && finishedAt ? (
@@ -377,29 +416,38 @@ export function SiteVisitRecord({
       {/* PHOTOS */}
       <section data-testid="sv-section-photos" className="mt-[18px]">
         <h2 className="mb-[8px] font-mono text-[11px] font-medium uppercase tracking-wide text-m6m-muted">
-          {promoted ? 'Photos taken during the visit' : 'Photos'} {photos.length > 0 ? `· ${photos.length}` : ''}
+          Photos {photos.length > 0 ? `· ${photos.length}` : ''}
           {heldForThisVisit > 0 ? ` · ${heldForThisVisit} waiting for signal` : ''}
         </h2>
-        {photos.length > 0 ? (
-          <div className="grid grid-cols-3 gap-[6px]">
-            {photos.map((p) =>
-              p.url ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img key={p.id} data-testid="sv-photo" src={p.url} alt={p.file_name} className="aspect-square w-full rounded-[8px] object-cover" />
-              ) : (
-                <div key={p.id} data-testid="sv-photo-missing" className="aspect-square rounded-[8px] bg-m6m-border" />
-              )
-            )}
-          </div>
-        ) : (
-          <p className="text-[14px] text-m6m-muted">No photos yet.</p>
-        )}
+        {photos.length === 0 ? <p className="text-[14px] text-m6m-muted">No photos yet.</p> : null}
+        {(['before', 'after'] as const).map((phase) => {
+          const group = phase === 'before' ? photosBefore : photosAfter;
+          if (group.length === 0) return null;
+          return (
+            <div key={phase} data-testid={`sv-photos-${phase}`} className="mt-[6px]">
+              {frozenAt ? (
+                <p className="mb-[4px] text-[12px] text-m6m-muted">
+                  {phase === 'before' ? 'Captured before the estimate was sent' : 'Added after it was sent'} · {group.length}
+                </p>
+              ) : null}
+              <div className="grid grid-cols-3 gap-[6px]">
+                {group.map((p) =>
+                  p.url ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img key={p.id} data-testid="sv-photo" src={p.url} alt={p.file_name} className="aspect-square w-full rounded-[8px] object-cover" />
+                  ) : (
+                    <div key={p.id} data-testid="sv-photo-missing" className="aspect-square rounded-[8px] bg-m6m-border" />
+                  )
+                )}
+              </div>
+            </div>
+          );
+        })}
         {promoted && office ? (
-          <p className="mt-[6px] text-[13px] text-m6m-muted">Photos added after it became an estimate are in Files.</p>
+          <p className="mt-[6px] text-[13px] text-m6m-muted">Files added from the estimate&apos;s Files tab stay there.</p>
         ) : null}
-        {/* After promotion new photos belong to the estimate (Files), not the
-            visit — so the record stops offering to add them. */}
-        {canWrite && !promoted ? (
+        {/* [S110 ruling 3] ADDING stays open at every status. */}
+        {canWrite ? (
           <label className="mt-[10px] flex h-[52px] cursor-pointer items-center justify-center rounded-[14px] bg-m6m-blue text-[16px] font-bold text-white">
             Add photos
             <input
@@ -438,6 +486,11 @@ export function SiteVisitRecord({
                   <span className="block font-mono text-[12px] text-m6m-muted">
                     {Number(m.length_ft)} × {Number(m.width_ft)} ft = {Number(m.square_feet)} sq ft
                   </span>
+                  {addedAfterSend(m.created_at, frozenAt) ? (
+                    <span data-testid="sv-added-after" className="block text-[12px] text-m6m-muted">
+                      Added after the estimate was sent
+                    </span>
+                  ) : null}
                 </span>
                 {mayEdit(m) ? (
                   <button
@@ -508,8 +561,7 @@ export function SiteVisitRecord({
         voiceNotes={detail.voiceNotes}
         audioUrls={audioUrls}
         canWrite={canWrite}
-        office={office}
-        viewerUserId={viewerUserId}
+        frozenAt={frozenAt}
         onChanged={async () => {
           await loadFiles();
           refresh();
@@ -517,7 +569,7 @@ export function SiteVisitRecord({
       />
 
       {/* FINISH — the recorder's "done". Not promotion: no number, no estimate. */}
-      {canWrite && !promoted && !detail.visit.is_deleted && !finishedAt ? (
+      {canWrite && (office || recordedByMe) && !promoted && !detail.visit.is_deleted && !finishedAt ? (
         <section data-testid="sv-finish" className="mt-[24px] border-t border-m6m-border pt-[18px]">
           {confirmingFinish ? (
             <div className="flex flex-col gap-[8px]">

@@ -3,9 +3,9 @@ import type { Database } from '@framefocus/shared/types/database';
 
 // S108 Spec A — SITE VISITS, server reads. Every read is the caller's SESSION
 // through RLS on the money-free site_visit_* tables:
-//   owner / admin / PM → every visit in the company;
-//   foreman / crew     → only what THEY recorded (created_by), before AND
-//                        after promotion.
+//   owner / admin / PM / foreman / crew → every visit in the company [S110 A,
+//   RULED Q1]; subcontractor and client → nothing.
+//   _Superseded: "foreman / crew → only what THEY recorded (created_by)."_
 // ⚠️ NOTHING HERE READS `estimates`. A foreman or crew member cannot, and the
 // recorder's view must be buildable without it — that is the Floor (ASK-A1).
 
@@ -99,12 +99,16 @@ export async function getSiteVisit(estimateId: string): Promise<SiteVisitDetail 
   };
 }
 
-/** Whether the caller may still WRITE to the visit (recorder pre-promotion, or
- *  office). Decided in the database by site_visit_access(). */
-export async function getSiteVisitAccess(estimateId: string): Promise<'office' | 'recorder' | null> {
+/** Whether the caller may ADD to the visit — 'office' (owner/admin/PM) or
+ *  'staff' (foreman/crew), at every status [S110 A]. Whether a given item may
+ *  still be EDITED is the freeze's answer (created after frozen_at), which the
+ *  record works out per item. Decided in the database by site_visit_access().
+ *  _Superseded: 'office' | 'recorder' — recorder pre-promotion only._ */
+export type SiteVisitAccess = 'office' | 'staff';
+export async function getSiteVisitAccess(estimateId: string): Promise<SiteVisitAccess | null> {
   const supabase = await createClient();
   const { data } = await supabase.rpc('site_visit_access', { p_estimate_id: estimateId });
-  return (data as 'office' | 'recorder' | null) ?? null;
+  return (data as SiteVisitAccess | null) ?? null;
 }
 
 export interface ContactOption {
