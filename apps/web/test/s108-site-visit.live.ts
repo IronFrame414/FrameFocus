@@ -21,6 +21,7 @@ const PM = 'josh+pm@worthprop.com';
 const CREW = 'josh+crew@worthprop.com';
 const FOREMAN = 'josh+qa-foreman@worthprop.com';
 const SUB = 'josh+qa-sub@worthprop.com';
+const CLIENT = 'josh+qa-client@worthprop.com';
 
 // Every money-bearing column on `estimates` (FILL-A1). None may appear on any
 // row a recorder can read.
@@ -37,6 +38,8 @@ let pmC: SupabaseClient;
 let crewC: SupabaseClient;
 let foremanC: SupabaseClient;
 let subC: SupabaseClient;
+let clientC: SupabaseClient;
+let foremanUid = '';
 let crewUid = '';
 let companyId = '';
 let contactId = '';
@@ -65,13 +68,16 @@ async function sequence(): Promise<number> {
 beforeAll(async () => {
   assertRebuildTest();
   await sweep();
-  [ownerC, pmC, crewC, foremanC, subC] = await Promise.all([
+  [ownerC, pmC, crewC, foremanC, subC, clientC] = await Promise.all([
     sessionFor(OWNER),
     sessionFor(PM),
     sessionFor(CREW),
     sessionFor(FOREMAN),
     sessionFor(SUB),
+    sessionFor(CLIENT),
   ]);
+  const { data: f } = await admin.from('profiles').select('user_id').eq('email', FOREMAN).eq('is_deleted', false).single();
+  foremanUid = (f as { user_id: string }).user_id;
   const { data: p } = await admin
     .from('profiles')
     .select('user_id, company_id')
@@ -241,19 +247,48 @@ describe('S108 A — 2. the FLOOR, BEFORE promotion', () => {
     expect(reads).toEqual({ site_visits: 1, site_visit_notes: 3, site_visit_measurements: 1, site_visit_voice_notes: 0 });
   });
 
-  it('2b — the files-route floor admits the recorder: READ own files, UPLOAD allowed (still a visit)', async () => {
+  // [S110 A] _Superseded: "2b — the files-route floor admits the recorder: READ
+  // own files, UPLOAD allowed (still a visit)" — `mode: 'recorder', canUpload:
+  // true, ownFilesOnly: true`._ Now the VISIT arm: captures only, capture at
+  // every status, never an ordinary upload.
+  it('2b — the files-route floor admits the crew member through the VISIT arm: captures only', async () => {
     const a = await resolveEstimateFileAccess(crewC, crewUid, visitId);
-    expect(a).toMatchObject({ ok: true, mode: 'recorder', canUpload: true, ownFilesOnly: true });
+    expect(a).toMatchObject({ ok: true, mode: 'visit', canCapture: true, canUpload: false, scope: 'capture' });
   });
 
-  it('2c — a DIFFERENT crew-level user (the foreman) reads nothing and may not write', async () => {
-    const r = await foremanC.from('site_visit_notes').select('id').eq('estimate_id', visitId);
-    expect(r.data ?? []).toHaveLength(0);
-    const w = await foremanC.rpc('save_site_visit_note', { p_estimate_id: visitId, p_note_id: null, p_kind: 'scope', p_body: 'x', p_resolved: false });
-    expect(w.error?.code).toBe('42501');
-    const { data: foremanUid } = await admin.from('profiles').select('user_id').eq('email', FOREMAN).eq('is_deleted', false).single();
-    const a = await resolveEstimateFileAccess(foremanC, (foremanUid as { user_id: string }).user_id, visitId);
-    expect(a).toMatchObject({ ok: false, status: 404 });
+  // [S110 A, RULED Q1 → A] INVERTED IN PLACE. _Superseded title and assertions:
+  // "2c — a DIFFERENT crew-level user (the foreman) reads nothing and may not
+  // write" — 0 notes read, save → 42501, files access 404._
+  it('2c — a DIFFERENT internal employee (the foreman) READS the crew member\'s visit and may EDIT it', async () => {
+    const r = await foremanC.from('site_visit_notes').select('id, body').eq('estimate_id', visitId).eq('kind', 'condition');
+    expect(r.data ?? []).toHaveLength(1);
+    // Edits a note he did not write (ruling 1: "and edit them") …
+    const note = (r.data ?? [])[0] as { id: string; body: string };
+    const w = await foremanC.rpc('save_site_visit_note', {
+      p_estimate_id: visitId, p_note_id: note.id, p_kind: 'condition', p_body: note.body, p_resolved: false,
+    });
+    expect(w.error, w.error?.message).toBeNull();
+    // … and reaches the files through the visit arm — captures only.
+    const a = await resolveEstimateFileAccess(foremanC, foremanUid, visitId);
+    expect(a).toMatchObject({ ok: true, mode: 'visit', scope: 'capture', canCapture: true });
+    // No money on anything he now reads.
+    for (const t of ['site_visits', 'site_visit_notes', 'site_visit_measurements', 'site_visit_voice_notes']) {
+      const rows = await foremanC.from(t).select('*').eq('estimate_id', visitId);
+      for (const row of rows.data ?? []) expect(moneyKeys(row as Record<string, unknown>), `foreman: ${t}`).toEqual([]);
+    }
+    const e = await foremanC.from('estimates').select('*').eq('id', visitId);
+    expect(e.data ?? [], 'the foreman received the estimate row').toHaveLength(0);
+  });
+
+  it('2c-ii — PAIRED: a SUBCONTRACTOR and a CLIENT read NOTHING on any site_visit_* table, and may not write', async () => {
+    for (const [who, c] of [['sub', subC], ['client', clientC]] as const) {
+      for (const t of ['site_visits', 'site_visit_notes', 'site_visit_measurements', 'site_visit_voice_notes']) {
+        const r = await c.from(t).select('id').eq('estimate_id', visitId);
+        expect(r.data ?? [], `${who} read ${t}`).toHaveLength(0);
+      }
+      const w = await c.rpc('save_site_visit_note', { p_estimate_id: visitId, p_note_id: null, p_kind: 'scope', p_body: 'x', p_resolved: false });
+      expect(w.error?.code, `${who} wrote a note`).toBe('42501');
+    }
   });
 
   it('2d — a SUBCONTRACTOR cannot record a visit at all', async () => {
@@ -299,20 +334,26 @@ describe('S108 A — 4. the FLOOR, AFTER promotion', () => {
     expect(reads.site_visits).toBe(1);
   });
 
-  it('4b — …and has LOST every write (Q3 condition 1): note, measurement, upload', async () => {
-    const n = await crewC.rpc('save_site_visit_note', { p_estimate_id: visitId, p_note_id: null, p_kind: 'scope', p_body: 'late', p_resolved: false });
-    expect(n.error?.code).toBe('42501');
+  // [S110 ruling 2] INVERTED IN PLACE. _Superseded: "4b — …and has LOST every
+  // write (Q3 condition 1): note, measurement, upload" — each → 42501,
+  // canUpload false._ Promotion no longer takes anything away.
+  it('4b — after promotion the crew member KEEPS every write: note, measurement, capture', async () => {
+    const n = await crewC.rpc('save_site_visit_note', { p_estimate_id: visitId, p_note_id: null, p_kind: 'scope', p_body: 'after promotion', p_resolved: false });
+    expect(n.error, n.error?.message).toBeNull();
     const m = await crewC.rpc('save_site_visit_measurement', {
-      p_estimate_id: visitId, p_measurement_id: null, p_area_name: 'Late', p_length_ft: 1, p_width_ft: 1, p_notes: null,
+      p_estimate_id: visitId, p_measurement_id: null, p_area_name: 'Hall', p_length_ft: 3, p_width_ft: 10, p_notes: null,
     });
-    expect(m.error?.code).toBe('42501');
+    expect(m.error, m.error?.message).toBeNull();
     const a = await resolveEstimateFileAccess(crewC, crewUid, visitId);
-    expect(a).toMatchObject({ ok: true, mode: 'recorder', canUpload: false, ownFilesOnly: true });
+    expect(a).toMatchObject({ ok: true, mode: 'visit', canCapture: true, scope: 'capture' });
   });
 
-  it('4b-ii — after promotion the recorder cannot finish (42501) and the office cannot either (already an estimate)', async () => {
+  // _Superseded: "4b-ii — after promotion the recorder cannot finish (42501)" —
+  // that 42501 was the lost write. Now the recorder still has access, and
+  // finishing is refused for the reason that remains: it is already an estimate.
+  it('4b-ii — after promotion NOBODY can finish: recorder and office both 22023 (already an estimate)', async () => {
     const c = await crewC.rpc('finish_site_visit', { p_estimate_id: visitId });
-    expect(c.error?.code).toBe('42501');
+    expect(c.error?.code).toBe('22023');
     const o = await ownerC.rpc('finish_site_visit', { p_estimate_id: visitId });
     expect(o.error?.code).toBe('22023');
   });
@@ -323,11 +364,17 @@ describe('S108 A — 4. the FLOOR, AFTER promotion', () => {
   });
 });
 
-// [Josh, 2026-09-23, ruling 3] The record FREEZES when the estimate is SENT —
-// in the database: site_visit_access() stops admitting the office, and a
-// trigger refuses every INSERT/UPDATE, including the service role's.
-describe('S108 A — 4.5 FREEZE at send', () => {
+// [S110 Section A, RULED Josh] The record FREEZES at SEND — but only what
+// EXISTED then. site_visits.frozen_at is stamped by the database on the status
+// transition; the trigger refuses UPDATE of rows created at or before it
+// (service role included), and admits INSERT at every status.
+// _Superseded header, quoted: "site_visit_access() stops admitting the office,
+// and a trigger refuses every INSERT/UPDATE, including the service role's."_
+describe('S108→S110 A — 4.5 FREEZE at send: what existed is frozen; adding stays open', () => {
   let blockerId = '';
+  let pendingVoiceId = '';
+  let captureFileId = '';
+  let postSendNoteId = '';
 
   it('4.5a — CONTROL, still a draft: the office CAN write (so the refusals below are the send, not the office)', async () => {
     const r = await ownerC.rpc('save_site_visit_note', {
@@ -344,36 +391,81 @@ describe('S108 A — 4.5 FREEZE at send', () => {
       .single();
     blockerId = (b as { id: string }).id;
     expect((b as { resolved: boolean }).resolved).toBe(false);
+    // Before any send there is no stamp.
+    const { data: sv } = await admin.from('site_visits').select('frozen_at').eq('estimate_id', visitId).single();
+    expect((sv as { frozen_at: string | null }).frozen_at).toBeNull();
+    // A voice note whose transcription is still PENDING at send, and a captured
+    // photo — both existing BEFORE the send.
+    const v = await admin
+      .from('site_visit_voice_notes')
+      .insert({ company_id: companyId, estimate_id: visitId, duration_seconds: 5, transcript_status: 'pending', created_by: crewUid })
+      .select('id')
+      .single();
+    expect(v.error, v.error?.message).toBeNull();
+    pendingVoiceId = (v.data as { id: string }).id;
+    const f = await admin
+      .from('files')
+      .insert({
+        company_id: companyId, project_id: null, estimate_id: visitId, category: 'other', site_visit_capture: true,
+        file_name: 'pre-send.jpg', file_path: `${companyId}/estimates/${visitId}/pre-send.jpg`, file_size: 4, mime_type: 'image/jpeg',
+      })
+      .select('id')
+      .single();
+    expect(f.error, f.error?.message).toBeNull();
+    captureFileId = (f.data as { id: string }).id;
   });
 
-  it('4.5b — the estimate is SENT', async () => {
-    const r = await admin.from('estimates').update({ status: 'sent', sent_at: new Date().toISOString() }).eq('id', visitId);
+  it('4.5b — the estimate is SENT, and the DATABASE stamps frozen_at on the transition', async () => {
+    // Deliberately WITHOUT sent_at: the stamp must not depend on it (FILLED-A.1 —
+    // 14/21 sent-or-later estimates on rebuild-test carry none).
+    const r = await admin.from('estimates').update({ status: 'sent' }).eq('id', visitId);
     expect(r.error, r.error?.message).toBeNull();
+    const { data: sv } = await admin.from('site_visits').select('frozen_at').eq('estimate_id', visitId).single();
+    expect((sv as { frozen_at: string | null }).frozen_at, 'the send did not stamp frozen_at').not.toBeNull();
   });
 
-  it('4.5c — the OFFICE is refused every write (42501) and site_visit_access() no longer says office', async () => {
+  // INVERTED IN PLACE. _Superseded: "4.5c — the OFFICE is refused every write
+  // (42501) and site_visit_access() no longer says office" — both INSERTs → 42501._
+  it('4.5c — after send the office still ADDS (access still office); a PRE-SEND note is refused (42501)', async () => {
     const { data: acc } = await ownerC.rpc('site_visit_access', { p_estimate_id: visitId });
-    expect(acc).toBeNull();
+    expect(acc).toBe('office');
     const n = await ownerC.rpc('save_site_visit_note', {
-      p_estimate_id: visitId, p_note_id: null, p_kind: 'scope', p_body: 'after send', p_resolved: false,
+      p_estimate_id: visitId, p_note_id: null, p_kind: 'scope', p_body: 'added after send', p_resolved: false,
     });
-    expect(n.error?.code).toBe('42501');
+    expect(n.error, n.error?.message).toBeNull();
+    postSendNoteId = n.data as string;
     const m = await pmC.rpc('save_site_visit_measurement', {
       p_estimate_id: visitId, p_measurement_id: null, p_area_name: 'Late', p_length_ft: 1, p_width_ft: 1, p_notes: null,
     });
-    expect(m.error?.code).toBe('42501');
-    // An open blocker cannot be resolved after send (ruling 3 — frozen as it stands).
+    expect(m.error, m.error?.message).toBeNull();
+    // An open blocker that EXISTED at send cannot be resolved — frozen as it stood.
     const b = await ownerC.rpc('save_site_visit_note', {
       p_estimate_id: visitId, p_note_id: blockerId, p_kind: 'blocker', p_body: 'Need crawlspace access', p_resolved: true,
     });
     expect(b.error?.code).toBe('42501');
+    // …nor removed.
+    const d = await crewC.rpc('delete_site_visit_note', { p_note_id: blockerId });
+    expect(d.error?.code).toBe('42501');
   });
 
-  it('4.5d — the SERVICE ROLE is refused too: the trigger, not only the RPC gate', async () => {
-    const ins = await admin.from('site_visit_notes').insert({
-      company_id: companyId, estimate_id: visitId, kind: 'condition', body: 'service-role insert after send',
-    });
-    expect(ins.error?.message ?? '').toMatch(/frozen/);
+  // INVERTED IN PLACE. _Superseded: "service-role insert/update/title refused
+  // ('frozen')"._ The service role is still refused an UPDATE of pre-send rows —
+  // S108's deliberate arm, kept — and may INSERT, but not backdate.
+  it('4.5d — the SERVICE ROLE: INSERT admitted but never backdated; UPDATE of a pre-send row refused', async () => {
+    const ins = await admin
+      .from('site_visit_notes')
+      .insert({
+        company_id: companyId, estimate_id: visitId, kind: 'condition', body: 'service-role insert after send',
+        created_at: '2020-01-01T00:00:00Z', // an attempt to pose as pre-send evidence
+      })
+      .select('created_at')
+      .single();
+    expect(ins.error, ins.error?.message).toBeNull();
+    const { data: sv } = await admin.from('site_visits').select('frozen_at').eq('estimate_id', visitId).single();
+    expect(
+      new Date((ins.data as { created_at: string }).created_at).getTime(),
+      'a backdated insert was accepted as pre-send evidence'
+    ).toBeGreaterThan(new Date((sv as { frozen_at: string }).frozen_at).getTime());
     const upd = await admin.from('site_visit_notes').update({ resolved: true }).eq('id', blockerId);
     expect(upd.error?.message ?? '').toMatch(/frozen/);
     const title = await admin.from('site_visits').update({ title: 'rewritten' }).eq('estimate_id', visitId);
@@ -389,10 +481,71 @@ describe('S108 A — 4.5 FREEZE at send', () => {
     expect(r.error, r.error?.message).toBeNull();
   });
 
-  it('4.5f — the crew recorder STILL reads their record after send: 0 estimate rows, 3 notes, no money key', async () => {
+  it('4.5f — the crew member reads the WHOLE record after send: 0 estimate rows, every note, no money key', async () => {
     const reads = await assertCrewSeesNoMoney('sent');
-    expect(reads.site_visit_notes).toBe(3);
+    const { count } = await admin
+      .from('site_visit_notes')
+      .select('id', { count: 'exact', head: true })
+      .eq('estimate_id', visitId)
+      .eq('is_deleted', false);
+    // _Superseded: `toBe(3)` — only the recorder's own._ Every note, the office's
+    // and the service role's included.
+    expect(count).toBeGreaterThan(3);
+    expect(reads.site_visit_notes).toBe(count);
     expect(reads.site_visits).toBe(1);
+  });
+
+  it('4.5g — a note ADDED after the send stays editable — by someone who did not write it (Q2, ruling 1)', async () => {
+    const r = await foremanC.rpc('save_site_visit_note', {
+      p_estimate_id: visitId, p_note_id: postSendNoteId, p_kind: 'scope', p_body: 'added after send (corrected)', p_resolved: false,
+    });
+    expect(r.error, r.error?.message).toBeNull();
+  });
+
+  it('4.5h — a transcription PENDING at send may COMPLETE, and its editable copy be seeded (Q3) …', async () => {
+    const done = await admin
+      .from('site_visit_voice_notes')
+      .update({ transcript_status: 'done', transcript_machine: 'la puerta no cierra', transcript_model: 'x', transcribed_at: new Date().toISOString() })
+      .eq('id', pendingVoiceId);
+    expect(done.error, done.error?.message).toBeNull();
+    const seed = await admin.from('site_visit_voice_notes').update({ transcript: 'la puerta no cierra' }).eq('id', pendingVoiceId);
+    expect(seed.error, seed.error?.message).toBeNull();
+  });
+
+  it('4.5h-ii — … but that pre-send transcript cannot then be EDITED (paired refusal)', async () => {
+    const r = await ownerC.rpc('update_voice_note_transcript', { p_voice_note_id: pendingVoiceId, p_transcript: 'rewritten' });
+    expect(r.error?.code).toBe('42501');
+  });
+
+  it('4.5i — a site-visit PHOTO captured before the send is frozen: no soft delete, no rename (service role too)', async () => {
+    const del = await admin.from('files').update({ is_deleted: true, deleted_at: new Date().toISOString() }).eq('id', captureFileId);
+    expect(del.error?.message ?? '').toMatch(/frozen/);
+    const ren = await admin.from('files').update({ file_name: 'renamed.jpg' }).eq('id', captureFileId);
+    expect(ren.error?.message ?? '').toMatch(/frozen/);
+    // CONTROL: an unrelated column on the same file still moves (the trigger is scoped).
+    const tag = await admin.from('files').update({ tags: ['s110'] }).eq('id', captureFileId);
+    expect(tag.error, tag.error?.message).toBeNull();
+  });
+
+  it('4.5j — the OUTCOME moves the stamp forward: the post-send note freezes; adding still works (Q3 → B)', async () => {
+    const { data: before } = await admin.from('site_visits').select('frozen_at').eq('estimate_id', visitId).single();
+    const r = await admin
+      .from('estimates')
+      .update({ status: 'accepted', accepted_at: new Date().toISOString() })
+      .eq('id', visitId);
+    expect(r.error, r.error?.message).toBeNull();
+    const { data: after } = await admin.from('site_visits').select('frozen_at').eq('estimate_id', visitId).single();
+    expect(new Date((after as { frozen_at: string }).frozen_at).getTime()).toBeGreaterThan(
+      new Date((before as { frozen_at: string }).frozen_at).getTime()
+    );
+    const edit = await foremanC.rpc('save_site_visit_note', {
+      p_estimate_id: visitId, p_note_id: postSendNoteId, p_kind: 'scope', p_body: 'edited after acceptance', p_resolved: false,
+    });
+    expect(edit.error?.code, 'a post-send note was still editable after the outcome').toBe('42501');
+    const add = await crewC.rpc('save_site_visit_note', {
+      p_estimate_id: visitId, p_note_id: null, p_kind: 'condition', p_body: 'noted after acceptance', p_resolved: false,
+    });
+    expect(add.error, add.error?.message).toBeNull();
   });
 });
 

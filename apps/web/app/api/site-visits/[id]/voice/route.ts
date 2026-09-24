@@ -33,9 +33,10 @@ export async function POST(req: Request, { params }: { params: { id: string } })
 
   const access = await resolveEstimateFileAccess(supabase, user.id, estimateId);
   if (!access.ok) return NextResponse.json({ error: access.error }, { status: access.status });
-  if (!access.canUpload) {
+  // [S110 A] a voice note is site-visit material: capture rights, every status.
+  if (!access.canCapture) {
     return NextResponse.json(
-      { error: 'This visit is now an estimate — new recordings are closed. Your notes stay readable.' },
+      { error: 'You cannot add to this site visit.' },
       { status: 403 }
     );
   }
@@ -91,6 +92,8 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       project_id: null,
       estimate_id: estimateId,
       category: 'other',
+      // [S110 A, Q4] a voice note's audio is site-visit material by definition.
+      site_visit_capture: true,
       file_name: `Voice note ${new Date().toISOString().slice(0, 16).replace('T', ' ')}.${extensionFor(mime)}`,
       file_path: storagePath,
       file_size: file.size,

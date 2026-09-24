@@ -51,7 +51,8 @@ export async function GET(
     .eq('estimate_id', estimateId)
     .eq('company_id', access.companyId)
     .eq('is_deleted', false);
-  if (access.ownFilesOnly) q = q.eq('created_by', user.id);
+  // [S110 A, Q4] the visit arm signs site-visit captures only.
+  if (access.scope === 'capture') q = q.eq('site_visit_capture', true);
   const { data: file, error } = await q.maybeSingle();
   if (error) {
     console.error('[GET /api/estimates/[id]/files/[fileId]/url] lookup failed', {

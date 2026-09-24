@@ -1,33 +1,46 @@
-// [Josh, 2026-09-23, ruling 4] VISIT-ERA PHOTOS ONLY on the site-visit record.
-// "The tab shows what was captured during the visit; anything added after
-// promotion lives in Files."
+// WHICH PHOTOS THE SITE-VISIT RECORD SHOWS, and how they are grouped.
 //
-// THE CUTOFF IS PROMOTION (site_visits.promoted_at), not finish:
-//   · Finishing is not a lock (ASK-A8) — the recorder may still add a missed
-//     shot between Finish and promotion, and that shot is visit evidence.
-//     So a photo uploaded between finish and promotion IS visit-era.
-//   · Promotion is the boundary the rest of the rules already use: it is
-//     where the recorder loses upload (Q3 condition 1) and the estimate begins.
-//   · Inclusive (created_at <= promoted_at). Both timestamps are the
-//     database's now(), so there is no client clock in the comparison.
-//   · Not yet promoted → every image on the estimate is visit-era: a site
-//     visit has no Files tab (the builder redirects it), so the only way a
-//     photo lands on it is through the visit.
+// [S110, RULED Josh Q4 → A] — the record shows SITE-VISIT CAPTURES (files
+// marked `site_visit_capture`: photos taken through the record, at any status),
+// in two groups split at the visit's `frozen_at`:
+//   · "Captured before the estimate was sent" — created at or before frozen_at
+//     (everything, while there is no frozen_at yet);
+//   · "Added after it was sent" — created after it.
+// Photos an estimator drops in through the ordinary Files tab are not captures,
+// and stay in Files.
 //
-// Presentation, not access control: nothing here hides a file from someone
-// entitled to it — the Files tab still lists every file on the estimate.
+// _SUPERSEDED — S108 ruling 4, quoted rather than deleted:_ "[Josh, 2026-09-23,
+// ruling 4] VISIT-ERA PHOTOS ONLY on the site-visit record. 'The tab shows what
+// was captured during the visit; anything added after promotion lives in
+// Files.' THE CUTOFF IS PROMOTION (site_visits.promoted_at), not finish … Not
+// yet promoted → every image on the estimate is visit-era." Ruling 2 removed
+// the premise (promotion no longer ends anyone's writes), and a time cutoff
+// could not tell a site photo from a Files-tab upload — the marker can.
+//
+// Presentation, not access control: the ROUTE decides who may read which file
+// (lib/site-visits/access.ts). Both timestamps are the database's now().
 
-export interface DatedFile {
+export interface CapturedFile {
   mime_type: string;
   created_at: string | null;
+  site_visit_capture: boolean;
 }
 
-export function visitEraPhotos<T extends DatedFile>(files: T[], promotedAt: string | null): T[] {
-  const cutoff = promotedAt ? new Date(promotedAt).getTime() : null;
-  return files.filter((f) => {
-    if (!f.mime_type.startsWith('image/')) return false;
-    if (cutoff === null) return true;
-    if (!f.created_at) return false;
-    return new Date(f.created_at).getTime() <= cutoff;
-  });
+export type Phase = 'before' | 'after';
+
+/** Captured images, each tagged before/after the send. Undated → 'before'. */
+export function sitePhotos<T extends CapturedFile>(files: T[], frozenAt: string | null): Array<T & { phase: Phase }> {
+  const cutoff = frozenAt ? new Date(frozenAt).getTime() : null;
+  return files
+    .filter((f) => f.site_visit_capture && f.mime_type.startsWith('image/'))
+    .map((f) => ({
+      ...f,
+      phase: (cutoff !== null && f.created_at && new Date(f.created_at).getTime() > cutoff ? 'after' : 'before') as Phase,
+    }));
+}
+
+/** Any dated item (a note, a measurement, a voice note): added after the send? */
+export function addedAfterSend(createdAt: string | null | undefined, frozenAt: string | null): boolean {
+  if (!frozenAt || !createdAt) return false;
+  return new Date(createdAt).getTime() > new Date(frozenAt).getTime();
 }

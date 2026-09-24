@@ -57,8 +57,8 @@ async function expectMediaRendered(scope: import('@playwright/test').Locator) {
   expect(await audio.getAttribute('src')).toContain('/storage/v1/object/sign/');
 }
 
-// A voice note with its audio file, seeded as the crew recorder would leave it
-// (the file is theirs, so the recorder arm can read it). The browser cannot
+// A voice note with its audio file, seeded as the voice route would leave it —
+// marked `site_visit_capture` [S110 A], which is what makes it the record's. The browser cannot
 // record audio headlessly; the upload path is `test/s108-site-visit.live.ts`'s.
 async function seedVoiceNote(estimateId: string) {
   const { data: crew } = await admin.from('profiles').select('user_id, company_id').eq('email', CREW).eq('is_deleted', false).single();
@@ -77,6 +77,7 @@ async function seedVoiceNote(estimateId: string) {
       file_path: path,
       file_size: bytes.length,
       mime_type: 'audio/webm',
+      site_visit_capture: true,
       created_by: c.user_id,
       updated_by: c.user_id,
     })
@@ -97,7 +98,10 @@ async function seedVoiceNote(estimateId: string) {
 }
 test.afterAll(sweep);
 
-test('S108 A — crew records, owner promotes, crew keeps reading with no money and no writes', async ({ page }) => {
+// [S110 A] _Superseded title, quoted: "S108 A — crew records, owner promotes, crew
+// keeps reading with no money and no writes"._ After the send the crew still
+// ADDS (ruling 3); what existed at the send is frozen.
+test('S108 A — crew records, owner promotes, after SEND the crew reads with no money and can still ADD', async ({ page }) => {
   test.setTimeout(180_000);
 
   // ── CREW: record ──────────────────────────────────────────────────────
@@ -179,7 +183,9 @@ test('S108 A — crew records, owner promotes, crew keeps reading with no money 
   await expect(tab.locator('[data-testid="sv-note"][data-kind="condition"]')).toContainText('Tile is cracked', { timeout: 30_000 });
   await expect(tab.getByTestId('sv-measurement')).toContainText('12 × 14 ft = 168 sq ft');
   await expect(tab).toContainText('finished');
-  // Ruling 4 — a photo added AFTER promotion lives in Files, not on the visit.
+  // [S110 A, Q4] a photo added through the FILES TAB (not captured through the
+  // record) lives in Files, not on the visit. _Superseded: "Ruling 4 — a photo
+  // added AFTER promotion lives in Files"._
   const { data: owner } = await admin.from('profiles').select('company_id').eq('email', OWNER).eq('is_deleted', false).single();
   const { error: fileErr } = await admin.from('files').insert({
     company_id: (owner as { company_id: string }).company_id,
@@ -193,31 +199,42 @@ test('S108 A — crew records, owner promotes, crew keeps reading with no money 
   expect(fileErr, fileErr?.message).toBeNull();
   await page.reload();
   await page.getByTestId('est-tab-site_visit').click();
-  await expect(tab.getByTestId('sv-section-photos')).toContainText('Photos taken during the visit · 1', { timeout: 30_000 });
+  await expect(tab.getByTestId('sv-section-photos')).toContainText('Photos · 1', { timeout: 30_000 });
   // [S109] …and on the desktop Site Visit tab they RENDER, not just count.
   await expectMediaRendered(tab);
 
-  // Ruling 3 — once SENT, the record is frozen: no add controls for the office.
-  await expect(tab.getByTestId('sv-add-condition')).toHaveCount(1); // control: still a draft
-  const { error: sendErr } = await admin
-    .from('estimates')
-    .update({ status: 'sent', sent_at: new Date().toISOString() })
-    .eq('id', visitId);
+  // [S110 A] once SENT, what existed is FROZEN — and adding stays open.
+  // _Superseded: "Ruling 3 — once SENT, the record is frozen: no add controls
+  // for the office" — asserted sv-add-condition count 0 and a 'FROZEN' banner._
+  const preSendNote = tab.locator('[data-testid="sv-note"][data-kind="condition"]');
+  await expect(preSendNote.getByRole('button', { name: 'Edit' })).toHaveCount(1); // control: still a draft, editable
+  const { error: sendErr } = await admin.from('estimates').update({ status: 'sent' }).eq('id', visitId);
   expect(sendErr, sendErr?.message).toBeNull();
   await page.goto(`/dashboard/estimates/${visitId}`);
   await page.getByTestId('est-tab-site_visit').click();
-  await expect(tab.getByTestId('sv-promoted-banner')).toContainText('FROZEN', { timeout: 30_000 });
-  await expect(tab.getByTestId('sv-add-condition')).toHaveCount(0);
+  await expect(tab.getByTestId('sv-frozen-banner')).toBeVisible({ timeout: 30_000 });
+  await expect(tab.getByTestId('sv-add-condition'), 'the office can no longer ADD after send').toHaveCount(1);
+  await expect(preSendNote.getByRole('button', { name: 'Edit' }), 'a note that existed at send is still editable').toHaveCount(0);
 
-  // ── CREW again: reads, cannot write, sees no money ────────────────────
+  // ── CREW again: reads, sees no money, and can still ADD ───────────────
+  // _Superseded: "reads, cannot write" — sv-add-condition and sv-photo-input 0._
   await signInAs(page, CREW);
   await page.goto(`/m/site-visits/${visitId}`);
-  await expect(page.getByTestId('sv-promoted-banner')).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByTestId('sv-frozen-banner')).toBeVisible({ timeout: 30_000 });
   await expect(page.locator('[data-testid="sv-note"][data-kind="condition"]')).toHaveCount(1);
   await expect(page.getByTestId('sv-measurement')).toHaveCount(1);
-  await expect(page.getByTestId('sv-add-condition')).toHaveCount(0);
-  await expect(page.getByTestId('sv-photo-input')).toHaveCount(0);
+  await expect(page.getByTestId('sv-add-condition')).toHaveCount(1);
+  await expect(page.getByTestId('sv-photo-input')).toHaveCount(1);
   await expect(page.getByTestId('site-visit-record')).not.toContainText('$');
+  // A note added AFTER the send lands, marked, and stays editable (Q2, Q3).
+  await page.getByTestId('sv-new-condition').fill('Found after the proposal went out');
+  await page.getByTestId('sv-add-condition').click();
+  const conditions = page.locator('[data-testid="sv-note"][data-kind="condition"]');
+  await expect(conditions).toHaveCount(2, { timeout: 20_000 });
+  const late = conditions.filter({ hasText: 'Found after the proposal went out' });
+  await expect(late.getByTestId('sv-added-after')).toBeVisible();
+  await expect(late.getByRole('button', { name: 'Edit' })).toHaveCount(1);
+  await expect(conditions.filter({ hasText: 'Tile is cracked' }).getByRole('button', { name: 'Edit' })).toHaveCount(0);
   // [S109] The recorder still sees their media after the freeze.
   await expectMediaRendered(page.getByTestId('site-visit-record'));
 });

@@ -12,6 +12,10 @@ let sessionUser: { id: string } | null = { id: 'user-1' };
 let profileRow: { company_id: string; role: string } | null = { company_id: 'co-1', role: 'project_manager' };
 let estimateRow: Record<string, unknown> | null = null;
 let fileRow: Record<string, unknown> | null = null;
+// [S110 A] the visit arm: a site_visits row the caller can read, and the
+// site_visit_access() answer.
+let visitRow: Record<string, unknown> | null = null;
+let accessValue: string | null = null;
 const fileFilters: [string, unknown][] = [];
 
 function table(row: unknown, record?: [string, unknown][]) {
@@ -29,8 +33,8 @@ function table(row: unknown, record?: [string, unknown][]) {
 vi.mock('@/lib/supabase-server', () => ({
   createClient: async () => ({
     auth: { getUser: async () => ({ data: { user: sessionUser } }) },
-    from: (t: string) => table(t === 'profiles' ? profileRow : t === 'site_visits' ? null : estimateRow),
-    rpc: async () => ({ data: null, error: null }),
+    from: (t: string) => table(t === 'profiles' ? profileRow : t === 'site_visits' ? visitRow : estimateRow),
+    rpc: async () => ({ data: accessValue, error: null }),
   }),
 }));
 
@@ -61,6 +65,8 @@ beforeEach(() => {
   profileRow = { company_id: 'co-1', role: 'project_manager' };
   estimateRow = null;
   fileRow = null;
+  visitRow = null;
+  accessValue = null;
 });
 
 describe('sign-on-click — the session floor runs BEFORE the service role', () => {
@@ -97,6 +103,26 @@ describe('sign-on-click — the session floor runs BEFORE the service role', () 
         ['is_deleted', false],
       ])
     );
+  });
+
+  // [S110 A, RULED Q4] ⚠️ THE FLOOR on the SIGNING route too: a foreman or crew
+  // member reaching the estimate through its site visit may sign a CAPTURE, and
+  // the lookup is scoped so a vendor-quote PDF id returns nothing.
+  it('the VISIT arm signs only site_visit_capture files — the lookup says so', async () => {
+    profileRow = { company_id: 'co-1', role: 'crew_member' };
+    visitRow = { estimate_id: ctx.params.id, company_id: 'co-1', is_deleted: false };
+    accessValue = 'staff';
+    fileRow = { file_path: 'co-1/estimates/e/p.jpg', file_name: 'p.jpg', mime_type: 'image/jpeg' };
+    const res = await GET(new Request('http://t/'), ctx);
+    expect(res.status).toBe(200);
+    expect(fileFilters, 'a crew member could sign any file on the estimate').toContainEqual(['site_visit_capture', true]);
+  });
+
+  it('MIRROR: the office arm is not scoped to captures (so the case above is not vacuous)', async () => {
+    estimateRow = { id: ctx.params.id, company_id: 'co-1' };
+    fileRow = { file_path: 'co-1/estimates/e/plans.pdf', file_name: 'plans.pdf', mime_type: 'application/pdf' };
+    await GET(new Request('http://t/'), ctx);
+    expect(fileFilters.some(([c]) => c === 'site_visit_capture')).toBe(false);
   });
 
   it('a file that is not on this estimate → 404 (after auth passed), nothing signed', async () => {

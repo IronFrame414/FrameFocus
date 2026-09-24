@@ -21,6 +21,9 @@ export interface EstimateFileListItem {
   mime_type: string;
   category: string;
   created_at: string | null;
+  /** [S110 A] captured through the site-visit record — the only files a
+   *  foreman or crew member may read on an estimate. */
+  site_visit_capture: boolean;
 }
 
 export interface EstimateFileListResponse {
