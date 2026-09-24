@@ -33,8 +33,11 @@ export function SendProposalModal({
   const [body, setBody] = useState(defaultBody);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // S110 H [RULED Q14] — fields the server found not in English. The sender may
+  // edit them, or send anyway (recorded on the send).
+  const [notEnglish, setNotEnglish] = useState<string[] | null>(null);
 
-  async function handleSend() {
+  async function handleSend(languageOverride = false) {
     setError(null);
     if (!subject.trim() || !body.trim()) {
       setError('Subject and body are required.');
@@ -49,10 +52,13 @@ export function SendProposalModal({
           estimate_id: estimateId,
           subject: subject.trim(),
           body: body.trim(),
+          ...(languageOverride ? { language_override: true } : {}),
         }),
       });
       const json = await res.json();
-      if (!res.ok) {
+      if (res.status === 409 && json.code === 'NON_ENGLISH') {
+        setNotEnglish(Array.isArray(json.fields) ? json.fields : []);
+      } else if (!res.ok) {
         setError(json.error || 'Send failed');
       } else {
         onSent();
@@ -153,6 +159,53 @@ export function SendProposalModal({
           ))}
         </div>
 
+        {notEnglish && (
+          <div
+            role="alert"
+            data-testid="send-not-english"
+            style={{
+              padding: '0.75rem 1rem',
+              borderRadius: '0.375rem',
+              marginBottom: '1rem',
+              backgroundColor: '#fffbeb',
+              border: '1px solid #f5cf8f',
+              color: '#7c4a03',
+              fontSize: '0.875rem',
+            }}
+          >
+            <strong>Some of this is not in English.</strong> A client always receives the proposal
+            in English, exactly as written — nothing is translated for them. Check:
+            <ul style={{ margin: '0.5rem 0 0.5rem 1.25rem', listStyle: 'disc' }}>
+              {notEnglish.map((f) => (
+                <li key={f}>{f}</li>
+              ))}
+            </ul>
+            If these are names, addresses or brands, send anyway. Otherwise cancel and edit them.
+            <div style={{ marginTop: '0.5rem' }}>
+              <button
+                type="button"
+                data-testid="send-anyway"
+                onClick={() => {
+                  setNotEnglish(null);
+                  void handleSend(true);
+                }}
+                disabled={busy}
+                style={{
+                  padding: '0.375rem 0.75rem',
+                  fontSize: '0.8125rem',
+                  fontWeight: 600,
+                  backgroundColor: '#fff',
+                  border: '1px solid #d4a24c',
+                  borderRadius: '0.375rem',
+                  cursor: 'pointer',
+                }}
+              >
+                Send anyway, as written
+              </button>
+            </div>
+          </div>
+        )}
+
         {error && (
           <div
             style={{
@@ -186,7 +239,7 @@ export function SendProposalModal({
           </button>
           <button
             type="button"
-            onClick={handleSend}
+            onClick={() => void handleSend()}
             disabled={busy || !recipientEmail}
             style={{
               padding: '0.5rem 1.25rem',
