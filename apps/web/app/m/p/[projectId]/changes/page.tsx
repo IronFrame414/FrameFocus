@@ -1,5 +1,7 @@
 import Link from 'next/link';
 import { getChangeOrders, CO_STATUS_LABELS } from '@/lib/services/change-orders';
+import { getMobileT } from '@/lib/i18n/server';
+import type { MsgKey } from '@/lib/i18n/messages';
 import { getMyProfile } from '@/lib/services/profiles';
 import { canReachDetail, canWriteCo } from '@/app/m/detail-access';
 import { SectionHeader } from '../section-header';
@@ -33,6 +35,15 @@ import { DeniedNotice, EmptyState, ListRow, ListRowLink, StatusPill } from '../.
 // will put net_delta on /m at the point of entry, and #117's open scoping
 // question should be answered first.
 
+// S110 H — status code → message key. An unknown code falls back to the
+// English label table, then the raw code.
+const CO_STATUS_KEY: Record<string, MsgKey> = {
+  draft: 'project.coStatus.draft',
+  sent: 'project.coStatus.sent',
+  signed: 'project.coStatus.signed',
+  voided: 'project.coStatus.voided',
+};
+
 export default async function ProjectChangesPage({
   params,
   searchParams,
@@ -40,9 +51,10 @@ export default async function ProjectChangesPage({
   params: { projectId: string };
   searchParams: { denied?: string };
 }) {
-  const [cos, profile] = await Promise.all([
+  const [cos, profile, t] = await Promise.all([
     getChangeOrders(params.projectId),
     getMyProfile(),
+    getMobileT(),
   ]);
 
   // D-54 step 1 — HIDE the row tap for a subcontractor. Step 2, the real gate,
@@ -61,7 +73,7 @@ export default async function ProjectChangesPage({
 
   return (
     <div className="px-[18px] pb-[18px] pt-[14px]">
-      <SectionHeader projectId={params.projectId} title="Change Orders" />
+      <SectionHeader projectId={params.projectId} title={t('project.tile.changes')} />
       <DeniedNotice kind={searchParams.denied} />
 
       {canWrite ? (
@@ -70,12 +82,12 @@ export default async function ProjectChangesPage({
           data-testid="m-co-new"
           className="mb-[14px] flex min-h-[52px] w-full items-center justify-center rounded-[14px] bg-m6m-blue text-[15px] font-bold text-white"
         >
-          New change order
+          {t('project.changes.new')}
         </Link>
       ) : null}
 
       {cos.length === 0 ? (
-        <EmptyState>No change orders.</EmptyState>
+        <EmptyState>{t('project.changes.empty')}</EmptyState>
       ) : (
         <ul className="rounded-[15px] border border-m6m-border bg-m6m-card px-[12px]">
           {cos.map((co) => (
@@ -92,7 +104,13 @@ export default async function ProjectChangesPage({
                 </p>
                 <p className="mt-[3px] flex flex-wrap items-center gap-[6px]">
                   {/* Status pill carries TEXT, never colour alone. */}
-                  <StatusPill label={CO_STATUS_LABELS[co.status] ?? co.status} />
+                  <StatusPill
+                    label={
+                      CO_STATUS_KEY[co.status]
+                        ? t(CO_STATUS_KEY[co.status])
+                        : (CO_STATUS_LABELS[co.status] ?? co.status)
+                    }
+                  />
                   {co.author?.display_name ? (
                     <span className="text-[13px] text-m6m-muted">{co.author.display_name}</span>
                   ) : null}
@@ -101,8 +119,8 @@ export default async function ProjectChangesPage({
                 {co.sent_at || co.signed_at ? (
                   <p className="mt-[2px] font-mono text-[11px] text-m6m-muted">
                     {co.signed_at
-                      ? `signed ${co.signed_at.slice(0, 10)}`
-                      : `sent ${co.sent_at!.slice(0, 10)}`}
+                      ? t('project.signedOn', { date: co.signed_at.slice(0, 10) })
+                      : t('project.sentOn', { date: co.sent_at!.slice(0, 10) })}
                   </p>
                 ) : null}
             </CoRow>

@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import type { MarkupShape } from '@framefocus/shared/types/markup';
 import { MarkupCanvas } from './markup-canvas';
+import { useT } from '@/components/i18n/language-provider';
 
 // M6M §4.7a.1 — the canvas cannot open until it knows the image's NATURAL
 // dimensions, because every stored coordinate is in that space and the SVG's
@@ -36,6 +37,7 @@ export function MeasureThenEdit({
   dims: { w: number; h: number } | null;
   returnHref: string;
 }) {
+  const t = useT();
   const [measured, setMeasured] = useState<{ w: number; h: number } | null>(dims);
   const [failed, setFailed] = useState(false);
 
@@ -52,7 +54,7 @@ export function MeasureThenEdit({
     return (
       <div className="flex min-h-full items-center justify-center bg-m6m-canvas px-[18px]">
         <p data-testid="m-markup-load-failed" className="text-center text-[15px] text-[#f0908a]">
-          This photo could not be loaded, so it cannot be marked up.
+          {t('photos.markup.loadFailed')}
         </p>
       </div>
     );
@@ -62,7 +64,7 @@ export function MeasureThenEdit({
     return (
       <div className="flex min-h-full items-center justify-center bg-m6m-canvas">
         <p data-testid="m-markup-loading" className="text-[15px] text-m6m-muted-navy">
-          Loading photo…
+          {t('photos.markup.loading')}
         </p>
       </div>
     );

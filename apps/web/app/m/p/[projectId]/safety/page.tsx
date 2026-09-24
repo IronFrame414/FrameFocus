@@ -1,5 +1,7 @@
 import { getIncidentsForProject } from '@/lib/services/safety';
 import { SectionHeader } from '../section-header';
+import { getMobileT } from '@/lib/i18n/server';
+import type { MsgKey } from '@/lib/i18n/messages';
 import { EmptyState, ListRow, StatusPill } from '../../../mobile-ui';
 
 // M6M §4.11.9 — M-19 · Safety incidents.
@@ -13,10 +15,11 @@ import { EmptyState, ListRow, StatusPill } from '../../../mobile-ui';
 // REPORTING AN INCIDENT IS NOT OFFERED HERE (A-39b). 7e / M-23 is the capture
 // screen (§4.12.5) and is a later slice; the tile must not imply otherwise.
 
-const TYPE_LABEL: Record<string, string> = {
-  injury: 'Injury',
-  property_damage: 'Property damage',
-  near_miss: 'Near miss',
+// S110 H — incident_type code → message key; an unknown code renders raw.
+const TYPE_KEY: Record<string, MsgKey> = {
+  injury: 'project.incidentType.injury',
+  property_damage: 'project.incidentType.property_damage',
+  near_miss: 'project.incidentType.near_miss',
 };
 
 export default async function ProjectSafetyPage({
@@ -24,25 +27,28 @@ export default async function ProjectSafetyPage({
 }: {
   params: { projectId: string };
 }) {
-  const incidents = await getIncidentsForProject(params.projectId);
+  const [incidents, t] = await Promise.all([
+    getIncidentsForProject(params.projectId),
+    getMobileT(),
+  ]);
 
   return (
     <div className="px-[18px] pb-[18px] pt-[14px]">
-      <SectionHeader projectId={params.projectId} title="Safety" />
+      <SectionHeader projectId={params.projectId} title={t('project.safety.title')} />
 
       {incidents.length === 0 ? (
-        <EmptyState>No incidents reported.</EmptyState>
+        <EmptyState>{t('project.safety.empty')}</EmptyState>
       ) : (
         <ul className="rounded-[15px] border border-m6m-border bg-m6m-card px-[12px]">
           {incidents.map((i) => (
             <ListRow key={i.id} testId="m-incident-row">
               <div className="min-w-0 flex-1">
                 <p className="truncate text-[17px] font-bold leading-tight text-m6m-navy">
-                  {TYPE_LABEL[i.incident_type] ?? i.incident_type}
+                  {TYPE_KEY[i.incident_type] ? t(TYPE_KEY[i.incident_type]) : i.incident_type}
                 </p>
                 <p className="mt-[3px] flex flex-wrap items-center gap-[6px]">
                   <StatusPill
-                    label={i.status === 'open' ? 'Open' : 'Closed'}
+                    label={i.status === 'open' ? t('project.safety.open') : t('project.safety.closed')}
                     tone={i.status === 'open' ? 'danger' : 'muted'}
                   />
                   <span className="font-mono text-[11px] text-m6m-muted">{i.incident_date}</span>

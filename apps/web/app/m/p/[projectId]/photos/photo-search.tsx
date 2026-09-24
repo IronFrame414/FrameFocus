@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import { Search, X } from 'lucide-react';
+import { useT } from '@/components/i18n/language-provider';
 
 // M6M §4.8 — the gallery's search control.
 //
@@ -41,6 +42,7 @@ export function PhotoSearch({
   initial: string;
 }) {
   const router = useRouter();
+  const t = useT();
   const [open, setOpen] = useState(initial.length > 0);
   const [value, setValue] = useState(initial);
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -50,14 +52,14 @@ export function PhotoSearch({
   // day grouping and the counts consistent with the chips.
   useEffect(() => {
     if (!open) return;
-    const t = setTimeout(() => {
+    const timer = setTimeout(() => {
       const params = new URLSearchParams();
       if (source) params.set('source', source);
       if (value.trim()) params.set('q', value.trim());
       const qs = params.toString();
       router.replace(qs ? `${basePath}?${qs}` : basePath);
     }, 250);
-    return () => clearTimeout(t);
+    return () => clearTimeout(timer);
   }, [value, open, source, basePath, router]);
 
   if (!open) {
@@ -66,7 +68,7 @@ export function PhotoSearch({
         <button
           type="button"
           data-testid="m-photo-search-open"
-          aria-label="Search photos"
+          aria-label={t('photos.search.label')}
           onClick={() => {
             setOpen(true);
             requestAnimationFrame(() => inputRef.current?.focus());
@@ -85,8 +87,8 @@ export function PhotoSearch({
         ref={inputRef}
         type="search"
         data-testid="m-photo-search"
-        aria-label="Search photos"
-        placeholder="Search photos"
+        aria-label={t('photos.search.label')}
+        placeholder={t('photos.search.label')}
         value={value}
         onChange={(e) => setValue(e.target.value)}
         className="h-11 flex-1 rounded-[12px] border border-m6m-border bg-m6m-card px-[14px] text-[15px] text-m6m-navy placeholder:text-m6m-muted"
@@ -94,7 +96,7 @@ export function PhotoSearch({
       <button
         type="button"
         data-testid="m-photo-search-close"
-        aria-label="Close search"
+        aria-label={t('photos.search.close')}
         onClick={() => {
           setValue('');
           setOpen(false);

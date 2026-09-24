@@ -3,6 +3,7 @@
 import { X } from 'lucide-react';
 import { color, font } from '@/lib/theme';
 import { ChatBody, ChatBackButton } from './chat-body';
+import { useT } from '@/components/i18n/language-provider';
 
 /**
  * Mobile chat — ND-36, ND-37, §7.1d.
@@ -43,12 +44,13 @@ export function MobileChatOverlay({
   /** ND-40 — the project screen underneath, so `?chat=1` lands IN the thread. */
   projectId?: string | null;
 }) {
+  const t = useT();
   if (!open) return null;
 
   return (
     <section
       data-testid="m-chat-overlay"
-      aria-label="Chat"
+      aria-label={t('shell.chat')}
       className="absolute inset-0 z-40 flex flex-col bg-m6m-card"
     >
       <ChatBody
@@ -82,7 +84,7 @@ export function MobileChatOverlay({
             <button
               type="button"
               data-testid="m-chat-close"
-              aria-label="Close chat"
+              aria-label={t('shell.chat.close')}
               onClick={onClose}
               className="flex h-11 w-11 shrink-0 items-center justify-center"
               style={{ border: 'none', background: 'none', color: color.muted }}

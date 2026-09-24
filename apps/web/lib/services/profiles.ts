@@ -30,6 +30,8 @@ export type MyProfile = {
   role: string;
   first_name: string | null;
   last_name: string | null;
+  /** S110 H — the reader's language ('en' | 'es'). */
+  language: 'en' | 'es';
 };
 
 export async function getMyProfile(): Promise<MyProfile | null> {
@@ -42,7 +44,7 @@ export async function getMyProfile(): Promise<MyProfile | null> {
 
   const { data } = await supabase
     .from('profiles')
-    .select('id, role, first_name, last_name')
+    .select('id, role, first_name, last_name, language')
     .eq('user_id', user.id)
     .eq('is_deleted', false)
     .maybeSingle();

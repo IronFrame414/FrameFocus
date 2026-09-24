@@ -14,6 +14,7 @@ import {
 import { useOfflineSync } from '../../offline-sync';
 import { buildDailyLogEntry, buildPhotoEntry } from '@/lib/offline/capture';
 import { SetMobileHeader } from '../../mobile-header';
+import { useT } from '@/components/i18n/language-provider';
 
 // M6M §4.12.3 — the 7c form. Work performed is THE required field (the D-30
 // CHECK behind it rejects NULL and blank alike); crew hours are READ-ONLY,
@@ -72,6 +73,7 @@ export function LogForm({
 }) {
   const router = useRouter();
   const offlineSync = useOfflineSync();
+  const t = useT();
 
   const [projectId, setProjectId] = useState<string | null>(initialProjectId);
   const [workPerformed, setWorkPerformed] = useState('');
@@ -188,7 +190,7 @@ export function LogForm({
 
     if (!result.success || !result.id) {
       setBusy(false);
-      setError(result.error ?? 'Could not save the log.');
+      setError(result.error ?? t('field.log.saveFailed'));
       return;
     }
 
@@ -197,7 +199,7 @@ export function LogForm({
     for (const file of photos) {
       const up = await uploadDailyLogPhoto(file, projectId, result.id);
       if (!up.success) {
-        setError(up.error ?? 'A photo failed to upload; the log itself is saved.');
+        setError(up.error ?? t('field.log.photoFailed'));
       }
     }
 
@@ -212,20 +214,19 @@ export function LogForm({
   if (done) {
     return (
       <div className="px-[18px] pb-[18px] pt-[14px]">
-        <SetMobileHeader title="Log the day" sub={null} />
+        <SetMobileHeader title={t('field.log.title')} sub={null} />
         <p
           data-testid="m-log-saved"
           className="rounded-[15px] border border-m6m-border bg-m6m-card px-[16px] py-[18px] text-center text-[16px] font-bold text-m6m-navy"
         >
-          {done.queued ? 'Log saved offline — it will sync when you’re back online.' : 'Log submitted.'}
+          {done.queued ? t('field.log.savedOffline') : t('field.log.submitted')}
         </p>
         {done.rosterDropped ? (
           <p
             data-testid="m-log-roster-dropped"
             className="mt-[10px] rounded-[10px] border border-m6m-border bg-m6m-strip-bg px-[12px] py-[8px] text-[13px] text-m6m-navy"
           >
-            Crew and sub hours can&apos;t be saved offline — open the log and add them once
-            you&apos;re back online.
+            {t('field.log.rosterDropped')}
           </p>
         ) : null}
         {done.hazard && projectId ? (
@@ -236,7 +237,7 @@ export function LogForm({
             data-testid="m-file-incident-offer"
             className="mt-[12px] flex min-h-[56px] w-full items-center justify-center rounded-[14px] border border-m6m-danger-border bg-[#fdf1f0] text-[15px] font-bold text-m6m-danger"
           >
-            File an incident report
+            {t('field.log.fileIncident')}
           </Link>
         ) : null}
         <button
@@ -248,7 +249,7 @@ export function LogForm({
           }}
           className="mt-[12px] flex min-h-[52px] w-full items-center justify-center rounded-[14px] border border-m6m-border bg-m6m-card text-[15px] font-semibold text-m6m-navy"
         >
-          Done
+          {t('field.done')}
         </button>
       </div>
     );
@@ -256,13 +257,13 @@ export function LogForm({
 
   return (
     <div className="px-[18px] pb-[18px] pt-[14px]">
-      <SetMobileHeader title="Log the day" sub={today} />
+      <SetMobileHeader title={t('field.log.title')} sub={today} />
 
       {/* Project — pre-filled from M-3's button, else a required picker. */}
       {initialProjectId === null ? (
         <section data-testid="m-log-project-block" className="mb-[14px]">
           <h2 className="mb-[8px] font-mono text-[11px] font-medium uppercase tracking-wide text-m6m-muted">
-            PROJECT
+            {t('field.projectHeading')}
           </h2>
           <select
             data-testid="m-log-project"
@@ -270,7 +271,7 @@ export function LogForm({
             onChange={(e) => setProjectId(e.target.value || null)}
             className="h-[52px] w-full rounded-[12px] border border-m6m-border bg-m6m-card px-[12px] text-[15px] text-m6m-navy"
           >
-            <option value="">Choose a project…</option>
+            <option value="">{t('field.log.chooseProject')}</option>
             {projects.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.name} · {p.project_number}
@@ -284,10 +285,10 @@ export function LogForm({
       <section className="rounded-[15px] border-[1.5px] border-m6m-blue bg-m6m-card p-[15px]">
         <div className="flex items-center justify-between">
           <h2 className="font-mono text-[11px] font-medium uppercase tracking-wide text-m6m-muted">
-            WORK PERFORMED
+            {t('field.log.workPerformed')}
           </h2>
           <span className="rounded-full bg-[#f5f7ff] px-[8px] py-[2px] font-mono text-[10px] font-semibold text-m6m-blue">
-            Required
+            {t('field.log.requiredBadge')}
           </span>
         </div>
         <textarea
@@ -295,7 +296,7 @@ export function LogForm({
           value={workPerformed}
           onChange={(e) => setWorkPerformed(e.target.value)}
           rows={3}
-          placeholder="What got done today?"
+          placeholder={t('field.log.workPlaceholder')}
           className="mt-[8px] w-full rounded-[10px] border border-m6m-border px-[12px] py-[8px] text-[15px] text-m6m-navy"
         />
       </section>
@@ -303,11 +304,11 @@ export function LogForm({
       {/* CREW & HOURS — auto from clock, read-only. */}
       <section className="mt-[14px]">
         <h2 className="mb-[8px] font-mono text-[11px] font-medium uppercase tracking-wide text-m6m-muted">
-          CREW &amp; HOURS · AUTO FROM CLOCK
+          {t('field.log.crewHours')}
         </h2>
         {presence.length === 0 ? (
           <p data-testid="m-presence-empty" className="text-[14px] text-m6m-muted">
-            No clocked hours on this project today.
+            {t('field.log.noPresence')}
           </p>
         ) : (
           <div data-testid="m-presence-pills" className="flex flex-wrap gap-[6px]">
@@ -333,9 +334,11 @@ export function LogForm({
                 data-testid="m-presence-pill"
                 className="rounded-full border border-m6m-border bg-m6m-card px-[10px] py-[6px] text-[12px] text-m6m-navy"
               >
-                {memberNames[p.member_id] ?? 'Crew member'}
+                {memberNames[p.member_id] ?? t('field.log.crewMember')}
                 {/* §2 — every number is mono, including this one. */}
-                <span className="ml-[6px] font-mono font-semibold">{p.hours}h</span>
+                <span className="ml-[6px] font-mono font-semibold">
+                  {t('field.hoursShort', { n: p.hours })}
+                </span>
               </span>
             ))}
           </div>
@@ -345,14 +348,15 @@ export function LogForm({
       {/* Photos — camera-first input, gallery as the fallback (D-8). */}
       <section className="mt-[14px]">
         <h2 className="mb-[8px] font-mono text-[11px] font-medium uppercase tracking-wide text-m6m-muted">
-          PHOTOS{photos.length > 0 ? ` · ${photos.length}` : ''}
+          {t('field.log.photos')}
+          {photos.length > 0 ? ` · ${photos.length}` : ''}
         </h2>
         <div className="flex items-stretch gap-[8px]">
           <label
             data-testid="m-log-photo-input"
             className="flex min-h-[56px] flex-1 cursor-pointer items-center justify-center rounded-[14px] border border-dashed border-m6m-border bg-m6m-card text-[15px] font-semibold text-m6m-blue"
           >
-            Add photo
+            {t('field.log.addPhoto')}
             <input
               type="file"
               accept="image/*"
@@ -370,7 +374,7 @@ export function LogForm({
                 input WITHOUT `capture`, which is the whole difference. */}
           <label
             data-testid="m-log-photo-library"
-            aria-label="Choose from library"
+            aria-label={t('field.log.chooseLibrary')}
             className="flex min-h-[56px] w-11 shrink-0 cursor-pointer items-center justify-center rounded-[14px] border border-m6m-border bg-m6m-card text-[13px] font-semibold text-m6m-muted"
           >
             <input
@@ -392,7 +396,7 @@ export function LogForm({
       <section className="mt-[14px] overflow-hidden rounded-[14px] border border-m6m-border bg-m6m-card">
         <Disclosure
           id="materials"
-          label="Materials & equipment"
+          label={t('field.log.materialsEquipment')}
           open={openRow}
           onToggle={setOpenRow}
           badge={materials.trim() || equipment.trim() ? '✓' : null}
@@ -402,7 +406,7 @@ export function LogForm({
             value={materials}
             onChange={(e) => setMaterials(e.target.value)}
             rows={2}
-            placeholder="Materials used"
+            placeholder={t('field.log.materialsUsed')}
             className="w-full rounded-[10px] border border-m6m-border px-[12px] py-[8px] text-[15px]"
           />
           <textarea
@@ -410,19 +414,19 @@ export function LogForm({
             value={equipment}
             onChange={(e) => setEquipment(e.target.value)}
             rows={2}
-            placeholder="Equipment used"
+            placeholder={t('field.log.equipmentUsed')}
             className="mt-[8px] w-full rounded-[10px] border border-m6m-border px-[12px] py-[8px] text-[15px]"
           />
         </Disclosure>
         <Disclosure
           id="subs"
-          label="Subs on site"
+          label={t('field.log.subsOnSite')}
           open={openRow}
           onToggle={setOpenRow}
           badge={subEntries.length > 0 ? String(subEntries.length) : null}
         >
           {subs.length === 0 ? (
-            <p className="text-[14px] text-m6m-muted">No subcontractors on the roster.</p>
+            <p className="text-[14px] text-m6m-muted">{t('field.log.noSubs')}</p>
           ) : (
             <div className="flex flex-col gap-[8px]">
               {/* THE COLUMN LABELS [S121]. The hours box carried an aria-label
@@ -437,8 +441,8 @@ export function LogForm({
                 aria-hidden
                 className="flex items-center gap-[8px] font-mono text-[10px] font-medium uppercase tracking-wide text-m6m-muted"
               >
-                <span className="min-w-0 flex-1">Subcontractor</span>
-                <span className="w-[76px] text-right">Hours</span>
+                <span className="min-w-0 flex-1">{t('field.subcontractor')}</span>
+                <span className="w-[76px] text-right">{t('field.log.hoursCol')}</span>
               </div>
               {subEntries.map((entry, i) => (
                 <div key={i} className="flex items-center gap-[8px]">
@@ -465,9 +469,11 @@ export function LogForm({
                     // Names the sub as well as the unit: the visible caption
                     // above is one column header over a repeating list, which a
                     // screen reader cannot tie to the third row's box.
-                    aria-label={`Hours for ${
-                      subs.find((s) => s.id === entry.member_id)?.display_name ?? 'subcontractor'
-                    }`}
+                    aria-label={t('field.log.hoursFor', {
+                      name:
+                        subs.find((s) => s.id === entry.member_id)?.display_name ??
+                        t('field.log.subFallback'),
+                    })}
                     onChange={(e) =>
                       setSubEntries((cur) =>
                         cur.map((s, j) => (j === i ? { ...s, hours: Number(e.target.value) } : s))
@@ -485,14 +491,14 @@ export function LogForm({
                 }
                 className="flex min-h-[44px] items-center justify-center rounded-[10px] border border-dashed border-m6m-border text-[14px] font-semibold text-m6m-blue"
               >
-                Add sub
+                {t('field.log.addSub')}
               </button>
             </div>
           )}
         </Disclosure>
         <Disclosure
           id="tomorrow"
-          label="Tomorrow's tasks"
+          label={t('field.log.tomorrow')}
           open={openRow}
           onToggle={setOpenRow}
           badge={tomorrow.trim() ? '✓' : null}
@@ -515,7 +521,7 @@ export function LogForm({
         }`}
       >
         <label className="flex min-h-[44px] items-center justify-between text-[15px] font-bold text-m6m-navy">
-          Flag a hazard
+          {t('field.log.flagHazard')}
           <input
             type="checkbox"
             data-testid="m-hazard-toggle"
@@ -530,7 +536,7 @@ export function LogForm({
             value={hazardNotes}
             onChange={(e) => setHazardNotes(e.target.value)}
             rows={2}
-            placeholder="What's the hazard? (required)"
+            placeholder={t('field.log.hazardPlaceholder')}
             className="mt-[8px] w-full rounded-[10px] border border-m6m-border px-[12px] py-[8px] text-[15px]"
           />
         ) : null}
@@ -553,7 +559,7 @@ export function LogForm({
         onClick={submit}
         className="mt-[16px] flex h-[60px] w-full items-center justify-center rounded-[14px] bg-m6m-amber text-[17px] font-bold text-m6m-navy disabled:opacity-40"
       >
-        {busy ? 'Submitting…' : 'Submit log'}
+        {busy ? t('field.log.submitting') : t('field.log.submit')}
       </button>
 
       {/* ⚠️ THE CAPTURE SCREEN'S OWN EXIT [S121].
@@ -576,7 +582,7 @@ export function LogForm({
         onClick={() => router.back()}
         className="mt-[10px] flex h-[52px] w-full items-center justify-center rounded-[14px] border border-m6m-border bg-m6m-card text-[15px] font-semibold text-m6m-navy"
       >
-        Cancel
+        {t('field.cancel')}
       </button>
     </div>
   );

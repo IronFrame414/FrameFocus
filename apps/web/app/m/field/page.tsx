@@ -12,18 +12,19 @@ import { SetMobileHeader } from '../mobile-header';
 import { EmptyState, Tile, TileGrid } from '../mobile-ui';
 import { ProjectContextRow, type ProjectChoice } from './project-context-row';
 import Link from 'next/link';
+import { getMobileT } from '@/lib/i18n/server';
 
 // [S108 Spec A] A site visit has NO project, so its entry sits OUTSIDE the
 // project-scoped tile grid (whose four tiles m-hubs.spec.ts pins) and shows
 // whether or not any project exists.
-function SiteVisitEntry() {
+function SiteVisitEntry({ label }: { label: string }) {
   return (
     <Link
       href="/m/site-visits"
       data-testid="m-field-site-visits"
       className="mb-[14px] flex min-h-[52px] items-center justify-between rounded-[14px] border border-m6m-border bg-m6m-card px-[14px] text-[15px] font-semibold text-m6m-navy"
     >
-      <span>Site visits</span>
+      <span>{label}</span>
       <span aria-hidden>›</span>
     </Link>
   );
@@ -74,7 +75,11 @@ export default async function MobileFieldPage({
 }: {
   searchParams: { project?: string };
 }) {
-  const [projects, openSession] = await Promise.all([getProjects(), getOpenSession()]);
+  const [projects, openSession, t] = await Promise.all([
+    getProjects(),
+    getOpenSession(),
+    getMobileT(),
+  ]);
 
   const openSegment =
     openSession?.segments?.find((s) => s.segment_end === null && !s.is_deleted) ?? null;
@@ -106,9 +111,9 @@ export default async function MobileFieldPage({
     // — §4.11's empty-state habit, and the honest reading of A-12d.
     return (
       <div className="px-[18px] pb-[18px] pt-[14px]">
-        <SetMobileHeader title="Field" sub={null} />
-        <SiteVisitEntry />
-        <EmptyState>No projects yet. Field tools open once a project exists.</EmptyState>
+        <SetMobileHeader title={t('field.hub.title')} sub={null} />
+        <SiteVisitEntry label={t('field.hub.siteVisits')} />
+        <EmptyState>{t('field.hub.noProjects')}</EmptyState>
       </div>
     );
   }
@@ -142,7 +147,7 @@ export default async function MobileFieldPage({
   return (
     <div className="px-[18px] pb-[18px] pt-[14px]">
       <SetMobileHeader
-        title="Field"
+        title={t('field.hub.title')}
         sub={[current.project_number, client].filter(Boolean).join(' · ') || null}
       />
 
@@ -155,14 +160,14 @@ export default async function MobileFieldPage({
         choices={choices}
       />
 
-      <SiteVisitEntry />
+      <SiteVisitEntry label={t('field.hub.siteVisits')} />
 
       <TileGrid testId="m-field-grid">
         <Tile
           testId="m-field-tile-logs"
           // M-6 with the project in context — NOT a project-scoped logs route.
           href={`/m/logs?project=${current.id}`}
-          label="Daily logs"
+          label={t('field.hub.dailyLogs')}
           icon={<ClipboardList size={20} strokeWidth={2} />}
           badge={String(logs.length)}
           tone="mono"
@@ -170,7 +175,7 @@ export default async function MobileFieldPage({
         <Tile
           testId="m-field-tile-deliveries"
           href={`/m/p/${current.id}/deliveries`}
-          label="Deliveries"
+          label={t('field.hub.deliveries')}
           icon={<Truck size={20} strokeWidth={2} />}
           badge={damaged > 0 ? String(damaged) : null}
           tone="danger"
@@ -178,7 +183,7 @@ export default async function MobileFieldPage({
         <Tile
           testId="m-field-tile-safety"
           href={`/m/p/${current.id}/safety`}
-          label="Safety"
+          label={t('field.hub.safety')}
           icon={<ShieldAlert size={20} strokeWidth={2} />}
           badge={openIncidents > 0 ? String(openIncidents) : null}
           tone="amber"
@@ -186,7 +191,7 @@ export default async function MobileFieldPage({
         <Tile
           testId="m-field-tile-photos"
           href={`/m/p/${current.id}/photos`}
-          label="Photos"
+          label={t('field.hub.photos')}
           icon={<ImageIcon size={20} strokeWidth={2} />}
           badge={String(photos.length)}
           tone="mono"

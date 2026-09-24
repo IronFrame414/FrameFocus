@@ -3,6 +3,7 @@
 import { color, font } from '@/lib/theme';
 import type { SwitcherProject, SwitcherThread } from '@/lib/chat/switcher';
 import type { ThreadKind } from '@/lib/chat/threads';
+import { useT } from '@/components/i18n/language-provider';
 
 /** A project as the switcher route reports it — threads plus available segments. */
 export type SwitcherEntry = SwitcherProject & { kinds: ThreadKind[] };
@@ -29,6 +30,7 @@ export function ThreadSegments({
   onChange: (k: ThreadKind) => void;
   threads: SwitcherThread[];
 }) {
+  const t = useT();
   if (kinds.length < 2) return null;
 
   return (
@@ -45,7 +47,7 @@ export function ThreadSegments({
         const selected = k === value;
         // Each segment carries its own unread dot — §7.1e. Unread is per
         // thread (A-C4), so reading the crew thread must leave this one lit.
-        const unread = threads.find((t) => t.kind === k)?.unreadCount ?? 0;
+        const unread = threads.find((th) => th.kind === k)?.unreadCount ?? 0;
         return (
           <button
             key={k}
@@ -69,7 +71,7 @@ export function ThreadSegments({
               cursor: 'pointer',
             }}
           >
-            {k === 'crew' ? 'Crew' : 'Subs'}
+            {k === 'crew' ? t('shell.chat.crew') : t('shell.chat.subs')}
             {unread > 0 && (
               <span
                 data-testid={`chat-segment-unread-${k}`}

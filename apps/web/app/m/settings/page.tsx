@@ -3,6 +3,7 @@ import { getMyMember } from '@/lib/services/members';
 import { getMyProfile } from '@/lib/services/profiles';
 import { getCompany, getCompanyTimeSettings } from '@/lib/services/company';
 import { SetMobileHeader } from '../mobile-header';
+import { getMobileT } from '@/lib/i18n/server';
 
 // M6M §4.13.7 — M-30 · Settings. READ-ONLY, for every role including Owner.
 //
@@ -38,10 +39,11 @@ export default async function MobileSettingsPage() {
     getCompany(),
     getCompanyTimeSettings(),
   ]);
+  const t = await getMobileT();
 
   return (
     <div className="px-[18px] pb-[18px] pt-[14px]">
-      <SetMobileHeader title="Settings" sub={company?.name ?? null} />
+      <SetMobileHeader title={t('shell.tile.settings')} sub={company?.name ?? null} />
 
       {/* ── You ────────────────────────────────────────────────────────────
           §4.13.7's first bound block. display_name and member_type from
@@ -55,7 +57,7 @@ export default async function MobileSettingsPage() {
         className="mt-[14px] rounded-[15px] border border-m6m-border bg-m6m-card p-[16px]"
       >
         <h2 className="font-mono text-[11px] font-medium uppercase tracking-wide text-m6m-muted">
-          You
+          {t('shell.settings.you')}
         </h2>
         <p
           data-testid="m-settings-name"
@@ -87,7 +89,7 @@ export default async function MobileSettingsPage() {
         data-testid="m-settings-edit-name"
         className="mt-[12px] block rounded-[15px] border border-m6m-border bg-m6m-card p-[16px] text-[13px] font-semibold text-brand-500"
       >
-        Your name and password →
+        {t('shell.settings.nameAndPassword')}
       </Link>
 
       {/* ── Your company ───────────────────────────────────────────────────
@@ -99,7 +101,7 @@ export default async function MobileSettingsPage() {
         className="mt-[12px] rounded-[15px] border border-m6m-border bg-m6m-card p-[16px]"
       >
         <h2 className="font-mono text-[11px] font-medium uppercase tracking-wide text-m6m-muted">
-          Your company
+          {t('shell.settings.yourCompany')}
         </h2>
         <p
           data-testid="m-settings-company-name"
@@ -116,7 +118,7 @@ export default async function MobileSettingsPage() {
       </section>
 
       <p className="mt-[14px] px-[2px] text-[13px] leading-snug text-m6m-muted">
-        Company settings are managed on the desktop app by an owner or admin.
+        {t('shell.settings.managedOnDesktop')}
       </p>
 
       {/* CUT from M-30, each with its reason in §4.13.7:

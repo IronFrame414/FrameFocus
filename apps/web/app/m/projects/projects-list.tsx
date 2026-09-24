@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useMemo, useState } from 'react';
+import { useT } from '@/components/i18n/language-provider';
 
 // M6M §4.2 — M-2's search field and card list.
 //
@@ -37,6 +38,7 @@ export type ProjectCard = {
 
 export function ProjectsList({ cards }: { cards: ProjectCard[] }) {
   const [query, setQuery] = useState('');
+  const t = useT();
 
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -54,8 +56,8 @@ export function ProjectsList({ cards }: { cards: ProjectCard[] }) {
       <input
         type="search"
         data-testid="m-search"
-        aria-label="Search projects"
-        placeholder="Search projects"
+        aria-label={t('field.projects.search')}
+        placeholder={t('field.projects.search')}
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         className="h-[48px] w-full rounded-[12px] border border-m6m-border bg-m6m-card px-[14px] text-[15px] text-m6m-navy placeholder:text-m6m-muted"
@@ -67,7 +69,7 @@ export function ProjectsList({ cards }: { cards: ProjectCard[] }) {
             data-testid="m-empty"
             className="rounded-[15px] border border-dashed border-m6m-border bg-m6m-card px-[16px] py-[22px] text-center text-[15px] text-m6m-muted"
           >
-            {cards.length === 0 ? 'No projects.' : 'No projects match that search.'}
+            {cards.length === 0 ? t('field.projects.none') : t('field.projects.noMatch')}
           </p>
         ) : (
           visible.map((c) => <Card key={c.id} card={c} />)
@@ -78,6 +80,7 @@ export function ProjectsList({ cards }: { cards: ProjectCard[] }) {
 }
 
 function Card({ card }: { card: ProjectCard }) {
+  const t = useT();
   return (
     <Link
       href={`/m/p/${card.id}`}
@@ -116,7 +119,7 @@ function Card({ card }: { card: ProjectCard }) {
               data-testid="m-on-site"
               className="rounded-full border border-m6m-blue bg-m6m-card px-[8px] py-[2px] font-mono text-[11px] font-semibold text-m6m-blue"
             >
-              On site
+              {t('field.projects.onSite')}
             </span>
           ) : null}
         </div>

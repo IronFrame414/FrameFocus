@@ -11,6 +11,8 @@ import {
 } from '@/lib/services/time-tracking-client';
 import { SetMobileHeader } from '../../mobile-header';
 import { PROJECT_TYPES, type PickerProject } from '../timeclock-screen';
+import { useT } from '@/components/i18n/language-provider';
+import type { MsgKey } from '@/lib/i18n/messages';
 
 // M6M §4.12.2 — the 7b interaction, honouring all three §4.5a constraints:
 //
@@ -33,17 +35,18 @@ import { PROJECT_TYPES, type PickerProject } from '../timeclock-screen';
 // "Mark '<task>' complete" row — the ONLY surface that may write `completion`,
 // and only on a `work` segment carrying a `task_id`.
 
-const ALL_TYPES: { id: SegmentType; label: string }[] = [
-  { id: 'work', label: 'Work' },
-  { id: 'material_run', label: 'Material run' },
-  { id: 'warranty', label: 'Warranty' },
-  { id: 'travel', label: 'Travel' },
-  { id: 'shop', label: 'Shop' },
-  { id: 'break', label: 'Break' },
+// Labels are message keys, resolved with t() at render [S110 H].
+const ALL_TYPES: { id: SegmentType; key: MsgKey }[] = [
+  { id: 'work', key: 'field.segment.work' },
+  { id: 'material_run', key: 'field.segment.material_run' },
+  { id: 'warranty', key: 'field.segment.warranty' },
+  { id: 'travel', key: 'field.segment.travel' },
+  { id: 'shop', key: 'field.segment.shop' },
+  { id: 'break', key: 'field.segment.break' },
 ];
 
-const TYPE_LABEL: Record<string, string> = Object.fromEntries(
-  ALL_TYPES.map((t) => [t.id, t.label])
+const TYPE_KEY: Record<string, MsgKey> = Object.fromEntries(
+  ALL_TYPES.map((t) => [t.id, t.key])
 );
 
 /** Timeline fill per type — work-family blue, break grey, travel/shop amber. */
@@ -68,6 +71,7 @@ export function SwitchScreen({
   projects: PickerProject[];
 }) {
   const router = useRouter();
+  const t = useT();
 
   const [nextType, setNextType] = useState<SegmentType | null>(null); // no default
   const [projectId, setProjectId] = useState<string | null>(null);
@@ -78,7 +82,8 @@ export function SwitchScreen({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const closingLabel = TYPE_LABEL[openSegment.segment_type] ?? openSegment.segment_type;
+  const closingKey = TYPE_KEY[openSegment.segment_type];
+  const closingLabel = closingKey ? t(closingKey) : openSegment.segment_type;
   // A-7j4 / A-7h — the note is for the segment being CLOSED, so the exemption
   // keys on the CLOSING segment's type, not the next one's.
   const noteRequired = openSegment.segment_type !== 'break';
@@ -95,8 +100,8 @@ export function SwitchScreen({
       return;
     }
     let cancelled = false;
-    listPickerTasks(projectId).then((t) => {
-      if (!cancelled) setTasks(t);
+    listPickerTasks(projectId).then((rows) => {
+      if (!cancelled) setTasks(rows);
     });
     return () => {
       cancelled = true;
@@ -128,7 +133,7 @@ export function SwitchScreen({
 
     setBusy(false);
     if (!result.success) {
-      setError(result.error ?? 'Switch failed.');
+      setError(result.error ?? t('field.switch.failed'));
       return;
     }
     router.push('/m/timeclock');
@@ -143,7 +148,10 @@ export function SwitchScreen({
 
   return (
     <div className="px-[18px] pb-[18px] pt-[14px]">
-      <SetMobileHeader title="Switch segment" sub={`Ends ${closingLabel} at ${nowLabel}`} />
+      <SetMobileHeader
+        title={t('field.switch.title')}
+        sub={t('field.switch.endsAt', { type: closingLabel, time: nowLabel })}
+      />
 
       {/* The day timeline bar — proportional widths of what is already logged,
           derived from the session's own segments. The crew sees their day
@@ -166,7 +174,7 @@ export function SwitchScreen({
       </div>
       <p className="mt-[4px] flex justify-between font-mono text-[11px] text-m6m-muted">
         <span>{hhmm(session.clock_in)}</span>
-        <span>now {nowLabel}</span>
+        <span>{t('field.switch.nowAt', { time: nowLabel })}</span>
       </p>
 
       {/* ----------------------------------------------------------------- */}
@@ -174,9 +182,9 @@ export function SwitchScreen({
       {/* ----------------------------------------------------------------- */}
       <section className="mt-[16px] rounded-[15px] border border-m6m-border bg-m6m-card p-[15px]">
         <p className="text-[15px] font-bold text-m6m-navy">
-          Ending: {closingLabel}
+          {t('field.switch.ending', { type: closingLabel })}
           <span className="ml-[6px] font-mono text-[12px] font-normal text-m6m-muted">
-            since {hhmm(openSegment.segment_start)}
+            {t('field.since', { time: hhmm(openSegment.segment_start) })}
           </span>
         </p>
 
@@ -186,7 +194,8 @@ export function SwitchScreen({
               htmlFor="m-switch-note"
               className="mb-[4px] mt-[10px] block text-[14px] font-semibold text-m6m-navy"
             >
-              What did you work on? <span className="text-m6m-danger">(required)</span>
+              {t('field.whatWorkedOn')}{' '}
+              <span className="text-m6m-danger">{t('field.required')}</span>
             </label>
             <textarea
               id="m-switch-note"
@@ -199,7 +208,7 @@ export function SwitchScreen({
           </>
         ) : (
           <p data-testid="m-switch-no-note" className="mt-[6px] font-mono text-[12px] text-m6m-muted">
-            No note needed for a break.
+            {t('field.switch.noNote')}
           </p>
         )}
 
@@ -214,7 +223,7 @@ export function SwitchScreen({
               onChange={(e) => setMarkComplete(e.target.checked)}
               className="h-[22px] w-[22px]"
             />
-            Mark the task complete
+            {t('field.switch.markComplete')}
           </label>
         ) : null}
       </section>
@@ -223,21 +232,21 @@ export function SwitchScreen({
       {/* WHAT'S NEXT — six types (A-7j3), three-and-three project rule.     */}
       {/* ----------------------------------------------------------------- */}
       <h2 className="mb-[8px] mt-[18px] font-mono text-[11px] font-medium uppercase tracking-wide text-m6m-muted">
-        WHAT&apos;S NEXT
+        {t('field.switch.whatsNext')}
       </h2>
       <div data-testid="m-next-type-grid" className="grid grid-cols-3 gap-[8px]">
-        {ALL_TYPES.map((t) => {
-          const on = nextType === t.id;
+        {ALL_TYPES.map((opt) => {
+          const on = nextType === opt.id;
           return (
             <button
-              key={t.id}
+              key={opt.id}
               type="button"
-              data-testid={`m-next-type-${t.id}`}
+              data-testid={`m-next-type-${opt.id}`}
               data-active={on ? 'true' : 'false'}
               aria-pressed={on}
               onClick={() => {
-                setNextType(t.id);
-                if (!PROJECT_TYPES.has(t.id)) {
+                setNextType(opt.id);
+                if (!PROJECT_TYPES.has(opt.id)) {
                   setProjectId(null);
                   setTaskId(null);
                 }
@@ -248,7 +257,7 @@ export function SwitchScreen({
                   : 'border border-m6m-border bg-m6m-card text-m6m-navy'
               }`}
             >
-              {t.label}
+              {t(opt.key)}
             </button>
           );
         })}
@@ -259,7 +268,7 @@ export function SwitchScreen({
       {needsProject ? (
         <section data-testid="m-next-project-block">
           <h2 className="mb-[8px] mt-[16px] font-mono text-[11px] font-medium uppercase tracking-wide text-m6m-muted">
-            PROJECT
+            {t('field.projectHeading')}
           </h2>
           <ul className="overflow-hidden rounded-[14px] border border-m6m-border bg-m6m-card">
             {projects.map((p) => {
@@ -298,7 +307,7 @@ export function SwitchScreen({
                 htmlFor="m-next-task"
                 className="mb-[4px] block font-mono text-[11px] font-medium uppercase tracking-wide text-m6m-muted"
               >
-                TASK (OPTIONAL)
+                {t('field.switch.taskOptional')}
               </label>
               <select
                 id="m-next-task"
@@ -307,10 +316,10 @@ export function SwitchScreen({
                 onChange={(e) => setTaskId(e.target.value || null)}
                 className="h-[48px] w-full rounded-[12px] border border-m6m-border bg-m6m-card px-[12px] text-[15px] text-m6m-navy"
               >
-                <option value="">No task</option>
-                {tasks.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.title}
+                <option value="">{t('field.switch.noTask')}</option>
+                {tasks.map((opt) => (
+                  <option key={opt.id} value={opt.id}>
+                    {opt.title}
                   </option>
                 ))}
               </select>
@@ -336,7 +345,7 @@ export function SwitchScreen({
         onClick={submit}
         className="mt-[16px] flex h-[60px] w-full items-center justify-center rounded-[14px] bg-m6m-amber text-[17px] font-bold text-m6m-navy disabled:opacity-40"
       >
-        {busy ? 'Switching…' : 'Start segment'}
+        {busy ? t('field.switch.switching') : t('field.switch.start')}
       </button>
 
       {/* ⚠️ THE CAPTURE SCREEN'S OWN EXIT [S121].
@@ -359,7 +368,7 @@ export function SwitchScreen({
         onClick={() => router.back()}
         className="mt-[10px] flex h-[52px] w-full items-center justify-center rounded-[14px] border border-m6m-border bg-m6m-card text-[15px] font-semibold text-m6m-navy"
       >
-        Cancel
+        {t('field.cancel')}
       </button>
     </div>
   );

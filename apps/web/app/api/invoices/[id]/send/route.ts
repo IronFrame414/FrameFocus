@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { checkClientFacingEnglish, nonEnglishResponseBody } from '@/lib/language-check/english-check';
+import { invoiceFieldsForCheck } from '@/lib/language-check/document-fields';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@framefocus/shared/types/database';
 import { createClient } from '@/lib/supabase-server';
@@ -107,6 +109,8 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     recipient_name?: string;
     subject?: string;
     body?: string;
+    // S110 H [RULED Q14] — sent anyway after the "not in English" warning.
+    language_override?: boolean;
   };
 
   // RLS-scoped — a cross-tenant or unreachable id 404s here.
@@ -195,6 +199,18 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       { error: 'No recipient email. Set a primary contact on the project, or pass recipient_email.' },
       { status: 422 }
     );
+  }
+
+  // ── S110 H [RULED Q14] — the invoice goes out in English. Checked BEFORE
+  // the issue step, because issuing spends an invoice number that can never be
+  // recovered. The office sender may override; it is recorded on the email log.
+  const languageCheck = await checkClientFacingEnglish(
+    admin,
+    invoice.company_id,
+    await invoiceFieldsForCheck(supabase, invoice.id, { subject: body.subject, body: body.body })
+  );
+  if (languageCheck.flagged.length > 0 && body.language_override !== true) {
+    return NextResponse.json(nonEnglishResponseBody(languageCheck.flagged), { status: 409 });
   }
 
   // ── 2. ISSUE — the number is allocated inside this UPDATE ──────────────────
@@ -341,7 +357,16 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     sender_email: sender,
     subject,
     status: sendError ? 'failed' : 'sent',
-    metadata: sendError ? { error: sendError, body: bodyText } : { body: bodyText },
+    metadata: {
+      ...(sendError ? { error: sendError } : {}),
+      body: bodyText,
+      // [S110 H, Q14] the language check, and the override when there was one.
+      language_check: {
+        checked: languageCheck.checked,
+        flagged: languageCheck.flagged.map((f) => f.field),
+        overridden_by: languageCheck.flagged.length > 0 ? profile.id : null,
+      },
+    },
   });
 
   if (sendError) {

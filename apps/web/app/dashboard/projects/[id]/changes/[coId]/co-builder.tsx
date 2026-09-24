@@ -1,5 +1,6 @@
 'use client';
 
+import { NotEnglishWarning } from '@/components/language-check/not-english-warning';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -251,8 +252,12 @@ export function CoBuilder({
     return true;
   }
 
-  async function handleSend() {
+  // S110 H [RULED Q14] — non-English fields the server named; see NotEnglishWarning.
+  const [notEnglish, setNotEnglish] = useState<string[] | null>(null);
+
+  async function handleSend(languageOverride = false) {
     setError(null);
+    setNotEnglish(null);
 
     const payload: Parameters<typeof sendChangeOrder>[1] = {
       recipient_name: recipientName.trim() || undefined,
@@ -275,9 +280,14 @@ export function CoBuilder({
       payload.contractor_signature_name = name;
     }
 
+    if (languageOverride) payload.language_override = true;
     setBusy(true);
     const result = await sendChangeOrder(co.id, payload);
     setBusy(false);
+    if (result.notEnglish) {
+      setNotEnglish(result.notEnglish);
+      return;
+    }
     if (!result.success) {
       setError(result.error ?? 'Send failed');
       return;
@@ -712,7 +722,7 @@ export function CoBuilder({
               </p>
             )}
 
-            <button type="button" onClick={handleSend} disabled={busy} style={primaryButtonStyle(busy)}>
+            <button type="button" onClick={() => void handleSend()} disabled={busy} style={primaryButtonStyle(busy)}>
               {busy ? 'Sending…' : 'Confirm Send'}
             </button>
             <p style={{ fontSize: '0.75rem', color: '#6b7280', margin: 0, flexBasis: '100%' }}>
@@ -748,6 +758,15 @@ export function CoBuilder({
           </div>
         )}
       </div>
+
+      {notEnglish && (
+        <NotEnglishWarning
+          fields={notEnglish}
+          doc="changeOrder"
+          busy={busy}
+          onSendAnyway={() => void handleSend(true)}
+        />
+      )}
 
       {error && (
         <div

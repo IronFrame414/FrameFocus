@@ -3,6 +3,8 @@ import { getCompanyTimeSettings } from '@/lib/services/company';
 // [S106] was a local copy of the company-tz calendar-date rule.
 import { companyToday } from '@framefocus/shared/utils/dates';
 import { SectionHeader } from '../section-header';
+import { getMobileT } from '@/lib/i18n/server';
+import type { MsgKey } from '@/lib/i18n/messages';
 import { EmptyState, ListRow, SectionLabel } from '../../../mobile-ui';
 
 // M6M §4.11.2 — M-12 · Schedule. The project's calendar as a LIST, not a grid:
@@ -20,15 +22,16 @@ import { EmptyState, ListRow, SectionLabel } from '../../../mobile-ui';
 // a mobile dependency visualisation and it is not derivable from locked patterns.
 // CUT: create/edit/assign — schedule-client.ts's writes are desktop flows.
 
-const SOURCE_LABEL: Record<CalendarEvent['source'], string> = {
-  task: 'Task',
-  general: 'Schedule',
-  inspection: 'Inspection',
+// S110 H — message keys, resolved with t() at render time.
+const SOURCE_KEY: Record<CalendarEvent['source'], MsgKey> = {
+  task: 'project.schedule.source.task',
+  general: 'project.schedule.source.general',
+  inspection: 'project.schedule.source.inspection',
   // Unreachable on this screen and deliberately so: getCalendarEvents emits
   // compliance events ONLY for the company-wide calendar (7C §3.3) — a
   // member's COI belongs to no single job. Present because the map is
   // exhaustive over the union, not because a compliance row can render here.
-  compliance: 'Compliance',
+  compliance: 'project.schedule.source.compliance',
 };
 
 function formatDay(iso: string): string {
@@ -46,9 +49,10 @@ export default async function ProjectSchedulePage({
 }: {
   params: { projectId: string };
 }) {
-  const [events, timeSettings] = await Promise.all([
+  const [events, timeSettings, t] = await Promise.all([
     getCalendarEvents({ projectId: params.projectId }),
     getCompanyTimeSettings(),
+    getMobileT(),
   ]);
 
   const today = companyToday(timeSettings.timezone);
@@ -68,18 +72,18 @@ export default async function ProjectSchedulePage({
 
   return (
     <div className="px-[18px] pb-[18px]">
-      <SectionHeader projectId={params.projectId} title="Schedule" />
+      <SectionHeader projectId={params.projectId} title={t('project.tile.schedule')} />
 
       {events.length === 0 ? (
         <div className="pt-[18px]">
-          <EmptyState>Nothing scheduled.</EmptyState>
+          <EmptyState>{t('project.schedule.empty')}</EmptyState>
         </div>
       ) : (
         [...past, ...upcoming].map((day) => (
           <section key={day} data-testid="m-day-group" data-day={day}>
             <SectionLabel>
               {formatDay(day)}
-              {day === today ? ' · Today' : ''}
+              {day === today ? t('project.schedule.todaySuffix') : ''}
             </SectionLabel>
             <ul className="rounded-[15px] border border-m6m-border bg-m6m-card px-[12px]">
               {byDay.get(day)!.map((e) => (
@@ -104,7 +108,7 @@ export default async function ProjectSchedulePage({
                     data-testid="m-event-source"
                     className="shrink-0 font-mono text-[11px] font-semibold text-m6m-muted"
                   >
-                    {SOURCE_LABEL[e.source]}
+                    {t(SOURCE_KEY[e.source])}
                   </span>
                 </ListRow>
               ))}

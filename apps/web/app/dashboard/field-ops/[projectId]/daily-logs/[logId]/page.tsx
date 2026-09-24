@@ -1,3 +1,5 @@
+// S110 H, ruling 3 — what the crew typed, in the READER's language (desktop too).
+import { UserText } from '@/components/i18n/user-text';
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase-server';
@@ -36,7 +38,7 @@ function FreeTextCard({ title, value }: { title: string; value: string | null })
         {title}
       </div>
       <div className={value ? 'text-[13px] text-[#374151]' : 'text-[13px] text-[#9aa1ac]'}>
-        {value || '—'}
+        {value ? <UserText text={value} /> : '—'}
       </div>
     </div>
   );
@@ -171,7 +173,7 @@ export default async function DailyLogDetailPage({
                   : 'text-[14px] text-[#9aa1ac]'
               }
             >
-              {log.work_performed || '—'}
+              {log.work_performed ? <UserText text={log.work_performed} /> : '—'}
             </div>
           </div>
 
@@ -191,7 +193,7 @@ export default async function DailyLogDetailPage({
                 log.notes ? 'text-[13px] leading-relaxed text-[#374151]' : 'text-[13px] text-[#9aa1ac]'
               }
             >
-              {log.notes || '—'}
+              {log.notes ? <UserText text={log.notes} /> : '—'}
             </div>
           </div>
 
@@ -219,7 +221,7 @@ export default async function DailyLogDetailPage({
             <div className="rounded-[13px] border border-[#f3e2c4] bg-[#fdf6ec] p-[16px]">
               <div className="mb-2 text-[13px] font-bold text-[#8a5a12]">⚠ Hazard flagged</div>
               <div className="mb-3 text-[13px] leading-snug text-[#8a5a12]">
-                {log.hazard_notes}
+                <UserText text={log.hazard_notes} />
               </div>
               {/* §2.4: 404s until the 6C UI ships — accepted, not hidden. */}
               <Link
@@ -284,7 +286,14 @@ export default async function DailyLogDetailPage({
                 <div key={s.id} className="flex items-center justify-between py-[6px]">
                   <span className="text-[13px] text-[#374151]">
                     {s.member?.display_name ?? 'Sub'}
-                    {s.note ? ` — ${s.note}` : ''}
+                    {s.note ? (
+                      <>
+                        {' — '}
+                        <UserText text={s.note} />
+                      </>
+                    ) : (
+                      ''
+                    )}
                   </span>
                   <span className="font-mono text-[13px] font-semibold text-[#14213d]">
                     {s.hours.toFixed(1)} h

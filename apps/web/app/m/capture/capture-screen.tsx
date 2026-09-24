@@ -9,6 +9,7 @@ import { useCaptureStore } from '../capture-store';
 import type { HeldShot } from '@/lib/offline/held-shots';
 import { useOfflineSync } from '../offline-sync';
 import { ErrorNotice, OptionStack, PrimaryButton, SecondaryButton } from '../write-ui';
+import { useT } from '@/components/i18n/language-provider';
 
 // M6M §6 / S107 Part A — THE TRAY. Everything after the shutter, for a BATCH.
 //
@@ -43,6 +44,7 @@ export function CaptureScreen({ projects }: { projects: CaptureProjectChoice[] }
   const router = useRouter();
   const capture = useCaptureStore();
   const offlineSync = useOfflineSync();
+  const t = useT();
 
   const [chosen, setChosen] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -94,8 +96,8 @@ export function CaptureScreen({ projects }: { projects: CaptureProjectChoice[] }
             shot.id,
             'failed',
             quota
-              ? "Couldn't save to this device — storage full. Free up space and retry."
-              : "Couldn't save this photo for later upload."
+              ? t('field.capture.storageFull')
+              : t('field.capture.saveLaterFailed')
           );
           return true; // handled — do not fall through and clear it
         }
@@ -120,7 +122,7 @@ export function CaptureScreen({ projects }: { projects: CaptureProjectChoice[] }
 
       if (!uploaded.success) {
         if (await queueForLater()) return;
-        await capture.setStatus(shot.id, 'failed', uploaded.error ?? 'The photo could not be uploaded.');
+        await capture.setStatus(shot.id, 'failed', uploaded.error ?? t('field.capture.uploadFailed'));
         return;
       }
       // ⚠️ Removed ONLY here — after it is genuinely somewhere. A clear on a path
@@ -129,7 +131,7 @@ export function CaptureScreen({ projects }: { projects: CaptureProjectChoice[] }
     },
     // `uploadFile` is a module import, not reactive state — including it is a
     // lint warning, not a correctness one.
-    [capture, offlineSync]
+    [capture, offlineSync, t]
   );
 
   /** File the whole batch, SERIALLY. */
@@ -168,7 +170,7 @@ export function CaptureScreen({ projects }: { projects: CaptureProjectChoice[] }
       const r = await capture.hold(f, batch?.projectId ?? null);
       // ⚠️ A refusal is SHOWN. At capacity nothing is evicted to make room.
       if (!r.ok) {
-        setError(r.reason ?? 'That photo could not be held.');
+        setError(r.reason ?? t('field.capture.holdFailed'));
         break;
       }
     }
@@ -178,8 +180,8 @@ export function CaptureScreen({ projects }: { projects: CaptureProjectChoice[] }
   if (!capture?.ready) {
     return (
       <div className="px-[18px] pb-[18px] pt-[14px]">
-        <SetMobileHeader title="Capture" />
-        <p className="text-[14px] text-m6m-muted">Loading your photos…</p>
+        <SetMobileHeader title={t('field.capture.title')} />
+        <p className="text-[14px] text-m6m-muted">{t('field.capture.loading')}</p>
       </div>
     );
   }
@@ -188,7 +190,9 @@ export function CaptureScreen({ projects }: { projects: CaptureProjectChoice[] }
 
   return (
     <div className="px-[18px] pb-[18px] pt-[14px]">
-      <SetMobileHeader title={askProject ? 'Which project?' : 'Photos'} />
+      <SetMobileHeader
+        title={askProject ? t('field.capture.whichProject') : t('field.capture.photos')}
+      />
 
       {/* ⚠️ THE COUNT IS ALWAYS ON SCREEN. The cleanup rule's last line: nothing
           may expire that was not visible first. */}
@@ -207,8 +211,10 @@ export function CaptureScreen({ projects }: { projects: CaptureProjectChoice[] }
           className="rounded-[12px] border border-m6m-border bg-m6m-card px-[14px] py-[12px] text-[14px] text-m6m-navy"
         >
           {progress && progress.added > 0
-            ? `${progress.added} photo${progress.added === 1 ? '' : 's'} saved.`
-            : 'No photos to file. Tap the camera button to take some.'}
+            ? t(progress.added === 1 ? 'field.capture.savedOne' : 'field.capture.savedMany', {
+                n: progress.added,
+              })
+            : t('field.capture.empty')}
         </p>
       ) : (
         <div data-testid="m-capture-tray" className="flex flex-col gap-[8px]">
@@ -223,15 +229,19 @@ export function CaptureScreen({ projects }: { projects: CaptureProjectChoice[] }
                 <div className="min-w-0">
                   <p className="truncate text-[14px] text-m6m-navy">{s.fileName}</p>
                   <p className="text-[12px] text-m6m-muted">
-                    {s.status === 'held' && 'Waiting for a project'}
-                    {s.status === 'uploading' && 'Uploading…'}
-                    {s.status === 'queued' && 'Waiting to upload when you are back online'}
-                    {s.status === 'failed' && (s.error ?? 'Failed')}
+                    {s.status === 'held' && t('field.capture.waitingProject')}
+                    {s.status === 'uploading' && t('field.capture.uploading')}
+                    {s.status === 'queued' && t('field.capture.waitingOnline')}
+                    {s.status === 'failed' && (s.error ?? t('field.capture.failed'))}
                   </p>
                   {/* ⚠️ The age warning must PRECEDE the sweep. */}
                   {days <= 2 && (
                     <p className="text-[12px] font-bold text-[#b45309]">
-                      {days <= 0 ? 'Expires today' : `Expires in ${days} day${days === 1 ? '' : 's'}`}
+                      {days <= 0
+                        ? t('field.capture.expiresToday')
+                        : t(days === 1 ? 'field.capture.expiresOne' : 'field.capture.expiresMany', {
+                            n: days,
+                          })}
                     </p>
                   )}
                 </div>
@@ -243,7 +253,7 @@ export function CaptureScreen({ projects }: { projects: CaptureProjectChoice[] }
                       onClick={() => void sendOne(s, batch.projectId!)}
                       className="text-[13px] font-bold text-m6m-navy underline"
                     >
-                      Retry
+                      {t('field.capture.retry')}
                     </button>
                   )}
                   <button
@@ -252,7 +262,7 @@ export function CaptureScreen({ projects }: { projects: CaptureProjectChoice[] }
                     onClick={() => void capture.discard(s.id)}
                     className="text-[13px] text-m6m-muted underline"
                   >
-                    Discard
+                    {t('field.capture.discard')}
                   </button>
                 </div>
               </div>
@@ -267,15 +277,14 @@ export function CaptureScreen({ projects }: { projects: CaptureProjectChoice[] }
       {askProject && (
         <div className="mt-[14px]">
           <p className="mb-[10px] text-[14px] text-m6m-muted">
-            These photos are saved on this device until you choose a project. They stay here if you
-            close the app.
+            {t('field.capture.heldNotice')}
           </p>
           {projects.length === 0 ? (
             <p
               data-testid="m-capture-no-projects"
               className="rounded-[12px] border border-m6m-border bg-m6m-card px-[14px] py-[12px] text-[14px] text-m6m-navy"
             >
-              No active projects to file these against.
+              {t('field.capture.noProjects')}
             </p>
           ) : (
             <div data-testid="m-capture-project-prompt">
@@ -292,8 +301,10 @@ export function CaptureScreen({ projects }: { projects: CaptureProjectChoice[] }
             </div>
           )}
           <PrimaryButton
-            label={`Save ${shots.length} photo${shots.length === 1 ? '' : 's'}`}
-            busyLabel="Saving…"
+            label={t(shots.length === 1 ? 'field.capture.saveOne' : 'field.capture.saveMany', {
+              n: shots.length,
+            })}
+            busyLabel={t('field.capture.saving')}
             onClick={() => chosen && void fileAll(chosen)}
             disabled={!chosen}
             busy={busy}
@@ -329,18 +340,22 @@ export function CaptureScreen({ projects }: { projects: CaptureProjectChoice[] }
           onChange={(e) => void onPick(e)}
         />
         <SecondaryButton
-          label="Take another"
+          label={t('field.capture.takeAnother')}
           testId="m-capture-again"
           onClick={() => cameraRef.current?.click()}
         />
         <SecondaryButton
-          label="Add from library"
+          label={t('field.capture.addLibrary')}
           testId="m-capture-library"
           onClick={() => libraryRef.current?.click()}
         />
       </div>
 
-      <SecondaryButton label="Done" testId="m-capture-done" onClick={() => router.push('/m')} />
+      <SecondaryButton
+        label={t('field.done')}
+        testId="m-capture-done"
+        onClick={() => router.push('/m')}
+      />
     </div>
   );
 }

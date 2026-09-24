@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useRef, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
+import { useT } from '@/components/i18n/language-provider';
 
 /**
  * S109 #161 — THE REUSABLE MODAL. [RULED Josh, ASK-161.A: "build the reusable
@@ -55,6 +56,7 @@ export function ModalSheet({
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
   const titleId = useId();
+  const t = useT();
 
   useEffect(() => {
     if (!open) return;
@@ -109,7 +111,7 @@ export function ModalSheet({
     <div className="fixed inset-0 z-[60] flex items-stretch justify-center sm:items-center sm:p-6">
       <button
         type="button"
-        aria-label="Close"
+        aria-label={t('shell.close')}
         tabIndex={-1}
         onClick={() => onCloseRef.current()}
         className="absolute inset-0 cursor-default"
@@ -128,7 +130,7 @@ export function ModalSheet({
           <button
             type="button"
             onClick={() => onCloseRef.current()}
-            aria-label="Close"
+            aria-label={t('shell.close')}
             data-testid={testId ? `${testId}-close` : undefined}
             className="rounded-md px-2 py-1 text-lg leading-none text-gray-600 hover:bg-gray-100"
           >

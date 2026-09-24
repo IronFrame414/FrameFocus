@@ -1,4 +1,10 @@
 import Link from 'next/link';
+import { makeT, type MsgKey, type T } from '@/lib/i18n/messages';
+
+// S110 H — THESE ARE SERVER COMPONENTS, SO THEY CANNOT CALL useT(). A component
+// here that shows system text takes an optional `t` (the page's getMobileT()),
+// and falls back to English when a caller has not passed one.
+const EN_T = makeT('en');
 
 // M6M — shared primitives for the §4.13 list screens.
 //
@@ -22,7 +28,16 @@ import Link from 'next/link';
 export type Chip = {
   /** Search-param value. `null` is the unfiltered "All" chip. */
   value: string | null;
+  /** The DISPLAYED text — translated by the caller. */
   label: string;
+  /**
+   * S110 H — the STABLE source of the chip's test id (`m-chip-${testKey}`).
+   * Pass the English label the chip had before translation (e.g. 'All',
+   * 'On hold') whenever `label` is translated; the id must not change with
+   * the user's language. Defaults to `label`, which keeps untranslated callers
+   * byte-identical.
+   */
+  testKey?: string;
 };
 
 export function FilterChips({
@@ -30,17 +45,20 @@ export function FilterChips({
   active,
   basePath,
   param,
+  t = EN_T,
 }: {
   chips: readonly Chip[];
   active: string | null;
   basePath: string;
   param: string;
+  /** S110 H — the page's getMobileT(); English when omitted. */
+  t?: T;
 }) {
   return (
     <div
       data-testid="m-chips"
       role="group"
-      aria-label="Filter"
+      aria-label={t('shell.filter')}
       className="flex gap-[8px] overflow-x-auto pb-[2px]"
     >
       {chips.map((chip) => {
@@ -52,11 +70,12 @@ export function FilterChips({
         // — a URL whose second param is silently part of the first's value.
         const sep = basePath.includes('?') ? '&' : '?';
         const href = chip.value === null ? basePath : `${basePath}${sep}${param}=${chip.value}`;
+        const id = chip.testKey ?? chip.label;
         return (
           <Link
-            key={chip.label}
+            key={id}
             href={href}
-            data-testid={`m-chip-${chip.label}`}
+            data-testid={`m-chip-${id}`}
             data-active={isActive ? 'true' : 'false'}
             aria-current={isActive ? 'true' : undefined}
             // 44px min height — §2's floor. Chips are not in the sub-44px
@@ -185,9 +204,9 @@ export function daysLeft(targetEndDate: string | null, today: string): number | 
  * The em-dash is the null state, NEVER `0` — the same distinction §2's money
  * token draws between "$0.00" and "not recorded".
  */
-export function daysLeftLabel(targetEndDate: string | null, today: string): string {
+export function daysLeftLabel(targetEndDate: string | null, today: string, t: T = EN_T): string {
   const n = daysLeft(targetEndDate, today);
-  return n === null ? '—' : `${n} days left`;
+  return n === null ? '—' : t('shell.daysLeft', { n });
 }
 
 // ---------------------------------------------------------------------------
@@ -209,13 +228,7 @@ export function daysLeftLabel(targetEndDate: string | null, today: string): stri
 // ---------------------------------------------------------------------------
 export type BadgeTone = 'amber' | 'danger' | 'mono';
 
-export function TileGrid({
-  children,
-  testId,
-}: {
-  children: React.ReactNode;
-  testId: string;
-}) {
+export function TileGrid({ children, testId }: { children: React.ReactNode; testId: string }) {
   return (
     <div data-testid={testId} className="grid grid-cols-2 gap-[10px]">
       {children}
@@ -281,13 +294,7 @@ export function SectionLabel({ children }: { children: React.ReactNode }) {
 }
 
 /** The shared 58px list row (§2's list/menu row size). */
-export function ListRow({
-  children,
-  testId,
-}: {
-  children: React.ReactNode;
-  testId?: string;
-}) {
+export function ListRow({ children, testId }: { children: React.ReactNode; testId?: string }) {
   return (
     <li
       data-testid={testId}
@@ -307,11 +314,14 @@ export function ContactActions({
   mobile,
   email,
   name,
+  t = EN_T,
 }: {
   phone?: string | null;
   mobile?: string | null;
   email?: string | null;
   name: string;
+  /** S110 H — the page's getMobileT(); English when omitted. */
+  t?: T;
 }) {
   // `mobile` wins when both are present — it is the number that reaches a person
   // on site, which is the whole argument for these screens existing on a phone.
@@ -325,7 +335,7 @@ export function ContactActions({
         <a
           href={`tel:${tel}`}
           data-testid="m-tel"
-          aria-label={`Call ${name}`}
+          aria-label={t('shell.callName', { name })}
           className="flex h-11 w-11 items-center justify-center rounded-full border border-m6m-border bg-m6m-card text-m6m-blue"
         >
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
@@ -343,7 +353,7 @@ export function ContactActions({
         <a
           href={`mailto:${mail}`}
           data-testid="m-mail"
-          aria-label={`Email ${name}`}
+          aria-label={t('shell.emailName', { name })}
           className="flex h-11 w-11 items-center justify-center rounded-full border border-m6m-border bg-m6m-card text-m6m-blue"
         >
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
@@ -445,30 +455,39 @@ export function ListRowLink({
 // the list renders this. Staying on the list matters: the user is returned to
 // something they can still use, with an explanation, rather than to the hub.
 // ---------------------------------------------------------------------------
-export const DENIED_COPY: Record<string, string> = {
-  co: 'Change order details are not available to subcontractors.',
-  member: 'Team member details are not available to subcontractors.',
-  contact: 'Contact details are not available to subcontractors.',
-  file: 'Opening documents is not available to subcontractors.',
+// S110 H — message KEYS, resolved with t() at render time (was DENIED_COPY).
+export const DENIED_KEYS: Record<string, MsgKey> = {
+  co: 'shell.denied.co',
+  member: 'shell.denied.member',
+  contact: 'shell.denied.contact',
+  file: 'shell.denied.file',
   // D-51's write surface. Worded by ROLE rather than by exclusion because this
   // one refuses five roles, not one — a foreman reading "not available to
   // subcontractors" on a screen they were just bounced from would reasonably
   // conclude the app was broken.
-  'co-write': 'Only an owner, admin or project manager can write change orders.',
+  'co-write': 'shell.denied.coWrite',
   // S121's edit surfaces. Worded BY ROLE for the same reason 'co-write' is:
   // these refuse foreman, crew and subcontractor — three roles, not one — and
   // "not available to subcontractors" would read to a foreman as a broken app.
-  'sub-edit': 'Only an owner, admin or project manager can edit subs and vendors.',
-  'contact-edit': 'Only an owner, admin or project manager can edit contacts.',
+  'sub-edit': 'shell.denied.subEdit',
+  'contact-edit': 'shell.denied.contactEdit',
   // Narrower than the two above by ruling [S121, Josh]: Owner/Admin only, with
   // no PM arm, mirroring `company_members_update_authorized`. The route exists
   // (`/m/team/[memberId]/edit`) and this is the copy a refused PM lands on.
-  'team-edit': 'Only an owner or admin can edit team members.',
+  'team-edit': 'shell.denied.teamEdit',
 };
 
-export function DeniedNotice({ kind }: { kind: string | undefined }) {
-  const copy = kind ? DENIED_COPY[kind] : undefined;
-  if (!copy) return null;
+export function DeniedNotice({
+  kind,
+  t = EN_T,
+}: {
+  kind: string | undefined;
+  /** S110 H — the page's getMobileT(); English when omitted. */
+  t?: T;
+}) {
+  const key = kind ? DENIED_KEYS[kind] : undefined;
+  if (!key) return null;
+  const copy = t(key);
   return (
     <p
       data-testid="m-denied"
@@ -508,13 +527,7 @@ export function DetailField({
 }
 
 /** The card the detail fields sit in. */
-export function DetailCard({
-  children,
-  testId,
-}: {
-  children: React.ReactNode;
-  testId?: string;
-}) {
+export function DetailCard({ children, testId }: { children: React.ReactNode; testId?: string }) {
   return (
     <section
       data-testid={testId}

@@ -7,6 +7,8 @@ import {
   updateMemberProfile,
   type WriteOutcome,
 } from '@/lib/services/members-client';
+import { useT } from '@/components/i18n/language-provider';
+import type { MsgKey, T } from '@/lib/i18n/messages';
 import { SetMobileHeader } from '../../../mobile-header';
 import {
   ErrorNotice,
@@ -57,15 +59,19 @@ import {
 // touch. The form says so on the field, because the alternative is a user who
 // "changed their email" and can no longer sign in.
 
+// S110 H — labels are message keys, resolved with t() at render time.
 const MEMBER_TYPES = [
-  { value: 'crew' as const, label: 'Crew' },
-  { value: 'subcontractor' as const, label: 'Subcontractor' },
+  { value: 'crew' as const, key: 'directory.team.type.crew' as MsgKey },
+  { value: 'subcontractor' as const, key: 'directory.team.type.subcontractor' as MsgKey },
 ];
 
 const ACTIVE = [
-  { value: 'active' as const, label: 'Active' },
-  { value: 'inactive' as const, label: 'Inactive' },
+  { value: 'active' as const, key: 'directory.status.active' as MsgKey },
+  { value: 'inactive' as const, key: 'directory.status.inactive' as MsgKey },
 ];
+
+// A hex code, not language.
+const DEFAULT_TINT = '#f59e0b';
 
 export type TeamEditable = {
   id: string;
@@ -80,7 +86,7 @@ export type TeamEditable = {
   phone: string;
 };
 
-function halfNote(which: 'roster' | 'profile', outcome: WriteOutcome): string | null {
+function halfNote(which: 'roster' | 'profile', outcome: WriteOutcome, t: T): string | null {
   switch (outcome.status) {
     case 'ok':
       return null;
@@ -88,16 +94,21 @@ function halfNote(which: 'roster' | 'profile', outcome: WriteOutcome): string | 
       return null; // Reported up front, not as a save failure.
     case 'refused':
       return which === 'profile'
-        ? 'The name, email and phone were not saved — an admin cannot edit the personal details of an owner or another admin, or their own.'
-        : 'The roster details were not saved — you do not have permission to edit this member.';
+        ? t('directory.team.refusedProfile')
+        : t('directory.team.refusedRoster');
     case 'error':
-      return `${which === 'profile' ? 'Personal details' : 'Roster details'}: ${outcome.error}`;
+      return which === 'profile'
+        ? t('directory.team.errorProfile', { error: outcome.error })
+        : t('directory.team.errorRoster', { error: outcome.error });
   }
 }
 
 export function TeamEditForm({ member }: { member: TeamEditable }) {
   const router = useRouter();
   const online = useOnline();
+  const t = useT();
+  const memberTypeOptions = MEMBER_TYPES.map((o) => ({ value: o.value, label: t(o.key) }));
+  const activeOptions = ACTIVE.map((o) => ({ value: o.value, label: t(o.key) }));
 
   const [displayName, setDisplayName] = useState(member.display_name);
   const [memberType, setMemberType] = useState<string | null>(member.member_type);
@@ -117,7 +128,7 @@ export function TeamEditForm({ member }: { member: TeamEditable }) {
   async function save() {
     if (!online) return;
     if (!ready) {
-      setNotes(['A display name is required.']);
+      setNotes([t('directory.team.needDisplayName')]);
       return;
     }
     setBusy(true);
@@ -142,7 +153,7 @@ export function TeamEditForm({ member }: { member: TeamEditable }) {
 
     setBusy(false);
 
-    const problems = [halfNote('roster', roster), halfNote('profile', profile)].filter(
+    const problems = [halfNote('roster', roster, t), halfNote('profile', profile, t)].filter(
       (n): n is string => n !== null
     );
 
@@ -161,18 +172,20 @@ export function TeamEditForm({ member }: { member: TeamEditable }) {
 
   return (
     <div className="px-[18px] pb-[18px] pt-[14px]">
-      <SetMobileHeader title="Edit" sub={member.display_name} />
+      <SetMobileHeader title={t('directory.edit')} sub={member.display_name} />
 
-      <h1 className="text-[17px] font-bold leading-tight text-m6m-navy">Edit team member</h1>
+      <h1 className="text-[17px] font-bold leading-tight text-m6m-navy">
+        {t('directory.team.editTitle')}
+      </h1>
 
       {!online ? (
         <div className="mt-[14px]">
-          <OfflineNotice what="Editing a team member" testId="m-team-edit-offline" />
+          <OfflineNotice what={t('directory.team.editingWhat')} testId="m-team-edit-offline" />
         </div>
       ) : null}
 
       <TextField
-        label="Display name"
+        label={t('directory.team.field.displayName')}
         value={displayName}
         onChange={setDisplayName}
         testId="m-team-edit-display-name"
@@ -180,9 +193,9 @@ export function TeamEditForm({ member }: { member: TeamEditable }) {
       />
 
       <div className="mt-[14px]">
-        <FieldLabel>Member type</FieldLabel>
+        <FieldLabel>{t('directory.team.field.memberType')}</FieldLabel>
         <OptionStack
-          options={MEMBER_TYPES}
+          options={memberTypeOptions}
           value={memberType}
           onChange={setMemberType}
           testIdPrefix="m-team-edit-type"
@@ -190,9 +203,9 @@ export function TeamEditForm({ member }: { member: TeamEditable }) {
       </div>
 
       <div className="mt-[14px]">
-        <FieldLabel>Status</FieldLabel>
+        <FieldLabel>{t('directory.field.status')}</FieldLabel>
         <OptionStack
-          options={ACTIVE}
+          options={activeOptions}
           value={active}
           onChange={setActive}
           testIdPrefix="m-team-edit-active"
@@ -200,16 +213,16 @@ export function TeamEditForm({ member }: { member: TeamEditable }) {
       </div>
 
       <TextField
-        label="Schedule colour (hex)"
+        label={t('directory.team.field.scheduleColour')}
         value={scheduleColor}
         onChange={setScheduleColor}
         testId="m-team-edit-color"
-        placeholder="#f59e0b"
+        placeholder={DEFAULT_TINT}
       />
 
       {/* ── THE PROFILE HALF ───────────────────────────────────────────────── */}
       <div className="mt-[20px] border-t border-m6m-border pt-[14px]">
-        <FieldLabel>Personal details</FieldLabel>
+        <FieldLabel>{t('directory.team.personalDetails')}</FieldLabel>
 
         {member.profile_id === null ? (
           // ⚠️ THE NORMAL CASE FOR MOST OF THE ROSTER, not an error. 32 of
@@ -220,34 +233,31 @@ export function TeamEditForm({ member }: { member: TeamEditable }) {
             data-testid="m-team-edit-no-profile"
             className="mt-[6px] rounded-[10px] border border-m6m-border bg-m6m-card px-[12px] py-[10px] text-[13px] text-m6m-muted"
           >
-            This member has no login, so there are no personal details to edit. Roster details
-            above still apply.
+            {t('directory.team.noProfile')}
           </p>
         ) : (
           <>
             <TextField
-              label="First name"
+              label={t('directory.field.firstName')}
               value={firstName}
               onChange={setFirstName}
               testId="m-team-edit-first"
             />
             <TextField
-              label="Last name"
+              label={t('directory.field.lastName')}
               value={lastName}
               onChange={setLastName}
               testId="m-team-edit-last"
             />
             <TextField
-              label="Email (not the sign-in address)"
+              label={t('directory.team.field.emailNotSignIn')}
               value={email}
               onChange={setEmail}
               testId="m-team-edit-email"
             />
-            <p className="mt-[4px] text-[12px] text-m6m-muted">
-              Changing this changes where mail is addressed, not how they sign in.
-            </p>
+            <p className="mt-[4px] text-[12px] text-m6m-muted">{t('directory.team.emailHelp')}</p>
             <TextField
-              label="Phone"
+              label={t('directory.field.phone')}
               value={phone}
               onChange={setPhone}
               testId="m-team-edit-phone"
@@ -264,8 +274,8 @@ export function TeamEditForm({ member }: { member: TeamEditable }) {
       ))}
 
       <PrimaryButton
-        label="Save changes"
-        busyLabel="Saving…"
+        label={t('directory.saveChanges')}
+        busyLabel={t('directory.saving')}
         onClick={save}
         disabled={!online}
         busy={busy}
@@ -273,7 +283,7 @@ export function TeamEditForm({ member }: { member: TeamEditable }) {
       />
       {!ready ? (
         <p className="mt-[8px] text-center text-[12px] text-m6m-muted">
-          A display name is required.
+          {t('directory.team.needDisplayName')}
         </p>
       ) : null}
     </div>

@@ -2,6 +2,7 @@ import { getProjectAssignments } from '@/lib/services/project-assignments';
 import { getMyProfile } from '@/lib/services/profiles';
 import { canReachDetail } from '@/app/m/detail-access';
 import { SectionHeader } from '../section-header';
+import { getMobileT } from '@/lib/i18n/server';
 import { DeniedNotice, EmptyState, ListRow, ListRowLink } from '../../../mobile-ui';
 
 // M6M §4.11.8 — M-18 · Assigned crew.
@@ -34,9 +35,10 @@ export default async function ProjectTeamPage({
   params: { projectId: string };
   searchParams: { denied?: string };
 }) {
-  const [rows, profile] = await Promise.all([
+  const [rows, profile, t] = await Promise.all([
     getProjectAssignments(params.projectId),
     getMyProfile(),
+    getMobileT(),
   ]);
 
   // D-54 step 1. requireDetailAccess() on M-35 is the real gate.
@@ -44,18 +46,18 @@ export default async function ProjectTeamPage({
 
   return (
     <div className="px-[18px] pb-[18px] pt-[14px]">
-      <SectionHeader projectId={params.projectId} title="Team" />
+      <SectionHeader projectId={params.projectId} title={t('project.tile.team')} />
       <DeniedNotice kind={searchParams.denied} />
 
       {rows.length === 0 ? (
-        <EmptyState>Nobody assigned yet.</EmptyState>
+        <EmptyState>{t('project.team.empty')}</EmptyState>
       ) : (
         <ul className="rounded-[15px] border border-m6m-border bg-m6m-card px-[12px]">
           {rows.map((a) => (
             <MemberRow
               key={a.id}
               href={canOpen && a.member?.id ? `/m/team/${a.member.id}` : null}
-              label={a.member?.display_name ?? 'Team member'}
+              label={a.member?.display_name ?? t('project.team.teamMember')}
             >
               {/* The avatar sits BESIDE the text, so the row's children need
                   their own flex context: ListRowLink's <Link> is a block. */}
@@ -70,13 +72,15 @@ export default async function ProjectTeamPage({
               </span>
               <div className="min-w-0 flex-1">
                 <p className="truncate text-[17px] font-bold leading-tight text-m6m-navy">
-                  {a.member?.display_name ?? 'Unknown member'}
+                  {a.member?.display_name ?? t('project.team.unknownMember')}
                 </p>
                 <p
                   data-testid="m-member-type"
                   className="mt-[2px] font-mono text-[11px] font-semibold text-m6m-muted"
                 >
-                  {a.member?.member_type === 'subcontractor' ? 'subcontractor' : 'crew'}
+                  {a.member?.member_type === 'subcontractor'
+                    ? t('project.team.typeSub')
+                    : t('project.team.typeCrew')}
                 </p>
               </div>
               </span>

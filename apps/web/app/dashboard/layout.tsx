@@ -1,3 +1,5 @@
+import { LanguageProvider } from '@/components/i18n/language-provider';
+import { asLang } from '@/lib/i18n/lang';
 import { createClient } from '@/lib/supabase-server';
 import { redirect } from 'next/navigation';
 import { getOpenSession } from '@/lib/services/time-tracking';
@@ -40,7 +42,9 @@ export default async function DashboardLayout({ children }: { children: React.Re
     // decide which bubbles are theirs. A mention recipient is a profile (ND-2)
     // and `chat_messages.author_profile_id` is a profile id, so `user.id` is
     // the wrong key here and would silently align every bubble left.
-    .select('id, first_name, last_name, role, company_id')
+    // `language` [S110 H] — the reader's language for user-entered text; the
+    // dashboard's own chrome stays English (ruling 2), so uiLang is pinned 'en'.
+    .select('id, first_name, last_name, role, company_id, language')
     .eq('user_id', user.id)
     .single();
 
@@ -89,26 +93,28 @@ export default async function DashboardLayout({ children }: { children: React.Re
   // S109 #161 — the file sheet wraps the WHOLE shell, not just the page, so the
   // chat panel (rendered by the shell) opens attachments in the same sheet.
   return (
-    <FileSheetProvider>
-      <DashboardShell
-        userName={`${profile.first_name} ${profile.last_name}`}
-        userRole={profile.role}
-        companyName={company.data?.name ?? 'My Company'}
-        openSession={openSession}
-        myMemberId={myMember?.id ?? null}
-        timeZone={timeSettings.timezone}
-        gpsMode={timeSettings.gpsClockMode}
-        unreadCount={unreadCount}
-        myProfileId={profile.id}
-      >
-        {/* ND-4 — registers the push-only desktop worker. Renders nothing, and
+    <LanguageProvider uiLang="en" readerLang={asLang(profile.language)}>
+      <FileSheetProvider>
+        <DashboardShell
+          userName={`${profile.first_name} ${profile.last_name}`}
+          userRole={profile.role}
+          companyName={company.data?.name ?? 'My Company'}
+          openSession={openSession}
+          myMemberId={myMember?.id ?? null}
+          timeZone={timeSettings.timezone}
+          gpsMode={timeSettings.gpsClockMode}
+          unreadCount={unreadCount}
+          myProfileId={profile.id}
+        >
+          {/* ND-4 — registers the push-only desktop worker. Renders nothing, and
           registering is not subscribing: no prompt fires from here. */}
-        <RegisterPushSw />
-        {/* S175 item 9 — the shared confirm/alert overlay behind useConfirm()/
+          <RegisterPushSw />
+          {/* S175 item 9 — the shared confirm/alert overlay behind useConfirm()/
           useAlert(), replacing native window.confirm/alert across the dashboard.
           Mounted here because every call site lives under /dashboard. */}
-        <ConfirmProvider>{children}</ConfirmProvider>
-      </DashboardShell>
-    </FileSheetProvider>
+          <ConfirmProvider>{children}</ConfirmProvider>
+        </DashboardShell>
+      </FileSheetProvider>
+    </LanguageProvider>
   );
 }

@@ -6,6 +6,7 @@ import { color, font } from '@/lib/theme';
 import type { ThreadKind } from '@/lib/chat/threads';
 import { ChatThreadView } from './chat-thread';
 import { ThreadSegments, type SwitcherEntry } from './chat-segments';
+import { useT } from '@/components/i18n/language-provider';
 
 /**
  * THE WHOLE OF CHAT'S BEHAVIOUR, ONCE — switcher, segments, thread.
@@ -47,6 +48,7 @@ export function ChatBody({ myProfileId, initialProjectId = null, renderHeader }:
   const [projects, setProjects] = useState<SwitcherEntry[] | null>(null);
   const [activeProjectId, setActiveProjectId] = useState<string | null>(initialProjectId);
   const [kind, setKind] = useState<ThreadKind>('crew');
+  const t = useT();
 
   const load = useCallback(async () => {
     try {
@@ -83,16 +85,16 @@ export function ChatBody({ myProfileId, initialProjectId = null, renderHeader }:
   return (
     <>
       {renderHeader({
-        title: active ? active.projectName : 'Chat',
+        title: active ? active.projectName : t('shell.chat'),
         onBack: active ? () => setActiveProjectId(null) : null,
       })}
 
       {!active && (
         <div data-testid="chat-switcher" style={{ flex: 1, overflowY: 'auto' }}>
-          {projects === null && <p style={emptyStyle}>Loading…</p>}
+          {projects === null && <p style={emptyStyle}>{t('shell.loading')}</p>}
           {projects !== null && projects.length === 0 && (
             <p data-testid="chat-switcher-empty" style={emptyStyle}>
-              No active projects to chat about.
+              {t('shell.chat.noProjects')}
             </p>
           )}
           {(projects ?? []).map((p) => (
@@ -158,11 +160,12 @@ export function ChatBody({ myProfileId, initialProjectId = null, renderHeader }:
 
 /** The back affordance both surfaces put in their own header. */
 export function ChatBackButton({ onClick }: { onClick: () => void }) {
+  const t = useT();
   return (
     <button
       type="button"
       data-testid="chat-back"
-      aria-label="Back to projects"
+      aria-label={t('shell.chat.backToProjects')}
       onClick={onClick}
       style={{
         display: 'flex',

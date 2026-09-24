@@ -119,6 +119,56 @@ export type Database = {
           },
         ]
       }
+      ai_translation_logs: {
+        Row: {
+          company_id: string | null
+          created_at: string | null
+          error_message: string | null
+          estimated_cost_usd: number | null
+          id: string
+          input_tokens: number | null
+          model: string
+          output_tokens: number | null
+          success: boolean
+          target_lang: string
+          text_count: number
+        }
+        Insert: {
+          company_id?: string | null
+          created_at?: string | null
+          error_message?: string | null
+          estimated_cost_usd?: number | null
+          id?: string
+          input_tokens?: number | null
+          model: string
+          output_tokens?: number | null
+          success: boolean
+          target_lang: string
+          text_count: number
+        }
+        Update: {
+          company_id?: string | null
+          created_at?: string | null
+          error_message?: string | null
+          estimated_cost_usd?: number | null
+          id?: string
+          input_tokens?: number | null
+          model?: string
+          output_tokens?: number | null
+          success?: boolean
+          target_lang?: string
+          text_count?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_translation_logs_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       archived_documents: {
         Row: {
           amounts: Json | null
@@ -5940,6 +5990,7 @@ export type Database = {
           first_name: string
           id: string
           is_deleted: boolean | null
+          language: string
           last_name: string
           notes: string | null
           phone: string | null
@@ -5960,6 +6011,7 @@ export type Database = {
           first_name: string
           id?: string
           is_deleted?: boolean | null
+          language?: string
           last_name: string
           notes?: string | null
           phone?: string | null
@@ -5980,6 +6032,7 @@ export type Database = {
           first_name?: string
           id?: string
           is_deleted?: boolean | null
+          language?: string
           last_name?: string
           notes?: string | null
           phone?: string | null
@@ -9615,6 +9668,47 @@ export type Database = {
             columns: ["project_id"]
             isOneToOne: false
             referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      text_translations: {
+        Row: {
+          company_id: string
+          created_at: string
+          id: string
+          model: string
+          source_hash: string
+          source_lang: string | null
+          target_lang: string
+          translated_text: string | null
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          id?: string
+          model: string
+          source_hash: string
+          source_lang?: string | null
+          target_lang: string
+          translated_text?: string | null
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          id?: string
+          model?: string
+          source_hash?: string
+          source_lang?: string | null
+          target_lang?: string
+          translated_text?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "text_translations_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
             referencedColumns: ["id"]
           },
         ]

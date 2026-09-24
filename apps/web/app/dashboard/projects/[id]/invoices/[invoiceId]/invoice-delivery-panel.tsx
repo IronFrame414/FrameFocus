@@ -1,5 +1,6 @@
 'use client';
 
+import { NotEnglishWarning } from '@/components/language-check/not-english-warning';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useConfirm } from '@/components/confirm/confirm-provider';
@@ -102,15 +103,18 @@ export function InvoiceDeliveryPanel({
   const confirm = useConfirm();
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{ text: string; bad: boolean } | null>(null);
+  // S110 H [RULED Q14] — non-English fields the server named (NotEnglishWarning).
+  const [notEnglish, setNotEnglish] = useState<string[] | null>(null);
 
   const willIssue = status === 'draft' || status === 'pending_approval';
 
-  async function send() {
+  async function send(languageOverride = false) {
     // Issuing is the irreversible half: it allocates the invoice number and
     // freezes the invoice (§8/§10). Re-delivering an already-issued invoice
     // changes nothing and needs no confirm.
     if (
       willIssue &&
+      !languageOverride &&
       !(await confirm(
         'Send this invoice to the client? It will be numbered and emailed, and a sent invoice is immutable — corrections go through void and reissue.'
       ))
@@ -120,8 +124,22 @@ export function InvoiceDeliveryPanel({
 
     setBusy(true);
     setMessage(null);
+    setNotEnglish(null);
     try {
-      const res = await fetch(`/api/invoices/${invoiceId}/send`, { method: 'POST' });
+      // S110 H [RULED Q14] — `languageOverride` after the "not in English" warning.
+      const res = await fetch(`/api/invoices/${invoiceId}/send`, {
+        method: 'POST',
+        ...(languageOverride
+          ? { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ language_override: true }) }
+          : {}),
+      });
+      if (res.status === 409) {
+        const j = (await res.clone().json().catch(() => null)) as { code?: string; fields?: string[] } | null;
+        if (j?.code === 'NON_ENGLISH') {
+          setNotEnglish(j.fields ?? []);
+          return;
+        }
+      }
       const payload = (await res.json().catch(() => null)) as
         | {
             success?: boolean;
@@ -247,6 +265,15 @@ export function InvoiceDeliveryPanel({
         <p style={{ fontSize: '0.75rem', color: color.faint, margin: '0.375rem 0 0' }}>
           Sending numbers the invoice, files its PDF under the project and emails it — one action.
         </p>
+      )}
+
+      {notEnglish && (
+        <NotEnglishWarning
+          fields={notEnglish}
+          doc="invoice"
+          busy={busy}
+          onSendAnyway={() => void send(true)}
+        />
       )}
 
       {message && (

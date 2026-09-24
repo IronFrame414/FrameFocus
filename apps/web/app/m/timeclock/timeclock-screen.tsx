@@ -15,6 +15,8 @@ import { buildClockInEntries, buildClockOutEntries } from '@/lib/offline/capture
 import type { QueueEntry } from '@/lib/offline/queue';
 import { SetMobileHeader } from '../mobile-header';
 import { captureGps } from './capture-gps';
+import { useT } from '@/components/i18n/language-provider';
+import type { MsgKey, T } from '@/lib/i18n/messages';
 
 // M6M §4.5 / §4.5a / §4.12.1 — the 7a interaction, exactly as D-27 shapes it.
 //
@@ -44,13 +46,14 @@ import { captureGps } from './capture-gps';
 //   · No switch control acting in place — §4.5a: "7a gains no switch control".
 //     The amber control NAVIGATES to M-20 (A-7j).
 
-const ALL_TYPES: { id: SegmentType; label: string }[] = [
-  { id: 'work', label: 'Work' },
-  { id: 'material_run', label: 'Material run' },
-  { id: 'warranty', label: 'Warranty' },
-  { id: 'travel', label: 'Travel' },
-  { id: 'shop', label: 'Shop' },
-  { id: 'break', label: 'Break' },
+// Labels are message keys, resolved with t() at render [S110 H].
+const ALL_TYPES: { id: SegmentType; key: MsgKey }[] = [
+  { id: 'work', key: 'field.segment.work' },
+  { id: 'material_run', key: 'field.segment.material_run' },
+  { id: 'warranty', key: 'field.segment.warranty' },
+  { id: 'travel', key: 'field.segment.travel' },
+  { id: 'shop', key: 'field.segment.shop' },
+  { id: 'break', key: 'field.segment.break' },
 ];
 
 /** The three types whose rows must carry a project — from the CHECK, verbatim. */
@@ -58,9 +61,15 @@ export const PROJECT_TYPES: ReadonlySet<SegmentType> = new Set(['work', 'materia
 
 export type PickerProject = { id: string; name: string; project_number: string };
 
-const TYPE_LABEL: Record<string, string> = Object.fromEntries(
-  ALL_TYPES.map((t) => [t.id, t.label])
+const TYPE_KEY: Record<string, MsgKey> = Object.fromEntries(
+  ALL_TYPES.map((t) => [t.id, t.key])
 );
+
+/** A segment type's label in the surface language; an unknown type shows raw. */
+function typeLabel(t: T, type: string): string {
+  const key = TYPE_KEY[type];
+  return key ? t(key) : type;
+}
 
 function hhmm(iso: string): string {
   const d = new Date(iso);
@@ -93,6 +102,7 @@ export function TimeclockScreen({
 }) {
   const router = useRouter();
   const offlineSync = useOfflineSync();
+  const t = useT();
   const entries = offlineSync?.entries;
   const today = new Date().toLocaleDateString('en-US', {
     weekday: 'short',
@@ -145,7 +155,7 @@ export function TimeclockScreen({
 
   return (
     <div className="px-[18px] pb-[18px] pt-[14px]">
-      <SetMobileHeader title="Timeclock" sub={today} />
+      <SetMobileHeader title={t('field.clock.title')} sub={today} />
       {openSession ? (
         <OnTheClock session={openSession} projects={projects} offlineSync={offlineSync} />
       ) : queuedShift ? (
@@ -177,6 +187,7 @@ function ClockInForm({
   offlineSync: OfflineSyncApi | null;
 }) {
   const router = useRouter();
+  const t = useT();
   const [type, setType] = useState<SegmentType | null>(null); // NO DEFAULT
   const [projectId, setProjectId] = useState<string | null>(null); // NO PRESELECTION
   const [recent, setRecent] = useState<string[] | null>(null);
@@ -252,7 +263,7 @@ function ClockInForm({
 
     setBusy(false);
     if (!result.success) {
-      setError(result.error ?? 'Clock-in failed.');
+      setError(result.error ?? t('field.clock.inFailed'));
       return;
     }
 
@@ -274,7 +285,7 @@ function ClockInForm({
         data-testid="m-clock-status"
         className="text-center font-mono text-[13px] font-medium uppercase tracking-wide text-m6m-muted"
       >
-        Not clocked in
+        {t('field.clock.notClockedIn')}
       </p>
       <p className="mt-[4px] text-center font-mono text-[52px] font-semibold leading-none text-m6m-navy">
         0:00
@@ -284,24 +295,24 @@ function ClockInForm({
       {/* THE TYPE ROW — required, six options, none preselected.            */}
       {/* ----------------------------------------------------------------- */}
       <h2 className="mb-[8px] mt-[18px] font-mono text-[11px] font-medium uppercase tracking-wide text-m6m-muted">
-        SEGMENT TYPE
+        {t('field.clock.segmentType')}
       </h2>
       <div data-testid="m-type-grid" className="grid grid-cols-3 gap-[8px]">
-        {ALL_TYPES.map((t) => {
-          const on = type === t.id;
+        {ALL_TYPES.map((opt) => {
+          const on = type === opt.id;
           return (
             <button
-              key={t.id}
+              key={opt.id}
               type="button"
-              data-testid={`m-type-${t.id}`}
+              data-testid={`m-type-${opt.id}`}
               data-active={on ? 'true' : 'false'}
               aria-pressed={on}
               onClick={() => {
-                setType(t.id);
+                setType(opt.id);
                 // A projectless type DROPS any chosen project rather than
                 // carrying it into a row the constraint forbids (A-7c3's
                 // context-carry-over trap).
-                if (!PROJECT_TYPES.has(t.id)) setProjectId(null);
+                if (!PROJECT_TYPES.has(opt.id)) setProjectId(null);
               }}
               className={`flex min-h-[58px] items-center justify-center rounded-[12px] px-[6px] text-[14px] font-semibold ${
                 on
@@ -309,7 +320,7 @@ function ClockInForm({
                   : 'border border-m6m-border bg-m6m-card text-m6m-navy'
               }`}
             >
-              {t.label}
+              {t(opt.key)}
             </button>
           );
         })}
@@ -322,7 +333,7 @@ function ClockInForm({
       {needsProject ? (
         <section data-testid="m-project-block">
           <h2 className="mb-[8px] mt-[18px] font-mono text-[11px] font-medium uppercase tracking-wide text-m6m-muted">
-            PROJECT
+            {t('field.projectHeading')}
           </h2>
           <ul className="overflow-hidden rounded-[14px] border border-m6m-border bg-m6m-card">
             {ordered.map((p) => {
@@ -378,7 +389,7 @@ function ClockInForm({
         onClick={submit}
         className="mt-[18px] flex h-[60px] w-full items-center justify-center rounded-[14px] bg-m6m-amber text-[17px] font-bold text-m6m-navy transition-transform duration-150 ease-out active:scale-[.99] disabled:opacity-40"
       >
-        {busy ? 'Clocking in…' : 'Clock in'}
+        {busy ? t('field.clock.clockingIn') : t('field.clock.clockIn')}
       </button>
     </div>
   );
@@ -397,6 +408,7 @@ function OnTheClock({
   offlineSync: OfflineSyncApi | null;
 }) {
   const router = useRouter();
+  const t = useT();
   const [now, setNow] = useState(() => Date.now());
   const [confirming, setConfirming] = useState(false);
   const [note, setNote] = useState('');
@@ -485,7 +497,7 @@ function OnTheClock({
 
     setBusy(false);
     if (!result.success) {
-      setError(result.error ?? 'Clock-out failed.');
+      setError(result.error ?? t('field.clock.outFailed'));
       return;
     }
     setConfirming(false);
@@ -499,7 +511,7 @@ function OnTheClock({
         data-testid="m-clock-status"
         className="text-center font-mono text-[13px] font-medium uppercase tracking-wide text-m6m-blue"
       >
-        On the clock
+        {t('field.clock.onTheClock')}
       </p>
       <p
         data-testid="m-clock-elapsed"
@@ -514,12 +526,19 @@ function OnTheClock({
         className="mt-[14px] rounded-[15px] border border-m6m-border bg-m6m-card p-[15px]"
       >
         <p className="text-[16px] font-bold leading-tight text-m6m-navy">
-          {project ? project.name : TYPE_LABEL[openSegment?.segment_type ?? ''] ?? 'On the clock'}
+          {project
+            ? project.name
+            : TYPE_KEY[openSegment?.segment_type ?? '']
+              ? t(TYPE_KEY[openSegment?.segment_type ?? ''])
+              : t('field.clock.onTheClock')}
         </p>
         <p className="mt-[3px] font-mono text-[12px] text-m6m-muted">
           {openSegment
-            ? `${TYPE_LABEL[openSegment.segment_type]} · since ${hhmm(openSegment.segment_start)}`
-            : 'Segment chain already ended'}
+            ? t('field.clock.typeSince', {
+                type: typeLabel(t, openSegment.segment_type),
+                time: hhmm(openSegment.segment_start),
+              })
+            : t('field.clock.chainEnded')}
         </p>
       </div>
 
@@ -530,7 +549,7 @@ function OnTheClock({
         data-testid="m-switch-link"
         className="mt-[12px] flex min-h-[52px] w-full items-center justify-center rounded-[14px] border border-m6m-amber text-[15px] font-bold text-m6m-amber"
       >
-        Switch task or project
+        {t('field.clock.switch')}
       </Link>
 
       {queuedClockOut ? (
@@ -538,7 +557,7 @@ function OnTheClock({
           data-testid="m-clock-out-queued"
           className="mt-[12px] rounded-[10px] border border-m6m-border bg-m6m-strip-bg px-[12px] py-[10px] text-[14px] font-semibold text-m6m-navy"
         >
-          Clock-out saved offline — it will sync when you&apos;re back online.
+          {t('field.clock.outOffline')}
         </p>
       ) : null}
 
@@ -553,7 +572,8 @@ function OnTheClock({
                 htmlFor="m-clock-out-note"
                 className="mb-[6px] block text-[14px] font-semibold text-m6m-navy"
               >
-                What did you work on? <span className="text-m6m-danger">(required)</span>
+                {t('field.whatWorkedOn')}{' '}
+                <span className="text-m6m-danger">{t('field.required')}</span>
               </label>
               <textarea
                 id="m-clock-out-note"
@@ -572,7 +592,7 @@ function OnTheClock({
             onClick={submitClockOut}
             className="mt-[10px] flex h-[52px] w-full items-center justify-center rounded-[12px] bg-m6m-danger text-[15px] font-bold text-white disabled:opacity-40"
           >
-            {busy ? 'Clocking out…' : 'Confirm clock out'}
+            {busy ? t('field.clock.clockingOut') : t('field.clock.confirmOut')}
           </button>
         </div>
       ) : null}
@@ -594,7 +614,7 @@ function OnTheClock({
           onClick={() => setConfirming(true)}
           className="mt-[12px] flex h-[60px] w-full items-center justify-center rounded-[14px] bg-m6m-danger text-[17px] font-bold text-white"
         >
-          Clock out
+          {t('field.clock.clockOut')}
         </button>
       ) : null}
     </div>
@@ -621,6 +641,7 @@ function QueuedOnTheClock({
   projects: PickerProject[];
   offlineSync: OfflineSyncApi | null;
 }) {
+  const t = useT();
   const [now, setNow] = useState(() => Date.now());
   const [confirming, setConfirming] = useState(false);
   const [note, setNote] = useState('');
@@ -678,7 +699,7 @@ function QueuedOnTheClock({
         data-testid="m-clock-status"
         className="text-center font-mono text-[13px] font-medium uppercase tracking-wide text-m6m-blue"
       >
-        On the clock
+        {t('field.clock.onTheClock')}
       </p>
       <p
         data-testid="m-clock-elapsed"
@@ -692,16 +713,25 @@ function QueuedOnTheClock({
         className="mt-[14px] rounded-[15px] border border-m6m-border bg-m6m-card p-[15px]"
       >
         <p className="text-[16px] font-bold leading-tight text-m6m-navy">
-          {project ? project.name : (TYPE_LABEL[segmentType ?? ''] ?? 'On the clock')}
+          {project
+            ? project.name
+            : TYPE_KEY[segmentType ?? '']
+              ? t(TYPE_KEY[segmentType ?? ''])
+              : t('field.clock.onTheClock')}
         </p>
         <p className="mt-[3px] font-mono text-[12px] text-m6m-muted">
-          {segmentType ? `${TYPE_LABEL[segmentType]} · since ${hhmm(clockIn)}` : `since ${hhmm(clockIn)}`}
+          {segmentType
+            ? t('field.clock.typeSince', {
+                type: typeLabel(t, segmentType),
+                time: hhmm(clockIn),
+              })
+            : t('field.since', { time: hhmm(clockIn) })}
         </p>
         <p
           data-testid="m-queued-shift-note"
           className="mt-[6px] font-mono text-[11px] font-semibold text-m6m-muted"
         >
-          Saved offline — waiting to sync
+          {t('field.clock.savedOffline')}
         </p>
       </div>
 
@@ -716,7 +746,8 @@ function QueuedOnTheClock({
                 htmlFor="m-clock-out-note"
                 className="mb-[6px] block text-[14px] font-semibold text-m6m-navy"
               >
-                What did you work on? <span className="text-m6m-danger">(required)</span>
+                {t('field.whatWorkedOn')}{' '}
+                <span className="text-m6m-danger">{t('field.required')}</span>
               </label>
               <textarea
                 id="m-clock-out-note"
@@ -735,7 +766,7 @@ function QueuedOnTheClock({
             onClick={submitClockOut}
             className="mt-[10px] flex h-[52px] w-full items-center justify-center rounded-[12px] bg-m6m-danger text-[15px] font-bold text-white disabled:opacity-40"
           >
-            {busy ? 'Clocking out…' : 'Confirm clock out'}
+            {busy ? t('field.clock.clockingOut') : t('field.clock.confirmOut')}
           </button>
         </div>
       ) : (
@@ -745,7 +776,7 @@ function QueuedOnTheClock({
           onClick={() => setConfirming(true)}
           className="mt-[12px] flex h-[60px] w-full items-center justify-center rounded-[14px] bg-m6m-danger text-[17px] font-bold text-white"
         >
-          Clock out
+          {t('field.clock.clockOut')}
         </button>
       )}
     </div>
@@ -754,11 +785,12 @@ function QueuedOnTheClock({
 
 /** §4.5 — today's segments as 58px rows: type, mono start–end, mono duration. */
 function TodaySegments({ segments }: { segments: TimeSegment[] }) {
+  const t = useT();
   if (segments.length === 0) return null;
   return (
     <section className="mt-[20px]">
       <h2 className="mb-[8px] font-mono text-[11px] font-medium uppercase tracking-wide text-m6m-muted">
-        TODAY
+        {t('field.clock.today')}
       </h2>
       <ul className="rounded-[14px] border border-m6m-border bg-m6m-card px-[12px]">
         {segments.map((s) => {
@@ -774,10 +806,10 @@ function TodaySegments({ segments }: { segments: TimeSegment[] }) {
               className="flex min-h-[58px] items-center gap-[10px] border-b border-m6m-border py-[8px] last:border-b-0"
             >
               <span className="min-w-0 flex-1 text-[15px] font-semibold text-m6m-navy">
-                {TYPE_LABEL[s.segment_type] ?? s.segment_type}
+                {typeLabel(t, s.segment_type)}
               </span>
               <span className="font-mono text-[12px] text-m6m-muted">
-                {hhmm(s.segment_start)}–{s.segment_end ? hhmm(s.segment_end) : 'now'}
+                {hhmm(s.segment_start)}–{s.segment_end ? hhmm(s.segment_end) : t('field.clock.now')}
               </span>
               <span className="w-[52px] text-right font-mono text-[12px] font-semibold text-m6m-navy">
                 {mins !== null ? `${Math.floor(mins / 60)}:${String(mins % 60).padStart(2, '0')}` : '—'}

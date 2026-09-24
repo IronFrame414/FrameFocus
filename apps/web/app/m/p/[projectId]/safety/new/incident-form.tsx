@@ -9,6 +9,8 @@ import {
   type IncidentType,
 } from '@framefocus/shared/constants/safety';
 import { createIncident, uploadIncidentPhoto } from '@/lib/services/safety-client';
+import { useT } from '@/components/i18n/language-provider';
+import type { MsgKey } from '@/lib/i18n/messages';
 import { SetMobileHeader } from '../../../../mobile-header';
 
 // M6M §4.12.5 — the 7e form, verified against the live schema:
@@ -34,6 +36,13 @@ export type RosterMember = { id: string; display_name: string; member_type: stri
 
 type Party = { member_id: string | null; name: string | null };
 
+// S110 H — incident_type → message key. The English table stays the fallback.
+const INCIDENT_TYPE_KEY: Record<IncidentType, MsgKey> = {
+  injury: 'project.incidentType.injury',
+  property_damage: 'project.incidentType.property_damage',
+  near_miss: 'project.incidentType.near_miss',
+};
+
 export function IncidentForm({
   projectId,
   projectName,
@@ -46,6 +55,7 @@ export function IncidentForm({
   initialDate: string;
 }) {
   const router = useRouter();
+  const t = useT();
 
   const [type, setType] = useState<IncidentType | null>(null);
   const [injured, setInjured] = useState<Party[]>([]);
@@ -92,13 +102,13 @@ export function IncidentForm({
 
     if (!result.success || !result.incidentId) {
       setBusy(false);
-      setError(result.error ?? 'The report could not be filed.');
+      setError(result.error ?? t('project.incident.fileFailed'));
       return;
     }
 
     for (const file of photos) {
       const up = await uploadIncidentPhoto(file, projectId, result.incidentId);
-      if (!up.success) setError(up.error ?? 'A photo failed to upload; the report is filed.');
+      if (!up.success) setError(up.error ?? t('project.incident.photoFailed'));
     }
 
     setBusy(false);
@@ -108,14 +118,14 @@ export function IncidentForm({
 
   return (
     <div className="pb-[18px]">
-      <SetMobileHeader title="Report incident" sub={projectName} />
+      <SetMobileHeader title={t('project.incident.title')} sub={projectName} />
 
       {/* The red header block — 7e's identity. */}
       <header
         data-testid="m-incident-header"
         className="bg-m6m-danger px-[18px] pb-[14px] pt-[10px]"
       >
-        <p className="text-[18px] font-extrabold text-white">Report incident</p>
+        <p className="text-[18px] font-extrabold text-white">{t('project.incident.title')}</p>
         <p className="mt-[2px] font-mono text-[11px] text-white/80">
           {projectName} · {initialDate}
         </p>
@@ -125,26 +135,26 @@ export function IncidentForm({
         {/* TYPE — three stacked options; the selected one fills red with a
             check. Never colour alone: the check mark carries the state too. */}
         <h2 className="mb-[8px] font-mono text-[11px] font-medium uppercase tracking-wide text-m6m-muted">
-          TYPE
+          {t('project.incident.type')}
         </h2>
         <div data-testid="m-incident-types" className="flex flex-col gap-[8px]">
-          {INCIDENT_TYPES.map((t) => {
-            const on = type === t;
+          {INCIDENT_TYPES.map((it) => {
+            const on = type === it;
             return (
               <button
-                key={t}
+                key={it}
                 type="button"
-                data-testid={`m-incident-type-${t}`}
+                data-testid={`m-incident-type-${it}`}
                 data-active={on ? 'true' : 'false'}
                 aria-pressed={on}
-                onClick={() => setType(t)}
+                onClick={() => setType(it)}
                 className={`flex min-h-[58px] items-center justify-between rounded-[14px] border px-[14px] text-[15px] font-bold ${
                   on
                     ? 'border-m6m-danger bg-m6m-danger text-white'
                     : 'border-m6m-border bg-m6m-card text-m6m-navy'
                 }`}
               >
-                {INCIDENT_TYPE_LABELS[t]}
+                {INCIDENT_TYPE_KEY[it] ? t(INCIDENT_TYPE_KEY[it]) : INCIDENT_TYPE_LABELS[it]}
                 {on ? <span aria-hidden>✓</span> : null}
               </button>
             );
@@ -157,10 +167,10 @@ export function IncidentForm({
           <section data-testid="m-injured-block" className="mt-[16px]">
             <div className="mb-[8px] flex items-center justify-between">
               <h2 className="font-mono text-[11px] font-medium uppercase tracking-wide text-m6m-muted">
-                WHO WAS HURT
+                {t('project.incident.whoHurt')}
               </h2>
               <span className="rounded-full bg-[#fdf1f0] px-[8px] py-[2px] font-mono text-[10px] font-semibold text-m6m-danger">
-                Required
+                {t('project.incident.required')}
               </span>
             </div>
             <ul className="overflow-hidden rounded-[14px] border border-m6m-border bg-m6m-card">
@@ -202,7 +212,7 @@ export function IncidentForm({
                     <span className="text-[15px] font-bold text-m6m-navy">{p.name}</span>
                     <button
                       type="button"
-                      aria-label={`Remove ${p.name}`}
+                      aria-label={t('project.incident.remove', { name: p.name ?? '' })}
                       onClick={() => setInjured((cur) => cur.filter((x) => x.name !== p.name))}
                       className="flex h-11 w-11 items-center justify-center text-m6m-muted"
                     >
@@ -218,7 +228,7 @@ export function IncidentForm({
                   data-testid="m-outsider-name"
                   value={outsiderName}
                   onChange={(e) => setOutsiderName(e.target.value)}
-                  placeholder="Name"
+                  placeholder={t('project.incident.namePlaceholder')}
                   className="h-11 min-w-0 flex-1 rounded-[10px] border border-m6m-border px-[12px] text-[15px]"
                 />
                 <button
@@ -233,7 +243,7 @@ export function IncidentForm({
                   }}
                   className="flex h-11 items-center rounded-[10px] border border-m6m-border px-[14px] text-[14px] font-semibold text-m6m-navy"
                 >
-                  Add
+                  {t('project.incident.add')}
                 </button>
               </div>
             ) : (
@@ -243,7 +253,7 @@ export function IncidentForm({
                 onClick={() => setAddingOutsider(true)}
                 className="mt-[8px] flex min-h-[52px] w-full items-center justify-center rounded-[14px] border border-dashed border-m6m-border bg-m6m-card text-[14px] font-semibold text-m6m-navy"
               >
-                + Someone not on the team
+                {t('project.incident.someoneElse')}
               </button>
             )}
           </section>
@@ -252,7 +262,7 @@ export function IncidentForm({
         {/* WHAT HAPPENED. */}
         <section className="mt-[16px]">
           <h2 className="mb-[8px] font-mono text-[11px] font-medium uppercase tracking-wide text-m6m-muted">
-            WHAT HAPPENED
+            {t('project.incident.whatHappened')}
           </h2>
           <textarea
             data-testid="m-incident-description"
@@ -265,10 +275,15 @@ export function IncidentForm({
 
         {/* Disclosure rows — Treatment given, Witnesses, Photos. */}
         <section className="mt-[14px] overflow-hidden rounded-[14px] border border-m6m-border bg-m6m-card">
-          <Row id="treatment" label="Treatment given" open={openRow} onToggle={setOpenRow}
-            badge={treatmentSought ? 'Yes' : null}>
+          <Row
+            id="treatment"
+            label={t('project.incident.treatmentGiven')}
+            open={openRow}
+            onToggle={setOpenRow}
+            badge={treatmentSought ? t('project.incident.yes') : null}
+          >
             <label className="flex min-h-[44px] items-center justify-between text-[15px] font-semibold text-m6m-navy">
-              Treatment was sought
+              {t('project.incident.treatmentSought')}
               <input
                 type="checkbox"
                 data-testid="m-treatment-toggle"
@@ -283,12 +298,12 @@ export function IncidentForm({
                 value={treatmentNotes}
                 onChange={(e) => setTreatmentNotes(e.target.value)}
                 rows={2}
-                placeholder="What treatment?"
+                placeholder={t('project.incident.treatmentPlaceholder')}
                 className="mt-[8px] w-full rounded-[10px] border border-m6m-border px-[12px] py-[8px] text-[15px]"
               />
             ) : null}
           </Row>
-          <Row id="witnesses" label="Witnesses" open={openRow} onToggle={setOpenRow}
+          <Row id="witnesses" label={t('project.incident.witnesses')} open={openRow} onToggle={setOpenRow}
             badge={witnesses.length > 0 ? String(witnesses.length) : null}>
             <div className="flex flex-col gap-[6px]">
               {roster.map((m) => {
@@ -317,11 +332,11 @@ export function IncidentForm({
               })}
             </div>
           </Row>
-          <Row id="photos" label="Photos" open={openRow} onToggle={setOpenRow}
+          <Row id="photos" label={t('project.incident.photos')} open={openRow} onToggle={setOpenRow}
             badge={photos.length > 0 ? String(photos.length) : null}>
             <div className="flex items-stretch gap-[8px]">
               <label className="flex min-h-[52px] flex-1 cursor-pointer items-center justify-center rounded-[10px] border border-dashed border-m6m-border text-[14px] font-semibold text-m6m-blue">
-                Add photo
+                {t('project.incident.addPhoto')}
                 <input
                   type="file"
                   accept="image/*"
@@ -339,7 +354,7 @@ export function IncidentForm({
                 WITHOUT `capture`, which is the entire difference. */}
               <label
                 data-testid="m-incident-photo-library"
-                aria-label="Choose from library"
+                aria-label={t('project.chooseFromLibrary')}
                 className="flex min-h-[52px] w-11 shrink-0 cursor-pointer items-center justify-center rounded-[10px] border border-m6m-border text-m6m-muted"
               >
                 <input
@@ -370,7 +385,7 @@ export function IncidentForm({
 
         {/* The consequence line, directly above the button. */}
         <p className="mt-[14px] text-center text-[12px] text-m6m-muted">
-          Emails Owner, Admin, PM &amp; Foreman immediately
+          {t('project.incident.emails')}
         </p>
         <button
           type="button"
@@ -379,7 +394,7 @@ export function IncidentForm({
           onClick={submit}
           className="mt-[6px] flex h-[60px] w-full items-center justify-center rounded-[14px] bg-m6m-danger text-[17px] font-bold text-white disabled:opacity-40"
         >
-          {busy ? 'Filing…' : 'File report'}
+          {busy ? t('project.incident.filing') : t('project.incident.fileReport')}
         </button>
       </div>
     </div>

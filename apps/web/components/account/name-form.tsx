@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { updateMyName } from '@/lib/services/profile-self';
+import { useT } from '@/components/i18n/language-provider';
 
 // Shared by /dashboard/account and /m/account (parity: one form, both surfaces).
 // Presentation can differ by wrapper; the mechanism (updateMyName + the DB guard)
@@ -18,6 +19,7 @@ export function NameForm({
   const [lastName, setLastName] = useState(initialLastName);
   const [status, setStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [error, setError] = useState('');
+  const t = useT();
 
   const dirty = firstName !== initialFirstName || lastName !== initialLastName;
 
@@ -38,7 +40,7 @@ export function NameForm({
     <form onSubmit={handleSubmit} className="space-y-4">
       <div>
         <label htmlFor="firstName" className="block text-sm font-medium text-gray-700 mb-1">
-          First name
+          {t('shell.account.firstName')}
         </label>
         <input
           id="firstName"
@@ -54,7 +56,7 @@ export function NameForm({
       </div>
       <div>
         <label htmlFor="lastName" className="block text-sm font-medium text-gray-700 mb-1">
-          Last name
+          {t('shell.account.lastName')}
         </label>
         <input
           id="lastName"
@@ -73,7 +75,9 @@ export function NameForm({
         <div className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</div>
       )}
       {status === 'saved' && (
-        <div className="rounded-lg bg-green-50 p-3 text-sm text-green-700">Your name was updated.</div>
+        <div className="rounded-lg bg-green-50 p-3 text-sm text-green-700">
+          {t('shell.account.nameUpdated')}
+        </div>
       )}
 
       <button
@@ -81,7 +85,7 @@ export function NameForm({
         disabled={status === 'saving' || !dirty || !firstName.trim() || !lastName.trim()}
         className="rounded-lg bg-brand-500 px-5 py-2.5 text-sm font-semibold text-white hover:bg-brand-600 disabled:cursor-not-allowed disabled:opacity-50"
       >
-        {status === 'saving' ? 'Saving…' : 'Save'}
+        {status === 'saving' ? t('account.saving') : t('account.save')}
       </button>
     </form>
   );

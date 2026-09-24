@@ -157,3 +157,122 @@ invisible to the walk, and is disallowed for contract routes. No migration. Merg
   `select count(*) from estimate_line_rows;` — Josh applies `20261720000000` before D merges.
 - **e2e `desktop-line-rows-s110.spec.ts` (R1 row, R2 line) and its sabotage (remove the
   `onMouseDown`) held** for the same CI-queue reason.
+
+## Phase 3 — Section E1 — branch `feature/s110-e-carried-debt` @ `12feaa6c` — **built and proven (live + sabotage)**
+
+### ⚠️ Q8's measurement — Supabase's password-change safeguards vs the emailed recovery link
+
+Done on **rebuild-test only** with a throwaway user (`scratchpad/recovery-probe.mjs`, `PROBE_EXIT_LINE=0`).
+Both settings were read first (`false`/`false`), toggled via the Management API, and **restored and
+re-read equal to the original**. The throwaway tenant the signup trigger created was removed (0
+users, 0 companies left). The round-trip used the **literal emailed link**
+(`GET /auth/v1/verify?token=<token_hash>&type=recovery`, 303 with a session) and the server-side
+`verifyOtp` path.
+
+| setting ON | recovery-link session sets a password | a FRESH password session, no current password / nonce |
+| --- | --- | --- |
+| neither (today) | OK | OK |
+| `security_update_password_require_reauthentication` (**"secure password change"**) | **OK — does not break recovery** | ⚠️ **OK — NOT stopped** (GoTrue exempts recent sessions) |
+| `security_update_password_require_current_password` | **OK — does not break recovery** | **REFUSED** `400 current_password_required`; with `current_password` → OK |
+
+**Report for Josh:** "secure password change" is **proven safe** for the recovery link, but it
+**does not close the unlocked-device case** for a session signed in recently. The setting that does
+is **"require current password"**. It is also proven safe for the recovery link, and it is the
+real floor under a direct API call. It would have broken the Account page's password change,
+which called `updateUser` without `current_password`. **That is fixed on this branch**:
+`changeMyPassword` and `/reset-password` pass it. So **after E merges**, switching on "require
+current password" in the production dashboard is safe by measurement. Switching it on **before**
+E merges would break the Account page. **Recommendation, not action:** enable it after the E
+merge. "Secure password change" adds little on top.
+
+**Also measured:** a recovery session's `amr` is `[{method:"otp"}]`, **not `recovery`**. Option B
+(`amr`) could not have told recovery from any other OTP sign-in. The ruled option A was the right
+one.
+
+### Built
+
+- **Admin reset fixed first** (`lib/services/team.ts`, `team/[id]/actions.ts`): `generateLink`
+  (no email, no PKCE verifier) → the SAME `handleAuthEmail` the hook uses (template, sender, rate
+  cap, `email_logs`), link → new **`/auth/confirm`**, which runs `verifyOtp` server-side on any
+  device. Recovery type only. _Old call quoted in place._ Outside production the send is
+  gated, and the action now **throws with the gate's reason** instead of silently "succeeding".
+- **`/auth/callback`** reads `redirectType === 'PASSWORD_RECOVERY'` (runtime field missing from the
+  public type — read via a commented cast) and sets the marker.
+- **`lib/auth/recovery-marker.ts`**: `ff_recovery`, httpOnly, HMAC (key HKDF-derived from the
+  service-role key — nothing new to provision), bound to user + session id, 15 min, spent on use.
+- **`/reset-password`**: a server page decides whether to show "Current password"; the change runs
+  in the server action `resetPasswordFromPage` — marker OR current password. The browser no longer
+  calls `updateUser`.
+
+### Proof
+
+| check | printed line |
+| --- | --- |
+| `s110-recovery-marker.test.ts` | `UNIT_E1_EXIT_LINE=0`, 7/7 (other session, other user, expired, edited body, bad/absent sig) |
+| `s110-reset-password.live.ts` — real `/auth/confirm` GET + real server action | `LIVE_E1_EXIT_LINE=0`, **8/8**: A confirm → 307 `/reset-password`, session, httpOnly marker; A2 non-recovery/missing token refused; **N** no marker → refused, unchanged; **X** the real marker copied onto a password session → refused; **F** forged sig → refused; **R** recovery + marker → set without current; **S** marker spent; **C** wrong current refused, right current changes |
+| sabotage 1 — `recovery = true \|\| …` | `SABOTAGE_E1_TRUST_EXIT_LINE=1`, 6 red (N, X, F first); restored `cmp` identical |
+| sabotage 2 — marker ignores the session id | `SABOTAGE_E1_BINDING_EXIT_LINE=1` (X red) and `SABOTAGE_E1_BINDING_UNIT_EXIT_LINE=1`; restored `cmp` identical |
+| clean re-run | `LIVE_E1_CLEAN_EXIT_LINE=0`, 8/8; fixtures 0 users / 0 companies |
+| `s109-change-password.live.ts` (now passes `current_password`) | `LIVE_S109_PW_EXIT_LINE=0`, 6/6 |
+| S157 sweep | `s109-password-wiring` asserted the redirect in `page.tsx` — **inverted in place**, old regex quoted; now also asserts the browser does not call `updateUser`. `s175` B6 unaffected. |
+
+⚠️ Not built, stated: a SELF-SERVICE reset link opened on a different device from the one that
+requested it still fails (PKCE verifier). This is the pre-existing limit named in S110 Phase 1, and
+not in Q8's scope.
+
+## Phase 3 — Sections E2–E4, and E's final gate — branch `feature/s110-e-carried-debt`
+
+- **E2 (Q9 → A)** `catalog-list.tsx`: the name is plain text; a separate labelled **"Vendor ↗"**
+  link. `s110-catalog-vendor.test.ts` 3/3; sabotage (name re-wrapped in the link) →
+  `SABOTAGE_E2_EXIT_LINE=1`; restored `cmp` identical.
+- **E3 (Q10 → A)** — new `components/files/sheet-link.tsx` (real `href`, so a modified click still
+  opens a tab; a plain click opens the sheet; `fileId` re-signs on the staff session, and with no
+  `fileId` it reuses `href`). Eight staff sites migrated (project file **View**, lien releases,
+  both "View form"s, delivery photos, receipts, **View Signed Proposal** — no longer navigates
+  away — and PO **View PDF**, with `/api/pos/[id]/pdf` inline only for `?view=1`).
+  **Portal:** `FileSheetProvider` in `app/portal/layout.tsx`; Shared documents open the sheet with
+  **only the already-signed URL**; photos untouched and view-only.
+  `s110-file-sheet-sites.test.ts` 14/14 (+ `s109-file-sheet` 21/21 unchanged); sabotage (a
+  `fileId` on the portal link) → `SABOTAGE_E3_PORTAL_EXIT_LINE=1`; restored `cmp` identical.
+  ⚠️ **Proven by source assertion, not in a browser.** No e2e drives these nine sites yet.
+- **E4 (Q11)** `#1-deliv` → `TECH_DEBT_CLOSED.md` (summary + "full text in git history"); the
+  Stripe event-shape check **re-filed as `#2-s110` in the same commit**; `#161` status line
+  records the S110 migration and that the inline-only surfaces remain.
+
+### ⚠️ Two defects that the final gate caught, both mine, both fixed
+
+1. **`next build` failed: `BUILD_EXIT_LINE=1`** — `lib/services/team.ts` is imported by a CLIENT
+   component (`team-page-client.tsx`), and the E1 change pulled the server-only `handleAuthEmail`
+   into it. **`tsc` and the full unit suite were both green over it.** Fixed by moving
+   `resetTeamMemberPassword` to server-only `lib/services/team-reset.ts`. CI saw the same thing: runs
+   `35932967573` and `35933424621` failed at "Build (production)".
+2. **`tsc` failed on the E1 live test** (`data!.properties` possibly null). vitest does not
+   type-check, so the live run was green. CI run `35932967573` failed "Type check" on it. Fixed and
+   committed separately.
+
+### E final gate
+
+| check | printed line |
+| --- | --- |
+| unit (whole suite) | `UNIT_EXIT_LINE=0`, **107 files / 1418 tests** |
+| `tsc` | `TSC_EXIT_LINE=0` |
+| `next build` (after fix 1) | `BUILD_EXIT_LINE=0`, **130/130** (`/auth/confirm` is the new page), BUILD_ID `Jwtgu_rawAF1IvHEQL4Lf` |
+| lint (changed files) | `LINT_EXIT_LINE=0` |
+
+### C and D — `next build` now run (it had not been)
+
+| branch | printed line |
+| --- | --- |
+| `feature/s110-c-account-link` | `BUILD_EXIT_LINE=0`, 129/129, `6XzTzwtT6cHfUyyNqTuON` |
+| `feature/s110-d-line-rows` | `BUILD_EXIT_LINE=0`, 129/129, `4HL7mKLSMN6f59IcnmKGk` |
+
+### CI queue (Actions API), and why no local e2e
+
+F, C and D CI runs have been `in_progress` for 30+ minutes. That is four concurrent e2e suites on
+rebuild-test, one per pushed S110 branch, which is the "push after every commit" cost the S108
+report predicted. **Each runs the whole e2e suite, so the new C and D specs get a CI result
+there.** A local run on top would be the second heavy consumer the prompt forbids. D's UI sabotage
+(remove `onMouseDown`) still needs one local run once the queue is idle.
+
+## Section A — ⚠️ BLOCKED on Josh's production counts (FILLED-A.8 queries 1–3). B depends on A.
+Per Josh: not idling. Moving to Section H's parts that do not touch `SiteVisitRecord`.

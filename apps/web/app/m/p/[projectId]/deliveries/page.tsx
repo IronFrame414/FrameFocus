@@ -2,6 +2,7 @@ import { getProjectDeliveries, getOrderlessDeliveries } from '@/lib/services/del
 import { SectionHeader } from '../section-header';
 import { EmptyState, ListRow, SectionLabel } from '../../../mobile-ui';
 import { MyPoLines } from '@/components/field/my-po-lines';
+import { getMobileT } from '@/lib/i18n/server';
 
 // M6M §4.11.5 — M-15 · Deliveries.
 //
@@ -16,7 +17,7 @@ import { MyPoLines } from '@/components/field/my-po-lines';
 // NO CHECK-IN CONTROL (A-35c). D-6 makes delivery check-in ONLINE-ONLY and
 // §4.12.4's M-22 is reached from the delivery record, not from this list.
 
-function DeliveryGroup({
+async function DeliveryGroup({
   label,
   rows,
   testId,
@@ -25,11 +26,12 @@ function DeliveryGroup({
   rows: Awaited<ReturnType<typeof getProjectDeliveries>>;
   testId: string;
 }) {
+  const t = await getMobileT();
   return (
     <section data-testid={testId}>
       <SectionLabel>{label}</SectionLabel>
       {rows.length === 0 ? (
-        <EmptyState>None.</EmptyState>
+        <EmptyState>{t('project.deliveries.none')}</EmptyState>
       ) : (
         <ul className="rounded-[15px] border border-m6m-border bg-m6m-card px-[12px]">
           {rows.map((d) => {
@@ -43,7 +45,7 @@ function DeliveryGroup({
                   <p className="mt-[2px] flex flex-wrap items-center gap-[6px]">
                     <span className="font-mono text-[11px] text-m6m-muted">{d.delivery_date}</span>
                     <span className="font-mono text-[11px] text-m6m-muted">
-                      {(d.items ?? []).length} items
+                      {t('project.deliveries.items', { n: (d.items ?? []).length })}
                     </span>
                     {d.receiver?.display_name ? (
                       <span className="text-[13px] text-m6m-muted">{d.receiver.display_name}</span>
@@ -56,7 +58,7 @@ function DeliveryGroup({
                       data-testid="m-damaged"
                       className="mt-[2px] font-mono text-[11px] font-semibold text-m6m-danger"
                     >
-                      Damage reported
+                      {t('project.deliveries.damage')}
                     </p>
                   ) : null}
                 </div>
@@ -74,19 +76,20 @@ export default async function ProjectDeliveriesPage({
 }: {
   params: { projectId: string };
 }) {
-  const [withPo, orderless] = await Promise.all([
+  const [withPo, orderless, t] = await Promise.all([
     getProjectDeliveries(params.projectId),
     getOrderlessDeliveries(params.projectId),
+    getMobileT(),
   ]);
 
   return (
     <div className="px-[18px] pb-[18px]">
-      <SectionHeader projectId={params.projectId} title="Deliveries" />
+      <SectionHeader projectId={params.projectId} title={t('project.tile.deliveries')} />
       {/* R6 — the member's assigned lines. The shared component renders no
           currency, honouring this screen's A-35/D-9 money cut. */}
       <MyPoLines projectId={params.projectId} />
-      <DeliveryGroup label="Against a PO" rows={withPo} testId="m-group-po" />
-      <DeliveryGroup label="No PO" rows={orderless} testId="m-group-nopo" />
+      <DeliveryGroup label={t('project.deliveries.againstPo')} rows={withPo} testId="m-group-po" />
+      <DeliveryGroup label={t('project.deliveries.noPo')} rows={orderless} testId="m-group-nopo" />
     </div>
   );
 }
