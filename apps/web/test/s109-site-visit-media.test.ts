@@ -133,7 +133,7 @@ describe('SiteVisitRecord renders what the resolver produced — one component, 
     for (const mount of [
       '../app/m/site-visits/[id]/page.tsx',
       '../app/dashboard/estimates/[id]/estimate-builder.tsx',
-      '../app/dashboard/estimates/site-visits/[id]/page.tsx',
+      '../app/dashboard/site-visits/[id]/page.tsx', // [S110 B] moved from dashboard/estimates/site-visits/[id]
     ]) {
       expect(read(mount), mount).toMatch(/import \{ SiteVisitRecord \} from '@\/components\/site-visits\/site-visit-record'/);
       expect(read(mount), mount).toMatch(/<SiteVisitRecord\b/);

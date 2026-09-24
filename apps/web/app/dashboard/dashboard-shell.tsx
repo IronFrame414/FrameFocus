@@ -4,6 +4,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
   Calendar,
+  ClipboardList,
   Clock,
   Bell,
   FileText,
@@ -104,6 +105,18 @@ const NAV_ITEMS: {
     label: 'Estimates',
     icon: FileText,
     roles: ['owner', 'admin', 'project_manager'],
+    section: null,
+  },
+  // [S110 B, RULED Josh Q5 → A] — SITE VISITS, top level, for EVERY internal
+  // employee: Section A lets foreman and crew read and add to every visit, so it
+  // cannot live under office-only Estimates. Placed beside Estimates; Notifications
+  // stays last in the top layer (ruled S130). Not subcontractor/client — they
+  // never reach /dashboard, and RLS gives them no visit anyway.
+  {
+    href: '/dashboard/site-visits',
+    label: 'Site visits',
+    icon: ClipboardList,
+    roles: ['owner', 'admin', 'project_manager', 'foreman', 'crew_member'],
     section: null,
   },
   // ND-12 [S123] — Notifications. UNGATED: every role has notifications, and
