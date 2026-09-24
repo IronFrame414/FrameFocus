@@ -508,13 +508,18 @@ export function SiteVisitRecord({
           </ul>
         )}
         {canWrite ? (
-          <div className="mt-[10px] grid grid-cols-[1fr_5rem_5rem] gap-[6px]">
+          // Fluid [/m visual sweep, 2026-09-24]: `1fr` alone has an `auto`
+          // minimum, so the Area input's intrinsic width (~180px) held the row
+          // at 372px and pushed "W ft" 30px off a 360 screen. minmax(0,1fr)
+          // lets Area give way; L and W stay fixed and narrow, and their
+          // placeholders set in Barlow so "Largo ft" fits. Fits at 320.
+          <div className="mt-[10px] grid grid-cols-[minmax(0,1fr)_4.75rem_4.75rem] gap-[6px]">
             <input
               data-testid="sv-m-area"
               value={area}
               onChange={(e) => setArea(e.target.value)}
               placeholder={t('visit.measurements.area')}
-              className="h-[48px] rounded-[12px] border border-m6m-border px-[10px] text-[15px]"
+              className="h-[48px] w-full min-w-0 rounded-[12px] border border-m6m-border px-[10px] text-[15px]"
             />
             <input
               data-testid="sv-m-length"
@@ -522,7 +527,7 @@ export function SiteVisitRecord({
               onChange={(e) => setLen(e.target.value.replace(/[^0-9.]/g, ''))}
               inputMode="decimal"
               placeholder={t('visit.measurements.length')}
-              className="h-[48px] rounded-[12px] border border-m6m-border px-[10px] font-mono text-[15px]"
+              className="h-[48px] w-full min-w-0 rounded-[12px] border border-m6m-border px-[8px] font-mono text-[15px] placeholder:font-sans"
             />
             <input
               data-testid="sv-m-width"
@@ -530,7 +535,7 @@ export function SiteVisitRecord({
               onChange={(e) => setWid(e.target.value.replace(/[^0-9.]/g, ''))}
               inputMode="decimal"
               placeholder={t('visit.measurements.width')}
-              className="h-[48px] rounded-[12px] border border-m6m-border px-[10px] font-mono text-[15px]"
+              className="h-[48px] w-full min-w-0 rounded-[12px] border border-m6m-border px-[8px] font-mono text-[15px] placeholder:font-sans"
             />
             <button
               type="button"
