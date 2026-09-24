@@ -107,3 +107,21 @@ export const paidBreakCapMinutesSchema = z
   .int('Whole minutes only')
   .min(0, 'Cannot be negative')
   .max(480, 'At most 480 minutes');
+
+// ── Company email — REQUIRED [Josh, 2026-09-24] ──
+// It is the Reply-To on every client email; a blank one sent a live client's
+// reply to the platform inbox. The database enforces "not blank"
+// (companies_email_required_check) and DELIBERATELY nothing more — shape is
+// checked here and only here, so a database constraint can never abort on a
+// valid address that a regex failed to foresee (ruling Q2).
+//
+// Takes the raw field value; trims before checking, as the form does before it
+// saves. The messages are the exact inline text Company Settings shows.
+export const COMPANY_EMAIL_REQUIRED_MESSAGE = 'Company email is required.';
+export const COMPANY_EMAIL_INVALID_MESSAGE = 'Enter a valid email address.';
+
+export const companyEmailSchema = z
+  .string()
+  .trim()
+  .min(1, COMPANY_EMAIL_REQUIRED_MESSAGE)
+  .email(COMPANY_EMAIL_INVALID_MESSAGE);

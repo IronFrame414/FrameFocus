@@ -24,7 +24,9 @@ export const companySettingsSchema = z.object({
   name: z.string().min(1, 'Company name is required').max(200),
   tradeType: z.string().optional(),
   phone: z.string().optional(),
-  email: z.string().email().optional().or(z.literal('')),
+  // REQUIRED [2026-09-24] — was `.optional().or(z.literal(''))`, which encoded
+  // the blank that companies_email_required_check now refuses.
+  email: z.string().trim().min(1, 'Company email is required.').email(),
   addressLine1: z.string().optional(),
   addressLine2: z.string().optional(),
   city: z.string().optional(),

@@ -12,6 +12,11 @@
 // The company `name` is required: an empty name blocks that field's save (the
 // field errors in place) and never reaches updateCompany.
 //
+// So is the company `email` [Josh, 2026-09-24], by the same mechanism: a blank
+// or malformed address errors in place and is never saved. The database refuses
+// a blank one anyway (companies_email_required_check); stopping it here is what
+// turns a raw constraint error into a sentence the user can act on.
+//
 // `contractor_signature_path` is the COMPANY image. The per-CO
 // `contractor_signature_mode/name/ref` triple lives on change_orders, written
 // by the send route at send time — nothing here touches it (Entry 25).
@@ -27,6 +32,7 @@ import {
 } from '@/lib/services/company-client';
 
 import { TRADE_TYPES, US_STATES } from '@framefocus/shared/constants';
+import { companyEmailSchema } from '@framefocus/shared/validation/company-settings';
 import { color, cardStyle } from '@/lib/theme';
 
 interface SettingsFormProps {
@@ -140,6 +146,19 @@ export function SettingsForm({ company }: SettingsFormProps) {
       }
       setFieldError('name', null);
       scheduleSave('name', trimmed);
+      return;
+    }
+    if (field === 'email') {
+      const parsed = companyEmailSchema.safeParse(trimmed);
+      if (!parsed.success) {
+        // Cancel a pending save of an earlier, valid value typed moments ago —
+        // otherwise the error shows while the old value still lands.
+        if (timersRef.current.email) clearTimeout(timersRef.current.email);
+        setFieldError('email', parsed.error.issues[0].message);
+        return;
+      }
+      setFieldError('email', null);
+      scheduleSave('email', parsed.data);
       return;
     }
     setFieldError(field, null);
@@ -584,7 +603,7 @@ export function SettingsForm({ company }: SettingsFormProps) {
                 column and it had no control anywhere, so it was always empty —
                 which is why client replies were landing in the owner's personal
                 inbox instead of the company's. */}
-            <label style={labelStyle}>Company Email</label>
+            <label style={labelStyle}>Company Email *</label>
             <input
               name="email"
               type="email"
@@ -595,10 +614,14 @@ export function SettingsForm({ company }: SettingsFormProps) {
               placeholder="office@yourcompany.com"
             />
             {fieldFeedback('email')}
+            {/* [2026-09-24] Required. The sentence that stood here ended "Leave it
+                blank and replies fall back to the owner's personal address." —
+                it invited the blank that sent a live client's reply to the
+                platform's inbox, and is removed by ruling. */}
             <p style={{ fontSize: '0.75rem', color: color.muted, marginTop: '0.25rem' }}>
-              Where clients reach you. Replies to estimates, change orders and invoices you send go
-              here, and it prints on your PDF letterhead. Leave it blank and replies fall back to
-              the owner&rsquo;s personal address.
+              Where client replies go. When a client replies to an estimate, change order or
+              invoice you send, the reply comes to this address. It also prints on your PDF
+              letterhead.
             </p>
           </div>
           <div style={{ marginBottom: '1rem' }}>
