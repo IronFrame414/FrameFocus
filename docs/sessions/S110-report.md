@@ -505,3 +505,29 @@ here: read `BUILD_EXIT_LINE` before trusting the e2e line that follows it.**
 **Found, not touched:** `feature/s110-d-line-rows` carries a commit that is not this session's —
 `423b9ab7` "[Data] Home Depot South Florida cost catalog - 282 verified items" (01:43 UTC, one CSV,
 same git identity). It will ride along when D merges.
+
+### B and H CI — one at a time, both green
+
+| branch | run | result |
+| --- | --- | --- |
+| B `feature/s110-b-desktop-site-visits` (`de9094fc`) | `35953040329` | **success** — the only run active |
+| H `feature/s110-h-language` (`16dbcef2`, contains C, A, B) | `35955073904` | **success** — the only run active |
+
+Under the one-branch-at-a-time rule, all three runs in this stretch (A, B, H) came back green. The
+two reds in the first stretch were contention, confirmed by solo runs.
+
+## STATUS — end of stretch 2
+
+| § | branch | state |
+| --- | --- | --- |
+| F | `feature/s110-f-route-guard` | built and proven; CI green |
+| C | `feature/s110-c-account-link` | built and proven; CI red only on #157 contention (proven solo) |
+| D | `feature/s110-d-line-rows` | built and proven; CI green. Migration `20261720000000` owed. Carries Josh's catalog CSV commit `423b9ab7` |
+| E | `feature/s110-e-carried-debt` | built and proven (E3 sheets by source assertion only); CI red only on #157 contention (proven solo) |
+| **A** | `feature/s110-a-site-visit-access` | **built and proven** — live 40/40, unit, UI sabotage ×2, **CI green**. Migration `20261730000000` owed |
+| **B** | `feature/s110-b-desktop-site-visits` | **built and proven** — e2e + sabotage (sidebar, Floor), **CI green**. No migration |
+| **H** | `feature/s110-h-language` | **built and proven, complete** — the site-visit record included, ratchet empty, **CI green**. Migration `20261750000000` owed |
+
+**Merge order:** F, C, D, E, A, B, H. Not authorized; nothing merged. **Nothing touched production.**
+**After the last migration lands:** regenerate `database.ts` and both fingerprint files
+(`npm run db:types`, `npm run db:fingerprint`) against production.
