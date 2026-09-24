@@ -131,9 +131,14 @@ describe('S151-M1 — cross-system findings on Module 1', () => {
     // the accumulated rows of every previous run, which is a cross-run
     // dependency masquerading as an assertion.
     const name = `${MARKER} crew-inserted ${Date.now()}`;
+    // ⚠️ WITH AN EMAIL, ON PURPOSE [2026-09-24]. companies.email is REQUIRED
+    // (companies_email_required_check). Without one this insert is refused by the
+    // CONSTRAINT whatever the policy says, so the row count below would read 0
+    // even if the INSERT policy were widened again — a probe that cannot fail.
+    // The email keeps RLS the only thing that can refuse it.
     const { error } = await crew
       .from('companies')
-      .insert({ name, slug: `${MARKER.toLowerCase()}-crew-${Date.now()}` });
+      .insert({ name, slug: `${MARKER.toLowerCase()}-crew-${Date.now()}`, email: 'fixture-office@qa-noreply.ezcontractorbinder.com' });
 
     void error; // the row count is the fact; the error code is not (see above).
 

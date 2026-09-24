@@ -61,7 +61,7 @@ beforeAll(async () => {
   // QA identities out of every other harness in this suite.
   const { data: co } = await admin
     .from('companies')
-    .insert({ name: `S137 Probe ${Date.now()}`, slug: `s137-probe-${Date.now()}` })
+    .insert({ name: `S137 Probe ${Date.now()}`, slug: `s137-probe-${Date.now()}`, email: 'fixture-office@qa-noreply.ezcontractorbinder.com' })
     .select('id')
     .single();
   probeCompanyId = (co as { id: string }).id;
@@ -341,7 +341,7 @@ describe('⚠️ the deletion job — what it must NOT touch', () => {
     // NOT NULL until 20260918000000 and the type-checker is what caught it.
     const { data: co } = await admin
       .from('companies')
-      .insert({ name: `S137 Null ${Date.now()}`, slug: `s137-null-${Date.now()}` })
+      .insert({ name: `S137 Null ${Date.now()}`, slug: `s137-null-${Date.now()}`, email: 'fixture-office@qa-noreply.ezcontractorbinder.com' })
       .select('id')
       .single();
     const cid = (co as { id: string }).id;

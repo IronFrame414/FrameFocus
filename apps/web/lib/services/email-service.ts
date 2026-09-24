@@ -498,6 +498,14 @@ export interface SendEmailParams {
  *   3. NULL — no Reply-To header at all. The send still goes; a missing reply
  *      address must never fail a send or make one up.
  *
+ * ⚠️ ARMS 2 AND 3 ARE UNREACHABLE IN PRACTICE [Josh, 2026-09-24]. companies.email
+ * is now REQUIRED — `companies_email_required_check` (20261760000000) refuses a
+ * blank value on insert and update, and signup writes the owner's address. A
+ * NULL company email once sent a live client's reply to the platform inbox.
+ * The arms are KEPT DELIBERATELY as belt and braces, in case the constraint is
+ * ever dropped: do not remove them, and do not make a send refuse on a blank
+ * address. Their coverage is `company-reply-to-resolver.test.ts`.
+ *
  * THE CACHE IS NOW TIME-LIMITED [S97]. It was "resolved once per process", set
  * on the assumption that companies.email could not change — true only because
  * nothing could SET it. Now that Company Settings has a Company Email control,

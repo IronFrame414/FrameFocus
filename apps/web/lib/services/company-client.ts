@@ -11,6 +11,7 @@ import type {
   TimeTrackingSettings,
 } from '@/lib/services/company';
 import type { GpsClockMode } from '@framefocus/shared/utils/time-tracking';
+import { companyEmailSchema } from '@framefocus/shared/validation/company-settings';
 
 export type {
   CompanyData,
@@ -120,6 +121,16 @@ export async function updateCompany(
   companyId: string,
   updates: Partial<Omit<CompanyData, 'id'>>
 ): Promise<{ success: boolean; error?: string }> {
+  // companies.email is REQUIRED [Josh, 2026-09-24]. The database refuses a
+  // blank value (companies_email_required_check) but deliberately not a
+  // malformed one, so shape is checked here, where every caller passes — not
+  // only in the one form that exists today.
+  if ('email' in updates) {
+    const parsed = companyEmailSchema.safeParse(updates.email ?? '');
+    if (!parsed.success) return { success: false, error: parsed.error.issues[0].message };
+    updates = { ...updates, email: parsed.data };
+  }
+
   const supabase = createClient();
 
   const { data, error } = await supabase

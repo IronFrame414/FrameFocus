@@ -86,9 +86,14 @@ describe('S152-B — companies INSERT is restricted to unaffiliated callers', ()
     // then count through the service role. The row count is the fact; the error
     // code is not.
     const name = `${MARKER} crew-tried ${Date.now()}`;
+    // ⚠️ WITH AN EMAIL, ON PURPOSE [2026-09-24]. companies.email is REQUIRED
+    // (companies_email_required_check). Without one this insert is refused by the
+    // CONSTRAINT whatever the policy says, so the row count below would read 0
+    // even if the INSERT policy were widened again — a probe that cannot fail.
+    // The email keeps RLS the only thing that can refuse it.
     await crew
       .from('companies')
-      .insert({ name, slug: `${MARKER.toLowerCase()}-crew-${Date.now()}` });
+      .insert({ name, slug: `${MARKER.toLowerCase()}-crew-${Date.now()}`, email: 'fixture-office@qa-noreply.ezcontractorbinder.com' });
 
     const { data: landed } = await admin.from('companies').select('id').eq('name', name);
     expect(
@@ -103,9 +108,14 @@ describe('S152-B — companies INSERT is restricted to unaffiliated callers', ()
     // get_my_company_id() resolves. Without this, B1 could pass on a policy that
     // merely floors by role — which is NOT what was ruled.
     const name = `${MARKER} owner-tried ${Date.now()}`;
+    // ⚠️ WITH AN EMAIL, ON PURPOSE [2026-09-24]. companies.email is REQUIRED
+    // (companies_email_required_check). Without one this insert is refused by the
+    // CONSTRAINT whatever the policy says, so the row count below would read 0
+    // even if the INSERT policy were widened again — a probe that cannot fail.
+    // The email keeps RLS the only thing that can refuse it.
     await owner
       .from('companies')
-      .insert({ name, slug: `${MARKER.toLowerCase()}-owner-${Date.now()}` });
+      .insert({ name, slug: `${MARKER.toLowerCase()}-owner-${Date.now()}`, email: 'fixture-office@qa-noreply.ezcontractorbinder.com' });
 
     const { data: landed } = await admin.from('companies').select('id').eq('name', name);
     expect(landed, 'an affiliated Owner minted a second company').toEqual([]);
@@ -152,9 +162,11 @@ describe('S152-B — companies INSERT is restricted to unaffiliated callers', ()
     expect(check, 'the fixture user still resolves to a company — B2 proves nothing').toBeNull();
 
     const name = `${MARKER} unaffiliated-made ${Date.now()}`;
+    // With an email [2026-09-24]: without one the CONSTRAINT refuses this insert
+    // and B2 would go red for a reason unrelated to the policy it tests.
     await fresh
       .from('companies')
-      .insert({ name, slug: `${MARKER.toLowerCase()}-new-${Date.now()}` });
+      .insert({ name, slug: `${MARKER.toLowerCase()}-new-${Date.now()}`, email: 'fixture-office@qa-noreply.ezcontractorbinder.com' });
 
     const { data: landed } = await admin.from('companies').select('id').eq('name', name);
     expect(

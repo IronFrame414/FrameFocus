@@ -278,7 +278,8 @@ if (companyB) {
 } else {
   const { data, error } = await db
     .from('companies')
-    .insert({ name: COMPANY_B_NAME, slug: COMPANY_B_SLUG, timezone: 'America/New_York' })
+    // companies.email is REQUIRED [2026-09-24, companies_email_required_check].
+    .insert({ name: COMPANY_B_NAME, slug: COMPANY_B_SLUG, timezone: 'America/New_York', email: 'josh+qa-b-owner@worthprop.com' })
     .select('id, name')
     .single();
   must('company B', error);
