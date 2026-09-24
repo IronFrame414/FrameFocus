@@ -4,18 +4,20 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { fmtMoney } from '../labels';
 import { useFileSheet } from '@/components/files/file-sheet';
 import { rowActivation } from '@/components/list-screen/row-activation';
+import type {
+  ApiErrorResponse,
+  EstimateFileListResponse,
+  EstimateFileListItem,
+  EstimateFileUrlResponse,
+} from '@/lib/api-contracts/estimate-files';
 
 // S106 Part C — the estimate Files tab. Lists + uploads through the service-role route
 // (/api/estimates/[id]/files); the ordinary files RLS blocks a PM on these project_id-NULL
 // rows, so everything goes through the route, whose session check is the access floor.
 
-interface EstimateFile {
-  id: string;
-  file_name: string;
-  file_size: number;
-  mime_type: string;
-  created_at: string | null;
-}
+// [S110 F] The row shape is the route's CONTRACT, imported — never hand-written
+// again. A hand-written copy is what let #161 blank the site-visit photos.
+type EstimateFile = EstimateFileListItem;
 
 const ALLOWED = 'application/pdf,image/jpeg,image/png,image/heic,image/heif';
 const MAX_MB = 25;
@@ -44,7 +46,7 @@ export default function EstimateFilesTab({
       resolveUrl: async () => {
         const res = await fetch(`/api/estimates/${estimateId}/files/${f.id}/url`);
         if (!res.ok) return null;
-        const body = (await res.json()) as { url?: string };
+        const body = (await res.json()) as EstimateFileUrlResponse;
         return body.url ?? null;
       },
     });
@@ -55,7 +57,7 @@ export default function EstimateFilesTab({
     setError(null);
     try {
       const res = await fetch(`/api/estimates/${estimateId}/files`);
-      const body = await res.json();
+      const body = (await res.json()) as Partial<EstimateFileListResponse & ApiErrorResponse>;
       if (!res.ok) {
         setError(body.error ?? 'Could not load files.');
         return;

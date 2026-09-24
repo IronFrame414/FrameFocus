@@ -16,7 +16,8 @@ import {
 import { useOfflineSync } from '@/app/m/offline-sync';
 import { ErrorNotice, useOnline } from '@/app/m/write-ui';
 import { VoiceNotes } from './voice-notes';
-import { resolveSiteVisitMedia, type ListedFile } from '@/lib/site-visits/media';
+import { resolveSiteVisitMedia } from '@/lib/site-visits/media';
+import type { EstimateFileListResponse } from '@/lib/api-contracts/estimate-files';
 
 // S108 Spec A — THE SITE VISIT RECORD. ONE component, rendered by BOTH the
 // phone (/m/site-visits/[id]) and the desktop page (/dashboard/estimates/
@@ -273,7 +274,7 @@ export function SiteVisitRecord({
   const loadFiles = useCallback(async () => {
     const res = await fetch(`/api/estimates/${estimateId}/files`);
     if (!res.ok) return;
-    const body = (await res.json()) as { files: ListedFile[] };
+    const body = (await res.json()) as EstimateFileListResponse;
     // [ruling 4, 2026-09-23] VISIT-ERA photos only — cutoff = promotion, see
     // lib/site-visits/photos.ts. Later photos live in the estimate's Files tab.
     // [S109 regression] The list carries NO url since #161 (161.B) — each photo
