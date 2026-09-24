@@ -23,6 +23,8 @@ import { getCompanyTimeSettings } from '@/lib/services/company';
 import { companyToday } from '@framefocus/shared/utils/dates';
 import { Tile, TileGrid, daysLeft } from '../../mobile-ui';
 import { selectUpNext, upNextDateLine } from './up-next';
+import { getMobileT } from '@/lib/i18n/server';
+import type { MsgKey } from '@/lib/i18n/messages';
 
 // M6M §4.3 — M-3 · Project sections hub.
 //
@@ -49,25 +51,36 @@ import { selectUpNext, upNextDateLine } from './up-next';
 // NOT a project tile), so the exclusion list here is unchanged. A build that
 // renders a finance tile fails review.
 
-/** §4.3's grid, in the spec's order. Nine. */
+/** §4.3's grid, in the spec's order. Nine. `labelKey` is resolved with t() at
+ *  render time [S110 H]; `key` (route + testid) stays English. */
 const TILES = [
-  { key: 'overview', label: 'Overview', icon: LayoutList },
-  { key: 'schedule', label: 'Schedule', icon: CalendarDays },
-  { key: 'changes', label: 'Change Orders', icon: FileText },
-  { key: 'punch', label: 'Punch List', icon: ClipboardCheck },
-  { key: 'deliveries', label: 'Deliveries', icon: Truck },
-  { key: 'files', label: 'Files', icon: Files },
-  { key: 'photos', label: 'Photos', icon: ImageIcon },
-  { key: 'contacts', label: 'Contacts', icon: Contact },
-  { key: 'team', label: 'Team', icon: Users },
+  { key: 'overview', labelKey: 'project.tile.overview', icon: LayoutList },
+  { key: 'schedule', labelKey: 'project.tile.schedule', icon: CalendarDays },
+  { key: 'changes', labelKey: 'project.tile.changes', icon: FileText },
+  { key: 'punch', labelKey: 'project.tile.punch', icon: ClipboardCheck },
+  { key: 'deliveries', labelKey: 'project.tile.deliveries', icon: Truck },
+  { key: 'files', labelKey: 'project.tile.files', icon: Files },
+  { key: 'photos', labelKey: 'project.tile.photos', icon: ImageIcon },
+  { key: 'contacts', labelKey: 'project.tile.contacts', icon: Contact },
+  { key: 'team', labelKey: 'project.tile.team', icon: Users },
 ] as const;
+
+// S110 H — project status code → message key; unknown codes fall back to the
+// English label table, then the raw code.
+const PROJECT_STATUS_KEY: Record<string, MsgKey> = {
+  active: 'project.status.active',
+  on_hold: 'project.status.on_hold',
+  complete: 'project.status.complete',
+  archived: 'project.status.archived',
+  cancelled: 'project.status.cancelled',
+};
 
 export default async function MobileProjectHubPage({
   params,
 }: {
   params: { projectId: string };
 }) {
-  const project = await getProject(params.projectId);
+  const [project, t] = await Promise.all([getProject(params.projectId), getMobileT()]);
   if (!project) notFound();
 
   // Company-tz calendar day [S106], not UTC: this is BOTH the Up-next `>= today`
@@ -128,7 +141,7 @@ export default async function MobileProjectHubPage({
 
   // D-16: "Mine first, then the project total" — and when the user has none
   // assigned it renders `0 mine · {total} open`, NOT a bare total.
-  const punchLabel = `${punch.mine} mine · ${punch.total} open`;
+  const punchLabel = t('project.hub.punchLabel', { mine: punch.mine, total: punch.total });
 
   const badgeFor = (key: (typeof TILES)[number]['key']): string | null => {
     switch (key) {
@@ -179,7 +192,9 @@ export default async function MobileProjectHubPage({
             data-testid="m-status-pill"
             className="mt-[3px] shrink-0 rounded-full border border-white/25 px-[8px] py-[2px] font-mono text-[11px] font-semibold text-white"
           >
-            {PROJECT_STATUS_LABELS[project.status] ?? project.status}
+            {PROJECT_STATUS_KEY[project.status]
+              ? t(PROJECT_STATUS_KEY[project.status])
+              : (PROJECT_STATUS_LABELS[project.status] ?? project.status)}
           </span>
         </div>
 
@@ -192,7 +207,7 @@ export default async function MobileProjectHubPage({
         >
           <div data-testid="m-stat-days" className="px-[12px] py-[10px]">
             <p className="font-mono text-[11px] uppercase tracking-wide text-m6m-muted-navy">
-              Days left
+              {t('project.hub.daysLeft')}
             </p>
             {/* Signed; negative past target rather than clamped at zero; the
                 em-dash when target_end_date is null — all three states, A-11d.
@@ -207,7 +222,7 @@ export default async function MobileProjectHubPage({
             className="border-l border-white/15 px-[12px] py-[10px]"
           >
             <p className="font-mono text-[11px] uppercase tracking-wide text-m6m-muted-navy">
-              Punch
+              {t('project.hub.punch')}
             </p>
             {/* §4.3: amber when non-zero, muted at zero (A-11). "Non-zero" is
                 the figure the stat is about — the project's open total. */}
@@ -255,23 +270,23 @@ export default async function MobileProjectHubPage({
               // The card is NOT omitted when there is nothing scheduled — its
               // absence would read as a loading failure (A-11h).
               <p className="text-[16px] font-bold leading-tight text-m6m-muted">
-                Nothing scheduled
+                {t('project.hub.nothingScheduled')}
               </p>
             )}
           </div>
         </section>
 
         <h2 className="mb-[8px] mt-[18px] font-mono text-[11px] font-medium uppercase tracking-wide text-m6m-muted">
-          SECTIONS
+          {t('project.hub.sections')}
         </h2>
 
         <TileGrid testId="m-section-grid">
-          {TILES.map(({ key, label, icon: Icon }) => (
+          {TILES.map(({ key, labelKey, icon: Icon }) => (
             <Tile
               key={key}
               testId={`m-tile-${key}`}
               href={`/m/p/${params.projectId}/${key}`}
-              label={label}
+              label={t(labelKey)}
               icon={<Icon size={20} strokeWidth={2} />}
               badge={badgeFor(key)}
               tone={toneFor(key)}
@@ -287,7 +302,7 @@ export default async function MobileProjectHubPage({
           data-testid="m-log-the-day"
           className="mt-[18px] flex h-[60px] w-full items-center justify-center rounded-[14px] bg-m6m-amber text-[16px] font-bold text-m6m-navy transition-transform duration-150 ease-out active:scale-[.99]"
         >
-          Log the day
+          {t('project.hub.logTheDay')}
         </Link>
       </div>
     </div>

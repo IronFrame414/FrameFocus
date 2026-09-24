@@ -2,7 +2,9 @@ import Link from 'next/link';
 import { getExpenses, getExpenseReceipts } from '@/lib/services/expenses';
 import { getBillsAndCommitments } from '@/lib/services/payables';
 import { getMyMember } from '@/lib/services/members';
-import { emptyCopyFor, selectMine } from './select-mine';
+import { selectMine } from './select-mine';
+import { getMobileT } from '@/lib/i18n/server';
+import type { MsgKey } from '@/lib/i18n/messages';
 import { SetMobileHeader } from '../mobile-header';
 import {
   EmptyState,
@@ -35,22 +37,25 @@ import {
 // DO NOT add a role gate here "to be safe". A UI gate over a real DB floor is
 // the pattern #117 exists to warn about, and A-45d fails on it.
 
-const CHIPS: readonly Chip[] = [
-  { value: null, label: 'All' },
-  { value: 'mine', label: 'Mine' },
-  { value: 'pending', label: 'Pending' },
-];
-
-const STATUS_LABEL: Record<string, string> = {
-  pending: 'Pending',
-  approved: 'Approved',
-  rejected: 'Rejected',
+// Labels are message keys, resolved with t() at render [S110 H].
+const STATUS_KEY: Record<string, MsgKey> = {
+  pending: 'field.expenses.status.pending',
+  approved: 'field.expenses.status.approved',
+  rejected: 'field.expenses.status.rejected',
 };
 
-const CATEGORY_LABEL: Record<string, string> = {
-  material: 'Material',
-  subcontractor: 'Subcontractor',
-  other: 'Other',
+const CATEGORY_KEY: Record<string, MsgKey> = {
+  material: 'field.expenses.category.material',
+  subcontractor: 'field.expenses.category.subcontractor',
+  other: 'field.expenses.category.other',
+};
+
+// The same three strings `emptyCopyFor()` returns (select-mine.ts, unit-tested
+// there), as message keys.
+const EMPTY_KEY: Record<'mine' | 'pending' | 'all', MsgKey> = {
+  pending: 'field.expenses.emptyPending',
+  mine: 'field.expenses.emptyMine',
+  all: 'field.expenses.empty',
 };
 
 export default async function MobileExpensesPage({
@@ -71,6 +76,13 @@ export default async function MobileExpensesPage({
   // and M-2's "Mine" chips have exactly this shape. Adding an author filter to
   // a shared service for one mobile chip is a bigger change than this slice
   // should make unasked.
+  const t = await getMobileT();
+  const chips: readonly Chip[] = [
+    { value: null, label: t('field.chip.all'), testKey: 'All' },
+    { value: 'mine', label: t('field.chip.mine'), testKey: 'Mine' },
+    { value: 'pending', label: t('field.expenses.chipPending'), testKey: 'Pending' },
+  ];
+
   const [rows, myMember, payables] = await Promise.all([
     getExpenses(active === 'pending' ? { status: 'pending' } : undefined),
     getMyMember(),
@@ -148,13 +160,13 @@ export default async function MobileExpensesPage({
     )
   );
 
-  const emptyCopy = emptyCopyFor(active);
+  const emptyCopy = t(EMPTY_KEY[active ?? 'all']);
 
   return (
     <div className="px-[18px] pb-[18px] pt-[14px]">
-      <SetMobileHeader title="Expenses" sub="Company costs" />
+      <SetMobileHeader title={t('field.expenses.title')} sub={t('field.expenses.sub')} />
 
-      <FilterChips chips={CHIPS} active={active} basePath="/m/expenses" param="filter" />
+      <FilterChips chips={chips} active={active} basePath="/m/expenses" param="filter" />
 
       {expenses.length === 0 ? (
         <div className="pt-[18px]">
@@ -172,11 +184,11 @@ export default async function MobileExpensesPage({
                   </p>
                   <p className="mt-[3px] flex flex-wrap items-center gap-[6px]">
                     <StatusPill
-                      label={STATUS_LABEL[e.status] ?? e.status}
+                      label={STATUS_KEY[e.status] ? t(STATUS_KEY[e.status]) : e.status}
                       tone={e.status === 'rejected' ? 'danger' : 'muted'}
                     />
                     <span className="font-mono text-[11px] font-semibold text-m6m-muted">
-                      {CATEGORY_LABEL[e.cost_category] ?? e.cost_category}
+                      {CATEGORY_KEY[e.cost_category] ? t(CATEGORY_KEY[e.cost_category]) : e.cost_category}
                     </span>
                     {/* §2 — every date is mono. */}
                     <span className="font-mono text-[11px] text-m6m-muted">{e.expense_date}</span>
@@ -209,7 +221,7 @@ export default async function MobileExpensesPage({
                     <Link
                       href={`/m/p/${e.project_id}/photos/${receiptId}`}
                       data-testid="m-receipt-link"
-                      aria-label={`Receipt for ${e.supplier}`}
+                      aria-label={t('field.expenses.receiptFor', { name: e.supplier })}
                       className="flex h-11 w-11 items-center justify-center rounded-full border border-m6m-border bg-m6m-card text-m6m-blue"
                     >
                       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>

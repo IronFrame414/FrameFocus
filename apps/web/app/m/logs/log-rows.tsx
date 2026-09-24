@@ -4,6 +4,8 @@ import Link from 'next/link';
 import type { MobileLogRow } from '@/lib/services/daily-logs';
 import { EmptyState, ListRowLink } from '../mobile-ui';
 import { useOfflineSync } from '../offline-sync';
+import { useT } from '@/components/i18n/language-provider';
+import type { T } from '@/lib/i18n/messages';
 
 // M6M §4.6 — M-6's rows, and the one thing that has to be a client component.
 //
@@ -29,9 +31,9 @@ import { useOfflineSync } from '../offline-sync';
 // `/m/logs/{id}` would 404 on an id the server has never seen.
 
 /** §4.6 — "a one-line excerpt of work_performed". */
-function excerpt(text: string | null): string {
+function excerpt(text: string | null, tr: T): string {
   const t = (text ?? '').replace(/\s+/g, ' ').trim();
-  if (!t) return 'No work recorded.';
+  if (!t) return tr('field.logs.noWork');
   return t.length > 90 ? `${t.slice(0, 89)}…` : t;
 }
 
@@ -39,6 +41,7 @@ type QueuedLog = { entryId: string; log_date: string; work_performed: string | n
 
 export function LogRows({ rows, projectId }: { rows: MobileLogRow[]; projectId: string | null }) {
   const offlineSync = useOfflineSync();
+  const t = useT();
 
   // The queue holds every entity; only the daily logs belong on this screen.
   const queued: QueuedLog[] = (offlineSync?.entries ?? [])
@@ -56,7 +59,7 @@ export function LogRows({ rows, projectId }: { rows: MobileLogRow[]; projectId: 
     <>
       {isEmpty ? (
         <div className="pt-[18px]">
-          <EmptyState>No daily logs yet.</EmptyState>
+          <EmptyState>{t('field.logs.empty')}</EmptyState>
         </div>
       ) : (
         <ul
@@ -73,13 +76,13 @@ export function LogRows({ rows, projectId }: { rows: MobileLogRow[]; projectId: 
               <div className="min-w-0 flex-1">
                 {/* D-4's project-card geometry: 17px/700 date, mono sub-line. */}
                 <p className="truncate text-[17px] font-bold leading-tight text-m6m-navy">
-                  {q.log_date || 'Today'}
+                  {q.log_date || t('field.logs.today')}
                 </p>
                 <p className="mt-[2px] truncate font-mono text-[11px] text-m6m-muted">
-                  Waiting to sync
+                  {t('field.logs.waitingSync')}
                 </p>
                 <p className="mt-[3px] truncate text-[13px] text-m6m-muted">
-                  {excerpt(q.work_performed)}
+                  {excerpt(q.work_performed, t)}
                 </p>
               </div>
               {/* A-13d — IN PLACE OF the photo count. There is deliberately no
@@ -89,7 +92,7 @@ export function LogRows({ rows, projectId }: { rows: MobileLogRow[]; projectId: 
                 data-testid="m-log-queued-badge"
                 className="shrink-0 rounded-full border border-m6m-strip-border bg-m6m-strip-bg px-[8px] py-[2px] font-mono text-[11px] font-semibold text-m6m-navy"
               >
-                Queued
+                {t('field.logs.queued')}
               </span>
             </li>
           ))}
@@ -109,7 +112,7 @@ export function LogRows({ rows, projectId }: { rows: MobileLogRow[]; projectId: 
               href={`/m/logs/${r.id}`}
               testId="m-log-row"
               dataAttrs={{ 'data-queued': 'false' }}
-              label={`Daily log ${r.log_date}`}
+              label={t('field.logs.rowLabel', { date: r.log_date })}
               trailing={
                 <span
                   data-testid="m-log-photo-count"
@@ -126,7 +129,7 @@ export function LogRows({ rows, projectId }: { rows: MobileLogRow[]; projectId: 
                 {[r.project_number ?? r.project_name, r.author_name].filter(Boolean).join(' · ')}
               </p>
               <p className="mt-[3px] truncate text-[13px] text-m6m-muted">
-                {excerpt(r.work_performed)}
+                {excerpt(r.work_performed, t)}
               </p>
             </ListRowLink>
           ))}
@@ -141,7 +144,7 @@ export function LogRows({ rows, projectId }: { rows: MobileLogRow[]; projectId: 
         data-testid="m-log-the-day"
         className="mt-[16px] flex h-[60px] w-full items-center justify-center rounded-[14px] bg-m6m-amber text-[17px] font-bold text-m6m-navy"
       >
-        Log the day
+        {t('field.log.title')}
       </Link>
     </>
   );

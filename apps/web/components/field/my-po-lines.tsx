@@ -12,6 +12,7 @@ import {
   listMyAssignedLines,
   type MyAssignedLine,
 } from '@/lib/services/po-lines-client';
+import { useT } from '@/components/i18n/language-provider';
 
 export function MyPoLines({ projectId }: { projectId: string }) {
   const [lines, setLines] = useState<MyAssignedLine[] | null>(null);
@@ -20,6 +21,7 @@ export function MyPoLines({ projectId }: { projectId: string }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [flaggedIds, setFlaggedIds] = useState<Set<string>>(new Set());
+  const t = useT();
 
   useEffect(() => {
     let active = true;
@@ -41,7 +43,7 @@ export function MyPoLines({ projectId }: { projectId: string }) {
     const res = await flagPoItemMissing(itemId, note);
     setBusy(false);
     if (!res.success) {
-      setError(res.error ?? 'Could not flag the line.');
+      setError(res.error ?? t('shell.po.couldNotFlag'));
       return;
     }
     setFlaggedIds((prev) => new Set(prev).add(itemId));
@@ -52,9 +54,9 @@ export function MyPoLines({ projectId }: { projectId: string }) {
   return (
     <section data-testid="my-po-lines" className="mb-6">
       <div className="mb-2 text-[13px] font-bold uppercase text-[#14213d]">
-        Your assigned lines{' '}
+        {t('shell.po.yourLines')}{' '}
         <span className="text-[11px] font-medium normal-case text-[#9aa1ac]">
-          · pick these up; flag anything you can&rsquo;t get
+          {t('shell.po.pickUp')}
         </span>
       </div>
       <ul className="rounded-[13px] border border-[#e6e9ef] bg-white px-4">
@@ -76,7 +78,7 @@ export function MyPoLines({ projectId }: { projectId: string }) {
               </div>
               {flaggedIds.has(line.itemId) ? (
                 <span className="text-[12px] font-semibold text-[#b45309]">
-                  Flagged — the office is told
+                  {t('shell.po.flagged')}
                 </span>
               ) : flaggingId !== line.itemId ? (
                 <button
@@ -88,7 +90,7 @@ export function MyPoLines({ projectId }: { projectId: string }) {
                     setError(null);
                   }}
                 >
-                  Can&rsquo;t get it…
+                  {t('shell.po.cantGet')}
                 </button>
               ) : null}
             </div>
@@ -97,7 +99,7 @@ export function MyPoLines({ projectId }: { projectId: string }) {
                 <input
                   value={note}
                   onChange={(e) => setNote(e.target.value)}
-                  placeholder="Why? (backordered, out of stock…)"
+                  placeholder={t('shell.po.why')}
                   className="min-w-0 flex-1 rounded-[8px] border border-[#e0e4ea] px-3 py-2 text-[13px]"
                 />
                 <button
@@ -105,14 +107,14 @@ export function MyPoLines({ projectId }: { projectId: string }) {
                   disabled={busy}
                   onClick={() => void submitFlag(line.itemId)}
                 >
-                  Flag
+                  {t('shell.po.flag')}
                 </button>
                 <button
                   className="text-[13px] font-semibold text-[#6b7280]"
                   disabled={busy}
                   onClick={() => setFlaggingId(null)}
                 >
-                  Cancel
+                  {t('shell.cancel')}
                 </button>
               </div>
             )}

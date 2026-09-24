@@ -12,6 +12,7 @@ import {
   SecondaryButton,
   useOnline,
 } from '../../../../write-ui';
+import { useT } from '@/components/i18n/language-provider';
 
 // M6M §4.11.14 — M-34's two write actions.
 //
@@ -73,6 +74,7 @@ export function PunchActions({
   myMemberId: string | null;
 }) {
   const router = useRouter();
+  const t = useT();
   const online = useOnline();
 
   const [busy, setBusy] = useState(false);
@@ -101,7 +103,7 @@ export function PunchActions({
     const up = await uploadFile(file, { project_id: projectId, category: 'photos' });
     setUploading(false);
     if (!up.success || !up.id) {
-      setError(up.error ?? 'The photo could not be uploaded.');
+      setError(up.error ?? t('photos.punch.uploadFailed'));
       return;
     }
     setPhotoId(up.id);
@@ -117,7 +119,7 @@ export function PunchActions({
     const result = await completePunchItem(item, photoId);
     setBusy(false);
     if (!result.success) {
-      setError(result.error ?? 'The item could not be completed.');
+      setError(result.error ?? t('photos.punch.completeFailed'));
       return;
     }
     router.refresh();
@@ -133,7 +135,7 @@ export function PunchActions({
     const result = await verifyPunchItem(item, userRole);
     setBusy(false);
     if (!result.success) {
-      setError(result.error ?? 'The item could not be verified.');
+      setError(result.error ?? t('photos.punch.verifyFailed'));
       return;
     }
     router.refresh();
@@ -141,7 +143,7 @@ export function PunchActions({
 
   return (
     <section data-testid="m-punch-actions" className="mt-[20px]">
-      {!online ? <OfflineNotice what="Updating a punch item" testId="m-punch-offline" /> : null}
+      {!online ? <OfflineNotice what={t('photos.punch.offlineWhat')} testId="m-punch-offline" /> : null}
 
       {/* ── COMPLETE — every role, subcontractors included ── */}
       {isOpen ? (
@@ -152,18 +154,18 @@ export function PunchActions({
               className="mb-[10px] rounded-[12px] border border-m6m-border bg-m6m-card px-[14px] py-[12px]"
             >
               <p className="text-[14px] font-semibold text-m6m-navy">
-                A completion photo is required
+                {t('photos.punch.photoRequired')}
               </p>
               {photoId ? (
                 <p
                   data-testid="m-punch-photo-attached"
                   className="mt-[4px] font-mono text-[11px] text-m6m-muted"
                 >
-                  photo attached
+                  {t('photos.punch.photoAttached')}
                 </p>
               ) : (
                 <label className="mt-[8px] flex min-h-[52px] cursor-pointer items-center justify-center rounded-[10px] border border-dashed border-m6m-border text-[14px] font-semibold text-m6m-blue">
-                  {uploading ? 'Uploading…' : 'Take photo'}
+                  {uploading ? t('photos.punch.uploading') : t('photos.punch.takePhoto')}
                   <input
                     type="file"
                     accept="image/*"
@@ -182,8 +184,8 @@ export function PunchActions({
           ) : null}
 
           <PrimaryButton
-            label="Mark complete"
-            busyLabel="Saving…"
+            label={t('photos.punch.markComplete')}
+            busyLabel={t('photos.punch.saving')}
             onClick={complete}
             // Disabled only for offline. The PHOTO gate is left to the service
             // function so its message is what the user sees — a disabled button
@@ -195,7 +197,7 @@ export function PunchActions({
           />
           {needsPhoto ? (
             <p className="mt-[8px] text-center text-[12px] text-m6m-muted">
-              Attach the photo first.
+              {t('photos.punch.attachFirst')}
             </p>
           ) : null}
         </>
@@ -206,8 +208,8 @@ export function PunchActions({
         canVerify ? (
           <>
             <PrimaryButton
-              label="Verify"
-              busyLabel="Verifying…"
+              label={t('photos.punch.verify')}
+              busyLabel={t('photos.punch.verifying')}
               onClick={verify}
               disabled={!online || wouldBeSelfVerify}
               busy={busy}
@@ -220,7 +222,7 @@ export function PunchActions({
                 data-testid="m-punch-self-verify"
                 className="mt-[8px] text-center text-[12px] text-m6m-muted"
               >
-                You completed this item — someone else must verify it.
+                {t('photos.punch.selfVerify')}
               </p>
             ) : null}
           </>
@@ -229,7 +231,7 @@ export function PunchActions({
             data-testid="m-punch-verify-denied"
             className="rounded-[12px] border border-m6m-border bg-m6m-card px-[14px] py-[12px] text-[14px] text-m6m-navy"
           >
-            This item is waiting on a foreman or above to verify it.
+            {t('photos.punch.verifyDenied')}
           </p>
         )
       ) : null}
@@ -241,14 +243,14 @@ export function PunchActions({
           data-testid="m-punch-done"
           className="rounded-[12px] border border-m6m-border bg-m6m-card px-[14px] py-[12px] text-[14px] text-m6m-navy"
         >
-          This item is verified and closed.
+          {t('photos.punch.done')}
         </p>
       ) : null}
 
       {error ? <ErrorNotice message={error} testId="m-punch-action-error" /> : null}
 
       <SecondaryButton
-        label="Back to punch list"
+        label={t('photos.punch.backToList')}
         testId="m-punch-back"
         onClick={() => router.push(`/m/p/${projectId}/punch`)}
       />

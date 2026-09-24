@@ -4,6 +4,7 @@ import { getProject } from '@/lib/services/projects';
 import { SetMobileHeader } from '../../mobile-header';
 import { DetailCard, DetailField, EmptyState, SectionLabel } from '../../mobile-ui';
 import { OpenFileButton } from '../../p/[projectId]/files/open-file';
+import { getMobileT } from '@/lib/i18n/server';
 
 // M6M — DAILY LOG DETAIL · `/m/logs/[logId]`. Read-only.
 //
@@ -80,9 +81,10 @@ export default async function DailyLogDetailPage({
   // readable page that the list it came from does not show.
   if (!log || log.is_deleted) notFound();
 
-  const [project, photos] = await Promise.all([
+  const [project, photos, t] = await Promise.all([
     getProject(log.project_id),
     getLogPhotos(log.id),
+    getMobileT(),
   ]);
 
   const crew = log.crew.filter((c) => c.member);
@@ -119,7 +121,7 @@ export default async function DailyLogDetailPage({
           className="mt-[14px] rounded-[14px] border border-m6m-danger-border bg-[#fdf1f0] px-[14px] py-[12px]"
         >
           <p className="font-mono text-[11px] font-semibold uppercase tracking-wide text-m6m-danger">
-            Hazard flagged
+            {t('field.logDetail.hazard')}
           </p>
           {log.hazard_notes ? (
             <p className="mt-[4px] text-[14px] text-m6m-navy">{log.hazard_notes}</p>
@@ -133,21 +135,21 @@ export default async function DailyLogDetailPage({
               the only one that never renders empty. The rest are nullable and
               DetailField drops a null outright — §4.13's "no empty slot where
               null". */}
-          <DetailField label="Work performed" value={log.work_performed} />
-          <DetailField label="Material used" value={log.material_used} />
-          <DetailField label="Material needed" value={log.material_needed} />
-          <DetailField label="Equipment used" value={log.equipment_used} />
-          <DetailField label="Tasks for tomorrow" value={log.tasks_tomorrow} />
-          <DetailField label="Weather" value={log.weather} />
+          <DetailField label={t('field.logDetail.workPerformed')} value={log.work_performed} />
+          <DetailField label={t('field.logDetail.materialUsed')} value={log.material_used} />
+          <DetailField label={t('field.logDetail.materialNeeded')} value={log.material_needed} />
+          <DetailField label={t('field.logDetail.equipmentUsed')} value={log.equipment_used} />
+          <DetailField label={t('field.logDetail.tasksTomorrow')} value={log.tasks_tomorrow} />
+          <DetailField label={t('field.logDetail.weather')} value={log.weather} />
         </DetailCard>
       </div>
 
       {/* CREW — names only. See the header: there is no hours column here. */}
       <div className="mt-[16px]">
-        <SectionLabel>Crew present</SectionLabel>
+        <SectionLabel>{t('field.logDetail.crewPresent')}</SectionLabel>
         {crew.length === 0 ? (
           <p data-testid="m-log-crew-empty" className="text-[14px] text-m6m-muted">
-            No crew recorded on this log.
+            {t('field.logDetail.noCrew')}
           </p>
         ) : (
           <div data-testid="m-log-crew" className="flex flex-wrap gap-[6px]">
@@ -166,10 +168,10 @@ export default async function DailyLogDetailPage({
 
       {/* SUBS — the hours that DO exist, said to be sub hours. */}
       <div className="mt-[16px]">
-        <SectionLabel>Subs on site · hours</SectionLabel>
+        <SectionLabel>{t('field.logDetail.subsHours')}</SectionLabel>
         {subs.length === 0 ? (
           <p data-testid="m-log-subs-empty" className="text-[14px] text-m6m-muted">
-            No subcontractor hours on this log.
+            {t('field.logDetail.noSubHours')}
           </p>
         ) : (
           <ul
@@ -184,7 +186,7 @@ export default async function DailyLogDetailPage({
               >
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-[15px] text-m6m-navy">
-                    {s.member?.display_name ?? 'Subcontractor'}
+                    {s.member?.display_name ?? t('field.subcontractor')}
                   </p>
                   {s.note ? (
                     <p className="mt-[2px] truncate text-[13px] text-m6m-muted">{s.note}</p>
@@ -196,7 +198,7 @@ export default async function DailyLogDetailPage({
                   data-testid="m-log-sub-hours"
                   className="shrink-0 font-mono text-[13px] font-semibold text-m6m-navy"
                 >
-                  {s.hours}h
+                  {t('field.hoursShort', { n: s.hours })}
                 </span>
               </li>
             ))}
@@ -210,9 +212,12 @@ export default async function DailyLogDetailPage({
           open in a pocket — the precise reason OpenFileButton signs on tap. M-8
           owns the gallery; this is a list that opens each attachment. */}
       <div className="mt-[16px]">
-        <SectionLabel>Photos{photos.length > 0 ? ` · ${photos.length}` : ''}</SectionLabel>
+        <SectionLabel>
+          {t('field.logDetail.photos')}
+          {photos.length > 0 ? ` · ${photos.length}` : ''}
+        </SectionLabel>
         {photos.length === 0 ? (
-          <EmptyState>No photos on this log.</EmptyState>
+          <EmptyState>{t('field.logDetail.noPhotos')}</EmptyState>
         ) : (
           <ul
             data-testid="m-log-photos"

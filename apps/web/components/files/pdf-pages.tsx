@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { useT } from '@/components/i18n/language-provider';
 
 /**
  * S109 #161 — every page of a PDF, stacked, for the file sheet.
@@ -35,20 +36,19 @@ type PdfPage = {
 
 const MAX_RENDER_PX = 2400;
 
-export function PdfPages({
-  url,
-  onFailed,
-}: {
-  url: string;
-  onFailed: (message: string) => void;
-}) {
+export function PdfPages({ url, onFailed }: { url: string; onFailed: (message: string) => void }) {
   const [doc, setDoc] = useState<PdfDoc | null>(null);
+  const t = useT();
+  const tRef = useRef(t);
+  tRef.current = t;
   const onFailedRef = useRef(onFailed);
   onFailedRef.current = onFailed;
 
   useEffect(() => {
     let cancelled = false;
     let loaded: PdfDoc | null = null;
+    // The latest translator, read without making it an effect dependency.
+    const t = tRef.current;
     setDoc(null);
     (async () => {
       try {
@@ -59,7 +59,9 @@ export function PdfPages({
         setDoc(loaded);
       } catch (err) {
         if (cancelled) return;
-        onFailedRef.current(err instanceof Error ? err.message : 'This PDF could not be displayed.');
+        onFailedRef.current(
+          err instanceof Error ? err.message : t('shell.file.pdfCouldNotDisplay')
+        );
       }
     })();
     return () => {
@@ -71,7 +73,7 @@ export function PdfPages({
   if (!doc) {
     return (
       <p className="p-6 text-center text-sm text-gray-500" data-testid="file-sheet-loading">
-        Loading…
+        {t('shell.loading')}
       </p>
     );
   }
@@ -98,6 +100,7 @@ function PdfPageCanvas({
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [visible, setVisible] = useState(pageNumber === 1);
   const [aspect, setAspect] = useState(11 / 8.5);
+  const t = useT();
 
   useEffect(() => {
     const el = holderRef.current;
@@ -136,13 +139,18 @@ function PdfPageCanvas({
         if (!ctx) return;
         await page.render({ canvasContext: ctx, viewport }).promise;
       } catch (err) {
-        if (!cancelled) onFailed(err instanceof Error ? err.message : `Page ${pageNumber} could not be displayed.`);
+        if (!cancelled)
+          onFailed(
+            err instanceof Error
+              ? err.message
+              : t('shell.file.pageCouldNotDisplay', { n: pageNumber })
+          );
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [visible, doc, pageNumber, onFailed]);
+  }, [visible, doc, pageNumber, onFailed, t]);
 
   return (
     <div
@@ -153,7 +161,7 @@ function PdfPageCanvas({
       {visible && (
         <canvas
           ref={canvasRef}
-          aria-label={`Page ${pageNumber} of ${doc.numPages}`}
+          aria-label={t('shell.file.pageOf', { n: pageNumber, total: doc.numPages })}
           style={{ display: 'block', width: '100%', height: '100%' }}
         />
       )}

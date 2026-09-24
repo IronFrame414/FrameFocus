@@ -4,6 +4,8 @@ import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { CONTACT_TYPE_LABELS } from '@framefocus/shared/constants';
 import { updateContact } from '@/lib/services/contacts-client';
+import { useT } from '@/components/i18n/language-provider';
+import type { MsgKey } from '@/lib/i18n/messages';
 import { SetMobileHeader } from '../../../mobile-header';
 import {
   ErrorNotice,
@@ -71,6 +73,7 @@ export type ContactEditable = {
 export function ContactEditForm({ contact }: { contact: ContactEditable }) {
   const router = useRouter();
   const online = useOnline();
+  const t = useT();
 
   const [firstName, setFirstName] = useState(contact.first_name ?? '');
   const [lastName, setLastName] = useState(contact.last_name ?? '');
@@ -92,7 +95,7 @@ export function ContactEditForm({ contact }: { contact: ContactEditable }) {
   async function save() {
     if (!online) return;
     if (!ready) {
-      setError('Give the contact a name or a company.');
+      setError(t('directory.contacts.needNameError'));
       return;
     }
 
@@ -111,7 +114,7 @@ export function ContactEditForm({ contact }: { contact: ContactEditable }) {
 
     if (!result.success) {
       setBusy(false);
-      setError(result.error ?? 'The changes could not be saved.');
+      setError(result.error ?? t('directory.saveFailed'));
       return;
     }
 
@@ -123,62 +126,67 @@ export function ContactEditForm({ contact }: { contact: ContactEditable }) {
   // The CHECK-constrained domain, from the shared constants rather than a local
   // literal — A-49c's rule that the label never shows the raw enum, and the
   // same source M-29 and M-36 read.
-  const typeOptions = Object.entries(CONTACT_TYPE_LABELS).map(([value, label]) => ({
+  const typeOptions = Object.keys(CONTACT_TYPE_LABELS).map((value) => ({
     value,
-    label: String(label),
+    label: t(`directory.contactType.${value}` as MsgKey),
   }));
 
   return (
     <div className="px-[18px] pb-[18px] pt-[14px]">
-      <SetMobileHeader title="Edit" sub={null} />
+      <SetMobileHeader title={t('directory.edit')} sub={null} />
 
-      <h1 className="text-[17px] font-bold leading-tight text-m6m-navy">Edit contact</h1>
+      <h1 className="text-[17px] font-bold leading-tight text-m6m-navy">
+        {t('directory.contacts.editTitle')}
+      </h1>
 
       {!online ? (
         <div className="mt-[14px]">
-          <OfflineNotice what="Editing a contact" testId="m-contact-edit-offline" />
+          <OfflineNotice
+            what={t('directory.contacts.editingWhat')}
+            testId="m-contact-edit-offline"
+          />
         </div>
       ) : null}
 
       <TextField
-        label="First name"
+        label={t('directory.field.firstName')}
         value={firstName}
         onChange={setFirstName}
         testId="m-contact-edit-first"
       />
       <TextField
-        label="Last name"
+        label={t('directory.field.lastName')}
         value={lastName}
         onChange={setLastName}
         testId="m-contact-edit-last"
       />
       <TextField
-        label="Company"
+        label={t('directory.field.company')}
         value={companyName}
         onChange={setCompanyName}
         testId="m-contact-edit-company"
       />
       <TextField
-        label="Phone"
+        label={t('directory.field.phone')}
         value={phone}
         onChange={setPhone}
         testId="m-contact-edit-phone"
       />
       <TextField
-        label="Mobile"
+        label={t('directory.field.mobile')}
         value={mobile}
         onChange={setMobile}
         testId="m-contact-edit-mobile"
       />
       <TextField
-        label="Email"
+        label={t('directory.field.email')}
         value={email}
         onChange={setEmail}
         testId="m-contact-edit-email"
       />
 
       <div className="mt-[14px]">
-        <FieldLabel>Type</FieldLabel>
+        <FieldLabel>{t('directory.field.type')}</FieldLabel>
         <OptionStack
           options={typeOptions}
           value={contactType}
@@ -194,8 +202,8 @@ export function ContactEditForm({ contact }: { contact: ContactEditable }) {
       {error ? <ErrorNotice message={error} testId="m-contact-edit-error" /> : null}
 
       <PrimaryButton
-        label="Save changes"
-        busyLabel="Saving…"
+        label={t('directory.saveChanges')}
+        busyLabel={t('directory.saving')}
         onClick={save}
         disabled={!online}
         busy={busy}
@@ -203,7 +211,7 @@ export function ContactEditForm({ contact }: { contact: ContactEditable }) {
       />
       {!ready ? (
         <p className="mt-[8px] text-center text-[12px] text-m6m-muted">
-          A name or a company is required.
+          {t('directory.contacts.needNameHint')}
         </p>
       ) : null}
     </div>

@@ -13,6 +13,7 @@ import {
   TextField,
   useOnline,
 } from '../../write-ui';
+import { useT } from '@/components/i18n/language-provider';
 
 // S108 Spec A — the create form. Online-only: the visit needs its id before
 // photos and voice can attach (those two are then held offline if signal
@@ -26,6 +27,7 @@ const selectClass =
 
 export function NewSiteVisitForm({ contacts }: { contacts: ContactOption[] }) {
   const router = useRouter();
+  const t = useT();
   const online = useOnline();
   const [title, setTitle] = useState('');
   const [contactMode, setContactMode] = useState<ContactMode>(contacts.length > 0 ? 'existing' : 'new');
@@ -66,7 +68,7 @@ export function NewSiteVisitForm({ contacts }: { contacts: ContactOption[] }) {
     });
     setBusy(false);
     if (!r.success || !r.id) {
-      setError(r.error ?? 'Could not record the visit.');
+      setError(r.error ?? t('photos.sv.recordFailed'));
       return;
     }
     router.replace(`/m/site-visits/${r.id}`);
@@ -74,17 +76,24 @@ export function NewSiteVisitForm({ contacts }: { contacts: ContactOption[] }) {
 
   return (
     <div data-testid="m-site-visit-form">
-      {!online ? <OfflineNotice what="Starting a site visit" testId="m-sv-offline" /> : null}
+      {!online ? <OfflineNotice what={t('photos.sv.offlineWhat')} testId="m-sv-offline" /> : null}
       {error ? <ErrorNotice message={error} testId="m-sv-error" /> : null}
 
-      <TextField label="Visit name" value={title} onChange={setTitle} testId="m-sv-title" placeholder="e.g. Smith kitchen" required />
+      <TextField
+        label={t('photos.sv.visitName')}
+        value={title}
+        onChange={setTitle}
+        testId="m-sv-title"
+        placeholder={t('photos.sv.visitNamePlaceholder')}
+        required
+      />
 
       <div className="mt-[14px]">
-        <FieldLabel required>Contact</FieldLabel>
+        <FieldLabel required>{t('photos.sv.contact')}</FieldLabel>
         <OptionStack
           options={[
-            { value: 'existing' as const, label: 'Existing contact' },
-            { value: 'new' as const, label: 'New contact' },
+            { value: 'existing' as const, label: t('photos.sv.existingContact') },
+            { value: 'new' as const, label: t('photos.sv.newContact') },
           ]}
           value={contactMode}
           onChange={(v) => {
@@ -107,7 +116,7 @@ export function NewSiteVisitForm({ contacts }: { contacts: ContactOption[] }) {
             }}
             className={selectClass}
           >
-            <option value="">Choose a contact…</option>
+            <option value="">{t('photos.sv.chooseContact')}</option>
             {contacts.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.label}
@@ -117,22 +126,22 @@ export function NewSiteVisitForm({ contacts }: { contacts: ContactOption[] }) {
         </div>
       ) : (
         <>
-          <TextField label="First name" value={first} onChange={setFirst} testId="m-sv-first" required />
-          <TextField label="Last name" value={last} onChange={setLast} testId="m-sv-last" required />
-          <TextField label="Phone" value={phone} onChange={setPhone} testId="m-sv-phone" />
-          <TextField label="Email" value={email} onChange={setEmail} testId="m-sv-email" />
+          <TextField label={t('photos.sv.firstName')} value={first} onChange={setFirst} testId="m-sv-first" required />
+          <TextField label={t('photos.sv.lastName')} value={last} onChange={setLast} testId="m-sv-last" required />
+          <TextField label={t('photos.sv.phone')} value={phone} onChange={setPhone} testId="m-sv-phone" />
+          <TextField label={t('photos.sv.email')} value={email} onChange={setEmail} testId="m-sv-email" />
         </>
       )}
 
       <div className="mt-[14px]">
-        <FieldLabel>Job site address</FieldLabel>
+        <FieldLabel>{t('photos.sv.jobSiteAddress')}</FieldLabel>
         <OptionStack
           options={[
             ...(contactMode === 'existing' && addressOptions.length > 0
-              ? [{ value: 'existing' as const, label: 'A saved address' }]
+              ? [{ value: 'existing' as const, label: t('photos.sv.savedAddress') }]
               : []),
-            { value: 'new' as const, label: 'New address' },
-            { value: 'none' as const, label: 'Add it later' },
+            { value: 'new' as const, label: t('photos.sv.newAddress') },
+            { value: 'none' as const, label: t('photos.sv.addLater') },
           ]}
           value={addressMode}
           onChange={setAddressMode}
@@ -147,7 +156,7 @@ export function NewSiteVisitForm({ contacts }: { contacts: ContactOption[] }) {
             onChange={(e) => setAddressId(e.target.value)}
             className={selectClass}
           >
-            <option value="">Choose an address…</option>
+            <option value="">{t('photos.sv.chooseAddress')}</option>
             {addressOptions.map((a) => (
               <option key={a.id} value={a.id}>
                 {a.label}
@@ -157,16 +166,16 @@ export function NewSiteVisitForm({ contacts }: { contacts: ContactOption[] }) {
         </div>
       ) : addressMode === 'new' ? (
         <>
-          <TextField label="Street" value={line1} onChange={setLine1} testId="m-sv-line1" required />
-          <TextField label="City" value={city} onChange={setCity} testId="m-sv-city" required />
-          <TextField label="State" value={state} onChange={setState} testId="m-sv-state" required />
-          <TextField label="ZIP" value={zip} onChange={setZip} testId="m-sv-zip" inputMode="numeric" required />
+          <TextField label={t('photos.sv.street')} value={line1} onChange={setLine1} testId="m-sv-line1" required />
+          <TextField label={t('photos.sv.city')} value={city} onChange={setCity} testId="m-sv-city" required />
+          <TextField label={t('photos.sv.state')} value={state} onChange={setState} testId="m-sv-state" required />
+          <TextField label={t('photos.sv.zip')} value={zip} onChange={setZip} testId="m-sv-zip" inputMode="numeric" required />
         </>
       ) : null}
 
       <PrimaryButton
-        label="Start the visit"
-        busyLabel="Starting…"
+        label={t('photos.sv.start')}
+        busyLabel={t('photos.sv.starting')}
         onClick={submit}
         disabled={!ready || !online}
         busy={busy}

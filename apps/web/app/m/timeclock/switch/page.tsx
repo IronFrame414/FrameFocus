@@ -4,6 +4,7 @@ import { getProjects } from '@/lib/services/projects';
 import { SetMobileHeader } from '../../mobile-header';
 import { SwitchScreen } from './switch-screen';
 import type { PickerProject } from '../timeclock-screen';
+import { getMobileT } from '@/lib/i18n/server';
 
 // M6M §4.12.2 — M-20 · the mid-shift segment switcher (7b). ADOPTED by D-32:
 // a gap in the spec, not a contradiction — §4.5a recorded it as owed and
@@ -11,9 +12,10 @@ import type { PickerProject } from '../timeclock-screen';
 // browser-back-able; the handoff's ✕ chrome is styling.
 
 export default async function SwitchSegmentPage() {
-  const [openSession, projects] = await Promise.all([
+  const [openSession, projects, t] = await Promise.all([
     getOpenSession(),
     getProjects({ status: 'active' }),
+    getMobileT(),
   ]);
 
   const openSegment =
@@ -24,12 +26,12 @@ export default async function SwitchSegmentPage() {
     // so rather than rendering a form whose submit can only throw.
     return (
       <div className="px-[18px] pb-[18px] pt-[14px]">
-        <SetMobileHeader title="Switch segment" sub={null} />
+        <SetMobileHeader title={t('field.switch.title')} sub={null} />
         <p
           data-testid="m-switch-empty"
           className="rounded-[15px] border border-dashed border-m6m-border bg-m6m-card px-[16px] py-[22px] text-center text-[15px] text-m6m-muted"
         >
-          Not clocked in — there is no segment to switch.
+          {t('field.switch.notClockedIn')}
         </p>
         {/* This branch ALREADY owned its exit — the gap [S121] was in the
             clocked-in branch, which had none. Given a testid so the "every
@@ -40,7 +42,7 @@ export default async function SwitchSegmentPage() {
           data-testid="m-switch-cancel"
           className="mt-[14px] flex min-h-[52px] w-full items-center justify-center rounded-[14px] border border-m6m-border bg-m6m-card text-[15px] font-semibold text-m6m-navy"
         >
-          Go to Timeclock
+          {t('field.switch.goToTimeclock')}
         </Link>
       </div>
     );

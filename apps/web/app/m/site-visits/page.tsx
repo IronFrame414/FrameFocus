@@ -5,6 +5,7 @@ import { getMyProfile } from '@/lib/services/profiles';
 import { listSiteVisits } from '@/lib/services/site-visits';
 import { SetMobileHeader } from '../mobile-header';
 import { EmptyState, ListRowLink, SectionLabel } from '../mobile-ui';
+import { getMobileT } from '@/lib/i18n/server';
 
 // S108 Spec A — the site visits list on the phone.
 //
@@ -16,14 +17,15 @@ import { EmptyState, ListRowLink, SectionLabel } from '../mobile-ui';
 // screen or in its payload — it never reads `estimates`.
 
 export default async function SiteVisitsPage() {
+  const t = await getMobileT();
   const profile = await getMyProfile();
   const internal = !!profile && DASHBOARD_ROLES.includes(profile.role as CompanyRole);
 
   if (!internal) {
     return (
       <div className="px-[18px] pb-[18px] pt-[14px]">
-        <SetMobileHeader title="Site visits" sub={null} />
-        <EmptyState>Site visits are recorded by company staff.</EmptyState>
+        <SetMobileHeader title={t('photos.sv.listTitle')} sub={null} />
+        <EmptyState>{t('photos.sv.staffOnly')}</EmptyState>
       </div>
     );
   }
@@ -59,28 +61,28 @@ export default async function SiteVisitsPage() {
 
   return (
     <div className="px-[18px] pb-[18px] pt-[14px]">
-      <SetMobileHeader title="Site visits" sub={null} />
+      <SetMobileHeader title={t('photos.sv.listTitle')} sub={null} />
       <Link
         href="/m/site-visits/new"
         data-testid="m-site-visit-new"
         className="flex h-[56px] w-full items-center justify-center rounded-[14px] bg-m6m-blue text-[16px] font-bold text-white"
       >
-        Record a site visit
+        {t('photos.sv.record')}
       </Link>
 
-      <SectionLabel>Recording · {open.length}</SectionLabel>
-      {open.length === 0 ? <EmptyState>No open site visits.</EmptyState> : <ul>{open.map(row)}</ul>}
+      <SectionLabel>{t('photos.sv.recording', { n: open.length })}</SectionLabel>
+      {open.length === 0 ? <EmptyState>{t('photos.sv.noneOpen')}</EmptyState> : <ul>{open.map(row)}</ul>}
 
       {finished.length > 0 ? (
         <>
-          <SectionLabel>Finished · waiting for the office · {finished.length}</SectionLabel>
+          <SectionLabel>{t('photos.sv.finished', { n: finished.length })}</SectionLabel>
           <ul>{finished.map(row)}</ul>
         </>
       ) : null}
 
       {done.length > 0 ? (
         <>
-          <SectionLabel>Became estimates · {done.length}</SectionLabel>
+          <SectionLabel>{t('photos.sv.becameEstimates', { n: done.length })}</SectionLabel>
           <ul>{done.map(row)}</ul>
         </>
       ) : null}

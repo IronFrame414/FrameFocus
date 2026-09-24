@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import { getMember } from '@/lib/services/members';
 import { getMyProfile } from '@/lib/services/profiles';
 import { canEdit, requireDetailAccess } from '@/app/m/detail-access';
+import { getMobileT } from '@/lib/i18n/server';
 import { DeniedNotice, DetailCard, DetailField } from '../../mobile-ui';
 
 // M6M §4.11.15 — M-35 · Team-member detail. Everyone except subcontractors.
@@ -60,15 +61,14 @@ export default async function MemberDetailPage({
   // works rather than one that is contextually perfect.
   await requireDetailAccess('member', '/m/team');
 
-  const [member, profile] = await Promise.all([
-    getMember(params.memberId),
-    getMyProfile(),
-  ]);
+  const [member, profile] = await Promise.all([getMember(params.memberId), getMyProfile()]);
   if (!member) notFound();
+  const t = await getMobileT();
+  const editable = canEdit('team', profile?.role);
 
   return (
     <div className="px-[18px] pb-[18px] pt-[14px]">
-      <DeniedNotice kind={searchParams.denied} />
+      <DeniedNotice kind={searchParams.denied} t={t} />
 
       <header className="mb-[14px] flex items-center gap-[12px]">
         {/* schedule_color tint with §2's amber as the null fallback — the same
@@ -89,7 +89,9 @@ export default async function MemberDetailPage({
             data-testid="m-member-type"
             className="mt-[2px] font-mono text-[11px] font-semibold text-m6m-muted"
           >
-            {member.member_type === 'subcontractor' ? 'subcontractor' : 'crew'}
+            {member.member_type === 'subcontractor'
+              ? t('directory.team.typeTag.subcontractor')
+              : t('directory.team.typeTag.crew')}
           </p>
         </div>
       </header>
@@ -97,21 +99,25 @@ export default async function MemberDetailPage({
       {/* D-54 step 1 — hidden here, refused at the route. Team is OWNER/ADMIN
           only, narrower than the other two edit surfaces, because
           `company_members_update_authorized` is (dd30968). */}
-      {canEdit('team', profile?.role) ? (
+      {editable ? (
         <Link
           href={`/m/team/${member.id}/edit`}
           data-testid="m-member-edit"
           className="mb-[14px] flex min-h-[52px] w-full items-center justify-center rounded-[14px] border border-m6m-blue text-[15px] font-bold text-m6m-blue"
         >
-          Edit
+          {t('directory.edit')}
         </Link>
       ) : null}
 
       <DetailCard testId="m-member-detail">
-        <DetailField label="Name" value={member.display_name} />
+        <DetailField label={t('directory.team.field.name')} value={member.display_name} />
         <DetailField
-          label="Type"
-          value={member.member_type === 'subcontractor' ? 'Subcontractor' : 'Crew'}
+          label={t('directory.field.type')}
+          value={
+            member.member_type === 'subcontractor'
+              ? t('directory.team.type.subcontractor')
+              : t('directory.team.type.crew')
+          }
           mono
         />
         {/* NO tap-to-act, and it is a CUT rather than an omission: company_members

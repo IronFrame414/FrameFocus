@@ -10,6 +10,7 @@ import {
   type Surface,
 } from '@/lib/notify/push-client';
 import { brand } from '@/lib/brand';
+import { useT } from '@/components/i18n/language-provider';
 
 /**
  * Push enrolment control. ONE component, both surfaces.
@@ -40,6 +41,7 @@ export function PushEnrolment({ surface }: { surface: Surface }) {
   const [state, setState] = useState<PushState | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const t = useT();
 
   const target = PUSH_TARGETS[surface];
 
@@ -78,29 +80,26 @@ export function PushEnrolment({ surface }: { surface: Surface }) {
       {state === 'ios-needs-install' && (
         // ⚠️ NO BUTTON IN THIS BRANCH. A-N26 asserts its absence.
         <div data-testid="push-ios-install">
-          <p>
-            To get notifications on iPhone or iPad, add {brand.name} to your Home Screen
-            first.
-          </p>
+          <p>{t('shell.push.iosIntro', { app: brand.name })}</p>
           <ol>
             <li>
-              Tap <strong>Share</strong> in Safari.
+              {t('shell.push.tap')} <strong>{t('shell.push.share')}</strong>{' '}
+              {t('shell.push.inSafari')}
             </li>
             <li>
-              Tap <strong>Add to Home Screen</strong>.
+              {t('shell.push.tap')} <strong>{t('shell.push.addToHomeScreen')}</strong>.
             </li>
             <li>
               {/* shortName, not name: this sentence points at the label UNDER the
                   home-screen icon, and that label IS the manifest's short_name. */}
-              <strong>Open {brand.shortName} from the new icon</strong>, then turn
-              notifications on there.
+              <strong>{t('shell.push.openFromIcon', { app: brand.shortName })}</strong>
+              {t('shell.push.thenTurnOn')}
             </li>
           </ol>
           <p>
             {/* The step that is skipped most often, and the reason nothing works
                 when it is. Stated rather than implied. */}
-            Notifications can only be turned on from the installed app — not from this
-            browser tab.
+            {t('shell.push.onlyFromInstalled')}
           </p>
         </div>
       )}
@@ -108,30 +107,24 @@ export function PushEnrolment({ surface }: { surface: Surface }) {
       {state === 'denied' && (
         // No re-prompt: the API will not show one. Saying so beats a button that
         // silently does nothing, which reads as a broken app.
-        <p data-testid="push-denied">
-          Notifications are blocked for this site. To turn them back on, allow
-          notifications for {brand.name} in your browser settings.
-        </p>
+        <p data-testid="push-denied">{t('shell.push.blocked', { app: brand.name })}</p>
       )}
 
       {state === 'unsupported' && (
-        <p data-testid="push-unsupported">
-          This browser can&apos;t receive push notifications. You&apos;ll still see
-          everything in your notifications list.
-        </p>
+        <p data-testid="push-unsupported">{t('shell.push.unsupported')}</p>
       )}
 
       {state === 'available' && (
         <button type="button" onClick={onEnable} disabled={busy} data-testid="push-enable">
-          {busy ? 'Turning on…' : 'Turn on notifications'}
+          {busy ? t('shell.push.turningOn') : t('shell.push.turnOn')}
         </button>
       )}
 
       {state === 'enabled' && (
         <div data-testid="push-enabled">
-          <p>Notifications are on for this device.</p>
+          <p>{t('shell.push.onForDevice')}</p>
           <button type="button" onClick={onDisable} disabled={busy} data-testid="push-disable">
-            {busy ? 'Turning off…' : 'Turn off on this device'}
+            {busy ? t('shell.push.turningOff') : t('shell.push.turnOff')}
           </button>
         </div>
       )}

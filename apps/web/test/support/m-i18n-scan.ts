@@ -41,10 +41,14 @@ const SETTER = /^set\w*(Error|Message|Notice|Announcement)$/;
 const LABEL_PROPS =
   /^(label|title|placeholder|sub|subtitle|description|hint|message|emptyText|heading|body|cta|action)$/;
 const LABEL_MAP = /(LABELS?|COPY|TEXTS?|TITLES?|MESSAGES?|Labels?|Copy|Titles?)$/;
-const hasLetters = (s: string) => /[A-Za-z]/.test(s);
+// A colour, a CSS length or a hex id is not language.
+const hasLetters = (s: string) => /[A-Za-z]/.test(s) && !/^#[0-9a-fA-F]{3,8}$/.test(s.trim());
 
 /** Exact strings allowed through: not language. */
 export const ALLOWED = new Set<string>([
+  // lib/brand.ts's product tagline — reached through the brand import, shown on
+  // the public and sign-in pages, never by an /m screen.
+  'The all-in-one platform for residential and commercial contractors.',
   'FrameFocus',
   'PDF',
   'GPS',

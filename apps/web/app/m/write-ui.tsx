@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useT } from '@/components/i18n/language-provider';
 
 // M6M Part C — shared primitives for the WRITE screens (M-32, M-33, M-34's
 // actions).
@@ -46,13 +47,14 @@ export function useOnline(): boolean {
 }
 
 export function OfflineNotice({ what, testId }: { what: string; testId: string }) {
+  const t = useT();
   return (
     <p
       data-testid={testId}
       role="status"
       className="mb-[12px] rounded-[10px] border border-m6m-border bg-m6m-card px-[12px] py-[10px] text-[14px] text-m6m-navy"
     >
-      {what} needs a connection — it is not saved offline. Reconnect and try again.
+      {t('shell.needsConnection', { what })}
     </p>
   );
 }
@@ -77,6 +79,7 @@ export function FieldLabel({
   children: React.ReactNode;
   required?: boolean;
 }) {
+  const t = useT();
   return (
     <div className="mb-[6px] flex items-center justify-between">
       <span className="font-mono text-[11px] font-medium uppercase tracking-wide text-m6m-muted">
@@ -84,7 +87,7 @@ export function FieldLabel({
       </span>
       {required ? (
         <span className="rounded-full bg-[#fdf1f0] px-[8px] py-[2px] font-mono text-[10px] font-semibold text-m6m-danger">
-          Required
+          {t('shell.required')}
         </span>
       ) : null}
     </div>

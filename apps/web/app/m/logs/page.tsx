@@ -6,6 +6,7 @@ import { companyToday } from '@framefocus/shared/utils/dates';
 import { SetMobileHeader } from '../mobile-header';
 import { FilterChips, type Chip } from '../mobile-ui';
 import { LogRows } from './log-rows';
+import { getMobileT } from '@/lib/i18n/server';
 
 // M6M §4.6 — M-6 · Logs. Tab slot 4.
 //
@@ -33,11 +34,6 @@ import { LogRows } from './log-rows';
 // 7c's daily-log Done also lands here, which is why the list must be correct
 // the moment a log is written rather than after a refresh.
 
-const BASE_CHIPS: readonly Chip[] = [
-  { value: null, label: 'All' },
-  { value: 'mine', label: 'Mine' },
-];
-
 export default async function MobileLogsPage({
   searchParams,
 }: {
@@ -49,6 +45,14 @@ export default async function MobileLogsPage({
 
   const raw = searchParams.filter;
   const active = raw === 'mine' || raw === 'project' ? raw : null;
+
+  const t = await getMobileT();
+  // The chip labels are resolved here, not in a module constant, so they are
+  // in the reader's language [S110 H].
+  const baseChips: readonly Chip[] = [
+    { value: null, label: t('field.chip.all'), testKey: 'All' },
+    { value: 'mine', label: t('field.chip.mine'), testKey: 'Mine' },
+  ];
 
   const [myMember, project, timeSettings] = await Promise.all([
     getMyMember(),
@@ -71,8 +75,8 @@ export default async function MobileLogsPage({
   // set is built from that condition rather than rendered-then-hidden, so a
   // context-free visit has a two-chip row and not a disabled third.
   const chips: Chip[] = project
-    ? [...BASE_CHIPS, { value: 'project', label: 'This project' }]
-    : [...BASE_CHIPS];
+    ? [...baseChips, { value: 'project', label: t('field.logs.thisProject'), testKey: 'This project' }]
+    : [...baseChips];
 
   // The chips must carry `?project=` forward or tapping one would drop the
   // context that produced the third chip.
@@ -81,7 +85,10 @@ export default async function MobileLogsPage({
   return (
     <div className="px-[18px] pb-[18px] pt-[14px]">
       {/* §4.6 — the app bar carries `{n} this week`, mono, per §2. */}
-      <SetMobileHeader title="Logs" sub={`${feed.thisWeek} this week`} />
+      <SetMobileHeader
+        title={t('field.logs.title')}
+        sub={t('field.logs.thisWeek', { n: feed.thisWeek })}
+      />
 
       <FilterChips chips={chips} active={active} basePath={basePath} param="filter" />
 

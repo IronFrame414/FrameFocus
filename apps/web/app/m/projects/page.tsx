@@ -1,11 +1,13 @@
-import { getProjects, PROJECT_STATUS_LABELS } from '@/lib/services/projects';
+import { getProjects } from '@/lib/services/projects';
 import { getMyAssignedProjectIds } from '@/lib/services/project-assignments';
 import { getOpenPunchCounts } from '@/lib/services/punch';
 import { getOpenSession } from '@/lib/services/time-tracking';
 import { getCompanyTimeSettings } from '@/lib/services/company';
 import { companyToday } from '@framefocus/shared/utils/dates';
 import { SetMobileHeader } from '../mobile-header';
-import { FilterChips, daysLeftLabel, type Chip } from '../mobile-ui';
+import { FilterChips, daysLeft, type Chip } from '../mobile-ui';
+import { getMobileT } from '@/lib/i18n/server';
+import type { MsgKey } from '@/lib/i18n/messages';
 import { ProjectsList, type ProjectCard } from './projects-list';
 
 // M6M §4.2 — M-2 · Projects list. Tab-bar slot 1.
@@ -32,12 +34,14 @@ import { ProjectsList, type ProjectCard } from './projects-list';
 // ingredient (PhaseRollup.percent) is a PHASE mean and is not a project
 // percentage. See projects-list.tsx's footer comment.
 
-const CHIPS: readonly Chip[] = [
-  { value: null, label: 'All' },
-  { value: 'active', label: 'Active' },
-  { value: 'mine', label: 'Mine' },
-  { value: 'on_hold', label: 'On hold' },
-];
+// PROJECT_STATUS_LABELS (projects-client.ts), as message keys [S110 H].
+const STATUS_KEY: Record<string, MsgKey> = {
+  active: 'field.projects.status.active',
+  on_hold: 'field.projects.status.on_hold',
+  complete: 'field.projects.status.complete',
+  archived: 'field.projects.status.archived',
+  cancelled: 'field.projects.status.cancelled',
+};
 
 export default async function MobileProjectsPage({
   searchParams,
@@ -50,6 +54,17 @@ export default async function MobileProjectsPage({
   // ONE unfiltered fetch. The chips narrow it below rather than each issuing a
   // differently-filtered query, which is what keeps the header's `{n} active`
   // honest across every chip (§8a) and keeps the punch lookup to one round trip.
+  const t = await getMobileT();
+  const chips: readonly Chip[] = [
+    { value: null, label: t('field.chip.all'), testKey: 'All' },
+    { value: 'active', label: t('field.projects.chipActive'), testKey: 'Active' },
+    { value: 'mine', label: t('field.chip.mine'), testKey: 'Mine' },
+    { value: 'on_hold', label: t('field.projects.chipOnHold'), testKey: 'On hold' },
+  ];
+  // daysLeftLabel() (mobile-ui.tsx) with its text translated; the em-dash stays.
+  const daysLeftText = (n: number | null) =>
+    n === null ? '—' : t('field.projects.daysLeft', { n });
+
   const projects = await getProjects();
 
   const [timeSettings, mineIds, punch, openSession] = await Promise.all([
@@ -107,21 +122,24 @@ export default async function MobileProjectsPage({
       id: p.id,
       name: p.name,
       subLine: [p.project_number, client].filter(Boolean).join(' · '),
-      statusLabel: PROJECT_STATUS_LABELS[p.status] ?? p.status,
+      statusLabel: STATUS_KEY[p.status] ? t(STATUS_KEY[p.status]) : p.status,
       // Signed, three states, em-dash when target_end_date is null — A-10e.
-      daysLeftLabel: daysLeftLabel(p.target_end_date, companyToday(timeSettings.timezone)),
+      daysLeftLabel: daysLeftText(daysLeft(p.target_end_date, companyToday(timeSettings.timezone))),
       // §8a binds `{total} open` for M-2. The em-dash at zero rather than
       // `0 open`, matching §4.2's own `—` example.
-      punchCallout: open > 0 ? `${open} open` : '—',
+      punchCallout: open > 0 ? t('field.projects.openPunch', { n: open }) : '—',
       onSite: onSiteProjectId !== null && p.id === onSiteProjectId,
     };
   });
 
   return (
     <div className="px-[18px] pb-[18px] pt-[14px]">
-      <SetMobileHeader title="Projects" sub={`${activeCount} active`} />
+      <SetMobileHeader
+        title={t('field.projects.title')}
+        sub={t('field.projects.activeCount', { n: activeCount })}
+      />
 
-      <FilterChips chips={CHIPS} active={active} basePath="/m/projects" param="filter" />
+      <FilterChips chips={chips} active={active} basePath="/m/projects" param="filter" />
 
       <div className="mt-[12px]">
         <ProjectsList cards={cards} />

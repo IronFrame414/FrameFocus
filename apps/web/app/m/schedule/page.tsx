@@ -5,6 +5,8 @@ import { companyToday } from '@framefocus/shared/utils/dates';
 import { SetMobileHeader } from '../mobile-header';
 import { EmptyState, ListRow, SectionLabel } from '../mobile-ui';
 import { ScrollToToday } from './scroll-to-today';
+import { getMobileT } from '@/lib/i18n/server';
+import type { MsgKey, T } from '@/lib/i18n/messages';
 
 // M6M §4.13.2 — M-25 · Schedule. The company calendar as a LIST, not a grid:
 // a month grid at 402px cannot carry a legible event label (the M-12 argument).
@@ -22,15 +24,15 @@ import { ScrollToToday } from './scroll-to-today';
  * teammate's task that RLS grants: a UI filter disagreeing with RLS, which
  * §4.13's common rules forbid. A-44 asserts both halves.
  */
-const SOURCE_LABEL: Record<CalendarEvent['source'], string> = {
-  task: 'Task',
-  general: 'Schedule',
-  inspection: 'Inspection',
+const SOURCE_KEY: Record<CalendarEvent['source'], MsgKey> = {
+  task: 'field.schedule.source.task',
+  general: 'field.schedule.source.general',
+  inspection: 'field.schedule.source.inspection',
   // 7C §3.3 [S140]. This calendar is COMPANY-WIDE, so compliance expiries do
   // reach it — and they must: parity says a feature on both surfaces behaves
   // the same on both. An Owner/Admin sees the same COI expiry here as on
   // /dashboard/schedule. Every other role reads none, by RLS, not by a filter.
-  compliance: 'Compliance',
+  compliance: 'field.schedule.source.compliance',
 };
 
 function formatDay(iso: string): string {
@@ -49,9 +51,10 @@ function formatRange(start: string, end: string): string {
 }
 
 export default async function MobileSchedulePage() {
-  const [events, timeSettings] = await Promise.all([
+  const [events, timeSettings, t] = await Promise.all([
     getCalendarEvents({}),
     getCompanyTimeSettings(),
+    getMobileT(),
   ]);
 
   const today = companyToday(timeSettings.timezone);
@@ -74,12 +77,12 @@ export default async function MobileSchedulePage() {
 
   return (
     <div className="px-[18px] pb-[18px]">
-      <SetMobileHeader title="Schedule" sub="Company calendar" />
+      <SetMobileHeader title={t('field.schedule.title')} sub={t('field.schedule.sub')} />
 
       {events.length === 0 ? (
         <div className="pt-[18px]">
           {/* §4.13.2's own empty state. Not a spinner, not omitted. */}
-          <EmptyState>Nothing scheduled.</EmptyState>
+          <EmptyState>{t('field.schedule.empty')}</EmptyState>
         </div>
       ) : (
         <>
@@ -88,7 +91,7 @@ export default async function MobileSchedulePage() {
           {/* Past days sit ABOVE today — "reachable by scrolling up" (§4.13.2),
               asserted by A-44d. They are not dropped. */}
           {past.map((day) => (
-            <DayGroup key={day} day={day} events={byDay.get(day)!} />
+            <DayGroup key={day} day={day} events={byDay.get(day)!} t={t} />
           ))}
 
           {/* The anchor ScrollToToday targets. It exists whether or not today
@@ -98,11 +101,17 @@ export default async function MobileSchedulePage() {
 
           {upcoming.length === 0 ? (
             <div className="pt-[18px]">
-              <EmptyState>Nothing scheduled.</EmptyState>
+              <EmptyState>{t('field.schedule.empty')}</EmptyState>
             </div>
           ) : (
             upcoming.map((day) => (
-              <DayGroup key={day} day={day} events={byDay.get(day)!} isToday={day === today} />
+              <DayGroup
+                key={day}
+                day={day}
+                events={byDay.get(day)!}
+                isToday={day === today}
+                t={t}
+              />
             ))
           )}
         </>
@@ -115,16 +124,18 @@ function DayGroup({
   day,
   events,
   isToday = false,
+  t,
 }: {
   day: string;
   events: CalendarEvent[];
   isToday?: boolean;
+  t: T;
 }) {
   return (
     <section data-testid="m-day-group" data-day={day}>
       <SectionLabel>
         {formatDay(day)}
-        {isToday ? ' · Today' : ''}
+        {isToday ? ` · ${t('field.schedule.today')}` : ''}
       </SectionLabel>
       <ul className="rounded-[15px] border border-m6m-border bg-m6m-card px-[12px]">
         {events.map((e) => (
@@ -158,7 +169,7 @@ function DayGroup({
                 className="block h-[8px] w-[8px] rounded-full"
                 style={{ background: e.color ?? '#8792a8' }}
               />
-              {SOURCE_LABEL[e.source]}
+              {t(SOURCE_KEY[e.source])}
             </span>
           </ListRow>
         ))}

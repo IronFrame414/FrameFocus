@@ -1,6 +1,7 @@
 'use client';
 
 import { SetMobileHeader } from './mobile-header';
+import { useT } from '@/components/i18n/language-provider';
 
 // NOT A SPECCED SCREEN. Read this before treating any of it as a design.
 //
@@ -32,6 +33,7 @@ export function SlicePlaceholder({
   title: string;
   sub?: string | null;
 }) {
+  const t = useT();
   return (
     <div className="px-[18px] py-[18px]">
       <SetMobileHeader title={title} sub={sub} />
@@ -43,10 +45,7 @@ export function SlicePlaceholder({
         <p className="font-mono text-[11px] font-medium uppercase tracking-wide text-m6m-muted">
           {screen}
         </p>
-        <p className="mt-[8px] text-[15px] leading-snug text-m6m-navy">
-          Not built in this slice. The shell around it — app bar, tab bar, menu
-          sheet and offline strip — is.
-        </p>
+        <p className="mt-[8px] text-[15px] leading-snug text-m6m-navy">{t('shell.placeholder')}</p>
       </div>
     </div>
   );

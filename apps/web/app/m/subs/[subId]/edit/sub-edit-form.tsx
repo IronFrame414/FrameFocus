@@ -3,6 +3,8 @@
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { updateSubcontractor } from '@/lib/services/subcontractors-client';
+import { useT } from '@/components/i18n/language-provider';
+import type { MsgKey } from '@/lib/i18n/messages';
 import { SetMobileHeader } from '../../../mobile-header';
 import {
   ErrorNotice,
@@ -60,15 +62,16 @@ import {
 // closed at four and this is not one of them, so the write is disabled with a
 // plain message rather than silently queued.
 
+// S110 H — labels are message keys, resolved with t() at render time.
 const STATUSES = [
-  { value: 'active' as const, label: 'Active' },
-  { value: 'inactive' as const, label: 'Inactive' },
-  { value: 'archived' as const, label: 'Archived' },
+  { value: 'active' as const, key: 'directory.status.active' as MsgKey },
+  { value: 'inactive' as const, key: 'directory.status.inactive' as MsgKey },
+  { value: 'archived' as const, key: 'directory.status.archived' as MsgKey },
 ];
 
 const TYPES = [
-  { value: 'subcontractor' as const, label: 'Subcontractor' },
-  { value: 'vendor' as const, label: 'Vendor' },
+  { value: 'subcontractor' as const, key: 'directory.subs.subcontractor' as MsgKey },
+  { value: 'vendor' as const, key: 'directory.subs.vendor' as MsgKey },
 ];
 
 export type SubEditable = {
@@ -89,6 +92,9 @@ export type SubEditable = {
 export function SubEditForm({ sub }: { sub: SubEditable }) {
   const router = useRouter();
   const online = useOnline();
+  const t = useT();
+  const typeOptions = TYPES.map((o) => ({ value: o.value, label: t(o.key) }));
+  const statusOptions = STATUSES.map((o) => ({ value: o.value, label: t(o.key) }));
 
   // ONE PIECE OF STATE PER EDITABLE COLUMN — see the header. There is
   // deliberately no `const [row, setRow] = useState(sub)`.
@@ -114,7 +120,7 @@ export function SubEditForm({ sub }: { sub: SubEditable }) {
   async function save() {
     if (!online) return;
     if (!ready) {
-      setError('A company name is required.');
+      setError(t('directory.subs.needCompany'));
       return;
     }
 
@@ -144,7 +150,7 @@ export function SubEditForm({ sub }: { sub: SubEditable }) {
       // The RLS refusal surfaces here for anyone who got past the route guard —
       // which should be nobody, since the guard mirrors the policy. If this
       // message is ever seen, the guard and the policy have diverged.
-      setError(result.error ?? 'The changes could not be saved.');
+      setError(result.error ?? t('directory.saveFailed'));
       return;
     }
 
@@ -158,43 +164,63 @@ export function SubEditForm({ sub }: { sub: SubEditable }) {
 
   return (
     <div className="px-[18px] pb-[18px] pt-[14px]">
-      <SetMobileHeader title="Edit" sub={sub.company_name} />
+      <SetMobileHeader title={t('directory.edit')} sub={sub.company_name} />
 
       <h1 className="text-[17px] font-bold leading-tight text-m6m-navy">
-        Edit {sub.sub_type === 'vendor' ? 'vendor' : 'sub'}
+        {sub.sub_type === 'vendor' ? t('directory.subs.editVendor') : t('directory.subs.editSub')}
       </h1>
 
       {!online ? (
         <div className="mt-[14px]">
-          <OfflineNotice what="Editing a sub or vendor" testId="m-sub-edit-offline" />
+          <OfflineNotice what={t('directory.subs.editingWhat')} testId="m-sub-edit-offline" />
         </div>
       ) : null}
 
       <TextField
-        label="Company"
+        label={t('directory.field.company')}
         value={companyName}
         onChange={setCompanyName}
         testId="m-sub-edit-company"
         required
       />
       <TextField
-        label="Contact first name"
+        label={t('directory.subs.field.contactFirstName')}
         value={firstName}
         onChange={setFirstName}
         testId="m-sub-edit-first"
       />
       <TextField
-        label="Contact last name"
+        label={t('directory.subs.field.contactLastName')}
         value={lastName}
         onChange={setLastName}
         testId="m-sub-edit-last"
       />
-      <TextField label="Phone" value={phone} onChange={setPhone} testId="m-sub-edit-phone" />
-      <TextField label="Mobile" value={mobile} onChange={setMobile} testId="m-sub-edit-mobile" />
-      <TextField label="Email" value={email} onChange={setEmail} testId="m-sub-edit-email" />
-      <TextField label="Trade" value={tradeType} onChange={setTradeType} testId="m-sub-edit-trade" />
       <TextField
-        label="Licence"
+        label={t('directory.field.phone')}
+        value={phone}
+        onChange={setPhone}
+        testId="m-sub-edit-phone"
+      />
+      <TextField
+        label={t('directory.field.mobile')}
+        value={mobile}
+        onChange={setMobile}
+        testId="m-sub-edit-mobile"
+      />
+      <TextField
+        label={t('directory.field.email')}
+        value={email}
+        onChange={setEmail}
+        testId="m-sub-edit-email"
+      />
+      <TextField
+        label={t('directory.subs.field.trade')}
+        value={tradeType}
+        onChange={setTradeType}
+        testId="m-sub-edit-trade"
+      />
+      <TextField
+        label={t('directory.subs.field.licence')}
         value={licenseNumber}
         onChange={setLicenseNumber}
         testId="m-sub-edit-licence"
@@ -204,9 +230,9 @@ export function SubEditForm({ sub }: { sub: SubEditable }) {
           was typed here. The value is shown read-only on the detail screen. */}
 
       <div className="mt-[14px]">
-        <FieldLabel>Type</FieldLabel>
+        <FieldLabel>{t('directory.field.type')}</FieldLabel>
         <OptionStack
-          options={TYPES}
+          options={typeOptions}
           value={subType}
           onChange={setSubType}
           testIdPrefix="m-sub-edit-type"
@@ -214,9 +240,9 @@ export function SubEditForm({ sub }: { sub: SubEditable }) {
       </div>
 
       <div className="mt-[14px]">
-        <FieldLabel>Status</FieldLabel>
+        <FieldLabel>{t('directory.field.status')}</FieldLabel>
         <OptionStack
-          options={STATUSES}
+          options={statusOptions}
           value={status}
           onChange={setStatus}
           testIdPrefix="m-sub-edit-status"
@@ -230,8 +256,8 @@ export function SubEditForm({ sub }: { sub: SubEditable }) {
       {error ? <ErrorNotice message={error} testId="m-sub-edit-error" /> : null}
 
       <PrimaryButton
-        label="Save changes"
-        busyLabel="Saving…"
+        label={t('directory.saveChanges')}
+        busyLabel={t('directory.saving')}
         onClick={save}
         disabled={!online}
         busy={busy}
@@ -239,7 +265,7 @@ export function SubEditForm({ sub }: { sub: SubEditable }) {
       />
       {!ready ? (
         <p className="mt-[8px] text-center text-[12px] text-m6m-muted">
-          A company name is required.
+          {t('directory.subs.needCompany')}
         </p>
       ) : null}
     </div>

@@ -2,6 +2,8 @@ import { getSubcontractors } from '@/lib/services/subcontractors';
 import { getCompanyTimeSettings } from '@/lib/services/company';
 // [S106] was a local copy of the company-tz calendar-date rule.
 import { companyToday } from '@framefocus/shared/utils/dates';
+import { getMobileT } from '@/lib/i18n/server';
+import type { MsgKey, T } from '@/lib/i18n/messages';
 import { SetMobileHeader } from '../mobile-header';
 import {
   ContactActions,
@@ -30,18 +32,22 @@ import {
 // a role gate "because owners may as well see it" reintroduces a UI-only gate.
 // DO NOT render them, and do not add a role check instead.
 
-const CHIPS: readonly Chip[] = [
-  { value: null, label: 'All' },
-  // `subcontractors_sub_type_check` permits exactly these two, so the chip row
-  // covers the domain and All = Subs ∪ Vendors (A-46d).
-  { value: 'subcontractor', label: 'Subs' },
-  { value: 'vendor', label: 'Vendors' },
-];
+// S110 H — labels are message keys, resolved with t() at render time.
+function chips(t: T): readonly Chip[] {
+  return [
+    { value: null, label: t('directory.chip.all'), testKey: 'All' },
+    // `subcontractors_sub_type_check` permits exactly these two, so the chip row
+    // covers the domain and All = Subs ∪ Vendors (A-46d).
+    { value: 'subcontractor', label: t('directory.subs.chip.subs'), testKey: 'Subs' },
+    { value: 'vendor', label: t('directory.subs.chip.vendors'), testKey: 'Vendors' },
+  ];
+}
 
-const STATUS_LABEL: Record<string, string> = {
-  active: 'Active',
-  inactive: 'Inactive',
-  archived: 'Archived',
+// S110 H — message keys, resolved with t() at render time.
+const STATUS_KEY: Record<string, MsgKey> = {
+  active: 'directory.status.active',
+  inactive: 'directory.status.inactive',
+  archived: 'directory.status.archived',
 };
 
 export default async function MobileSubsPage({
@@ -56,9 +62,10 @@ export default async function MobileSubsPage({
   const raw = searchParams.type;
   const active = raw === 'subcontractor' || raw === 'vendor' ? raw : null;
 
-  const [subs, timeSettings] = await Promise.all([
+  const [subs, timeSettings, t] = await Promise.all([
     getSubcontractors(active ? { sub_type: active } : undefined),
     getCompanyTimeSettings(),
+    getMobileT(),
   ]);
 
   const today = companyToday(timeSettings.timezone);
@@ -66,16 +73,16 @@ export default async function MobileSubsPage({
   // §4.13.4's empty-state copy, per-chip.
   const emptyCopy =
     active === 'subcontractor'
-      ? 'No subs.'
+      ? t('directory.subs.emptySubs')
       : active === 'vendor'
-        ? 'No vendors.'
-        : 'No subs or vendors.';
+        ? t('directory.subs.emptyVendors')
+        : t('directory.subs.empty');
 
   return (
     <div className="px-[18px] pb-[18px] pt-[14px]">
-      <SetMobileHeader title="Subs & Vendors" sub="Company directory" />
+      <SetMobileHeader title={t('directory.subs.title')} sub={t('directory.companyDirectory')} />
 
-      <FilterChips chips={CHIPS} active={active} basePath="/m/subs" param="type" />
+      <FilterChips chips={chips(t)} active={active} basePath="/m/subs" param="type" t={t} />
 
       {subs.length === 0 ? (
         <div className="pt-[18px]">
@@ -85,7 +92,7 @@ export default async function MobileSubsPage({
         <ul className="mt-[14px] rounded-[15px] border border-m6m-border bg-m6m-card px-[12px]">
           {subs.map((s) => {
             const expired = s.insurance_expiry != null && s.insurance_expiry < today;
-            const name = s.company_name ?? 'Unnamed';
+            const name = s.company_name ?? t('directory.subs.unnamed');
             return (
               // D-55 — THE WHOLE ROW OPENS THE SUB [S121]. `ListRowLink`, the
               // same component M-36 uses, and for the same structural reason:
@@ -104,6 +111,7 @@ export default async function MobileSubsPage({
                     mobile={s.mobile}
                     email={s.email}
                     name={name}
+                    t={t}
                   />
                 }
               >
@@ -112,9 +120,11 @@ export default async function MobileSubsPage({
                     {name}
                   </p>
                   <p className="mt-[3px] flex flex-wrap items-center gap-[6px]">
-                    <StatusPill label={STATUS_LABEL[s.status] ?? s.status} />
+                    <StatusPill label={STATUS_KEY[s.status] ? t(STATUS_KEY[s.status]) : s.status} />
                     <span className="font-mono text-[11px] font-semibold text-m6m-muted">
-                      {s.sub_type === 'vendor' ? 'Vendor' : 'Sub'}
+                      {s.sub_type === 'vendor'
+                        ? t('directory.subs.vendor')
+                        : t('directory.subs.sub')}
                     </span>
                     {/* §4.13.4 puts trade_type in mono. Rendered only where set —
                         the column is nullable, and A-46e checks there is no empty
@@ -138,7 +148,9 @@ export default async function MobileSubsPage({
                         expired ? 'font-semibold text-m6m-danger' : 'text-m6m-muted'
                       }`}
                     >
-                      {expired ? 'Insurance expired ' : 'Insurance to '}
+                      {expired
+                        ? t('directory.subs.insuranceExpired')
+                        : t('directory.subs.insuranceTo')}
                       {s.insurance_expiry}
                     </p>
                   ) : null}
@@ -148,7 +160,7 @@ export default async function MobileSubsPage({
                       data-testid="m-license"
                       className="mt-[2px] font-mono text-[11px] text-m6m-muted"
                     >
-                      Lic {s.license_number}
+                      {t('directory.subs.lic')} {s.license_number}
                     </p>
                   ) : null}
                 </div>

@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import { Image as ImageIcon } from 'lucide-react';
 import { checkInDelivery } from '@/lib/services/deliveries-client';
 import { uploadFile } from '@/lib/services/files-client';
+import { useT } from '@/components/i18n/language-provider';
 import { SetMobileHeader } from '../../../../mobile-header';
 
 // M6M §4.12.4 — the 7d form.
@@ -60,6 +61,7 @@ export function CheckInForm({
   today: string;
 }) {
   const router = useRouter();
+  const t = useT();
 
   const [poId, setPoId] = useState<string | null>(null);
   const [orderless, setOrderless] = useState(poOptions.length === 0);
@@ -141,7 +143,7 @@ export function CheckInForm({
         const up = await uploadFile(file, { project_id: projectId, category: 'photos' });
         if (!up.success || !up.id) {
           setBusy(false);
-          setError(up.error ?? 'A photo failed to upload — nothing was submitted.');
+          setError(up.error ?? t('project.checkIn.photoFailed'));
           return;
         }
         ids.push(up.id);
@@ -169,7 +171,7 @@ export function CheckInForm({
 
     setBusy(false);
     if (!result.success) {
-      setError(result.error ?? 'Check-in failed.');
+      setError(result.error ?? t('project.checkIn.failed'));
       return;
     }
     router.push(`/m/p/${projectId}/deliveries`);
@@ -178,7 +180,7 @@ export function CheckInForm({
 
   return (
     <div className="px-[18px] pb-[18px] pt-[14px]">
-      <SetMobileHeader title="Delivery check-in" sub={projectName} />
+      <SetMobileHeader title={t('project.checkIn.title')} sub={projectName} />
 
       {/* D-6 — offline fails CLOSED. An explicit message, no Draft pill, no
           queue entry. */}
@@ -188,15 +190,14 @@ export function CheckInForm({
           role="alert"
           className="mb-[14px] rounded-[12px] border border-m6m-strip-border bg-m6m-strip-bg px-[14px] py-[10px] text-[14px] font-semibold text-m6m-navy"
         >
-          Delivery check-in needs a connection — it is not saved offline. Reconnect and try
-          again.
+          {t('project.checkIn.offline')}
         </p>
       ) : null}
 
       {/* PO or orderless. */}
       <section className="mb-[14px]">
         <h2 className="mb-[8px] font-mono text-[11px] font-medium uppercase tracking-wide text-m6m-muted">
-          PURCHASE ORDER
+          {t('project.checkIn.purchaseOrder')}
         </h2>
         <div className="flex flex-col gap-[8px]">
           {poOptions.map((p) => (
@@ -227,7 +228,7 @@ export function CheckInForm({
                 : 'border-dashed border-m6m-border bg-m6m-card text-m6m-navy'
             }`}
           >
-            No PO — orderless check-in
+            {t('project.checkIn.orderless')}
           </button>
         </div>
       </section>
@@ -240,14 +241,14 @@ export function CheckInForm({
                 htmlFor="m-checkin-vendor"
                 className="mb-[6px] block font-mono text-[11px] font-medium uppercase tracking-wide text-m6m-muted"
               >
-                VENDOR
+                {t('project.checkIn.vendor')}
               </label>
               <input
                 id="m-checkin-vendor"
                 data-testid="m-checkin-vendor"
                 value={vendor}
                 onChange={(e) => setVendor(e.target.value)}
-                placeholder="Who delivered?"
+                placeholder={t('project.checkIn.vendorPlaceholder')}
                 className="h-[48px] w-full rounded-[12px] border border-m6m-border bg-m6m-card px-[12px] text-[15px] text-m6m-navy"
               />
             </section>
@@ -275,7 +276,7 @@ export function CheckInForm({
                         {line.description}
                       </p>
                       <span className="shrink-0 font-mono text-[12px] text-m6m-muted">
-                        Ordered {line.ordered}
+                        {t('project.checkIn.ordered', { n: line.ordered ?? '' })}
                       </span>
                     </div>
                   ) : (
@@ -287,27 +288,27 @@ export function CheckInForm({
                           cur.map((l, j) => (j === i ? { ...l, description: e.target.value } : l))
                         )
                       }
-                      placeholder="What arrived?"
+                      placeholder={t('project.checkIn.descPlaceholder')}
                       className="h-[44px] w-full rounded-[10px] border border-m6m-border px-[12px] text-[15px] text-m6m-navy"
                     />
                   )}
 
                   <div className="mt-[10px] flex items-center justify-between gap-[10px]">
                     <Stepper
-                      label="Received"
+                      label={t('project.checkIn.received')}
                       value={line.received}
                       testId={`m-received-${i}`}
                       onDelta={(d) => bump(i, 'received', d)}
                     />
                     <Stepper
-                      label="Damaged"
+                      label={t('project.checkIn.damaged')}
                       value={line.damaged}
                       danger={damaged}
                       testId={`m-damaged-${i}`}
                       onDelta={(d) => bump(i, 'damaged', d)}
                     />
                     <div className="text-right">
-                      <p className="font-mono text-[11px] uppercase text-m6m-muted">Usable</p>
+                      <p className="font-mono text-[11px] uppercase text-m6m-muted">{t('project.checkIn.usable')}</p>
                       <p
                         data-testid={`m-usable-${i}`}
                         className={`font-mono text-[20px] font-bold ${
@@ -325,11 +326,11 @@ export function CheckInForm({
                       className="mt-[10px] rounded-[10px] border border-m6m-danger-border bg-white px-[12px] py-[8px]"
                     >
                       <p className="text-[13px] font-semibold text-m6m-danger">
-                        Photo required for damage · {line.photos.length}
+                        {t('project.checkIn.photoRequired', { n: line.photos.length })}
                       </p>
                       <div className="mt-[6px] flex items-stretch gap-[8px]">
                         <label className="flex min-h-[44px] flex-1 cursor-pointer items-center justify-center rounded-[10px] border border-dashed border-m6m-danger-border text-[14px] font-semibold text-m6m-danger">
-                          Add damage photo
+                          {t('project.checkIn.addDamagePhoto')}
                           <input
                             type="file"
                             accept="image/*"
@@ -354,7 +355,7 @@ export function CheckInForm({
                             most likely to have shot it already. */}
                         <label
                           data-testid={`m-damage-photo-library-${i}`}
-                          aria-label="Choose from library"
+                          aria-label={t('project.chooseFromLibrary')}
                           className="flex min-h-[44px] w-11 shrink-0 cursor-pointer items-center justify-center rounded-[10px] border border-m6m-danger-border text-m6m-danger"
                         >
                           <input
@@ -394,7 +395,7 @@ export function CheckInForm({
                 }
                 className="flex min-h-[52px] items-center justify-center rounded-[14px] border border-dashed border-m6m-border bg-m6m-card text-[15px] font-semibold text-m6m-blue"
               >
-                Add line
+                {t('project.checkIn.addLine')}
               </button>
             ) : null}
           </div>
@@ -408,7 +409,7 @@ export function CheckInForm({
               onClick={() => setNoteOpen((v) => !v)}
               className="flex min-h-[58px] w-full items-center justify-between px-[14px] text-[15px] font-semibold text-m6m-navy"
             >
-              Note for the office
+              {t('project.checkIn.note')}
               <span aria-hidden className={`text-m6m-muted ${noteOpen ? 'rotate-90' : ''}`}>
                 ›
               </span>
@@ -438,7 +439,7 @@ export function CheckInForm({
 
           {/* The consequence line — never a surprise. */}
           <p className="mt-[14px] text-center text-[12px] text-m6m-muted">
-            Notifies Owner, Admin, PM
+            {t('project.checkIn.notifies')}
           </p>
           <button
             type="button"
@@ -447,7 +448,7 @@ export function CheckInForm({
             onClick={submit}
             className="mt-[6px] flex h-[60px] w-full items-center justify-center rounded-[14px] bg-m6m-amber text-[17px] font-bold text-m6m-navy disabled:opacity-40"
           >
-            {busy ? 'Submitting…' : 'Submit check-in'}
+            {busy ? t('project.checkIn.submitting') : t('project.checkIn.submit')}
           </button>
         </>
       )}
@@ -469,6 +470,7 @@ function Stepper({
   testId: string;
   onDelta: (d: number) => void;
 }) {
+  const t = useT();
   return (
     <div>
       <p className={`font-mono text-[11px] uppercase ${danger ? 'text-m6m-danger' : 'text-m6m-muted'}`}>
@@ -478,7 +480,7 @@ function Stepper({
         <button
           type="button"
           data-testid={`${testId}-minus`}
-          aria-label={`${label} minus`}
+          aria-label={t('project.checkIn.minus', { label })}
           onClick={() => onDelta(-1)}
           className="flex h-[46px] w-[46px] items-center justify-center rounded-l-[10px] border border-m6m-border bg-white text-[18px] font-bold text-m6m-navy"
         >
@@ -495,7 +497,7 @@ function Stepper({
         <button
           type="button"
           data-testid={`${testId}-plus`}
-          aria-label={`${label} plus`}
+          aria-label={t('project.checkIn.plus', { label })}
           onClick={() => onDelta(1)}
           className="flex h-[46px] w-[46px] items-center justify-center rounded-r-[10px] border border-m6m-border bg-white text-[18px] font-bold text-m6m-navy"
         >

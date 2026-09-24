@@ -5,6 +5,8 @@ import { getMyMember } from '@/lib/services/members';
 import { SectionHeader } from '../../section-header';
 import { DetailCard, DetailField, StatusPill } from '../../../../mobile-ui';
 import { PunchActions } from './punch-actions';
+import { getMobileT } from '@/lib/i18n/server';
+import type { MsgKey } from '@/lib/i18n/messages';
 
 // M6M §4.11.14 — M-34 · Punch item detail, complete and verify.
 //
@@ -46,11 +48,21 @@ import { PunchActions } from './punch-actions';
 // it is also the one that needs no explaining redirect: the item genuinely does
 // not exist as far as this caller's database session is concerned.
 
-const PRIORITY_LABELS: Record<string, string> = {
-  low: 'Low',
-  medium: 'Medium',
-  high: 'High',
-  urgent: 'Urgent',
+// Resolved with t() at render. Unknown values fall back to the raw value.
+const PRIORITY_KEYS: Record<string, MsgKey> = {
+  low: 'photos.punch.priority.low',
+  medium: 'photos.punch.priority.medium',
+  high: 'photos.punch.priority.high',
+  urgent: 'photos.punch.priority.urgent',
+};
+
+// PUNCH_STATUS_LABELS (lib/services/punch) stays the English source; /m shows
+// the translated word for the same status value.
+const STATUS_KEYS: Record<string, MsgKey> = {
+  open: 'photos.punch.status.open',
+  in_progress: 'photos.punch.status.in_progress',
+  complete: 'photos.punch.status.complete',
+  verified: 'photos.punch.status.verified',
 };
 
 export default async function PunchItemDetailPage({
@@ -58,6 +70,7 @@ export default async function PunchItemDetailPage({
 }: {
   params: { projectId: string; itemId: string };
 }) {
+  const t = await getMobileT();
   const [item, profile, myMember] = await Promise.all([
     getPunchItem(params.itemId),
     getMyProfile(),
@@ -71,34 +84,40 @@ export default async function PunchItemDetailPage({
 
   return (
     <div className="px-[18px] pb-[18px] pt-[14px]">
-      <SectionHeader projectId={params.projectId} title="Punch Item" />
+      <SectionHeader projectId={params.projectId} title={t('photos.punch.itemTitle')} />
 
       <header className="mb-[14px]">
         <h1 className="text-[17px] font-bold leading-tight text-m6m-navy">{item.title}</h1>
         <p className="mt-[6px] flex flex-wrap items-center gap-[6px]">
-          <StatusPill label={PUNCH_STATUS_LABELS[item.status] ?? item.status} />
+          <StatusPill
+            label={
+              STATUS_KEYS[item.status]
+                ? t(STATUS_KEYS[item.status])
+                : (PUNCH_STATUS_LABELS[item.status] ?? item.status)
+            }
+          />
           {item.priority ? (
             <span
               data-testid="m-punch-priority"
               className="font-mono text-[11px] font-semibold text-m6m-muted"
             >
-              {PRIORITY_LABELS[item.priority] ?? item.priority}
+              {PRIORITY_KEYS[item.priority] ? t(PRIORITY_KEYS[item.priority]) : item.priority}
             </span>
           ) : null}
         </p>
       </header>
 
       <DetailCard testId="m-punch-detail">
-        <DetailField label="Description" value={item.description} />
-        <DetailField label="Location" value={item.location} mono />
-        <DetailField label="Trade" value={item.trade} mono />
-        <DetailField label="Assigned to" value={item.assignee?.display_name ?? null} />
+        <DetailField label={t('photos.punch.description')} value={item.description} />
+        <DetailField label={t('photos.punch.location')} value={item.location} mono />
+        <DetailField label={t('photos.punch.trade')} value={item.trade} mono />
+        <DetailField label={t('photos.punch.assignedTo')} value={item.assignee?.display_name ?? null} />
         {/* §4.11.14 — the completer and verifier are already joined by the
             service function, and showing WHO completed an item is what makes
             the separate-eyes rule visible BEFORE the verify tap rather than as
             an error after it. The tap itself is Part C. */}
         <DetailField
-          label="Completed by"
+          label={t('photos.punch.completedBy')}
           value={
             item.completer?.display_name
               ? `${item.completer.display_name}${item.completed_at ? ` · ${item.completed_at.slice(0, 10)}` : ''}`
@@ -107,7 +126,7 @@ export default async function PunchItemDetailPage({
           testId="m-punch-completer"
         />
         <DetailField
-          label="Verified by"
+          label={t('photos.punch.verifiedBy')}
           value={
             item.verifier?.display_name
               ? `${item.verifier.display_name}${item.verified_at ? ` · ${item.verified_at.slice(0, 10)}` : ''}`
@@ -119,11 +138,11 @@ export default async function PunchItemDetailPage({
             Foreman+ and not offered on /m (§4.11.13's cut). Showing that a photo
             WILL be required is not a control. */}
         <DetailField
-          label="Requires"
+          label={t('photos.punch.requires')}
           value={
             [
-              item.requires_verification ? 'verification' : null,
-              item.requires_completion_photo ? 'completion photo' : null,
+              item.requires_verification ? t('photos.punch.req.verification') : null,
+              item.requires_completion_photo ? t('photos.punch.req.completionPhoto') : null,
             ]
               .filter(Boolean)
               .join(' · ') || null

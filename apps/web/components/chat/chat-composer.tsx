@@ -4,6 +4,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 import { AtSign, Image as ImageIcon, Send, X } from 'lucide-react';
 import { color, font } from '@/lib/theme';
 import type { ThreadKind } from '@/lib/chat/threads';
+import { useT } from '@/components/i18n/language-provider';
 
 /**
  * The composer — §7.3 — and the `@` affordance, which is §5.1 and §2.4.
@@ -70,6 +71,7 @@ export function ChatComposer({ projectId, kind, disabled, onSend }: ChatComposer
   const [galleryOpen, setGalleryOpen] = useState(false);
   const [gallery, setGallery] = useState<PickablePhoto[] | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const t = useT();
 
   /**
    * ⚠️ THE CARET IS RESTORED IN useLayoutEffect, NOT requestAnimationFrame.
@@ -185,9 +187,7 @@ export function ChatComposer({ projectId, kind, disabled, onSend }: ChatComposer
       // something the parser can read back (a surname with a space in it).
       // Inserting either would send a message the sender believes notified
       // someone.
-      setNotice(
-        `${person.name} has no unique @name in this thread — nothing was inserted, so they would not be notified.`
-      );
+      setNotice(t('shell.chat.noUniqueName', { name: person.name }));
       setPickerOpen(false);
       return;
     }
@@ -225,7 +225,9 @@ export function ChatComposer({ projectId, kind, disabled, onSend }: ChatComposer
       // out — §5.1's ambiguity rule is only safe if it is visible.
       if (outcome.unresolved.length > 0) {
         setNotice(
-          `Sent, but ${outcome.unresolved.map((t) => `@${t}`).join(', ')} matched nobody — no one was notified about that.`
+          t('shell.chat.matchedNobody', {
+            tokens: outcome.unresolved.map((tok) => `@${tok}`).join(', '),
+          })
         );
       }
     }
@@ -263,12 +265,12 @@ export function ChatComposer({ projectId, kind, disabled, onSend }: ChatComposer
           }}
         >
           {people === null && (
-            <p style={{ ...hintStyle, padding: '10px 12px' }}>Loading people…</p>
+            <p style={{ ...hintStyle, padding: '10px 12px' }}>{t('shell.chat.loadingPeople')}</p>
           )}
           {/* §7.5 — an empty picker is a real state, not a crash. */}
           {people !== null && filtered.length === 0 && (
             <p data-testid="chat-mention-empty" style={{ ...hintStyle, padding: '10px 12px' }}>
-              Nobody here to mention.
+              {t('shell.chat.nobodyToMention')}
             </p>
           )}
           {filtered.map((p) => (
@@ -312,11 +314,11 @@ export function ChatComposer({ projectId, kind, disabled, onSend }: ChatComposer
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', marginBottom: '6px' }}>
-            <span style={{ ...hintStyle, fontWeight: 600 }}>Project photos</span>
+            <span style={{ ...hintStyle, fontWeight: 600 }}>{t('shell.chat.projectPhotos')}</span>
             <button
               type="button"
               data-testid="chat-photo-picker-close"
-              aria-label="Close photo picker"
+              aria-label={t('shell.chat.closePhotoPicker')}
               onClick={() => setGalleryOpen(false)}
               style={{ marginLeft: 'auto', border: 'none', background: 'none', cursor: 'pointer', color: color.muted }}
             >
@@ -324,10 +326,10 @@ export function ChatComposer({ projectId, kind, disabled, onSend }: ChatComposer
             </button>
           </div>
 
-          {gallery === null && <p style={hintStyle}>Loading photos…</p>}
+          {gallery === null && <p style={hintStyle}>{t('shell.chat.loadingPhotos')}</p>}
           {gallery !== null && gallery.length === 0 && (
             <p data-testid="chat-photo-picker-empty" style={hintStyle}>
-              No photos on this project yet.
+              {t('shell.chat.noPhotos')}
             </p>
           )}
 
@@ -398,7 +400,7 @@ export function ChatComposer({ projectId, kind, disabled, onSend }: ChatComposer
               )}
               <button
                 type="button"
-                aria-label={`Remove ${photo.fileName}`}
+                aria-label={t('shell.chat.removeFile', { name: photo.fileName })}
                 data-testid="chat-attachment-remove"
                 onClick={() => togglePhoto(photo)}
                 style={{
@@ -433,7 +435,7 @@ export function ChatComposer({ projectId, kind, disabled, onSend }: ChatComposer
         onKeyDown={handleKeyDown}
         onClick={(e) => syncPicker(body, e.currentTarget.selectionStart ?? body.length)}
         rows={2}
-        placeholder="Write a message…"
+        placeholder={t('shell.chat.writeMessage')}
         style={{
           width: '100%',
           resize: 'none',
@@ -470,7 +472,7 @@ export function ChatComposer({ projectId, kind, disabled, onSend }: ChatComposer
           }}
         >
           <AtSign size={15} strokeWidth={2.2} aria-hidden />
-          Mention
+          {t('shell.chat.mention')}
         </button>
 
         {/* ND-22 — REFERENCE, not upload. This opens the project gallery; it is
@@ -479,7 +481,7 @@ export function ChatComposer({ projectId, kind, disabled, onSend }: ChatComposer
         <button
           type="button"
           data-testid="chat-attach"
-          aria-label="Attach a project photo"
+          aria-label={t('shell.chat.attachPhoto')}
           onClick={() => void openGallery()}
           disabled={disabled || sending}
           style={{
@@ -498,7 +500,7 @@ export function ChatComposer({ projectId, kind, disabled, onSend }: ChatComposer
           }}
         >
           <ImageIcon size={15} strokeWidth={2.1} aria-hidden />
-          Photo
+          {t('shell.entity.photo')}
         </button>
 
         <button
@@ -524,15 +526,18 @@ export function ChatComposer({ projectId, kind, disabled, onSend }: ChatComposer
           }}
         >
           <Send size={14} strokeWidth={2.2} aria-hidden />
-          {sending ? 'Sending…' : 'Send'}
+          {sending ? t('shell.chat.sending') : t('shell.chat.send')}
         </button>
       </div>
 
       {/* R6, said out loud. A message with no `@` reaches nobody's phone, and
           the only place a person can learn that is here. */}
       <p data-testid="chat-mention-hint" style={{ ...hintStyle, marginTop: '7px' }}>
-        Only <strong style={{ fontWeight: 700, color: color.primary }}>@mentions</strong> notify
-        someone. A plain message waits until they open chat.
+        {t('shell.chat.hintOnly')}{' '}
+        <strong style={{ fontWeight: 700, color: color.primary }}>
+          {t('shell.chat.hintMentions')}
+        </strong>{' '}
+        {t('shell.chat.hintRest')}
       </p>
 
       {notice && (

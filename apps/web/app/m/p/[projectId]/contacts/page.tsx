@@ -1,6 +1,8 @@
 import { CONTACT_TYPE_LABELS } from '@framefocus/shared/constants';
 import { getProjectContacts } from '@/lib/services/project-contacts';
 import { getMyProfile } from '@/lib/services/profiles';
+import { getMobileT } from '@/lib/i18n/server';
+import type { MsgKey } from '@/lib/i18n/messages';
 import { canReachDetail } from '@/app/m/detail-access';
 import { SectionHeader } from '../section-header';
 import { ContactActions, DeniedNotice, EmptyState, ListRow, ListRowLink } from '../../../mobile-ui';
@@ -14,6 +16,18 @@ import { ContactActions, DeniedNotice, EmptyState, ListRow, ListRowLink } from '
 // phone and email are TAP-TO-ACT (A-37). That is the screen's whole reason to
 // exist on a phone: a list that only displays a number wastes the device.
 
+// S110 H — contact_type code → message key; unknown codes fall back to the
+// shared English table, then the raw code.
+const CONTACT_TYPE_KEY: Record<string, MsgKey> = {
+  lead: 'project.contactType.lead',
+  client: 'project.contactType.client',
+  vendor: 'project.contactType.vendor',
+  architect: 'project.contactType.architect',
+  inspector: 'project.contactType.inspector',
+  building_dept: 'project.contactType.building_dept',
+  other_external: 'project.contactType.other_external',
+};
+
 export default async function ProjectContactsPage({
   params,
   searchParams,
@@ -21,9 +35,10 @@ export default async function ProjectContactsPage({
   params: { projectId: string };
   searchParams: { denied?: string };
 }) {
-  const [rows, profile] = await Promise.all([
+  const [rows, profile, t] = await Promise.all([
     getProjectContacts(params.projectId),
     getMyProfile(),
+    getMobileT(),
   ]);
 
   // D-54 step 1. The real gate is requireDetailAccess() on M-36.
@@ -34,11 +49,11 @@ export default async function ProjectContactsPage({
 
   return (
     <div className="px-[18px] pb-[18px] pt-[14px]">
-      <SectionHeader projectId={params.projectId} title="Contacts" />
+      <SectionHeader projectId={params.projectId} title={t('project.tile.contacts')} />
       <DeniedNotice kind={searchParams.denied} />
 
       {rows.length === 0 ? (
-        <EmptyState>No contacts on this project.</EmptyState>
+        <EmptyState>{t('project.contacts.empty')}</EmptyState>
       ) : (
         <ul className="rounded-[15px] border border-m6m-border bg-m6m-card px-[12px]">
           {rows.map((pc) => {
@@ -46,7 +61,7 @@ export default async function ProjectContactsPage({
             const name =
               [c?.first_name, c?.last_name].filter(Boolean).join(' ').trim() ||
               c?.company_name?.trim() ||
-              'Unnamed contact';
+              t('project.contacts.unnamed');
             return (
               <ContactRow
                 key={pc.id}
@@ -64,9 +79,11 @@ export default async function ProjectContactsPage({
                   <p className="mt-[2px] flex flex-wrap items-center gap-[6px]">
                     {c?.contact_type ? (
                       <span className="font-mono text-[11px] font-semibold text-m6m-muted">
-                        {CONTACT_TYPE_LABELS[
-                          c.contact_type as keyof typeof CONTACT_TYPE_LABELS
-                        ] ?? c.contact_type}
+                        {CONTACT_TYPE_KEY[c.contact_type]
+                          ? t(CONTACT_TYPE_KEY[c.contact_type])
+                          : (CONTACT_TYPE_LABELS[
+                              c.contact_type as keyof typeof CONTACT_TYPE_LABELS
+                            ] ?? c.contact_type)}
                       </span>
                     ) : null}
                     {/* The role on THIS project, from the junction row. */}

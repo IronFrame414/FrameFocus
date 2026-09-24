@@ -8,6 +8,7 @@ import type { ThreadKind } from '@/lib/chat/threads';
 import { useChatThread } from './use-chat-thread';
 import { ChatComposer } from './chat-composer';
 import { useFileSheet } from '@/components/files/file-sheet';
+import { useT } from '@/components/i18n/language-provider';
 
 /**
  * THE thread view. One component, both desktop surfaces — A-C28.
@@ -74,6 +75,7 @@ export function ChatThreadView({
   const [older, setOlder] = useState<ChatMessageWithPhotos[]>([]);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const lastSeenCount = useRef(0);
+  const t = useT();
 
   // Older pages live beside the live list rather than inside it: the poll's
   // watermark is built from the END of `messages`, and prepending history to
@@ -130,15 +132,15 @@ export function ChatThreadView({
   }, [all, thread, loadingOlder, surface, pageSize, setHasOlder, projectId]);
 
   if (status === 'loading' || status === 'idle') {
-    return <Centered>Opening…</Centered>;
+    return <Centered>{t('shell.chat.opening')}</Centered>;
   }
 
   if (status === 'denied') {
-    return <Centered>{error ?? 'You do not have access to this conversation.'}</Centered>;
+    return <Centered>{error ?? t('shell.chat.noAccess')}</Centered>;
   }
 
   if (status === 'error') {
-    return <Centered>{error ?? 'Something went wrong.'}</Centered>;
+    return <Centered>{error ?? t('shell.chat.somethingWrong')}</Centered>;
   }
 
   return (
@@ -173,7 +175,7 @@ export function ChatThreadView({
               cursor: 'pointer',
             }}
           >
-            {loadingOlder ? 'Loading…' : 'Load older messages'}
+            {loadingOlder ? t('shell.loading') : t('shell.chat.loadOlder')}
           </button>
         )}
 
@@ -182,7 +184,7 @@ export function ChatThreadView({
             data-testid="chat-empty"
             style={{ ...mutedStyle, textAlign: 'center', marginTop: '24px' }}
           >
-            No messages yet. Say something.
+            {t('shell.chat.noMessages')}
           </p>
         )}
 
@@ -190,7 +192,7 @@ export function ChatThreadView({
           const mine = m.author_profile_id === myProfileId;
           const author = m.author
             ? `${m.author.first_name} ${m.author.last_name}`.trim()
-            : 'Someone';
+            : t('shell.chat.someone');
           const prev = all[i - 1];
           const newDay =
             !prev || new Date(prev.created_at).toDateString() !== new Date(m.created_at).toDateString();
@@ -212,8 +214,15 @@ export function ChatThreadView({
                 }}
               >
                 <div style={{ display: 'flex', gap: '7px', alignItems: 'baseline' }}>
-                  <span style={{ fontFamily: font.sans, fontSize: '12px', fontWeight: 700, color: color.navy }}>
-                    {mine ? 'You' : author}
+                  <span
+                    style={{
+                      fontFamily: font.sans,
+                      fontSize: '12px',
+                      fontWeight: 700,
+                      color: color.navy,
+                    }}
+                  >
+                    {mine ? t('shell.chat.you') : author}
                   </span>
                   <span style={mutedStyle}>{timeLabel(m.created_at)}</span>
                 </div>
@@ -352,10 +361,10 @@ export function ChatThreadView({
                 }}
               >
                 <RotateCw size={12} strokeWidth={2.2} aria-hidden />
-                Not sent — retry
+                {t('shell.chat.notSentRetry')}
               </button>
             ) : (
-              <span style={{ ...mutedStyle, marginTop: '3px' }}>Sending…</span>
+              <span style={{ ...mutedStyle, marginTop: '3px' }}>{t('shell.chat.sending')}</span>
             )}
           </div>
         ))}
@@ -399,6 +408,7 @@ export function ChatThreadView({
  * that ever changes.
  */
 function ReadOnlyBanner({ kind }: { kind: ThreadKind }) {
+  const t = useT();
   return (
     <div
       data-testid="chat-readonly-banner"
@@ -419,14 +429,17 @@ function ReadOnlyBanner({ kind }: { kind: ThreadKind }) {
       >
         {kind === 'sub' ? (
           <>
-            <strong style={{ fontWeight: 700, color: color.navy }}>Read-only</strong> — this
-            thread includes subcontractors. You can follow along here; post in the crew thread
-            instead.
+            <strong style={{ fontWeight: 700, color: color.navy }}>
+              {t('shell.chat.readOnly')}
+            </strong>{' '}
+            {t('shell.chat.readOnlySub')}
           </>
         ) : (
           <>
-            <strong style={{ fontWeight: 700, color: color.navy }}>Read-only</strong> — you can
-            follow this conversation but not post in it.
+            <strong style={{ fontWeight: 700, color: color.navy }}>
+              {t('shell.chat.readOnly')}
+            </strong>{' '}
+            {t('shell.chat.readOnlyCrew')}
           </>
         )}
       </p>

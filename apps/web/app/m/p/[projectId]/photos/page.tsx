@@ -7,6 +7,8 @@ import { SetMobileHeader } from '../../../mobile-header';
 import { FilterChips, type Chip } from '../../../mobile-ui';
 import { PhotoGrid, type GridPhoto } from './photo-grid';
 import { PhotoSearch } from './photo-search';
+import { getMobileT } from '@/lib/i18n/server';
+import type { T } from '@/lib/i18n/messages';
 
 // M6M §4.8 — M-8 · Project photos, the gallery.
 //
@@ -29,16 +31,20 @@ import { PhotoSearch } from './photo-search';
 // writes nothing to `punch_list_items` (A-22c); the join is a SELECT of two
 // columns and the two keep their distinct meanings.
 
-const CHIPS: readonly Chip[] = [
-  { value: null, label: 'All' },
-  { value: 'log', label: 'Daily logs' },
-  { value: 'delivery', label: 'Deliveries' },
-  { value: 'punch', label: 'Punch' },
-];
+// [S110 H] Labels translated; `testKey` keeps each `m-chip-*` id on the English
+// word, so the ids do not change with the reader's language.
+function chips(t: T): readonly Chip[] {
+  return [
+    { value: null, label: t('photos.chip.all'), testKey: 'All' },
+    { value: 'log', label: t('photos.chip.dailyLogs'), testKey: 'Daily logs' },
+    { value: 'delivery', label: t('photos.chip.deliveries'), testKey: 'Deliveries' },
+    { value: 'punch', label: t('photos.chip.punch'), testKey: 'Punch' },
+  ];
+}
 
 /** `TODAY` / `JUL 8` — §4.8's mono uppercase day label. */
-function dayLabel(iso: string, todayIso: string): string {
-  if (iso === todayIso) return 'TODAY';
+function dayLabel(iso: string, todayIso: string, t: T): string {
+  if (iso === todayIso) return t('photos.day.today');
   const d = new Date(`${iso}T00:00:00`);
   return d
     .toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
@@ -52,6 +58,7 @@ export default async function ProjectPhotosPage({
   params: { projectId: string };
   searchParams: { source?: string; q?: string };
 }) {
+  const t = await getMobileT();
   const raw = searchParams.source;
   const active = raw === 'log' || raw === 'delivery' || raw === 'punch' ? raw : null;
 
@@ -72,8 +79,8 @@ export default async function ProjectPhotosPage({
     ? filtered.filter(
         (p) =>
           p.file_name.toLowerCase().includes(q) ||
-          (p.tags ?? []).some((t) => t.toLowerCase().includes(q)) ||
-          (p.ai_tags ?? []).some((t) => t.toLowerCase().includes(q))
+          (p.tags ?? []).some((tag) => tag.toLowerCase().includes(q)) ||
+          (p.ai_tags ?? []).some((tag) => tag.toLowerCase().includes(q))
       )
     : filtered;
 
@@ -99,7 +106,7 @@ export default async function ProjectPhotosPage({
       hasMarkup: p.hasMarkup,
       source: p.source,
       day,
-      dayLabel: day ? dayLabel(day, todayIso) : 'UNDATED',
+      dayLabel: day ? dayLabel(day, todayIso, t) : t('photos.day.undated'),
     };
   });
 
@@ -110,8 +117,11 @@ export default async function ProjectPhotosPage({
           project's photo total, which is the same figure M-3's Photos badge
           carries (D-14 as amended: total count, and NO unseen dot anywhere). */}
       <SetMobileHeader
-        title="Photos"
-        sub={`${project?.name ?? 'Project'} · ${photos.length} photos`}
+        title={t('photos.gallery.title')}
+        sub={t('photos.gallery.sub', {
+          project: project?.name ?? t('photos.gallery.projectFallback'),
+          n: photos.length,
+        })}
       />
 
       <div className="px-[18px] pt-[14px]">
@@ -133,7 +143,7 @@ export default async function ProjectPhotosPage({
 
         <div className="mt-[12px]">
           <FilterChips
-            chips={CHIPS}
+            chips={chips(t)}
             active={active}
             basePath={`/m/p/${params.projectId}/photos`}
             param="source"

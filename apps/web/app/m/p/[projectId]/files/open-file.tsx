@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useFileSheet } from '@/components/files/file-sheet';
+import { useT } from '@/components/i18n/language-provider';
 
 // M6M §4.11.16 — "Opening a file from M-16 — the tap that does not exist today".
 //
@@ -77,6 +78,7 @@ export function OpenFileButton({
 }) {
   const [state, setState] = useState<'idle' | 'opening' | 'error' | 'denied'>('idle');
   const openFile = useFileSheet();
+  const t = useT();
 
   async function sign(): Promise<string | null> {
     const response = await fetch(`/api/files/signed-url?path=${encodeURIComponent(path)}`);
@@ -132,14 +134,14 @@ export function OpenFileButton({
       type="button"
       onClick={open}
       data-testid="m-file-open"
-      aria-label={`Open ${fileName}`}
+      aria-label={t('project.files.open', { name: fileName })}
       // min-h-[44px] — §2's floor. The row is 58px but the target is this
       // button, so the floor is asserted on the button rather than inherited.
       className={`flex min-h-[44px] w-full items-center gap-[10px] text-left ${className ?? ''}`}
     >
       <span className="min-w-0 flex-1">{children}</span>
       {state === 'opening' ? (
-        <span className="shrink-0 font-mono text-[11px] text-m6m-muted">opening…</span>
+        <span className="shrink-0 font-mono text-[11px] text-m6m-muted">{t('project.files.opening')}</span>
       ) : null}
       {state === 'denied' ? (
         // Storage refused the path. It does NOT distinguish "you may not read
@@ -147,13 +149,13 @@ export function OpenFileButton({
         // Storage's side (anti-enumeration), so the copy covers both rather
         // than naming the one we cannot verify.
         <span data-testid="m-file-denied" className="shrink-0 text-[12px] text-m6m-danger">
-          No access
+          {t('project.files.noAccess')}
         </span>
       ) : null}
       {state === 'error' ? (
         // A genuine failure, now that a refusal has its own branch above.
         <span data-testid="m-file-error" className="shrink-0 text-[12px] text-m6m-danger">
-          Could not open
+          {t('project.files.couldNotOpen')}
         </span>
       ) : null}
     </button>
