@@ -38,7 +38,11 @@ describe('A-N4 / §1 — the ruled order', () => {
   // billing-settings-tab.tsx). This is an S157 inversion, not a failure: the
   // sequence is unchanged, Billing is simply removed. The Admin section is now
   // Settings alone.
-  it('is 13 items in the ruled sequence (Billing moved to Settings)', () => {
+  // ⚠️ [S110 B, RULED Josh Q5 → A] 13 → 14: "Site visits" is a new TOP-LEVEL item
+  // beside Estimates, for every internal employee. Superseded title quoted:
+  // "is 13 items in the ruled sequence (Billing moved to Settings)". The S130
+  // sequence is otherwise unchanged and Notifications stays LAST in the top layer.
+  it('is 14 items in the ruled sequence (Site visits added beside Estimates, S110)', () => {
     expect(entries().map((e) => e.label)).toEqual([
       // Top layer — the daily set, no header.
       'Dashboard',
@@ -48,6 +52,7 @@ describe('A-N4 / §1 — the ruled order', () => {
       'Timeclock',
       'Expenses',
       'Estimates',
+      'Site visits',
       'Notifications',
       // Reference.
       'Contacts',
@@ -65,20 +70,24 @@ describe('A-N4 / §1 — the ruled order', () => {
     expect(entries().map((e) => e.label)).not.toContain('Billing');
   });
 
-  it('A-N4 — Notifications is EIGHTH and last in the top layer', () => {
+  // [S110 B] _Superseded title: "A-N4 — Notifications is EIGHTH and last in the
+  // top layer"._ It is NINTH now that Site visits joined the top layer — and
+  // still LAST, which is the half of the S130 ruling that carries the meaning.
+  it('A-N4 — Notifications is NINTH and last in the top layer', () => {
     const list = entries();
-    expect(list[7].label).toBe('Notifications');
-    expect(list[7].section).toBe('top');
+    expect(list[8].label).toBe('Notifications');
+    expect(list[8].section).toBe('top');
     // "Last in the top layer" is the half that a build could get wrong while
-    // still putting it eighth — the next item must begin Reference.
-    expect(list[8].section).toBe('reference');
+    // still putting it ninth — the next item must begin Reference.
+    expect(list[9].section).toBe('reference');
   });
 
-  it('the three sections hold 8 / 4 / 1', () => {
+  // [S110 B] _Superseded: "the three sections hold 8 / 4 / 1"._
+  it('the three sections hold 9 / 4 / 1', () => {
     // ⚠️ WAS 8 / 4 / 2 — Admin lost Billing to Settings, so it holds Settings
     // alone. The section still renders (Settings is owner/admin); it is not empty.
     const list = entries();
-    expect(list.filter((e) => e.section === 'top')).toHaveLength(8);
+    expect(list.filter((e) => e.section === 'top')).toHaveLength(9);
     expect(list.filter((e) => e.section === 'reference')).toHaveLength(4);
     expect(list.filter((e) => e.section === 'admin')).toHaveLength(1);
   });
@@ -122,7 +131,11 @@ describe('A-N6 — this work changed NO gate', () => {
     const gated = entries().filter((e) => e.roles !== null).map((e) => e.label);
     // ⚠️ WAS ['Billing', 'Cost Catalog', 'Estimates', 'Settings'] — Billing left
     // the nav for a Settings tab, so it is no longer a gated nav item.
-    expect(gated.sort()).toEqual(['Cost Catalog', 'Estimates', 'Settings']);
+    // [S110 B] + 'Site visits': gated to the five INTERNAL roles, which is every
+    // dashboard role — the gate is there so a sub or client can never see it
+    // even if /dashboard ever admitted them.
+    expect(gated.sort()).toEqual(['Cost Catalog', 'Estimates', 'Settings', 'Site visits']);
+    expect(gateFor('Site visits')).toBe("'owner', 'admin', 'project_manager', 'foreman', 'crew_member'");
     // §2b: Team being ungated is precisely what kept it out of Admin — an
     // ungated item there would give crew an Admin header with Team under it.
     expect(gateFor('Team')).toBeNull();

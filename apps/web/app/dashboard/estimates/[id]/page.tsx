@@ -46,7 +46,7 @@ export default async function EstimateBuilderPage({ params }: PageProps) {
     .maybeSingle();
   // [S108 Spec A] A site visit is not an estimate document yet — it opens as
   // the visit record, where the office can promote it.
-  if (est?.status === 'site_visit') redirect(`/dashboard/estimates/site-visits/${params.id}`);
+  if (est?.status === 'site_visit') redirect(`/dashboard/site-visits/${params.id}`);
   // [S108 follow-up] What was captured on site, for the estimator pricing it.
   // Read on the caller's SESSION from the money-free site_visit_* tables
   // (office reads every visit in the company). Null for an estimate that never

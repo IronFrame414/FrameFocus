@@ -166,7 +166,7 @@ test('S108 A — crew records, owner promotes, after SEND the crew reads with no
 
   // ── OWNER: promote on desktop ─────────────────────────────────────────
   await signInAs(page, OWNER);
-  await page.goto(`/dashboard/estimates/site-visits/${visitId}`);
+  await page.goto(`/dashboard/site-visits/${visitId}`); // [S110 B] moved from /dashboard/estimates/site-visits/
   await expect(page.getByTestId('sv-office-state')).toContainText('Finished');
   // [S109] The third mount — the desktop standalone visit page — renders them too.
   await expectMediaRendered(page.getByTestId('site-visit-record'));

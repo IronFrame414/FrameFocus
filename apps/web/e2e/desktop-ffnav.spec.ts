@@ -51,6 +51,8 @@ const TOP = [
   'Timeclock',
   'Expenses',
   'Estimates',
+  // [S110 B, RULED Q5 → A] a new top-level item, every internal role.
+  'Site visits',
   'Notifications',
 ];
 
@@ -58,7 +60,8 @@ test.describe('A-N1 — three sections, in the ruled order', () => {
   // ⚠️ WAS 14 [inverted, "move Billing into Settings"]. Billing became an
   // owner-only Settings TAB, so it is gone from the sidebar for everyone —
   // including the owner. The Admin section is now Settings alone. S157 inversion.
-  test('Owner sees 13 across three sections (Billing moved to Settings)', async ({ page }) => {
+  // [S110 B] _Superseded title: "Owner sees 13 across three sections"_ — 14 with Site visits.
+  test('Owner sees 14 across three sections (Billing moved to Settings; Site visits added)', async ({ page }) => {
     await signIn(page, ROLES.owner);
     expect(await navRows(page)).toEqual([
       ...TOP,
@@ -78,7 +81,7 @@ test.describe('A-N1 — three sections, in the ruled order', () => {
     // "Main" would satisfy every ordering assertion above.
     const rows = await navRows(page);
     expect(rows[0]).toBe('Dashboard');
-    expect(rows.slice(0, 8).some((r) => r.startsWith('—'))).toBe(false);
+    expect(rows.slice(0, 9).some((r) => r.startsWith('—'))).toBe(false);
   });
 
   test('headers are labels, and there are exactly two', async ({ page }) => {
@@ -154,6 +157,9 @@ test.describe('A-N2 — an empty section renders NO header', () => {
       'Timeclock',
       'Expenses',
       // No Estimates — gated.
+      // [S110 B] Site visits IS here: foreman and crew read and add to every
+      // visit (Section A), so the desktop must reach them.
+      'Site visits',
       'Notifications',
       '— Reference —',
       'Contacts',
