@@ -10440,6 +10440,10 @@ export type Database = {
         }
         Returns: Json
       }
+      reorder_estimate_line_rows: {
+        Args: { p_line_item_id: string; p_ordered_ids: string[] }
+        Returns: number
+      }
       reorder_estimate_lines: {
         Args: { p_estimate_id: string; p_moves: Json }
         Returns: number

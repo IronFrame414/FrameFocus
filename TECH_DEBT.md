@@ -548,6 +548,21 @@ top of this file is advanced to `#164` in the same commit, which is what keeps t
   Traps: `test/s109-row-activation.test.tsx` + `e2e/desktop-row-activation-s109.spec.ts`, each
   proven by sabotage — see `S109-report.md` Step 4.
 
+### Branch-scoped, awaiting real numbers — `feature/s110-d-line-rows` [S110]
+
+- **#1-s110 — ✅ FIXED ON THIS BRANCH (filed and fixed together, RULED Josh S110 Q16; closes on
+  merge): a row inside a line could be re-parented onto ANOTHER estimate's line.**
+  `estimate_line_rows_update_manager`'s USING checked the SOURCE (draft; a PM's own), but its WITH
+  CHECK was only company + role, so a direct PostgREST UPDATE of `line_item_id` could point a row at
+  a line on another PM's draft or a SENT estimate — the sibling of S108 FILL-B5 on
+  `estimate_line_items`. Not reachable from the UI (no app path writes `line_item_id` after insert),
+  but row reorder is the feature that would have made it reachable. **Fix:**
+  `20261720000000_line_row_reorder_and_containment.sql` — `estimate_line_rows_containment`, a BEFORE
+  UPDATE OF `line_item_id` trigger that makes it immutable (23514), service role included. Proven:
+  `test/s110-line-rows.live.ts` 4a–4d (a rename on the same row passes; owner, PM-to-SENT and
+  service-role re-parents refused, row stays put). ⚠️ **Production, before merge:** governs future
+  writes only, cannot abort; for the record `select count(*) from estimate_line_rows;`.
+
 ### Branch-scoped, awaiting real numbers — `feature/s109-debt-159-163` [S109]
 
 - **#2-s109 — ✅ FIXED ON THIS BRANCH (filed by ruling 161.B, closes on merge): the Estimate
