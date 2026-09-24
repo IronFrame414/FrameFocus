@@ -114,3 +114,46 @@ through a separate worktree, so the section branches never conflict over this fi
 
 Limits, stated in the registry: a path built by concatenation or from a variable last segment is
 invisible to the walk, and is disallowed for contract routes. No migration. Merge: awaiting Josh.
+
+## Phase 3 — Section C — branch `feature/s110-c-account-link` @ `cbd4c085` — **built; e2e NOT YET RUN**
+
+- `app/m/mobile-shell.tsx` `NavSheet`: a full-width **"Your account"** row (`m-sheet-account`,
+  `href="/m/account"`, `aria-current` on the page) directly above Sign out, every role (Q7). The
+  Settings card link stays.
+- `e2e/m-shell.spec.ts` A-3b: describe title superseded and quoted in place; the seven tiles are
+  still asserted exactly; a new case measures the row (58 px, full width, directly above Sign
+  out, not in the grid).
+- New `e2e/m-account-link-s110.spec.ts`: **clicks** ☰ → Your account → the password form, as crew
+  and as a subcontractor (the S109 link had never been clicked by any test).
+- `tsc` 0, lint 0. ⚠️ **e2e held:** the Actions API shows 4–6 concurrent CI runs on rebuild-test
+  (every pushed S110 branch, plus `main` and `feature/s110-docs`, which are not this session's).
+  Stop rule: no second heavy consumer. To be run when the queue drains.
+
+## Phase 3 — Section D — branch `feature/s110-d-line-rows` @ `075139c4` — **DB half proven; UI e2e NOT YET RUN**
+
+- `20261720000000_line_row_reorder_and_containment.sql` → rebuild-test: dry run listed exactly this
+  file; `DBPUSH_EXIT_LINE=0`; objects verified (`reorder_estimate_line_rows` INVOKER, anon ✗ /
+  authenticated ✓; `enforce_line_row_containment` no grants; trigger `estimate_line_rows_containment`
+  present); `db:types` +4 lines; `db:fingerprint` exit 0; `db:verify` exit 0, **LEDGER CLEAN**.
+- **`#1-s110` filed and fixed** (Q16): `line_item_id` immutable on UPDATE, service role included.
+- `test/s110-line-rows.live.ts` — **`LIVE_D_EXIT_LINE=0`, 11/11**, 0 fixtures left. Renumber incl.
+  the duplicate-`sort_order` case; stale/partial list 22023 with order unchanged; PM own draft
+  CONTROL passes beside PM-on-owner refused and owner-on-SENT 42501; rename CONTROL passes beside
+  three re-parent refusals (23514), row stays put. ⚠️ First run red at 3b: the PM got **22023, not
+  42501**. The PM cannot even SELECT the owner's rows, so the list check refuses before any
+  UPDATE. That is the stronger refusal; the test now asserts it, with the reason in the file.
+  42501 is covered by 3c.
+- UI: one `ReorderGrip` for lines and rows (`items-tab.tsx`), row grip in the Type cell, native
+  DnD within the line (upper half = before, lower half = after) plus ↑/↓. **D2: the grip focuses
+  itself on mousedown.**
+- **The D2 failure class, named:** _the thing inspected must be the thing being judged_ — the
+  **wrong-scope** form. S109 T2 ran in Chromium only, which focuses a button on click by itself;
+  it measured Chromium's default, not the handle. The new e2e dispatches a **synthetic**
+  mousedown, which no browser focuses by default. `desktop-row-activation-s109.spec.ts` gains a
+  header note (T2's focus claim is Chromium evidence only); nothing deleted.
+- `test/s110-line-rows.test.ts` 10/10 (plan helpers + a pin on the grip's focus and on there
+  being ONE draggable button). `tsc` 0, lint 0.
+- ⚠️ **Production count owed (governs no existing row, cannot abort):**
+  `select count(*) from estimate_line_rows;` — Josh applies `20261720000000` before D merges.
+- **e2e `desktop-line-rows-s110.spec.ts` (R1 row, R2 line) and its sabotage (remove the
+  `onMouseDown`) held** for the same CI-queue reason.

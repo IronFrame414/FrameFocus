@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useFileSheet } from '@/components/files/file-sheet';
 import {
   EmailLog,
   SigningSession,
@@ -54,18 +55,23 @@ export function SigningActivity({ data, reload }: Pick<TabProps, 'data' | 'reloa
     await reload();
   }
 
-  async function handleSignedDownload() {
-    if (!estimate.signed_proposal_file_id) return;
-    setBusy(true);
-    const { url, error: urlError } = await getSignedProposalUrl(
-      estimate.signed_proposal_file_id
-    );
-    setBusy(false);
-    if (!url) {
-      setError(urlError || 'Could not create the download link');
-      return;
-    }
-    window.location.href = url;
+  // S110 E3 [RULED Q10 → A] — the signed proposal opens in the SHEET, whose
+  // Download action still saves it. _Superseded, quoted:_
+  // `window.location.href = url` — which navigated away from the estimate.
+  const openFile = useFileSheet();
+  function handleSignedDownload() {
+    const fileId = estimate.signed_proposal_file_id;
+    if (!fileId) return;
+    setError(null);
+    openFile({
+      fileName: 'Signed proposal',
+      mimeType: 'application/pdf',
+      resolveUrl: async () => {
+        const { url, error: urlError } = await getSignedProposalUrl(fileId);
+        if (!url) setError(urlError || 'Could not open the signed proposal');
+        return url;
+      },
+    });
   }
 
   const remindersOff =
@@ -145,7 +151,7 @@ export function SigningActivity({ data, reload }: Pick<TabProps, 'data' | 'reloa
         )}
         {estimate.signed_proposal_file_id && (
           <button type="button" onClick={handleSignedDownload} disabled={busy} style={smallButton}>
-            Download Signed Proposal
+            View Signed Proposal
           </button>
         )}
         {(estimate.status === 'sent' || remindersOff) && (

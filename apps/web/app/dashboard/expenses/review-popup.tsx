@@ -24,6 +24,7 @@
 // 'subcontractor', which capture never offers).
 
 import { useCallback, useEffect, useState } from 'react';
+import { SheetLink } from '@/components/files/sheet-link';
 import {
   listPaymentAccounts,
   myDefaultPaymentAccountId,
@@ -415,11 +416,13 @@ export function ReviewPopup({ expense, receipts, projects, onClose, onDone }: Re
           until approved.
         </p>
 
-        {/* Receipt strip — tap opens fullscreen in a new tab. */}
+        {/* Receipt strip — S110 E3 [RULED Q10 → A]: tap opens the receipt in the
+            SHEET over this review (re-signed on open). _Superseded, quoted:_
+            "tap opens fullscreen in a new tab". A modified click still does. */}
         {receipts.length > 0 ? (
           <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', flexWrap: 'wrap' }}>
             {receipts.map((r) => (
-              <a key={r.id} href={r.url} target="_blank" rel="noreferrer" title={r.name}>
+              <SheetLink key={r.id} href={r.url} fileName={r.name} fileId={r.id} title={r.name}>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={r.url}
@@ -432,7 +435,7 @@ export function ReviewPopup({ expense, receipts, projects, onClose, onDone }: Re
                     border: `1px solid ${color.cardBorder}`,
                   }}
                 />
-              </a>
+              </SheetLink>
             ))}
           </div>
         ) : (

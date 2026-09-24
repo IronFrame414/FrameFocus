@@ -545,7 +545,15 @@ async function confirmationState(
 export async function handleAuthEmail(
   admin: SupabaseClient<Database>,
   payload: AuthEmailPayload,
-  supabaseUrl: string
+  supabaseUrl: string,
+  /**
+   * [S110 E1] The link in the email, when it is NOT GoTrue's `/auth/v1/verify`.
+   * Used only by the admin-initiated reset, which mints its own token with
+   * `auth.admin.generateLink()` and points the email at this app's
+   * `/auth/confirm` — a same-origin route, so no allow-list is routed around.
+   * Every other caller (the Send Email Hook) omits it and is unchanged.
+   */
+  opts?: { actionUrl?: string }
 ): Promise<AuthEmailOutcome> {
   const actionRaw = payload.email_data.email_action_type;
   const action = (actionRaw in ACTIONS ? actionRaw : 'unknown') as AuthEmailAction | 'unknown';
@@ -642,11 +650,9 @@ export async function handleAuthEmail(
   }
 
   const { emailType, kind } = ACTIONS[action];
-  const verifyUrl = buildVerifyUrl(
-    supabaseUrl,
-    payload.email_data,
-    action === 'email_change_new'
-  );
+  const verifyUrl =
+    opts?.actionUrl ??
+    buildVerifyUrl(supabaseUrl, payload.email_data, action === 'email_change_new');
 
   const { sender, reason: senderReason } = await senderFor(admin, payload.user.id);
 
