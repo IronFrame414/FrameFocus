@@ -122,7 +122,8 @@ export default async function NotificationsPage({
       <NotificationList initial={rest} surface="desktop" filter={filter} rollUpRepeats />
 
       <section style={{ marginTop: '2rem' }}>
-        <h2 style={{ fontSize: '1rem', fontWeight: 600 }}>Push notifications</h2>
+        {/* The "Push notifications" heading is the component's own now [/m
+            visual sweep, 2026-09-24] — one card, both surfaces. */}
         {/* ND-4: this enrols against the /dashboard push-only worker. The same
             component on /m enrols against the /m worker — one behaviour, two
             registrations. */}

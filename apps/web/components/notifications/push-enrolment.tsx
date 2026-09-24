@@ -37,7 +37,18 @@ import { useT } from '@/components/i18n/language-provider';
  * is what a tap does and what it writes. Both surfaces render THIS component and
  * pass a different `surface` — they do not each own a copy.
  */
-export function PushEnrolment({ surface }: { surface: Surface }) {
+export function PushEnrolment({
+  surface,
+  framed = true,
+}: {
+  surface: Surface;
+  /**
+   * Draw the card and its heading. Settings passes false because it already
+   * frames this control in its own titled card; a second card inside it would
+   * double both. Presentation only — every branch below renders identically.
+   */
+  framed?: boolean;
+}) {
   const [state, setState] = useState<PushState | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -75,13 +86,35 @@ export function PushEnrolment({ surface }: { surface: Surface }) {
   // install instructions a tick later is the same wrong offer, just briefly.
   if (state === null) return null;
 
+  // [2026-09-24, /m visual sweep Q1] Styled for the first time — it shipped with
+  // no classes on either surface. One card, both surfaces; the button meets
+  // /m's 44px floor on mobile. Nothing here changes which branch renders.
+  const button =
+    'inline-flex min-h-[44px] items-center justify-center rounded-[12px] px-[16px] text-[15px] font-bold disabled:opacity-60';
+  const text = 'text-[14px] leading-relaxed text-m6m-navy/80';
+
   return (
-    <div data-testid="push-enrolment" data-push-state={state}>
+    <div
+      data-testid="push-enrolment"
+      data-push-state={state}
+      data-surface={surface}
+      className={
+        framed
+          ? 'flex flex-col gap-[10px] rounded-[15px] border border-m6m-border bg-m6m-card px-[16px] py-[14px]'
+          : 'flex flex-col gap-[10px]'
+      }
+    >
+      {framed && (
+        <h2 className="font-mono text-[11px] font-medium uppercase tracking-wide text-m6m-muted">
+          {t('shell.push.heading')}
+        </h2>
+      )}
+
       {state === 'ios-needs-install' && (
         // ⚠️ NO BUTTON IN THIS BRANCH. A-N26 asserts its absence.
-        <div data-testid="push-ios-install">
+        <div data-testid="push-ios-install" className={`flex flex-col gap-[8px] ${text}`}>
           <p>{t('shell.push.iosIntro', { app: brand.name })}</p>
-          <ol>
+          <ol className="list-decimal space-y-[4px] pl-[20px]">
             <li>
               {t('shell.push.tap')} <strong>{t('shell.push.share')}</strong>{' '}
               {t('shell.push.inSafari')}
@@ -107,29 +140,49 @@ export function PushEnrolment({ surface }: { surface: Surface }) {
       {state === 'denied' && (
         // No re-prompt: the API will not show one. Saying so beats a button that
         // silently does nothing, which reads as a broken app.
-        <p data-testid="push-denied">{t('shell.push.blocked', { app: brand.name })}</p>
+        <p data-testid="push-denied" className={text}>
+          {t('shell.push.blocked', { app: brand.name })}
+        </p>
       )}
 
       {state === 'unsupported' && (
-        <p data-testid="push-unsupported">{t('shell.push.unsupported')}</p>
+        <p data-testid="push-unsupported" className={text}>
+          {t('shell.push.unsupported')}
+        </p>
       )}
 
       {state === 'available' && (
-        <button type="button" onClick={onEnable} disabled={busy} data-testid="push-enable">
+        <button
+          type="button"
+          onClick={onEnable}
+          disabled={busy}
+          data-testid="push-enable"
+          className={`${button} self-start bg-m6m-blue text-white`}
+        >
           {busy ? t('shell.push.turningOn') : t('shell.push.turnOn')}
         </button>
       )}
 
       {state === 'enabled' && (
-        <div data-testid="push-enabled">
-          <p>{t('shell.push.onForDevice')}</p>
-          <button type="button" onClick={onDisable} disabled={busy} data-testid="push-disable">
+        <div data-testid="push-enabled" className="flex flex-col gap-[10px]">
+          <p className={text}>{t('shell.push.onForDevice')}</p>
+          <button
+            type="button"
+            onClick={onDisable}
+            disabled={busy}
+            data-testid="push-disable"
+            className={`${button} self-start border border-m6m-border bg-m6m-card text-m6m-navy`}
+          >
             {busy ? t('shell.push.turningOff') : t('shell.push.turnOff')}
           </button>
         </div>
       )}
 
-      {message && <p data-testid="push-message">{message}</p>}
+      {message && (
+        <p data-testid="push-message" className={text}>
+          {message}
+        </p>
+      )}
     </div>
   );
 }

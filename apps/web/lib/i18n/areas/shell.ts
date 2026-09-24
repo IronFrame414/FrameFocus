@@ -127,6 +127,7 @@ export const en = {
   'shell.push.unsupported':
     "This browser can't receive push notifications. You'll still see everything in your notifications list.",
   'shell.push.turningOn': 'Turning on…',
+  'shell.push.heading': 'Push notifications',
   'shell.push.turnOn': 'Turn on notifications',
   'shell.push.onForDevice': 'Notifications are on for this device.',
   'shell.push.turningOff': 'Turning off…',
@@ -308,6 +309,7 @@ export const es: Record<keyof typeof en, string> = {
   'shell.push.unsupported':
     'Este navegador no puede recibir notificaciones push. Igual verás todo en tu lista de notificaciones.',
   'shell.push.turningOn': 'Activando…',
+  'shell.push.heading': 'Notificaciones push',
   'shell.push.turnOn': 'Activar notificaciones',
   'shell.push.onForDevice': 'Las notificaciones están activadas en este dispositivo.',
   'shell.push.turningOff': 'Desactivando…',
