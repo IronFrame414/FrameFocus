@@ -4,8 +4,11 @@ import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 // Reply-To of the sending COMPANY's address, so a client's reply reaches the
 // company rather than the platform domain (ezcontractorbinder.com).
 //
-// These are unit traces over the shared send path. The DB-backed resolution
-// order is asserted live in s97ct-reply-to.live.ts; what is asserted HERE is the
+// These are unit traces over the shared send path. The resolution order is
+// unit-tested in company-reply-to-resolver.test.ts (its fallback arms cannot be
+// built against a real database since companies.email became required
+// [2026-09-24]); s97ct-reply-to.live.ts asserts arm 1 and the refusals live.
+// What is asserted HERE is the
 // wiring — that the header is set, that it is the company's address and never
 // the recipient's, and that an unresolvable address degrades to NO header
 // rather than to a failed send or an invented address.
@@ -100,8 +103,9 @@ describe('+REPLY-TO — the header is set from the company', () => {
   });
 
   it('FALLS BACK to the owner when companies.email is empty', async () => {
-    // The branch that actually runs today: the column exists but no company on
-    // rebuild-test has filled it in.
+    // [2026-09-24] Unreachable against a real database now that companies.email
+    // is required (20261760000000) — kept as a trace of the safety net. The
+    // resolver's own arms are covered in company-reply-to-resolver.test.ts.
     resolveMock.mockImplementation((table: string) =>
       table === 'companies'
         ? { data: { email: '   ' } }
