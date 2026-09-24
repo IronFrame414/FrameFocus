@@ -324,3 +324,51 @@ count before its exit line.**
 Also measured and recorded in the test: under vitest 4, a `beforeEach` that resets or clears a
 mock makes a later throwing implementation fail the test **even though the code caught the
 error**. Reproduced with and without the hook; the test asserts call-count deltas instead.
+
+### H continued — Q14 (send-time English check), UserText wired, filings
+
+**Q14 — A + C, never B, with the amendment (warn + record the override).**
+`lib/language-check/english-check.ts` asks the model for a **language CODE per field and nothing
+else**; any other field of the reply is dropped. So machine output can stop a send but never becomes
+words on a document. It sits deliberately outside `lib/translation/`, which the ruling-5 test forbids
+client-facing code from reaching. It fails open, and logs a cost row on success and failure
+(`target_lang='detect'`). Wired into **proposal, change-order and invoice sends**. The invoice check
+runs **before** the issue step, so a warning never spends an invoice number. One
+`NotEnglishWarning` component serves all four send UIs; on `/m` it speaks the user's language. The
+override is recorded on the send's `email_logs.metadata.language_check`
+(`{checked, flagged, overridden_by}`).
+
+| proof | printed line |
+| --- | --- |
+| unit `s110-english-check.test.ts` (codes only; fails open; 409 body) | 5/5 |
+| live `s110-english-check.live.ts` — real route + model | **3/3**: Spanish estimate name → 409 naming it, no signing link, no log, name unchanged; override → proceeds, override recorded with the owner's profile id; English control clean |
+| live `s110-english-check-co-invoice.live.ts` | **4/4**: CO refused and untouched (no signature written); CO override recorded; CO English control; **invoice refused, still draft, `invoice_number` NULL** |
+| sabotage (proposal check disabled / CO check disabled) | `SABOTAGE_EC_EXIT_LINE=1`, `SABOTAGE_EC2_EXIT_LINE=1`; both restored `cmp` identical; fixtures 0 |
+| not driven live, stated | the invoice OVERRIDE path — it would issue the invoice and spend a real number in Company A's sequence |
+
+**Fixed on the way:** two send buttons passed the click EVENT as the new `languageOverride`
+argument (`onClick={handleSend}`), which would have overridden every warning silently. Now
+`onClick={() => void handleSend()}`. Prettier had also reflowed four unrelated files; they were
+restored and re-edited so the diffs hold only the change.
+
+**UserText (ruling 3), wired:** someone else's chat message (both surfaces), `/m` daily-log detail
+and list excerpts, the `/m` punch item, and the desktop daily-log detail.
+`s110-usertext-wiring.test.ts` 6/6. **UserText now adds nothing unless a translation exists**: pending
+or failed shows the original alone, with the state in `data-usertext-state` and a tooltip. This keeps
+the text identical for an English reader and for every existing e2e assertion (CI has no model
+key).
+
+**Filed (H branch):** `#3-s110` notifications/push, out of scope by Q15; `#4-s110` the user-text
+surfaces not yet wired (SiteVisitRecord first, after A).
+
+**E2E written, not yet run:** `e2e/m-language-s110.spec.ts` (Español on `/m`, English on `/dashboard`,
+back). Its `afterAll` resets the shared crew identity to `en` through the service role.
+
+### CI results so far (Actions API)
+
+| branch | run | result |
+| --- | --- | --- |
+| F `feature/s110-f-route-guard` | `35931243349` | **success** |
+| D `feature/s110-d-line-rows` | `35931975526` | **success**, so `desktop-line-rows-s110` R1/R2 passed in CI |
+| C `feature/s110-c-account-link` | `35931389397` | **failure: 1 failed, 4 flaky, 569 passed.** The failure is `desktop-chat-switcher.spec.ts:62` (per-thread unread), the #157 contention fingerprint. That run overlapped 4 other S110 CI runs on the one database. C's own specs are in neither the failed nor the flaky list; the log names only those, so this is not direct evidence. **To be confirmed by a local run on an idle database.** |
+| E | `35933826436` | in progress at the time of writing (earlier E runs failed at build/type-check on the two defects already fixed) |
