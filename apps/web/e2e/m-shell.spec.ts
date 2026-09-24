@@ -306,9 +306,16 @@ test.describe('A-3b · the sheet holds exactly the seven named tiles + Your acco
     await expect(account).toHaveText('Your account');
     await expect(account).toHaveAttribute('href', '/m/account');
     await expect(page.getByTestId('m-sheet-grid').getByText('Your account')).toHaveCount(0);
-    const a = (await account.boundingBox())!;
-    const out = (await page.getByTestId('m-sign-out').boundingBox())!;
-    const sheet = (await page.getByTestId('m-nav-sheet').boundingBox())!;
+    // The sheet DROPS in (a 140ms animation). Separate boundingBox() calls read
+    // separate frames of it — a first run measured a 0.6px "gap" that was the
+    // animation, not the layout. Wait for it to finish, then read all three
+    // rects in ONE frame.
+    const sheetEl = page.getByTestId('m-nav-sheet');
+    await sheetEl.evaluate((el) => Promise.all(el.getAnimations().map((x) => x.finished)));
+    const { a, out, sheet } = await page.evaluate(() => {
+      const r = (id: string) => document.querySelector(`[data-testid="${id}"]`)!.getBoundingClientRect();
+      return { a: r('m-sheet-account'), out: r('m-sign-out'), sheet: r('m-nav-sheet') };
+    });
     expect(a.height).toBeCloseTo(58, 0);
     expect(a.width).toBeCloseTo(sheet.width - 36, 0);
     // Directly above: its bottom edge plus the 10px gap is Sign out's top.
