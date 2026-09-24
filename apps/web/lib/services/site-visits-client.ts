@@ -149,11 +149,15 @@ export async function abandonSiteVisit(estimateId: string): Promise<Result> {
 }
 
 /** A photo, through the estimate-files route (the only access control for a
- *  project-less file). `id` makes a replay from the offline queue idempotent. */
+ *  project-less file), as a site-visit capture. `id` makes a replay from the
+ *  offline queue idempotent. */
 export async function uploadSiteVisitPhoto(estimateId: string, file: Blob, fileName: string, id: string): Promise<Result> {
   const form = new FormData();
   form.set('file', new File([file], fileName, { type: file.type || 'image/jpeg' }));
   form.set('id', id);
+  // [S110 A] a site-visit CAPTURE: allowed at every status, and marked so that
+  // foreman and crew can read it (and only it) on the estimate.
+  form.set('capture', '1');
   const res = await fetch(`/api/estimates/${estimateId}/files`, { method: 'POST', body: form });
   if (res.ok) return { success: true };
   const body = (await res.json().catch(() => ({}))) as { error?: string };

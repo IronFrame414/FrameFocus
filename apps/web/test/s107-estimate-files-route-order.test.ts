@@ -46,12 +46,20 @@ let estimateRow: Record<string, unknown> | null = null;
 let visitRow: Record<string, unknown> | null = null;
 let accessValue: string | null = null;
 
+// [S110 A] every .eq() the ADMIN client's query makes, so a test can assert the
+// visit arm is SCOPED to site-visit captures (the Floor) and the office arm is not.
+let adminEqs: Array<[string, unknown]> = [];
+
 /** A chainable PostgREST-shaped stub. `.single()` resolves the configured row. */
-function table(row: unknown) {
+function table(row: unknown, eqs?: Array<[string, unknown]>) {
   const chain: Record<string, unknown> = {};
-  for (const m of ['select', 'eq', 'order', 'is', 'in']) {
+  for (const m of ['select', 'order', 'is', 'in']) {
     chain[m] = () => chain;
   }
+  chain.eq = (col: string, val: unknown) => {
+    eqs?.push([col, val]);
+    return chain;
+  };
   chain.single = async () => ({ data: row, error: null });
   chain.maybeSingle = async () => ({ data: row, error: null });
   chain.then = (res: (v: unknown) => unknown) => Promise.resolve({ data: [], error: null }).then(res);
@@ -71,7 +79,7 @@ vi.mock('@/lib/supabase-admin', () => ({
   getSupabaseAdmin: (...args: unknown[]) => {
     adminSpy(...args);
     return {
-      from: () => table(null),
+      from: () => table(null, adminEqs),
       storage: {
         from: () => ({
           createSignedUrl: async () => ({ data: null }),
@@ -89,6 +97,7 @@ const ctx = { params: { id: '11111111-1111-1111-1111-111111111111' } };
 
 beforeEach(() => {
   adminSpy.mockClear();
+  adminEqs = [];
   sessionUser = { id: 'user-1' };
   profileRow = { company_id: 'co-1', role: 'project_manager' };
   estimateRow = null;
@@ -170,10 +179,15 @@ describe('POST — the session read AND the edit gate both precede the admin cli
 // That arm must ALSO run entirely before the service-role client, and it gets
 // its OWN mirror case so its not-called assertions cannot pass vacuously.
 // ---------------------------------------------------------------------------
-describe('[S108] the RECORDER arm — also before the admin client, with its own mirror', () => {
-  const body = () => {
+// [S110 A] _Superseded title, quoted: "[S108] the RECORDER arm — also before the
+// admin client, with its own mirror"._ The arm is now the VISIT arm: any internal
+// employee on the visit (not only its recorder), who reads ONLY site-visit
+// captures and captures at every status. Same ordering rule, same mirrors.
+describe('[S108→S110] the VISIT arm — also before the admin client, with its own mirror', () => {
+  const body = (capture = true) => {
     const form = new FormData();
     form.set('file', new File([new Uint8Array(4)], 'a.jpg', { type: 'image/jpeg' }));
+    if (capture) form.set('capture', '1');
     return new Request('http://t/', { method: 'POST', body: form });
   };
   const crew = () => {
@@ -197,8 +211,11 @@ describe('[S108] the RECORDER arm — also before the admin client, with its own
     expect(adminSpy).not.toHaveBeenCalled();
   });
 
-  it('their visit, already PROMOTED (access null) → POST 403 AND the admin client is never reached', async () => {
-    // Q3 condition 1: after promotion the recorder keeps READ and LOSES UPLOAD.
+  // _Superseded title: "their visit, already PROMOTED (access null) → POST 403" —
+  // "Q3 condition 1: after promotion the recorder keeps READ and LOSES UPLOAD."_
+  // [S110 ruling 2] promotion no longer closes upload; access is NULL now only
+  // for a caller who is not an internal employee on the visit.
+  it('site_visit_access() NULL → POST 403 AND the admin client is never reached', async () => {
     crew();
     visitRow = { estimate_id: ctx.params.id, company_id: 'co-1', created_by: 'user-1', is_deleted: false };
     accessValue = null;
@@ -207,18 +224,48 @@ describe('[S108] the RECORDER arm — also before the admin client, with its own
     expect(adminSpy).not.toHaveBeenCalled();
   });
 
-  it('MIRROR: their visit, still a site visit → POST reaches the admin client (so the above is not vacuous)', async () => {
+  it('a visit-arm ORDINARY upload (no capture flag) → 403 AND the admin client is never reached', async () => {
+    // Only the site-visit record's captures are theirs to add; the Files tab is the office's.
     crew();
-    visitRow = { estimate_id: ctx.params.id, company_id: 'co-1', created_by: 'user-1', is_deleted: false };
-    accessValue = 'recorder';
-    await POST(body(), ctx);
-    expect(adminSpy, 'the recorder arm never reaches the admin client at all').toHaveBeenCalled();
+    visitRow = { estimate_id: ctx.params.id, company_id: 'co-1', created_by: 'someone-else', is_deleted: false };
+    accessValue = 'staff';
+    const res = await POST(body(false), ctx);
+    expect(res.status).toBe(403);
+    expect(adminSpy).not.toHaveBeenCalled();
   });
 
-  it('MIRROR: their PROMOTED visit → GET still reaches the admin client (READ survives promotion)', async () => {
+  it('MIRROR: a capture on ANY visit in the company (not only one they recorded) → POST reaches the admin client', async () => {
+    crew();
+    visitRow = { estimate_id: ctx.params.id, company_id: 'co-1', created_by: 'someone-else', is_deleted: false };
+    accessValue = 'staff';
+    await POST(body(), ctx);
+    expect(adminSpy, 'the visit arm never reaches the admin client at all').toHaveBeenCalled();
+  });
+
+  it('⚠️ THE FLOOR — the visit arm lists ONLY site_visit_capture files, never the estimate\'s other files', async () => {
+    crew();
+    visitRow = { estimate_id: ctx.params.id, company_id: 'co-1', created_by: 'someone-else', is_deleted: false };
+    accessValue = 'staff';
+    const res = await GET(new Request('http://t/'), ctx);
+    expect(res.status).toBe(200);
+    expect(adminEqs, 'a crew member could list the estimate\'s PDFs (vendor quotes)').toContainEqual([
+      'site_visit_capture',
+      true,
+    ]);
+  });
+
+  it('MIRROR: the office arm is NOT scoped to captures (so the Floor case is not vacuous)', async () => {
+    profileRow = { company_id: 'co-1', role: 'owner' };
+    estimateRow = { id: ctx.params.id, company_id: 'co-1', status: 'draft', created_by: 'user-1' };
+    const res = await GET(new Request('http://t/'), ctx);
+    expect(res.status).toBe(200);
+    expect(adminEqs.some(([c]) => c === 'site_visit_capture')).toBe(false);
+  });
+
+  it('MIRROR: a PROMOTED (or sent) visit → GET still reaches the admin client', async () => {
     crew();
     visitRow = { estimate_id: ctx.params.id, company_id: 'co-1', created_by: 'user-1', is_deleted: false };
-    accessValue = null;
+    accessValue = 'staff';
     const res = await GET(new Request('http://t/'), ctx);
     expect(res.status).toBe(200);
     expect(adminSpy).toHaveBeenCalled();

@@ -1,5 +1,6 @@
 'use client';
 
+import { addedAfterSend } from '@/lib/site-visits/photos';
 import { useEffect, useRef, useState } from 'react';
 import {
   retryTranscription,
@@ -50,16 +51,16 @@ export function VoiceNotes({
   voiceNotes,
   audioUrls,
   canWrite,
-  office,
-  viewerUserId,
+  frozenAt,
   onChanged,
 }: {
   estimateId: string;
   voiceNotes: SiteVisitVoiceNote[];
   audioUrls: Record<string, string | null>;
+  /** site_visit_access() — this viewer may ADD (every status, S110 A). */
   canWrite: boolean;
-  office: boolean;
-  viewerUserId: string;
+  /** site_visits.frozen_at — a note recorded at or before it is frozen. */
+  frozenAt: string | null;
   onChanged: () => void | Promise<void>;
 }) {
   const online = useOnline();
@@ -186,7 +187,11 @@ export function VoiceNotes({
             key={v.id}
             note={v}
             url={v.file_id ? audioUrls[v.file_id] ?? null : null}
-            editable={canWrite && (office || v.created_by === viewerUserId)}
+            // [S110 A] any internal employee edits any transcript, unless the
+            // note existed when the estimate was sent (the database refuses it too).
+            // _Superseded: `canWrite && (office || v.created_by === viewerUserId)`._
+            editable={canWrite && !(frozenAt && v.created_at && v.created_at <= frozenAt)}
+            addedAfterSend={addedAfterSend(v.created_at, frozenAt)}
             onChanged={onChanged}
           />
         ))}
@@ -216,11 +221,13 @@ function VoiceRow({
   note,
   url,
   editable,
+  addedAfterSend: after,
   onChanged,
 }: {
   note: SiteVisitVoiceNote;
   url: string | null;
   editable: boolean;
+  addedAfterSend: boolean;
   onChanged: () => void | Promise<void>;
 }) {
   const online = useOnline();
@@ -238,6 +245,7 @@ function VoiceRow({
       <div className="mb-[6px] font-mono text-[12px] text-m6m-muted">
         {mmss(Number(note.duration_seconds))}
         {note.transcript_edited_at ? ' · transcript edited' : ''}
+        {after ? <span data-testid="sv-added-after"> · added after the estimate was sent</span> : null}
       </div>
       {url ? <audio data-testid="sv-voice-audio" controls preload="none" src={url} className="w-full" /> : null}
       {note.transcript_status === 'pending' ? (

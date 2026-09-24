@@ -62,12 +62,15 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
   const admin = getSupabaseAdmin() as SupabaseClient<Database>;
   let q = admin
     .from('files')
-    .select('id, file_name, file_size, mime_type, category, created_at')
+    .select('id, file_name, file_size, mime_type, category, created_at, site_visit_capture')
     .eq('estimate_id', estimateId)
     .eq('company_id', access.companyId)
     .eq('is_deleted', false)
     .order('created_at', { ascending: false });
-  if (access.ownFilesOnly) q = q.eq('created_by', user.id);
+  // [S110 A, RULED Q4] a VISIT-arm caller (foreman, crew, a PM who does not
+  // own the estimate) sees ONLY site-visit captures — never the estimate's other
+  // files. _Superseded, quoted:_ `if (access.ownFilesOnly) q = q.eq('created_by', user.id);`
+  if (access.scope === 'capture') q = q.eq('site_visit_capture', true);
   const { data: files, error } = await q;
   if (error) {
     console.error('[GET /api/estimates/[id]/files] list failed', {
@@ -90,9 +93,10 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
   return NextResponse.json({ files: files ?? [] } satisfies EstimateFileListResponse);
 }
 
-// POST — upload a file to an estimate. EDIT rights: owner/admin any DRAFT, PM own DRAFT
-// (mirrors `estimates_update_manager`); owner/admin/PM on a SITE VISIT; and the recorder
-// of a site visit while it is still one. Service role bypasses RLS, so the route enforces
+// POST — upload a file to an estimate. An ordinary upload: owner/admin any DRAFT, PM own
+// DRAFT (mirrors `estimates_update_manager`). A site-visit CAPTURE (`capture=1`): any
+// internal employee on the visit, at every status [S110 ruling 3]. _Superseded: "owner/
+// admin/PM on a SITE VISIT; and the recorder of a site visit while it is still one."_ Service role bypasses RLS, so the route enforces
 // this itself — BEFORE the admin client exists.
 export async function POST(req: Request, { params }: { params: { id: string } }) {
   const estimateId = params.id;
@@ -104,19 +108,23 @@ export async function POST(req: Request, { params }: { params: { id: string } })
 
   const access = await resolveEstimateFileAccess(supabase, user.id, estimateId);
   if (!access.ok) return NextResponse.json({ error: access.error }, { status: access.status });
-  if (!access.canUpload) {
+  const form = await req.formData();
+  // [S110 A] `capture=1` — the upload comes from the site-visit record. It is
+  // allowed at EVERY status for any internal employee on the visit (ruling 3)
+  // and is marked site_visit_capture, which is what lets foreman and crew read
+  // it. Anything else is an ordinary Files-tab upload: a draft you may edit.
+  const capture = form.get('capture') === '1';
+  if (capture ? !access.canCapture : !access.canUpload) {
     return NextResponse.json(
       {
-        error:
-          access.mode === 'recorder'
-            ? 'This visit is now an estimate — new photos are closed. Yours stay readable.'
-            : 'You cannot attach files to this estimate (edit rights required on a draft you own).',
+        error: capture
+          ? 'You cannot add to this site visit.'
+          : 'You cannot attach files to this estimate (edit rights required on a draft you own).',
       },
       { status: 403 }
     );
   }
 
-  const form = await req.formData();
   const file = form.get('file');
   if (!(file instanceof File)) return NextResponse.json({ error: 'No file provided' }, { status: 400 });
   if (file.size > MAX_SIZE) {
@@ -138,7 +146,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   if (clientId) {
     const { data: already } = await admin
       .from('files')
-      .select('id, file_name, file_size, mime_type, category, created_at')
+      .select('id, file_name, file_size, mime_type, category, created_at, site_visit_capture')
       .eq('id', clientId)
       .eq('estimate_id', estimateId)
       .maybeSingle();
@@ -169,6 +177,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       project_id: null,
       estimate_id: estimateId,
       category: 'other',
+      site_visit_capture: capture,
       file_name: file.name,
       file_path: storagePath,
       file_size: file.size,
@@ -176,7 +185,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       created_by: user.id,
       updated_by: user.id,
     })
-    .select('id, file_name, file_size, mime_type, category, created_at')
+    .select('id, file_name, file_size, mime_type, category, created_at, site_visit_capture')
     .single();
   if (insertError || !row) {
     // Cleanup the orphaned blob so a failed insert leaves nothing behind.

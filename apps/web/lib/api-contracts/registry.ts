@@ -53,7 +53,7 @@ export const ROUTE_CONTRACTS: RouteContract[] = [
       String.raw`/api/estimates/${SEG}/files(?![/\w])|api/estimates/\[id\]/files/route`
     ),
     fieldSource: 'select',
-    fields: ['id', 'file_name', 'file_size', 'mime_type', 'category', 'created_at'],
+    fields: ['id', 'file_name', 'file_size', 'mime_type', 'category', 'created_at', 'site_visit_capture'],
     consumers: {
       // The desktop Files tab: lists, opens (id), shows name/size/date, uploads.
       'app/dashboard/estimates/[id]/estimate-files-tab.tsx': [
@@ -65,7 +65,8 @@ export const ROUTE_CONTRACTS: RouteContract[] = [
       ],
       // THE #161 CONSUMER. Reads the list to find photos and audio, then signs
       // each through the /url route (lib/site-visits/media.ts).
-      'components/site-visits/site-visit-record.tsx': ['id', 'file_name', 'mime_type', 'created_at'],
+      // [S110 A] also reads site_visit_capture: the tab shows captures only.
+      'components/site-visits/site-visit-record.tsx': ['id', 'file_name', 'mime_type', 'created_at', 'site_visit_capture'],
       // POST only; reads `error` on failure, no row fields.
       'lib/services/site-visits-client.ts': [],
       // S2 asserts the list carries NO url and NO file_path (161.B).
