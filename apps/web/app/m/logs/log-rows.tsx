@@ -5,6 +5,7 @@ import type { MobileLogRow } from '@/lib/services/daily-logs';
 import { EmptyState, ListRowLink } from '../mobile-ui';
 import { useOfflineSync } from '../offline-sync';
 import { useT } from '@/components/i18n/language-provider';
+import { UserText } from '@/components/i18n/user-text';
 import type { T } from '@/lib/i18n/messages';
 
 // M6M §4.6 — M-6's rows, and the one thing that has to be a client component.
@@ -129,7 +130,14 @@ export function LogRows({ rows, projectId }: { rows: MobileLogRow[]; projectId: 
                 {[r.project_number ?? r.project_name, r.author_name].filter(Boolean).join(' · ')}
               </p>
               <p className="mt-[3px] truncate text-[13px] text-m6m-muted">
-                {excerpt(r.work_performed, t)}
+                {/* S110 H — the excerpt in the reader's language. A queued
+                    (offline) row above is shown as typed: it cannot reach
+                    the translator until it syncs. */}
+                {r.work_performed?.trim() ? (
+                  <UserText text={excerpt(r.work_performed, t)} />
+                ) : (
+                  excerpt(r.work_performed, t)
+                )}
               </p>
             </ListRowLink>
           ))}

@@ -11,8 +11,8 @@ import type { Lang } from '@/lib/i18n/lang';
  *   · translated → the translation, and a quiet "Translated from Spanish ·
  *     show original" line (Q13: the original is one tap away);
  *   · already in the reader's language → the original, no chrome;
- *   · pending or failed → THE ORIGINAL, never a blank (FILL-H.8), with a small
- *     "translating…" / "translation unavailable" note.
+ *   · pending or failed → THE ORIGINAL, never a blank (FILL-H.8), and nothing
+ *     added to it (the state is on `data-usertext-state` and a tooltip).
  *
  * Requests are BATCHED: every UserText on a screen that mounts in the same tick
  * goes out in one POST, and results are remembered for the session.
@@ -109,38 +109,33 @@ export function UserText({
   const from =
     result?.sourceLang === 'es' ? t('lang.es') : result?.sourceLang === 'en' ? t('lang.en') : null;
 
+  // Pending or failed → the ORIGINAL, with no added line at all (Q13, FILL-H.8).
+  // A visible "translating…" / "unavailable" note under every line of text was
+  // noise for a reader already in the right language, and it changed the text
+  // of every element a test or a screen reader reads. The state is still
+  // exposed: `data-usertext-state`, and a tooltip when it failed.
+  const state =
+    result === null ? 'pending' : result.failed ? 'failed' : translated ? 'translated' : 'original';
   return (
     <span
       className={className}
       data-testid={testId}
+      data-usertext-state={state}
       data-translated={translated && !showOriginal ? 'true' : 'false'}
+      title={
+        state === 'failed' || (state === 'pending' && slow)
+          ? t(state === 'failed' ? 'usertext.unavailable' : 'usertext.translating')
+          : undefined
+      }
     >
       <span style={{ whiteSpace: 'pre-wrap' }}>{shown}</span>
-      {result === null ? (
-        slow ? (
-          <span
-            data-usertext-state="pending"
-            style={{ display: 'block', fontSize: '11px', color: '#8792a8' }}
-          >
-            {t('usertext.translating')}
-          </span>
-        ) : null
-      ) : result.failed ? (
-        <span
-          data-usertext-state="failed"
-          style={{ display: 'block', fontSize: '11px', color: '#8792a8' }}
-        >
-          {t('usertext.unavailable')}
-        </span>
-      ) : translated ? (
-        <span
-          data-usertext-state="translated"
-          style={{ display: 'block', fontSize: '11px', color: '#8792a8' }}
-        >
+      {translated ? (
+        <span style={{ display: 'block', fontSize: '11px', color: '#8792a8' }}>
           {from ? t('usertext.translatedFrom', { lang: from }) : null}
           {from ? ' · ' : null}
           <button
             type="button"
+            data-testid="usertext-toggle"
             onClick={() => setShowOriginal((v) => !v)}
             style={{
               background: 'none',

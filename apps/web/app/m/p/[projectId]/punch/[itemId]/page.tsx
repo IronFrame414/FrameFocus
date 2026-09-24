@@ -1,3 +1,5 @@
+// S110 H, ruling 3 — the item as typed, shown in the READER's language.
+import { UserText } from '@/components/i18n/user-text';
 import { notFound } from 'next/navigation';
 import { getPunchItem, PUNCH_STATUS_LABELS } from '@/lib/services/punch';
 import { getMyProfile } from '@/lib/services/profiles';
@@ -87,7 +89,9 @@ export default async function PunchItemDetailPage({
       <SectionHeader projectId={params.projectId} title={t('photos.punch.itemTitle')} />
 
       <header className="mb-[14px]">
-        <h1 className="text-[17px] font-bold leading-tight text-m6m-navy">{item.title}</h1>
+        <h1 className="text-[17px] font-bold leading-tight text-m6m-navy">
+          <UserText text={item.title} />
+        </h1>
         <p className="mt-[6px] flex flex-wrap items-center gap-[6px]">
           <StatusPill
             label={
@@ -108,7 +112,10 @@ export default async function PunchItemDetailPage({
       </header>
 
       <DetailCard testId="m-punch-detail">
-        <DetailField label={t('photos.punch.description')} value={item.description} />
+        <DetailField
+          label={t('photos.punch.description')}
+          value={item.description ? <UserText text={item.description} /> : null}
+        />
         <DetailField label={t('photos.punch.location')} value={item.location} mono />
         <DetailField label={t('photos.punch.trade')} value={item.trade} mono />
         <DetailField label={t('photos.punch.assignedTo')} value={item.assignee?.display_name ?? null} />

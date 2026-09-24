@@ -1,5 +1,6 @@
 'use client';
 
+import { UserText } from '@/components/i18n/user-text';
 import { useCallback, useEffect, useRef, useState, useMemo } from 'react';
 import { RotateCw } from 'lucide-react';
 import { color, font } from '@/lib/theme';
@@ -241,7 +242,10 @@ export function ChatThreadView({
                     wordBreak: 'break-word',
                   }}
                 >
-                  {m.body}
+                  {/* S110 H, ruling 3 — someone ELSE's message is shown in the
+                      reader's language (the original one tap away); your own is
+                      shown as you wrote it. */}
+                  {mine ? m.body : <UserText text={m.body} />}
                 </div>
 
                 {/* ---------------------------------------------------------
