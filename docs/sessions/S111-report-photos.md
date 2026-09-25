@@ -154,3 +154,9 @@ before/after:
   photos (chooser is the tab bar's library input, no `capture`, `multiple`), punch completion
   through the library input. The 2 skips are the pre-existing subcontractor-identity cases in
   `m-writes` (A-68, A-68b), unrelated.
+
+## Step P8 — pushed; CI green
+
+`feature/s111-photos` pushed at `afbe26af`. CI run **36086660760 on `afbe26af`: completed / success,
+03:03:46Z** (the run's head SHA matches the pushed tip). **Not merged** — Q20: merges only after
+Josh applies `20261770000000` and `20261780000000` to production, and authorizes it.
