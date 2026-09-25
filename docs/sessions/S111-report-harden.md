@@ -126,9 +126,17 @@ stopped by PID.
 ## Owed to production — `20261790000000` (NOT applied; Josh applies)
 
 **Policy-only. It governs no existing row or object** — an INSERT policy is evaluated only on new
-writes. Production must already carry `20261780000000`, which this replaces. What changes going
-forward: a non owner/admin can write a `.markup.jpg` only beside a file on a project they are
-assigned to.
+writes. What changes going forward: a non owner/admin can write a `.markup.jpg` only beside a file on
+a project they are assigned to.
+
+> **CORRECTION [Josh, 2026-09-25].** _Superseded text, quoted:_ _"Production must already carry
+> `20261780000000`, which this replaces"_, and the final summary's _"Apply `20261780000000` and then
+> `20261790000000` to production"_. **`20261780000000` is ALREADY on production** — applied 23:10
+> 2026-09-24 in an attended push, verified by object (ledger row present; `pg_policies` showed
+> `project_files_insert_non_client` live with the `.markup.jpg` arm). Production sits at
+> `20261780000000`. **Owed: `20261790000000` and the ruling-B migration only**, and per ruling C they
+> go in ONE attended push together — not `20261790000000` alone, which would leave production with a
+> tight INSERT and a loose READ/UPDATE.
 
 Sizing query, read-only, for Josh to run on production first. The last column is how many EXISTING
 derivatives were written by someone the new rule would not admit. On rebuild-test: 17 derivative
