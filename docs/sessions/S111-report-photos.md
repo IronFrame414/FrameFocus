@@ -142,3 +142,15 @@ before/after:
   AFTER run: projects 0, estimates 0, files 0, storage objects 0.
 - `npm run db:fingerprint` regenerated both baseline files (functions n=311, latest migration
   `20261780000000`), committed with this step.
+
+## Step P7 — build and e2e against the migrated rebuild-test
+
+- `next build` after the last change: **BUILD_EXIT_LINE=0**.
+- Actions API immediately before: in_progress 0, queued 0.
+- Playwright against the production build (`next start`), 8 files — the two new specs,
+  `m-capture-camera`, `m-writes`, `m-site-visit`, `desktop-site-visits-s110`,
+  `desktop-file-sheet-s109`, `m-photos`: **121 passed, 2 skipped, 0 ✘, PW_EXIT=0**. The three new
+  tests ran and passed: desktop Add photos (DB row exactly 1, category photos, count +1), /m Add
+  photos (chooser is the tab bar's library input, no `capture`, `multiple`), punch completion
+  through the library input. The 2 skips are the pre-existing subcontractor-identity cases in
+  `m-writes` (A-68, A-68b), unrelated.
