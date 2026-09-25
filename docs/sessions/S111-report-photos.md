@@ -39,3 +39,39 @@ Stripe secret key.
 only `status, trial_start, trial_end, plan_tier, seat_limit` for its own company, switching the three
 readers to it — a real change, with tests; (B) leave the policy, correct its misleading name in a
 comment/migration, and record that every role reading billing state is intended.
+
+## Step P2 — ⚠️ FINDING: conversion likely ABORTS for any sent/accepted estimate with pre-send site-visit photos (unproven — test owed)
+
+Found while reading the two BEFORE-UPDATE triggers on `files` before changing the write path:
+
+- `enforce_site_visit_file_freeze` (`20261730000000_site_visit_access_widen.sql:228-262`) raises on a
+  frozen captured file if **`estimate_id`** (or `markup_data`, `file_path`, …) changes. It does
+  **not** check `auth.uid()` for that branch and has **no conversion exemption**.
+- `stamp_site_visit_frozen_at` sets `frozen_at` at SEND and moves it to `now()` at any outcome
+  **including `accepted`** — so after acceptance every captured photo is frozen.
+- `convert_estimate_to_project` (`20261550000000…:184-187`) does `UPDATE files SET project_id = …,
+  estimate_id = NULL WHERE estimate_id = …` — which changes `estimate_id` on those frozen rows.
+- Conversion is offered at **any status** (`convert-to-project.tsx:26-28`), and the normal flow is
+  visit → send → accepted → convert.
+
+**Inference:** since S110 A reached production, converting a sent or accepted estimate that carries
+site-visit photos taken before the send raises *"This site-visit photo is frozen…"* and the whole
+conversion rolls back. A draft converted without sending is unaffected (`frozen_at` NULL). Josh's
+report ("photos under Files when converted") describes a conversion that SUCCEEDED, so it predates
+S110 A or was a never-sent draft. **To be proven on rebuild-test with a real session before and
+after the fix** (held while CI run 36083667540 uses rebuild-test).
+
+After conversion `estimate_id` is NULL, the trigger finds no visit, and the freeze no longer
+applies — so **markup on a converted photo is not blocked by the freeze**, and there is no conflict
+with S110's freeze ruling on that point.
+
+Production count Josh can run to size exposure (read-only):
+```sql
+SELECT e.status, count(DISTINCT e.id) AS estimates, count(f.id) AS frozen_captures
+FROM files f
+JOIN estimates e ON e.id = f.estimate_id
+JOIN site_visits sv ON sv.estimate_id = e.id
+WHERE f.site_visit_capture AND sv.frozen_at IS NOT NULL AND f.created_at <= sv.frozen_at
+  AND e.project_id IS NULL
+GROUP BY e.status;
+```
