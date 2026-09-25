@@ -75,3 +75,38 @@ WHERE f.site_visit_capture AND sv.frozen_at IS NOT NULL AND f.created_at <= sv.f
   AND e.project_id IS NULL
 GROUP BY e.status;
 ```
+
+## Step P3 — Q14 write path + conversion; Q16 punch + Q17 guard — built, committed locally
+
+- `9b6ddd3b` — route writes `'photos'` for images; migration `20261770000000` (conversion
+  reclassifies `'other'` images; freeze admits the conversion re-point); `prepareImageForUpload()`
+  shared by `uploadFile()` and both route callers (HEIC). **Migration not applied yet** (CI).
+- `da07198d` — punch completion gets the library sibling; `test/s111-camera-roll-guard.test.ts`:
+  8/8 after; **1 failed / 7 passed against the pre-fix `punch-actions.tsx`** (the defect it guards).
+  New e2e in `m-writes.spec.ts` completes a punch through the library input — not yet run.
+
+## Step P4 — Q18 (daily-log and safety images under Photos) — ⛔ STOPPED, widening breaks a THIRD surface
+
+The ruling: widen the Photos query to include images in `daily_logs` / `safety`, and STOP if that
+breaks either of those surfaces. Those two surfaces are safe — they select by `daily_log_id` /
+`safety_incident_id` (`daily-logs.ts:131-134`, `safety.ts:106`), not by category. **But
+`getProjectPhotos()` is not only the Photos pages' query:**
+
+- **Chat** uses it as the composer's photo picker (`api/chat/photos/route.ts:45`) and to resolve
+  thumbnails (`api/chat/messages/route.ts:78`, `api/chat/threads/route.ts:181`). Its own header
+  says it is chat's definition of "what a project photo is", and that a second definition would
+  recreate #129.
+- Chat's **send** path is independently gated on `category = 'photos'` (`eligiblePhotoIds()`,
+  `lib/chat/photos.ts:62`). So:
+  - widen only the query → the picker offers log/safety images the send then **refuses** (broken
+    chat UI);
+  - widen the send gate too → **safety images (injury photos) become postable into the SUB thread
+    and the CLIENT thread**; daily-log images to subs, who are excluded from `daily_logs` itself.
+- Also affected by a widened `getProjectPhotos()`: the /m viewer (`photos/[fileId]/page.tsx:51`),
+  and — if `getPhoto()` follows — markup and gallery actions (delete, client-visible) on log and
+  safety images.
+
+**Not built.** Options for Josh in the final report: (A) a gallery-only widening — a separate
+Photos-page query, with chat keeping `'photos'` only, stated in code as a deliberate difference;
+(B) (A) but daily logs only, safety excluded (safety images carry injury/incident evidence and
+crew cannot read `safety_incidents`); (C) defer.
