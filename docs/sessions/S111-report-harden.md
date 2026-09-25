@@ -229,6 +229,25 @@ transaction, so there is no window with either missing. Held until CI run **3613
   authored). Tying it to assignment would silently remove those. It is the same class of coupling;
   **recorded for a ruling, not changed.** The CLIENT policies' derivative arm (`project_files_select_client`)
   is likewise untouched — outside ruling B, which named the non-client READ and UPDATE.
+
+  > ### ✅ RULED [Josh, 2026-09-25]: the ORIGINALS arm stays exactly as it is. It is NOT the same defect.
+  >
+  > _Superseded wording above, quoted: "It is the same class of coupling."_ **It is not**, and this
+  > is recorded so nobody "fixes" it later.
+  >
+  > **A markup derivative has NO `files` row of its own.** So "can you see the ORIGINAL's row" was a
+  > **proxy** for authority over a different object — which is why the derivative arms were wrong and
+  > were given their own assignment check (`20261790000000`, `20261800000000`).
+  >
+  > **An original DOES have its own `files` row, and that row IS the authority for that file.**
+  > Following it is direct, not a proxy: whatever `files` RLS says about the row is, by design, what
+  > holds for its bytes. If `files` RLS is widened later, the widening is a decision about those files,
+  > and their bytes should follow it.
+  >
+  > **The PM-reads-an-invoice-they-authored case is that authority working correctly. Not a bug.**
+  > Tying originals to assignment would have broken it.
+  >
+  > **The client-side derivative rule (`project_files_select_client`) also stays untouched.**
 - **AFTER, live, real sessions — VITEST_EXIT=0, 74 passed / 74:** `s111-markup-derivative-floor` 6,
   `s111-markup-derivative-read-update-floor` 9 (unassigned: 0 readable, 0 changed on both paths;
   assigned control: 1 readable, row 17 B → 18 B), `s111-photo-conversion` 8, and as regression guards
