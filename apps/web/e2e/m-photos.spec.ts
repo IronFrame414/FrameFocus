@@ -1,7 +1,7 @@
 import { test, expect, type Page } from '@playwright/test';
 import { setupHubFixture, teardownHubFixture, COMPANY_A, type HubFixture } from './hub-fixture';
 import { setupPhotoFixture, teardownPhotoFixture, type PhotoFixture } from './photo-fixture';
-import { derivativePathFor } from '@framefocus/shared/utils/markup';
+import { derivativePathFor, thumbPathFor } from '@framefocus/shared/utils/markup';
 
 // M6M §4.8 / §4.9 / §4.10 — M-8 gallery, M-9 viewer, M-10 markup.
 //
@@ -850,20 +850,26 @@ test.describe('the markup save', () => {
 
     // A-23l — the derivative is reached through a SIGNED url from the same
     // {company_id}/{project_id}/ prefix, exactly as the original is.
-    // [S111 D] …as a THUMBNAIL: the grid tile is now /render/image/sign/ of the
-    // derivative, never the full file. _Superseded assertion, quoted:_
-    // `expect(src).toContain('/storage/v1/object/sign/project-files/')`.
+    // [S111 D, option A] The tile is the STORED THUMBNAIL of THIS markup
+    // (`{path}.m{fingerprint}.thumb.webp`) once the save's regeneration has
+    // landed, and the full derivative until then (the ruled fallback). Both are
+    // the derivative's pixels, signed from the same prefix. _Superseded, quoted:_
+    // `expect(src).toContain('.markup.jpg');` — true only of the fallback now.
     const src = await tile(page, target.id)
       .getByTestId('m-tile-image')
       .getAttribute('src');
-    expect(src).toContain('/storage/v1/render/image/sign/project-files/');
+    expect(src).toContain('/storage/v1/object/sign/project-files/');
     expect(src).toContain(encodeURIComponent(COMPANY_A));
     expect(src).toContain('token=');
-    expect(src).toContain('.markup.jpg');
+    expect(src).toMatch(/\.markup\.jpg\?|\.m[0-9a-f]{8}\.thumb\.webp\?/);
 
     // Reset so the fixture's other assertions are unaffected by ordering.
+    // [S111 D] Read the markup first: its thumbnail's name is derived from it.
+    const { data: saved } = await fx.admin.from('files').select('markup_data').eq('id', target.id).single();
     await fx.admin.from('files').update({ markup_data: null }).eq('id', target.id);
-    await fx.admin.storage.from('project-files').remove([derivativePathFor(target.path)]);
+    await fx.admin.storage
+      .from('project-files')
+      .remove([derivativePathFor(target.path), thumbPathFor(target.path, saved?.markup_data ?? null)]);
   });
 });
 

@@ -251,9 +251,18 @@ export async function getSignedUrls(
 ): Promise<Map<string, string>> {
   if (filePaths.length === 0) return new Map();
   const supabase = await createClient();
-  const { data, error } = await supabase.storage
+  // [S111 D] Retried on Storage's "SlowDown" (429, "Too many connections issued
+  // to the database" — measured on rebuild-test). This ONE call signs every tile
+  // on a page; if it is refused, every photo on the page has no URL at all and
+  // the grid is empty. Signing writes nothing, so a retry is safe.
+  let { data, error } = await supabase.storage
     .from('project-files')
     .createSignedUrls(filePaths, expiresIn);
+  for (let n = 0; error && n < 2 && /429|SlowDown|too many connections/i.test(error.message); n++) {
+    await new Promise((r) => setTimeout(r, 500 * 2 ** n));
+    ({ data, error } = await supabase.storage.from('project-files').createSignedUrls(filePaths, expiresIn));
+  }
+  if (error) console.error('[getSignedUrls] batch sign failed', { paths: filePaths.length, error: error.message });
   const out = new Map<string, string>();
   if (error || !data) return out;
   for (const row of data) {

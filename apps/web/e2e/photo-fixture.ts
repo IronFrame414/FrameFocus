@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { MARKUP_SCHEMA_VERSION, type MarkupData } from '@framefocus/shared/types/markup';
-import { derivativePathFor } from '@framefocus/shared/utils/markup';
+import { derivativePathFor, thumbPathFor } from '@framefocus/shared/utils/markup';
 import { COMPANY_A, CREW_MEMBER, type HubFixture } from './hub-fixture';
 
 // M6M — photo fixtures for the M-8 / M-9 / M-10 criteria.
@@ -195,12 +195,19 @@ export async function teardownPhotoFixture(fx: HubFixture): Promise<void> {
 
   const { data: rows } = await admin
     .from('files')
-    .select('id, file_path')
+    .select('id, file_path, markup_data')
     .eq('company_id', COMPANY_A)
     .like('file_name', `${filePrefix(fx)}-%`);
 
   const ids = (rows ?? []).map((r) => r.id);
-  const paths = (rows ?? []).flatMap((r) => [r.file_path, derivativePathFor(r.file_path)]);
+  // [S111 D] …and the stored grid thumbnails a markup save now generates
+  // (plain and current-markup names; older versions are pruned on generation).
+  const paths = (rows ?? []).flatMap((r) => [
+    r.file_path,
+    derivativePathFor(r.file_path),
+    thumbPathFor(r.file_path, null),
+    thumbPathFor(r.file_path, r.markup_data),
+  ]);
 
   if (ids.length) {
     // Unlink before deleting the files, or the FK on punch_list_items blocks it.

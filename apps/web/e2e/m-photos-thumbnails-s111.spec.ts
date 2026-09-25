@@ -2,7 +2,7 @@ import { test, expect, type Page } from '@playwright/test';
 import { signInAs } from './sign-in-as';
 import { PHOTO_COUNT, setupThumbFixture, sweepThumbFixture, watchStorageImages } from './thumb-fixture';
 
-// [S111 D] The /m Photos grid: thumbnails only, 12 screens ahead normally, and
+// [S111 D, option A] The /m Photos grid: STORED thumbnails only, 12 screens ahead normally, and
 // a SHORTER buffer when the browser reports data-saver (navigator.connection,
 // lib/photos/thumbnail.ts). A short viewport makes both behaviours visible with
 // 80 photos: 12 screens covers all 80; 3 screens does not.
@@ -14,7 +14,7 @@ test.use({ viewport: { width: 402, height: 500 } });
 
 test.beforeAll(async () => {
   test.setTimeout(180_000);
-  projectId = await setupThumbFixture('mobile');
+  projectId = (await setupThumbFixture('mobile')).projectId;
 });
 
 test.afterAll(async () => {
@@ -31,10 +31,13 @@ async function open(page: Page) {
   return seen;
 }
 
+// In range = loaded OR queued for a load slot (lib/photos caps in-flight loads).
 const loadedCount = (page: Page) =>
-  page.getByTestId('m-tile-image').evaluateAll((els) => els.filter((e) => (e as HTMLImageElement).src).length);
+  page
+    .getByTestId('m-tile-image')
+    .evaluateAll((els) => els.filter((e) => (e as HTMLElement).dataset.lazy !== 'pending').length);
 
-test('[S111 D] /m grid: thumbnails only; the full buffer covers all 80', async ({ page }) => {
+test('[S111 D] /m grid: stored thumbnails only; the full buffer covers all 80', async ({ page }) => {
   test.setTimeout(180_000);
   const seen = await open(page);
   const loaded = await loadedCount(page);
@@ -43,8 +46,11 @@ test('[S111 D] /m grid: thumbnails only; the full buffer covers all 80', async (
   await expect
     .poll(() => page.locator('[data-testid="m-tile-image"][data-state="loaded"]').count(), { timeout: 30_000 })
     .toBe(PHOTO_COUNT);
-  console.log(`[S111 D m] storage image requests: thumbs ${seen.thumbs.length}, originals ${seen.originals.length}`);
-  expect(seen.originals, 'the grid requested an ORIGINAL').toEqual([]);
+  console.log(
+    `[S111 D m] storage image requests: thumbs ${seen.thumbs.length}, originals ${seen.originals.length}, renders ${seen.renders.length}`
+  );
+  expect(seen.originals, 'the grid requested a FULL file although every photo has a thumbnail').toEqual([]);
+  expect(seen.renders, 'the grid hit /render/image/ per view — the route ruled out').toEqual([]);
   expect(seen.thumbs.length).toBeGreaterThanOrEqual(PHOTO_COUNT);
 });
 

@@ -1,6 +1,9 @@
 import type { Page, Request } from '@playwright/test';
 import { adminClient, COMPANY_A } from './hub-fixture';
 import { deleteProjects } from '../test-support/company-purge';
+import { thumbPathFor } from '@framefocus/shared/utils/markup';
+// The BACKFILL's own generator — so CI exercises the exact code Josh will run.
+import { generate, withSlowDownRetry } from '../../../scripts/s111-thumbnail-backfill.cjs';
 
 // [S111 D] Fixture for the thumbnail/load-ahead specs: a throwaway project
 // holding PHOTO_COUNT real (tiny) photos on DISTINCT paths, so every tile has
@@ -26,15 +29,29 @@ export async function sweepThumbFixture(tag: string): Promise<void> {
   if (ids.length === 0) return;
   const { data: files } = await admin.from('files').select('id, file_path').in('project_id', ids);
   const rows = (files ?? []) as { id: string; file_path: string }[];
-  for (let i = 0; i < rows.length; i += 100) {
-    await admin.storage.from(BUCKET).remove(rows.slice(i, i + 100).map((r) => r.file_path));
+  const objects = rows.flatMap((r) => [r.file_path, thumbPathFor(r.file_path, null)]);
+  for (let i = 0; i < objects.length; i += 100) {
+    await admin.storage.from(BUCKET).remove(objects.slice(i, i + 100));
   }
   if (rows.length) await admin.from('files').delete().in('id', rows.map((r) => r.id));
   await deleteProjects(admin, ids);
 }
 
-/** Creates the project and its photos; returns the project id. */
-export async function setupThumbFixture(tag: string): Promise<string> {
+export interface ThumbFixture {
+  projectId: string;
+  fileIds: string[];
+  /** Per-photo generation time, ms — empty when thumbnails were not made. */
+  generationMs: number[];
+}
+
+/**
+ * Creates the project and its photos. `thumbnails: false` leaves them without
+ * stored thumbnails, for the fallback case.
+ */
+export async function setupThumbFixture(
+  tag: string,
+  opts: { thumbnails: boolean } = { thumbnails: true }
+): Promise<ThumbFixture> {
   await sweepThumbFixture(tag);
   // Any contact will do; ordered so the pick is stable (CLAUDE.md, .limit(1)).
   const { data: c, error: cErr } = await admin
@@ -74,8 +91,13 @@ export async function setupThumbFixture(tag: string): Promise<string> {
     const id = crypto.randomUUID();
     const name = `${MARKER.toLowerCase()}-${String(n).padStart(3, '0')}.png`;
     const path = `${COMPANY_A}/${projectId}/${id}-${name}`;
-    const up = await admin.storage.from(BUCKET).upload(path, PNG_8, { contentType: 'image/png' });
-    if (up.error) throw new Error(`upload ${n}: ${up.error.message}`);
+    // rebuild-test's Storage answers bursts with 429 "SlowDown" (max_connections
+    // 60); an upsert of the same bytes is safe to retry.
+    await withSlowDownRetry(async () => {
+      const up = await admin.storage.from(BUCKET).upload(path, PNG_8, { contentType: 'image/png', upsert: true });
+      if (up.error) throw new Error(`upload ${n}: ${up.error.message}`);
+    });
+    await new Promise((res) => setTimeout(res, 50));
     rows.push({
       id,
       company_id: COMPANY_A,
@@ -89,20 +111,35 @@ export async function setupThumbFixture(tag: string): Promise<string> {
   }
   const ins = await admin.from('files').insert(rows);
   if (ins.error) throw new Error(`files: ${ins.error.message}`);
-  return projectId;
+
+  const generationMs: number[] = [];
+  if (opts.thumbnails) {
+    // ONE at a time, paced — the backfill's default, and for the same reason:
+    // rebuild-test's Storage runs on a pool of ~5 DB connections shared by every
+    // upload, sign and render, and two in flight still drew "Too many
+    // connections" (S111 thumbnails report).
+    for (const r of rows) {
+      const g = (await generate(admin, { ...r, markup_data: null })) as { ms: number };
+      generationMs.push(g.ms);
+      await new Promise((res) => setTimeout(res, 100));
+    }
+  }
+  return { projectId, fileIds: rows.map((r) => r.id), generationMs };
 }
 
 /**
- * Every storage IMAGE request the page makes, classified. `/render/image/` is a
- * thumbnail; `/object/` is an original (or a derivative at full size).
+ * Every storage IMAGE request the page makes, classified: a stored thumbnail
+ * (`….thumb.webp`), a live `/render/image/` transform (the per-view route that
+ * was ruled out — must stay ZERO), or a full file (original or derivative).
  */
-export function watchStorageImages(page: Page): { thumbs: string[]; originals: string[] } {
-  const seen = { thumbs: [] as string[], originals: [] as string[] };
+export function watchStorageImages(page: Page): { thumbs: string[]; originals: string[]; renders: string[] } {
+  const seen = { thumbs: [] as string[], originals: [] as string[], renders: [] as string[] };
   page.on('request', (r: Request) => {
     if (r.resourceType() !== 'image') return;
     const u = r.url();
     if (!u.includes('/storage/v1/')) return;
-    if (u.includes('/storage/v1/render/image/')) seen.thumbs.push(u);
+    if (u.includes('/storage/v1/render/image/')) seen.renders.push(u);
+    else if (/\.thumb\.webp\?/.test(u)) seen.thumbs.push(u);
     else if (u.includes('/storage/v1/object/')) seen.originals.push(u);
   });
   return seen;

@@ -263,6 +263,7 @@ function Tile({
           // mid-transition; this is the fact the placeholder rule is about.
           data-loaded={loaded ? 'true' : 'false'}
           data-state={loadState}
+          data-lazy={lazy.src ? 'loaded' : lazy.inRange ? 'queued' : 'pending'}
           // THE `complete` CHECK IS NOT BELT-AND-BRACES — it is the fix for a
           // real stuck state. This markup is server-rendered, so a cached or
           // fast image can finish loading BEFORE hydration attaches `onLoad`;
@@ -272,11 +273,17 @@ function Tile({
           // A thumbnail the lazy loader starts AFTER hydration is caught by
           // onLoad; this covers one that finished before hydration.
           ref={imgRef}
-          onLoad={() => setLoadState('loaded')}
+          onLoad={() => {
+            lazy.onLoad();
+            setLoadState('loaded');
+          }}
           // A broken image must not hold the placeholder either — reveal the
           // element so the browser's own broken-image state is visible rather
           // than a grey square that looks like it is still loading.
-          onError={() => setLoadState('error')}
+          // A retry is scheduled first (lib/photos) — only a final failure shows broken.
+          onError={() => {
+            if (!lazy.onError()) setLoadState('error');
+          }}
           className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-150 ${
             loaded ? 'opacity-100' : 'opacity-0'
           }`}

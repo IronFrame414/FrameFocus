@@ -8,15 +8,19 @@
 //
 // USAGE
 //   NEXT_PUBLIC_SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... \
-//     node scripts/s111-thumbnail-backfill.mjs --project-ref <ref>            # DRY RUN: counts only
+//     node scripts/s111-thumbnail-backfill.cjs --project-ref <ref>            # DRY RUN: counts only
 //   ... --project-ref <ref> --apply [--concurrency 2] [--limit N]             # writes
 //
 //   --project-ref   REQUIRED, and must match the URL's ref — a guard against
 //                   pointing the right command at the wrong database.
 //   --apply         without it, nothing is written.
-//   --concurrency   photos in flight, default 2, capped at 4. Low on purpose:
-//                   Storage ran out of DB connections at 3 pages × 16 signs
-//                   in flight on rebuild-test (S111 report, step T4).
+//   --concurrency   photos in flight, default 1, capped at 4. Low on purpose:
+//                   on rebuild-test Storage runs on a pool of ~5 DB
+//                   connections shared with every live upload, and 2 in
+//                   flight still drew "Too many connections". A 429
+//                   "SlowDown" or a 502/503/504 is retried with backoff
+//                   (5 attempts). Raise it only if production's compute is
+//                   known to be larger — and never while the crew is uploading.
 //   --limit         stop after N generations (a canary run).
 //
 // IF INTERRUPTED PARTWAY (Ctrl-C, crash, lost connection): safe, and re-running
@@ -28,22 +32,24 @@
 // without a thumbnail shows its full file.
 //
 // ⚠️ markupFingerprint() and thumbPathFor() below RE-IMPLEMENT
-// packages/shared/utils/markup.ts (a .mjs cannot import that TypeScript).
+// packages/shared/utils/markup.ts (a plain Node script cannot import that
+// TypeScript). CommonJS, not .mjs, so the e2e fixture (Playwright) and the
+// parity unit test (Vitest) can load it without transpiling it into ESM scope.
 // test/s111-thumbnail-path.test.ts asserts the two produce identical paths.
 
-import { createClient } from '@supabase/supabase-js';
-import { pathToFileURL } from 'node:url';
+'use strict';
+const { createClient } = require('@supabase/supabase-js');
 
 const BUCKET = 'project-files';
 const PAGE = 500;
 const TRANSFORM = { width: 400, height: 400, resize: 'cover' };
 
-export function hasMarkup(markup) {
+function hasMarkup(markup) {
   if (!markup || typeof markup !== 'object') return false;
   return Array.isArray(markup.shapes) && markup.shapes.length > 0;
 }
 
-export function markupFingerprint(markup) {
+function markupFingerprint(markup) {
   const s = JSON.stringify(markup);
   let h = 0x811c9dc5;
   for (let i = 0; i < s.length; i++) {
@@ -53,26 +59,51 @@ export function markupFingerprint(markup) {
   return h.toString(16).padStart(8, '0');
 }
 
-export function thumbPathFor(originalPath, markup) {
+function thumbPathFor(originalPath, markup) {
   return hasMarkup(markup)
     ? `${originalPath}.m${markupFingerprint(markup)}.thumb.webp`
     : `${originalPath}.thumb.webp`;
 }
 
 function args(argv) {
-  const out = { apply: false, concurrency: 2, limit: Infinity, ref: null };
+  const out = { apply: false, concurrency: 1, limit: Infinity, ref: null };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--apply') out.apply = true;
     else if (a === '--project-ref') out.ref = argv[++i];
-    else if (a === '--concurrency') out.concurrency = Math.min(4, Math.max(1, Number(argv[++i]) || 2));
+    else if (a === '--concurrency') out.concurrency = Math.min(4, Math.max(1, Number(argv[++i]) || 1));
     else if (a === '--limit') out.limit = Math.max(1, Number(argv[++i]) || 1);
     else throw new Error(`unknown argument: ${a}`);
   }
   return out;
 }
 
+// Storage answers an overloaded moment with 429 / code "SlowDown" — "Too many
+// connections issued to the database" (measured on rebuild-test, max_connections
+// 60). That is a retry-later signal, and every write here is an idempotent upsert
+// of the same bytes, so retrying cannot double anything.
+// Also transient gateway/network failures (measured: a 502 "Bad Gateway" on an
+// upload under the same load) — same reasoning: the retried write is identical.
+function isSlowDown(message) {
+  return /429|SlowDown|too_many_connections|Too many connections|Bad Gateway|Service Unavailable|Gateway Timeout|\b50[234]\b|fetch failed|ECONNRESET|socket hang up/i.test(String(message));
+}
+
+async function withSlowDownRetry(fn, attempts = 5) {
+  for (let n = 0; ; n++) {
+    try {
+      return await fn();
+    } catch (e) {
+      if (n + 1 >= attempts || !isSlowDown(e instanceof Error ? e.message : e)) throw e;
+      await new Promise((r) => setTimeout(r, 500 * 2 ** n));
+    }
+  }
+}
+
 async function generate(db, row) {
+  return withSlowDownRetry(() => generateOnce(db, row));
+}
+
+async function generateOnce(db, row) {
   const started = Date.now();
   const source = hasMarkup(row.markup_data) ? `${row.file_path}.markup.jpg` : row.file_path;
   const target = thumbPathFor(row.file_path, row.markup_data);
@@ -140,6 +171,8 @@ async function main() {
               t.failed++;
               failures.push({ id: r.id, path: r.file_path, error: String(e instanceof Error ? e.message : e) });
             }
+            // Pace: leave room in Storage's small pool for live users' uploads.
+            await new Promise((res) => setTimeout(res, 100));
           }
         })
       );
@@ -181,7 +214,9 @@ async function main() {
   process.exitCode = t.failed ? 1 : 0;
 }
 
-if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
+module.exports = { hasMarkup, markupFingerprint, thumbPathFor, generate, withSlowDownRetry, isSlowDown };
+
+if (require.main === module) {
   main().catch((e) => {
     console.error(`[backfill] FAILED: ${e instanceof Error ? e.message : e}`);
     process.exitCode = 1;

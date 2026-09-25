@@ -89,8 +89,8 @@ export function isDerivativePath(path: string): boolean {
 //
 // Same appended-suffix rule as the derivative: the whole original path, so the
 // company_id first segment every storage policy keys on is kept.
-// ⚠️ scripts/s111-thumbnail-backfill.mjs re-implements markupFingerprint() and
-// thumbPathFor() (a .mjs cannot import this TS); test/s111-thumbnail-path.test.ts
+// ⚠️ scripts/s111-thumbnail-backfill.cjs re-implements markupFingerprint() and
+// thumbPathFor() (a plain Node script cannot import this TS); test/s111-thumbnail-path.test.ts
 // asserts the two agree.
 // ---------------------------------------------------------------------------
 export const THUMB_SUFFIX = '.thumb.webp';

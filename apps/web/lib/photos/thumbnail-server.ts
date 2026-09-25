@@ -59,11 +59,29 @@ async function listThumbs(admin: SupabaseClient, originalPath: string): Promise<
     .map((n) => `${folder}/${n}`);
 }
 
+/**
+ * Storage's retry-later answer: 429, code "SlowDown", "Too many connections
+ * issued to the database" — measured on rebuild-test (max_connections 60). The
+ * write is an idempotent upsert of the same bytes, so a retry cannot double it.
+ */
+// Also transient gateway/network failures (measured: a 502 on an upload under
+// the same load) — the retried write is identical, so it is equally safe.
+const SLOW_DOWN = /429|SlowDown|too_many_connections|Too many connections|Bad Gateway|Service Unavailable|Gateway Timeout|\b50[234]\b|fetch failed|ECONNRESET|socket hang up/i;
+const ATTEMPTS = 3;
+
 export async function generateThumbnail(
   admin: SupabaseClient,
   file: ThumbSourceFile
 ): Promise<ThumbResult> {
   if (!isThumbnailable(file.mime_type)) return { ok: false, skipped: true, reason: 'not_image' };
+  for (let n = 0; ; n++) {
+    const r = await generateOnce(admin, file);
+    if (r.ok || r.skipped || n + 1 >= ATTEMPTS || !SLOW_DOWN.test(r.error)) return r;
+    await new Promise((res) => setTimeout(res, 500 * 2 ** n));
+  }
+}
+
+async function generateOnce(admin: SupabaseClient, file: ThumbSourceFile): Promise<ThumbResult> {
   const started = Date.now();
   const source = hasMarkup(file.markup_data) ? derivativePathFor(file.file_path) : file.file_path;
   const target = thumbPathFor(file.file_path, file.markup_data);

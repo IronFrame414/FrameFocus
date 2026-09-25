@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { isThumbnailPath, markupFingerprint, thumbPathFor } from '@framefocus/shared/utils/markup';
-import * as backfill from '../../../scripts/s111-thumbnail-backfill.mjs';
+import * as backfill from '../../../scripts/s111-thumbnail-backfill.cjs';
 
 // [S111 D] The stored-thumbnail path. The backfill script re-implements it (a
 // .mjs cannot import TS); if the two ever disagree, the backfill writes

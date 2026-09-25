@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { bufferScreens, rootMarginFor, type ConnectionHint, type GridSurface } from './thumbnail';
 
 // S111 — load a grid tile's image only once it is within the surface's buffer
@@ -18,6 +18,50 @@ import { bufferScreens, rootMarginFor, type ConnectionHint, type GridSurface } f
 //
 // Once a tile is inside the buffer it stays loaded: the buffer only has to stay
 // AHEAD of the user; nothing is ever unloaded.
+//
+// ---------------------------------------------------------------------------
+// ⚠️ THE BUFFER IS FILLED THROUGH A QUEUE, NOT IN ONE BURST — MEASURED.
+// ---------------------------------------------------------------------------
+// /m's 12-screen buffer put all 80 fixture tiles in range at once, and firing
+// 80 image requests together got 22–33 of them refused by Storage ("SlowDown",
+// "Too many connections issued to the database" — a JSON body Chrome then
+// discards as net::ERR_BLOCKED_BY_ORB). So at most MAX_IN_FLIGHT images load
+// at a time, in the order tiles came into range (nearest first, since the
+// observer reports in document order), and a failed load is retried with
+// backoff before the tile is shown as broken. The buffer is unchanged — every
+// tile in it still loads; it just does not all start in the same instant.
+
+const MAX_IN_FLIGHT = 6;
+const RETRIES = 3;
+
+let inFlight = 0;
+const waiting: Array<() => void> = [];
+
+function pump() {
+  while (inFlight < MAX_IN_FLIGHT && waiting.length) waiting.shift()!();
+}
+
+/** Queue `start` for a load slot; returns a cancel for a tile that unmounts first. */
+function acquire(start: () => void): () => void {
+  let cancelled = false;
+  const go = () => {
+    if (cancelled) return;
+    inFlight++;
+    start();
+  };
+  if (inFlight < MAX_IN_FLIGHT) go();
+  else waiting.push(go);
+  return () => {
+    cancelled = true;
+    const i = waiting.indexOf(go);
+    if (i >= 0) waiting.splice(i, 1);
+  };
+}
+
+function release() {
+  inFlight = Math.max(0, inFlight - 1);
+  pump();
+}
 
 type Entry = { observer: IntersectionObserver; callbacks: Map<Element, () => void> };
 const registry = new Map<Element | null, Map<string, Entry>>();
@@ -68,21 +112,35 @@ function connectionHint(): ConnectionHint | undefined {
 }
 
 /**
- * `ref` goes on the tile; `src` is `undefined` until the tile is within the
- * buffer, then the real URL for good.
+ * `ref` goes on the <img>; `src` is `undefined` until the tile is within the
+ * buffer AND holds a load slot, then the URL (with a `_r=n` suffix on a retry,
+ * which Storage ignores — measured 200). Wire `onLoad`/`onError` to the
+ * element's events: they free the slot, and `onError` returns TRUE when it has
+ * scheduled a retry, so the caller should not show the tile as broken yet.
  *
  * `ref` is a CALLBACK ref, and the element is held in state, so a REMOUNTED
  * element is observed again. /m's tile swaps its shell (link ↔ button) when
  * selection mode toggles, which remounts the <img>; with a ref object and an
  * effect keyed only on the url, a tile not yet loaded would silently never load.
- * A caller that already has a callback ref on the element calls this from it.
  */
 export function useLazySrc<T extends Element>(
   url: string | null,
   surface: GridSurface
-): { ref: (node: T | null) => void; src: string | undefined } {
+): {
+  ref: (node: T | null) => void;
+  src: string | undefined;
+  /** Within the buffer — loading, queued for a slot, or backing off. */
+  inRange: boolean;
+  onLoad: () => void;
+  onError: () => boolean;
+} {
   const [el, setEl] = useState<T | null>(null);
   const [near, setNear] = useState(false);
+  // 'idle' → waiting for range or a slot; 'loading' → holds a slot, src set;
+  // 'retry' → backing off after an error; 'done' → loaded or given up.
+  const [phase, setPhase] = useState<'idle' | 'loading' | 'retry' | 'done'>('idle');
+  const [attempt, setAttempt] = useState(0);
+  const holding = useRef(false);
   const ref = useCallback((node: T | null) => setEl(node), []);
 
   useEffect(() => {
@@ -95,5 +153,44 @@ export function useLazySrc<T extends Element>(
     return observe(el, scrollParent(el), margin, () => setNear(true));
   }, [near, url, surface, el]);
 
-  return { ref, src: near && url ? url : undefined };
+  useEffect(() => {
+    if (!near || !url || phase !== 'idle') return;
+    return acquire(() => {
+      holding.current = true;
+      setPhase('loading');
+    });
+  }, [near, url, phase]);
+
+  const free = useCallback(() => {
+    if (!holding.current) return;
+    holding.current = false;
+    release();
+  }, []);
+
+  // Free the slot if the tile unmounts mid-load.
+  useEffect(() => free, [free]);
+
+  const onLoad = useCallback(() => {
+    free();
+    setPhase('done');
+  }, [free]);
+
+  const onError = useCallback((): boolean => {
+    free();
+    if (attempt >= RETRIES) {
+      setPhase('done');
+      return false;
+    }
+    setPhase('retry');
+    setTimeout(() => {
+      setAttempt(attempt + 1);
+      setPhase('idle');
+    }, 500 * 2 ** attempt);
+    return true;
+  }, [attempt, free]);
+
+  const loadingOrDone = phase === 'loading' || phase === 'done';
+  const src =
+    loadingOrDone && url ? (attempt === 0 ? url : `${url}${url.includes('?') ? '&' : '?'}_r=${attempt}`) : undefined;
+  return { ref, src, inRange: near, onLoad, onError };
 }
