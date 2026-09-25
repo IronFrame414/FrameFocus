@@ -74,7 +74,7 @@ export default async function ProjectChangesPage({
   return (
     <div className="px-[18px] pb-[18px] pt-[14px]">
       <SectionHeader projectId={params.projectId} title={t('project.tile.changes')} />
-      <DeniedNotice kind={searchParams.denied} />
+      <DeniedNotice kind={searchParams.denied} t={t} />
 
       {canWrite ? (
         <Link

@@ -688,6 +688,12 @@ test.describe('A-43 · Dashboard is cut', () => {
     // A tile with no route is an inert tile; a route with no tile is an orphan.
     // A-43 asserts both halves, so this is the second one.
     expect(response?.status()).toBe(404);
+    // [/m visual sweep, 2026-09-24] ...and it 404s INSIDE the /m shell. Until
+    // app/m/not-found.tsx + [...missing] every /m 404 was the root one: no app
+    // bar, no tab bar, no way back but the browser.
+    await expect(page.getByTestId('m-not-found')).toBeVisible();
+    await expect(page.getByTestId('m-tabbar')).toBeVisible();
+    await expect(page.getByTestId('m-not-found-home')).toHaveAttribute('href', '/m');
   });
 });
 

@@ -224,8 +224,17 @@ test.describe('M-31 · net_delta is Owner/Admin/PM only (D-51), and it is UI-onl
     const url = await firstCoUrlAsOwner(page);
 
     await signInAs(page, CREW);
-    const resp = await page.goto(url);
-    expect(resp?.status(), 'crew still reached a change order after the floor').toBe(404);
+    // [/m visual sweep, 2026-09-24] _Superseded assertion, quoted:_
+    // _"expect(resp?.status(), 'crew still reached a change order after the
+    // floor').toBe(404);"_ — that 404 was a BARE Next 404 outside the /m shell
+    // (no app bar, no tab bar, no way back). A refusal now lands on the list
+    // with a reason (A-66), worded by role, not "subcontractors". The floor
+    // assertion is unchanged in substance: crew still never sees the CO.
+    await page.goto(url);
+    await expect(page).toHaveURL(new RegExp(`/m/p/${PROJECT}/changes\\?denied=co-read$`));
+    await expect(page.getByTestId('m-denied')).toBeVisible();
+    await expect(page.getByTestId('m-denied')).not.toContainText(/subcontractor/i);
+    await expect(page.getByTestId('m-tabbar')).toBeVisible();
 
     // And the list it would have come from is empty for them.
     await page.goto(`/m/p/${PROJECT}/changes`);

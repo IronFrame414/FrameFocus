@@ -475,6 +475,14 @@ export const DENIED_KEYS: Record<string, MsgKey> = {
   // no PM arm, mirroring `company_members_update_authorized`. The route exists
   // (`/m/team/[memberId]/edit`) and this is the copy a refused PM lands on.
   'team-edit': 'shell.denied.teamEdit',
+  // [/m visual sweep, 2026-09-24] The READ refusal for a change order, which is
+  // DB-enforced: change_orders_select_visible (S121 read floor) admits owner,
+  // admin, and a PM on the COs they authored — nobody else. M-31 used to
+  // notFound() on the null that returns, and /m had no not-found boundary, so a
+  // crew member tapping a CO link got a bare Next 404 with no app shell. Worded
+  // by role for the same reason 'co-write' is: 'co' says "subcontractors",
+  // which would read to a foreman as a broken app.
+  'co-read': 'shell.denied.coRead',
 };
 
 export function DeniedNotice({

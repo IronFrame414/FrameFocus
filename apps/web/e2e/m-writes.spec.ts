@@ -473,8 +473,13 @@ test.describe('M-31 · write controls are Owner/Admin/PM, on a screen foreman an
       .eq('is_deleted', false)
       .limit(1);
     if (!cos?.length) return;
-    const resp = await page.goto(`/m/p/${PROJECT}/changes/${cos[0].id}`);
-    expect(resp?.status(), 'a foreman still reached a change order after the floor').toBe(404);
+    // [/m visual sweep, 2026-09-24] _Superseded assertion, quoted:_
+    // _"expect(resp?.status(), 'a foreman still reached a change order after
+    // the floor').toBe(404);"_ — a bare Next 404 outside the /m shell. The
+    // refusal now redirects to the list with a reason (A-66).
+    await page.goto(`/m/p/${PROJECT}/changes/${cos[0].id}`);
+    await expect(page).toHaveURL(new RegExp(`/m/p/${PROJECT}/changes\\?denied=co-read$`));
+    await expect(page.getByTestId('m-denied')).toBeVisible();
   });
 
   test('send demands a printed name on the first send', async ({ page }) => {
