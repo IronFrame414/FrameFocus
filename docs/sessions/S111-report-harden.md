@@ -170,3 +170,40 @@ someone once wrote a derivative on a project they are not assigned to now.
   Both carry the identical `.markup.jpg` arm scoped only by `files` RLS. UPDATE is the path the
   `saveMarkup()` upsert takes on every save after the first. Item 2 named the INSERT arm only, so both
   are untouched.
+  → **RULED B [Josh, 2026-09-25]: harden both, same branch.** Steps H6–H8 below.
+
+## Step H6 — ruling B1: negative tests FIRST, against the CURRENT SELECT and UPDATE policies — ✅ both refuse (B2 did not fire)
+
+`apps/web/test/s111-markup-derivative-read-update-floor.live.ts` (`279597fb`), run before any change.
+Held until CI run 36132906069 on `05df48af` completed (**success**, both jobs; 0 in progress / 0 queued).
+Policies under test, from `pg_policies` on rebuild-test: `project_files_select_non_client` and
+`project_files_update_non_client` exactly as `20261008000000` left them.
+
+Same actor and shape as H2 — `josh+qa-sub` (subcontractor; passes both policies' `role <> 'client'`
+gate), a project the sub is **not assigned to (0 rows)**, two originals (project path, estimates path),
+each with a derivative **already in storage** written by the service role (17 bytes, `SEEDED-DERIVATIVE`).
+
+**Run 1 — VITEST_EXIT=1, 7 passed / 2 failed.** Both failures were the **CONTROL** (4b): the assigned
+sub's `update()` returned **no error**, yet the service role's `download()` still read the seeded
+bytes. That makes `download()` an instrument that could not see a change — so "0 changed" for the
+unassigned case was **not proven** by run 1, even though it printed 0. The unassigned READ cases in run
+1 were sound (refusals, not reads).
+
+**Instrument replaced:** "changed" is now the `storage.objects` **row** — `metadata.size` and
+`updated_at`, read with the service role via `list()` before and after the attempt. The overwrite
+payload is 18 bytes against the seeded 17, so a real write moves the size.
+
+**Run 2 — VITEST_EXIT=0, 9 passed / 9**, live-guard `nmyphyhmfttxkdoposvf`:
+
+| case | client | measured |
+| --- | --- | --- |
+| READ projpath, unassigned | download refused, signed URL refused | **0 readable** |
+| READ estpath, unassigned | download refused, signed URL refused | **0 readable** |
+| UPDATE projpath, unassigned | `new row violates row-level security policy` | row 17 B → 17 B, `updated_at` unchanged: **0 changed** |
+| UPDATE estpath, unassigned | same | **0 changed** |
+| CONTROL, same sub **assigned**, projpath | reads; update OK | **1 readable; row 17 B → 18 B, `updated_at` moved: 1 changed** |
+| CONTROL, assigned, estpath | same | **1 readable; 1 changed** |
+
+In run 2 the post-update `download()` returned the new bytes, so **the run-1 stale read is NOT proven
+to be a CDN cache** — what is proven is that `download()` was not a reliable instrument, and the row
+metadata is. **No live leak: both policies refuse an unassigned subcontractor today. Proceeding to B3.**
