@@ -56,12 +56,17 @@ async function sweep() {
       .remove(rows.flatMap((r) => [r.file_path, `${r.file_path}.markup.jpg`]));
     await admin.from('files').delete().in('id', rows.map((r) => r.id));
   }
-  await sweepProjectsNamed(MARKER);
+  // Detach the estimate FIRST (as s170 does): deleteProjects() purges a
+  // project's `estimates` children, and the converted estimate is also the
+  // project's source_estimate_id — deleting it before the project violates
+  // projects_source_estimate_id_fkey.
   const { data: ests } = await admin.from('estimates').select('id').like('name', `${MARKER}%`);
   const ids = ((ests ?? []) as { id: string }[]).map((e) => e.id);
+  if (ids.length) await admin.from('estimates').update({ project_id: null }).in('id', ids);
+  await sweepProjectsNamed(MARKER);
   if (ids.length) {
-    await admin.from('estimates').update({ project_id: null }).in('id', ids);
-    await admin.from('estimates').delete().in('id', ids);
+    const del = await admin.from('estimates').delete().in('id', ids);
+    if (del.error) throw new Error(`S111 sweep, estimates: ${del.error.message}`);
   }
 }
 

@@ -123,3 +123,22 @@ crew cannot read `safety_incidents`); (C) defer.
 - `docs/sessions/S111-photos-backfill-PREPARED.sql` — Q15 count, UPDATE (commented), undo. Not run.
 - Local, no database: unit suite **117 files / 1638 tests passed, exit 0** (the new guard is among
   the 117 — checked with `vitest list --filesOnly`); `next build` **BUILD_EXIT_LINE=0**.
+
+## Step P6 — migrations applied to rebuild-test, proven before / middle / after [2026-09-25]
+
+CI run 36083667540 (`feature/s111-project-role`) **completed/success 02:19:12Z**; Actions API then
+showed 0 in progress, 0 queued. CLI link re-checked: rebuild-test (`nmyphyhmfttxkdoposvf`). Only
+`20261770000000` and `20261780000000` were pending. Applied **one at a time** so each fix had its own
+before/after:
+
+| run | migrations applied | `s111-photo-conversion.live.ts` | what it proves |
+| --- | --- | --- | --- |
+| BEFORE | neither | **5 failed / 3 passed**, exit 1 | 2a: conversion of the accepted estimate raised **"This site-visit photo is frozen: it was captured before the estimate was sent."** (42501) — the whole conversion rolled back. Fixture checks passed first (1a, 1b incl. the control that the freeze fires). **The production defect is real.** |
+| MIDDLE | `20261770000000` only | **1 failed / 7 passed**, exit 1 | conversion succeeds; 4a: assigned PM's derivative write refused — **"new row violates row-level security policy"**. The markup ride-along defect is real. |
+| AFTER | both | **8 passed**, exit 0 | 2b **rows moved: 3** (capture 'other'→'photos', tab image 'photos', PDF control stays 'other', paths unchanged); 2c **Photos query rows: 2** on the owner's session; 4a PM writes `markup_data` + derivative; 4b CONTROL unassigned crew refused. |
+
+- The MIDDLE run's teardown threw on `projects_source_estimate_id_fkey` (the shared project purge
+  deletes the source estimate before the project); fixed in the test's sweep. Residue after the
+  AFTER run: projects 0, estimates 0, files 0, storage objects 0.
+- `npm run db:fingerprint` regenerated both baseline files (functions n=311, latest migration
+  `20261780000000`), committed with this step.
