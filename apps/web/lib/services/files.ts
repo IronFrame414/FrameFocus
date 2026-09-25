@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase-server';
 import type { Database } from '@framefocus/shared/types/database';
 import { SIGNED_URL_TTL_SECONDS } from './signed-url-ttl';
+import { THUMB_TRANSFORM } from '@/lib/photos/thumbnail';
 
 type FileRow = Database['public']['Tables']['files']['Row'];
 
@@ -259,5 +260,46 @@ export async function getSignedUrls(
   for (const row of data) {
     if (row.path && row.signedUrl && !row.error) out.set(row.path, row.signedUrl);
   }
+  return out;
+}
+
+/**
+ * [S111 D] Signed THUMBNAIL URLs — `/render/image/sign/`, 400x400 cover
+ * (lib/photos/thumbnail.ts). Same "absent from the map = no url" semantics as
+ * getSignedUrls().
+ *
+ * ⚠️ ONE CALL PER PATH, NOT ONE BATCH — MEASURED, NOT PREFERRED. The batch
+ * endpoint (`createSignedUrls`) takes no transform, and a batch-signed token
+ * pointed at `/render/image/sign/` IGNORES a transform passed as query params
+ * or in the POST body: on rebuild-test both returned the FULL image (3000x4000,
+ * 455 KB – 2.6 MB). The transform is honoured only when it is inside the
+ * token, i.e. signed per path. So this fans out, capped at
+ * THUMB_SIGN_CONCURRENCY requests in flight — server to storage, never a
+ * browser round trip per tile.
+ *
+ * It never falls back to the original: the grid must not load one (ruling D2).
+ */
+const THUMB_SIGN_CONCURRENCY = 16;
+
+export async function getSignedThumbnailUrls(
+  filePaths: string[],
+  expiresIn: number = SIGNED_URL_TTL_SECONDS
+): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  if (filePaths.length === 0) return out;
+  const supabase = await createClient();
+  const bucket = supabase.storage.from('project-files');
+  const queue = [...new Set(filePaths)];
+  async function worker() {
+    for (let path = queue.shift(); path !== undefined; path = queue.shift()) {
+      const { data, error } = await bucket.createSignedUrl(path, expiresIn, {
+        transform: { ...THUMB_TRANSFORM },
+      });
+      if (!error && data?.signedUrl) out.set(path, data.signedUrl);
+    }
+  }
+  await Promise.all(
+    Array.from({ length: Math.min(THUMB_SIGN_CONCURRENCY, queue.length) }, worker)
+  );
   return out;
 }

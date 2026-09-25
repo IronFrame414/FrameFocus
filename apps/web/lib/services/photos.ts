@@ -1,7 +1,7 @@
 import { createClient } from '@/lib/supabase-server';
 import { hasMarkup, derivativePathFor } from '@framefocus/shared/utils/markup';
 import type { MarkupData } from '@framefocus/shared/types/markup';
-import { getFiles, getSignedUrls, type FileRecord } from './files';
+import { getFiles, getSignedThumbnailUrls, getSignedUrls, type FileRecord } from './files';
 
 // M6M §4.8 / §4.9 — server reads for M-8 (gallery), M-9 (viewer) and M-10.
 //
@@ -50,6 +50,15 @@ export interface PhotoRecord {
    * unmarked photo off as marked (A-23t).
    */
   derivativeMissing: boolean;
+  /**
+   * [S111 D] The GRID's image — a 400x400 thumbnail of the SAME file
+   * `displayUrl` points at (the derivative when annotated, D-31), via
+   * /render/image/. Falls back to the ORIGINAL's thumbnail when the
+   * derivative's cannot be signed — the same degrade `displayUrl` makes, and
+   * still a thumbnail: the grid never loads an original. Null unless the caller
+   * asked for thumbnails (`getProjectPhotos(id, { thumbnails: true })`).
+   */
+  thumbUrl: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -150,8 +159,17 @@ async function resolveUrlsSingle(
   return resolveUrls(file, annotated, await getSignedUrls(paths));
 }
 
-/** M-8's list. Newest first — §4.8 groups by day, newest day first. */
-export async function getProjectPhotos(projectId: string): Promise<PhotoRecord[]> {
+/**
+ * M-8's list. Newest first — §4.8 groups by day, newest day first.
+ *
+ * [S111 D] `thumbnails: true` also signs `thumbUrl` for every photo. Opt-in,
+ * because it costs one storage call PER PHOTO (see getSignedThumbnailUrls) and
+ * only the two Photos grids render thumbnails — chat and the viewer do not.
+ */
+export async function getProjectPhotos(
+  projectId: string,
+  opts: { thumbnails?: boolean } = {}
+): Promise<PhotoRecord[]> {
   const [files, punchIds] = await Promise.all([
     getFiles({ project_id: projectId, category: 'photos' }),
     getPunchPhotoIds(projectId),
@@ -164,7 +182,10 @@ export async function getProjectPhotos(projectId: string): Promise<PhotoRecord[]
     signPaths.push(file.file_path);
     if (readMarkup(file.markup_data) !== null) signPaths.push(derivativePathFor(file.file_path));
   }
-  const urls = await getSignedUrls(signPaths);
+  const [urls, thumbs] = await Promise.all([
+    getSignedUrls(signPaths),
+    opts.thumbnails ? getSignedThumbnailUrls(signPaths) : Promise.resolve(new Map<string, string>()),
+  ]);
 
   return files.map((file) => {
       const markup = readMarkup(file.markup_data);
@@ -188,6 +209,10 @@ export async function getProjectPhotos(projectId: string): Promise<PhotoRecord[]
         displayUrl,
         originalUrl,
         derivativeMissing,
+        thumbUrl:
+          (annotated ? thumbs.get(derivativePathFor(file.file_path)) : undefined) ??
+          thumbs.get(file.file_path) ??
+          null,
       } satisfies PhotoRecord;
   });
 }
@@ -257,6 +282,8 @@ export async function getPhoto(fileId: string, projectId: string): Promise<Photo
     displayUrl,
     originalUrl,
     derivativeMissing,
+    // A single photo is opened, not tiled: no thumbnail is signed.
+    thumbUrl: null,
   } satisfies PhotoRecord;
 }
 
@@ -331,6 +358,7 @@ export async function getReceiptFile(
     displayUrl,
     originalUrl,
     derivativeMissing: false,
+    thumbUrl: null,
   } satisfies PhotoRecord;
 }
 
