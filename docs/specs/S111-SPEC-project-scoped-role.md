@@ -31,6 +31,11 @@ Do not let Part Two's smaller surface pull effort away from Part One's Floor wor
 2. The role has **full access to the projects it is on, money included** — the same financial
    visibility an Owner has, scoped to those projects.
 3. The role has **no company-level access.**
+3a. **AMENDMENT TO RULED 3 [Josh, 2026-09-24, Phase 2].** "No company-level access" is narrowed to:
+    **no company-level AUTHORITY and no company-level MONEY.** Read-only visibility of company
+    lists is permitted where the role cannot do its job without it. This amendment is the basis of
+    Q2 and Q4 (see "RULED — Phase 2" below). _Ruling 3 as first written is kept above, not
+    rewritten._
 
 ⚠️ **"Company level" is not yet defined, and defining it is most of this build.** See FILL-2.
 
@@ -701,6 +706,111 @@ to Photos, or only new ones routed correctly from here forward? Give him the row
 question.
 
 **ASK-9** — May these branches be merged, and in what order?
+
+---
+
+## ✅ RULED — Phase 2 [Josh via Claude, 2026-09-24] — recorded verbatim
+
+> Each states the question so a future session can read it cold.
+
+**AMENDMENT TO RULED 3** — recorded above as **RULED 3a**.
+
+**Q1 (ASK-1) Name of the new role.** RULED: `project_executive`, label "Project Executive". It is the
+construction industry's own term for someone senior to a PM who owns a job's financials without
+running the company, which is exactly the described access. Rejected: `project_admin` (collides with
+the existing Admin role), `partner` (implies ownership), `project_lead` (reads as junior to PM).
+
+**Q2 (ASK-2a) Does it see the company team roster?** RULED: B — whole roster, read-only. Option A
+(assigned people only) is self-defeating: it could never assign anyone new, because it could not see
+them. The roster carries no money; rates live elsewhere. No new policy shape.
+
+**Q3 (ASK-2b) Cost catalog and scope library?** RULED: A — read only. It needs items to write
+estimates and change orders; adding to the company price list is a company decision.
+
+**Q4 (ASK-2c) Contact, client and subcontractor directories?** RULED: B — full directories,
+read-only, WITH ONE CONDITION. Before building it, state which columns in contacts and
+subcontractors carry rates, pricing, markup or financial terms. Those columns are excluded from this
+role's SELECT. If they cannot be excluded column-wise in the database, STOP and report — do not solve
+it in the renderer (#136). Reasoning is the same as Q2: it cannot add a sub to its job without seeing
+the list.
+
+**Q5 (ASK-3) Which projects?** RULED: A — only assigned projects; unassigned ones are invisible, not
+even listed by name. This is RULED 2 as written and needs no new mechanism.
+
+**Q6 (ASK-4a) May it create a project?** RULED: A — no. Creating a project commits the company to
+work.
+
+**Q7 (ASK-4b) Estimates before they become a project?** RULED: A — no sales-stage access. It sees an
+estimate only once it converts to one of its projects. Rejected B deliberately: an estimate has no
+project, so scoping it by "authored by me" introduces a SECOND scoping mechanism into a build already
+sized at 60-90 policies. Widening this later is cheap; narrowing it later is not. Additional work on
+its own project goes through change orders, which it has in full.
+
+**Q8 (ASK-4c) May it put people on its projects?** RULED: A — assign existing staff and existing subs
+to its own projects; it may not invite new people to the company. Inviting takes a paid seat.
+
+**Q9 (ASK-4d) Client payments?** RULED: A — it sees and records payments only as they apply to
+invoices on its own projects, and never a payment's unapplied balance or its applications to other
+projects. B was rejected because "financials and all" is meaningless if it cannot see whether its own
+job got paid. **THIS IS THE PIECE THIS BUILD IS JUDGED ON.** It must be enforced in the database. If
+you find yourself filtering in a route, a view or a component, that is a Floor violation and a hard
+stop (#136). Prove it the FILL-7.2 way: applications to its own project's invoices, row count above
+zero, and ZERO rows for applications to any other project, measured with a real session against the
+database. State both counts.
+
+**Q10 (ASK-4e) Company margin target?** RULED: A — no. It still sees its own projects' actual margin.
+
+**Q11 (ASK-5) Who may grant this role?** RULED: A — Owner only, like promoting to Admin. If code is
+needed to stop an Admin granting it, that code is in scope.
+
+**Q12 (ASK-14) Does it take a paid seat?** RULED: A — yes, like staff. Commercial default: charging
+and later stopping is easy, the reverse is not.
+
+**Q13 (ASK-15) Timesheets?** RULED: A — rank it with PM. It approves foreman and crew; Owner and
+Admin approve it. Rank 0 is a defect, not an option.
+
+**Q14 (ASK-6) Where do site-visit and estimate images become photos?** RULED: D — at upload AND at
+conversion. Upload makes it right going forward; conversion catches everything still sitting on an
+unconverted estimate, with no production data change.
+
+**Q15 (ASK-8) Move images already under Files on production?** RULED: prepare the UPDATE statement,
+do not run it, and do not run the count either. Josh will run the read-only count query on
+production and report the numbers; the decision follows the count. Build everything else in Part Two
+without waiting on this.
+
+**Q16 (ASK-11) Which screen had no camera-roll option?** RULED: A — fix both gaps. Add a library
+option to punch-item completion, and an "Add photos" button that opens the library on both Photos
+pages, desktop and /m. The measurement of all 36 controls is the useful part of this answer; Josh's
+report was one sentence and the actual gaps were not where either of us would have guessed.
+
+**Q17 (ASK-13) The guard conflicts with the camera-first ruling.** RULED: A — the reshape. The guard
+fails any camera-only image input that has no library option beside it. The version in the spec was
+Josh's and it was wrong; it would have fought M6M D-8/A-20. Quote both rulings where it is written.
+
+**Q18 (ASK-12) Daily-log and safety images under Photos?** RULED: B — include them, but NOT by
+recategorizing rows. Do it by widening the Photos query to include images whose category is
+daily_logs or safety. Recategorizing would pull those rows off their own surfaces if category is the
+discriminator. The Photos page already renders "from daily log" and "from safety" badges and its
+empty state promises them, so today it advertises something it never delivers. If widening the query
+turns out to break either of those surfaces, STOP and report rather than choosing.
+
+**Q19 (ASK-10) `subscriptions_select_owner_admin` has no role check** (every role including crew
+reads the company subscription row). RULED: fix it, as its own commit, on the PART TWO branch — not
+Part One. Part One will outlive this session and a one-line leak fix should not wait behind it. It
+needs a production migration; it does not merge until Josh has applied that migration.
+
+**Q20 (ASK-9) Merge order.** RULED: A — Part Two first (`feature/s111-photos`), then Part One
+(`feature/s111-project-role`). Neither merges until Josh has applied its migration to production,
+and he authorizes each merge separately.
+
+**RIDE-ALONG FINDINGS — both approved, both in Part Two:**
+- The storage policy refusing flattened markup copies under the `estimates/` folder. Approved. TEST
+  it before and after; do not assume the failure or the fix. Move no files.
+- HEIC images unconverted on the estimate route. Approved — convert them the way every other upload
+  already does. A photo that only renders in Safari is not a photo.
+
+**PUSHING.** Push allowed; check the Actions API for an in-progress run first and record what was
+seen. Do not push main, do not merge anything, do not touch `feature/m-visual-sweep`.
 
 ---
 

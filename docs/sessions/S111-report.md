@@ -90,3 +90,18 @@ Site-visit record (`site-visit-record.tsx:450`) and estimate Files tab (`estimat
 carry no `capture` and write `category 'other'` through `api/estimates/[id]/files/route.ts:179`.
 
 ## Step 2 — Phase 2 questions sent; stopped for rulings
+
+- Phase 2 questions answered by Josh (Q1–Q20, rulings dated 2026-09-24). Recorded verbatim in the
+  spec under "RULED — Phase 2", with RULED 3a (no company-level AUTHORITY or MONEY; read-only lists
+  permitted) inserted under ruling 3, which is kept as first written.
+
+## Step 3 — push check [2026-09-25]
+
+- Actions API (`curl` with the Codespace `GITHUB_TOKEN`; `gh` is not installed):
+  `status=in_progress` → total_count **0**; `status=queued` → **0**. Control: the unfiltered query
+  returned real runs, so the zeros are not an auth failure — newest three: `main` 36079898218
+  completed/success 00:57Z; `feature/s111-docs` 36079700479 cancelled 00:55Z;
+  `feature/m-visual-sweep` 36078160083 completed/success 00:34Z.
+- `origin/main` is still `033269ff`. This branch carries local `main`'s two unpushed spec/prompt
+  commits (`35d87670`, `9a96ab6a`); pushing the feature branch publishes them on the feature branch
+  only. `main` not pushed; nothing merged; `feature/m-visual-sweep` untouched.
