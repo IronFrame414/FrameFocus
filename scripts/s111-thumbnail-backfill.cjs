@@ -131,7 +131,7 @@ async function main() {
   console.log(`[backfill] target ${urlRef} — ${opt.apply ? 'APPLY (writes thumbnails)' : 'DRY RUN (writes nothing)'}`);
 
   const db = createClient(url, key, { auth: { persistSession: false } });
-  const t = { rows: 0, sourceBytes: 0, existing: 0, missing: 0, generated: 0, failed: 0, thumbBytes: 0, ms: [] };
+  const t = { rows: 0, sourceBytes: 0, existing: 0, missing: 0, generated: 0, failed: 0, originalMissing: 0, thumbBytes: 0, ms: [] };
   const failures = [];
 
   for (let from = 0; ; from += PAGE) {
@@ -168,8 +168,16 @@ async function main() {
               t.thumbBytes += g.bytes;
               t.ms.push(g.ms);
             } catch (e) {
-              t.failed++;
-              failures.push({ id: r.id, path: r.file_path, error: String(e instanceof Error ? e.message : e) });
+              const message = String(e instanceof Error ? e.message : e);
+              // A row whose source object is gone ("Object not found") cannot have a
+              // thumbnail and never will — a data condition, not a failed run. It is
+              // counted apart and does not set a failing exit code; the grid shows
+              // such a row exactly as it did before.
+              if (/Object not found/i.test(message)) t.originalMissing++;
+              else {
+                t.failed++;
+                failures.push({ id: r.id, path: r.file_path, error: message });
+              }
             }
             // Pace: leave room in Storage's small pool for live users' uploads.
             await new Promise((res) => setTimeout(res, 100));
@@ -195,6 +203,7 @@ async function main() {
           ? {
               generated: t.generated,
               failed: t.failed,
+              source_object_missing: t.originalMissing,
               thumbnail_mb_written: mb(t.thumbBytes),
               mean_kb: t.generated ? (t.thumbBytes / t.generated / 1024).toFixed(1) : null,
               ms_per_photo: sorted.length
