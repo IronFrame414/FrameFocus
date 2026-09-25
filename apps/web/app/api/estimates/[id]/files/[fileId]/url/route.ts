@@ -6,6 +6,7 @@ import { SIGNED_URL_TTL_SECONDS } from '@/lib/services/signed-url-ttl';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@framefocus/shared/types/database';
 import type { EstimateFileUrlResponse } from '@/lib/api-contracts/estimate-files';
+import { thumbPathFor } from '@framefocus/shared/utils/markup';
 
 // S109 #161 [RULED Josh, 161.B] — SIGN ON CLICK, NOT AT LIST TIME.
 //
@@ -46,7 +47,7 @@ export async function GET(
   const admin = getSupabaseAdmin() as SupabaseClient<Database>;
   let q = admin
     .from('files')
-    .select('file_path, file_name, mime_type')
+    .select('file_path, file_name, mime_type, markup_data')
     .eq('id', fileId)
     .eq('estimate_id', estimateId)
     .eq('company_id', access.companyId)
@@ -69,10 +70,16 @@ export async function GET(
     return NextResponse.json({ error: 'File not found' }, { status: 404 });
   }
 
-  const { data: signed, error: signErr } = await admin.storage
+  // [S111 D] An image's stored thumbnail is signed in the SAME call as the file
+  // — one Storage request per file, as before (per-photo signing was measured
+  // to exhaust Storage's connections). An absent thumbnail is just absent.
+  const thumbPath = file.mime_type.startsWith('image/') ? thumbPathFor(file.file_path, file.markup_data) : null;
+  const { data: batch, error: signErr } = await admin.storage
     .from(BUCKET)
-    .createSignedUrl(file.file_path, SIGNED_URL_TTL_SECONDS);
-  if (signErr || !signed?.signedUrl) {
+    .createSignedUrls(thumbPath ? [file.file_path, thumbPath] : [file.file_path], SIGNED_URL_TTL_SECONDS);
+  const signedFor = (p: string) => (batch ?? []).find((d) => d.path === p && !d.error)?.signedUrl ?? null;
+  const signed = { signedUrl: signedFor(file.file_path) };
+  if (signErr || !signed.signedUrl) {
     console.error('[GET /api/estimates/[id]/files/[fileId]/url] createSignedUrl failed', {
       check: 'service-role storage sign',
       estimateId,
@@ -87,5 +94,6 @@ export async function GET(
     url: signed.signedUrl,
     file_name: file.file_name,
     mime_type: file.mime_type,
+    thumb_url: thumbPath ? signedFor(thumbPath) : null,
   } satisfies EstimateFileUrlResponse);
 }

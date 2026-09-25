@@ -85,11 +85,12 @@ export const ROUTE_CONTRACTS: RouteContract[] = [
       String.raw`/api/estimates/${SEG}/files/${SEG}/url|api/estimates/\[id\]/files/\[fileId\]/url/route`
     ),
     fieldSource: 'json',
-    fields: ['url', 'file_name', 'mime_type'],
+    fields: ['url', 'file_name', 'mime_type', 'thumb_url'],
     consumers: {
       'app/dashboard/estimates/[id]/estimate-files-tab.tsx': ['url'],
       // resolveSiteVisitMedia() — every site-visit photo and voice note.
-      'lib/site-visits/media.ts': ['url'],
+      // [S111 D] thumb_url for the record's photo tiles.
+      'lib/site-visits/media.ts': ['url', 'thumb_url'],
       'test/s109-estimate-file-url-order.test.ts': [],
       'test/s109-file-sheet.test.ts': [],
       'test/s109-site-visit-media.test.ts': ['url'],
