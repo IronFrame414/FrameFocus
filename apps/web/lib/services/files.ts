@@ -295,7 +295,15 @@ export async function getSignedThumbnailUrls(
       const { data, error } = await bucket.createSignedUrl(path, expiresIn, {
         transform: { ...THUMB_TRANSFORM },
       });
-      if (!error && data?.signedUrl) out.set(path, data.signedUrl);
+      if (!error && data?.signedUrl) {
+        out.set(path, data.signedUrl);
+        continue;
+      }
+      // Logged, never silent: a missing thumbnail is a tile with no image.
+      console.error('[getSignedThumbnailUrls] sign failed', {
+        path,
+        error: error?.message ?? 'no signedUrl',
+      });
     }
   }
   await Promise.all(

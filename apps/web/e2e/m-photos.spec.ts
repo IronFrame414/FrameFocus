@@ -850,10 +850,13 @@ test.describe('the markup save', () => {
 
     // A-23l — the derivative is reached through a SIGNED url from the same
     // {company_id}/{project_id}/ prefix, exactly as the original is.
+    // [S111 D] …as a THUMBNAIL: the grid tile is now /render/image/sign/ of the
+    // derivative, never the full file. _Superseded assertion, quoted:_
+    // `expect(src).toContain('/storage/v1/object/sign/project-files/')`.
     const src = await tile(page, target.id)
       .getByTestId('m-tile-image')
       .getAttribute('src');
-    expect(src).toContain('/storage/v1/object/sign/project-files/');
+    expect(src).toContain('/storage/v1/render/image/sign/project-files/');
     expect(src).toContain(encodeURIComponent(COMPANY_A));
     expect(src).toContain('token=');
     expect(src).toContain('.markup.jpg');
