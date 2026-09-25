@@ -14,8 +14,14 @@
 //      image transformation (/render/image/). One size for every surface is
 //      the ruling: the largest measured need is 184 CSS px at 2x = 368 device
 //      px (desktop 1440), and /m at 3x needs 352 (402 wide) / 310 (360 wide).
-//   2. The grid NEVER loads an original. The original is fetched only when a
-//      photo is opened (markup / viewer), which keeps using `displayUrl`.
+//      [Option A, RULED] The thumbnail is STORED — generated once per
+//      displayable write (lib/photos/thumbnail-server.ts) — and the grid
+//      batch-signs it with everything else in ONE call. Signing a
+//      /render/image/ URL per photo per view was measured to exhaust Storage's
+//      database connections (S111 report, T4).
+//   2. The grid loads the original only when opened (markup / viewer, which
+//      keep using `displayUrl`) — or as the FALLBACK when a photo has no stored
+//      thumbnail yet: a slow tile is acceptable, an invisible photo is not.
 //   3. Images load AHEAD of the viewport, not all at once, and keep loading as
 //      the user scrolls: ~2 screens on desktop, ~12 on mobile (touch scrolling
 //      outruns a mouse wheel), reduced on a slow connection or data-saver.
