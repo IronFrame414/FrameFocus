@@ -1,4 +1,4 @@
-# S111 — session prompt: a project-scoped role with full project access
+# S111 — session prompt: a project-scoped role, plus photo routing and camera-roll upload
 
 Fresh context. Read this whole prompt, then the spec, before doing anything.
 
@@ -22,6 +22,9 @@ Q1. [ASK-1] <the question, stated in full — Josh may be reading it with no mem
 ⚠️ **State each question in full.** A ruling that says only "Q3: option A" is useless to a future
 session; so is a question that assumes the reader has the spec open.
 
+Ask **all** questions from both parts in that one message. Do not ask Part One's, build, and then
+come back for Part Two's.
+
 ---
 
 ## The work
@@ -29,13 +32,29 @@ session; so is a question that assumes the reader has the spec open.
 **`docs/specs/S111-SPEC-project-scoped-role.md`** — the scaffold. Fill it in place; do not
 restructure it and do not write a new spec file.
 
-Josh needs an account with complete access to a project — financials included — and no
-company-level access. He has ruled this is **a new role**, not per-user permissions.
+**It has two parts, and they are independent of each other.**
+
+**Part One — a new role.** Josh needs an account with complete access to a project, financials
+included, and no company-level access. He has ruled this is a new role, not per-user permissions.
 
 ⚠️ **The first real question is whether a new role is needed at all.** FILL-1 measures what
 `project_manager` already does. If the gap is small, say so — a narrower change to PM plus a
 scoping rule may be the better answer, and Josh would rather hear that than receive a role he did
 not need.
+
+**Part Two — photos.** Two defects, in Josh's words:
+
+> "the photo from site visit and estimate are under files when converted to project. they should be
+> under photos so they can be marked up. also, there is no way to add pictures from the camera roll"
+
+⚠️ **Do not propose a Part Two fix before FILL-8 is filled.** FILL-8 establishes what actually
+separates a photo from a file in this schema. Until that is answered, you do not know whether this
+is a write-path bug, a conversion bug, or a query bug, and the three have different fixes.
+
+⚠️ **FILL-11 may end Part Two early.** If image markup does not exist yet, this stops being a
+routing fix and becomes a feature Josh has not scoped. Say so in one line and ask; do not build it.
+
+**Two branches, one per part** (FILL-14). ⚠️ **One branch's CI at a time.**
 
 ---
 
@@ -43,7 +62,8 @@ not need.
 
 - `main` carries S110 in full (seven sections) plus the company-email work. Production has every
   migration through `20261760000000`, verified by object.
-- `feature/m-visual-sweep` is built and awaiting CI and a merge; it is not this work.
+- `feature/m-visual-sweep` is built and awaiting CI and a merge; it is not this work. ⚠️ **Its CI
+  may still be running — check before you push anything.**
 - The CLI is linked to **rebuild-test** (`nmyphyhmfttxkdoposvf`). ⚠️ **It can reach production** —
   check `supabase/.temp/linked-project.json` before any `db push`.
 - Josh and three real staff use this in production daily.
@@ -61,9 +81,13 @@ and a Turbo cache hit reported as a build. One of those shipped a production reg
 blank. **Never truncate a search whose completeness is the point. State the command and the full
 count.**
 
-⚠️ **This build's version of that trap is the literal role array.** Role lists are written out by
+⚠️ **Part One's version of that trap is the literal role array.** Role lists are written out by
 hand in policies, triggers, functions and TypeScript. Miss one and you get a silent denial or a
 silent leak. FILL-3.1 exists for that reason; treat its count as load-bearing.
+
+⚠️ **Part Two's version is the upload entry point.** FILL-10 must find every one of them across
+`/m` and desktop. This is the same shape of search that already shipped one production regression
+when it was truncated.
 
 ## Phase 2 — ask, then stop
 
@@ -71,16 +95,18 @@ silent leak. FILL-3.1 exists for that reason; treat its count as load-bearing.
 form, the team list and the database.
 ⚠️ **ASK-2 and ASK-4 draw the company/project boundary.** An invoice belongs to a project and to
 the company's books; say how you divided them rather than assuming.
+⚠️ **ASK-8 carries a row count.** Josh cannot decide whether to move existing production images
+without knowing how many there are.
 
-Also ask, explicitly: **may this branch be merged**, and as one branch or several.
+Also ask, explicitly: **may these branches be merged**, and in what order.
 
 ## Phase 3 — build
 
 Stop rules, which override "do not stop":
 
-1. Anything that writes to **production**.
+1. Anything that writes to **production** — including any backfill of existing image rows.
 2. A decision not settled in the spec.
-3. Destroying existing rows.
+3. Destroying existing rows, or **moving** them between surfaces.
 4. ⚠️ **Any change that weakens the Financial Visibility Floor.** A gate controlling only rendering
    still ships the data in the payload (`#136`). Authority belongs in the database.
 5. Merging, unless Josh authorized it — and ⚠️ **never a branch carrying a migration before Josh
@@ -106,4 +132,5 @@ survives.** A rebuild also removes Claude Code — `npm install -g @anthropic-ai
 
 Final report in plain text: what is built and proven, what is built and untested, what is blocked;
 every migration owed to production with its row count; anything awaiting a ruling; and **what a
-person still has to click before this is trusted.**
+person still has to click before this is trusted** — for Part Two that includes taking a photo on a
+real phone, choosing one from the camera roll, and marking one up.
