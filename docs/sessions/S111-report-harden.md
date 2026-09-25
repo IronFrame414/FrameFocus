@@ -79,3 +79,86 @@ rolled back**:
 
 So under today's arm, a later widening of `files` SELECT widens **who can write storage** with no
 edit to the storage policy. Residue afterwards: files 0, objects 0, projects 0, probe policy 0.
+
+## Step H3 — item 1 proven in CI
+
+CI run **36129811882 on `440d71b4`**: Lint & Type Check **success**, E2E (Playwright) **success**
+(head SHA matches the pushed tip). The new spec **ran** — its lines are in the job log:
+`[S111 e2e] attached to the estimate: 3 files, 2 images`, `[S111 e2e] Photos query rows: 2 (expected 2)`.
+Suite tally **585 passed, 10 skipped, 0 failed, 0 flaky** (the 13 "failed" grep hits are all
+`[WebServer]` app log lines — translate/english-check with no model key, an invoice-send delivery, a
+deliveries PDF — not test results). `next build` locally: **BUILD_EXIT_LINE=0**; eslint on both new
+files exit 0.
+
+**Item 1 is done: the conversion regression now has a CI tripwire, asserting on 2 Photos-query rows.**
+
+## Step H4 — item 2(b): the arm made self-contained — `20261790000000`, rebuild-test only
+
+- CLI re-linked: `supabase link --project-ref nmyphyhmfttxkdoposvf` → `linked-project.json` name
+  **framefocus-rebuild-test**. Actions API 0 in progress / 0 queued. `db push --dry-run` listed exactly
+  one pending migration, `20261790000000`; pushed, DBPUSH_EXIT=0.
+- The `.markup.jpg` arm now JOINs `files → project_assignments → company_members → profiles` on
+  `p.user_id = auth.uid()`, with `f.project_id IS NOT NULL` — the same assignment test the CASE arm
+  already uses. `files` RLS still applies on top (it can only narrow). Owner/admin unchanged.
+  Confirmed from `pg_policies` after the push.
+- **AFTER, real sessions** — `s111-markup-derivative-floor` + the unchanged `s111-photo-conversion`:
+  **VITEST_EXIT=0, 14 passed / 14**. Unassigned sub: **0 objects** on both paths; assigned sub
+  (control): **1**; conversion 2b rows moved **3**, 2c Photos rows **2**; 4a assigned PM still writes
+  the derivative; 4b unassigned crew still refused.
+- **AFTER, the coupling probe** (same rolled-back `DO` block, `files` SELECT widened to `USING (true)`):
+  unassigned project `3a01d018…` → **REFUSED**; CONTROL, a project the sub IS assigned to
+  (`4a4f8567…`) → **WRITTEN**. Before the migration the unassigned case was **WRITTEN**. The authority
+  now sits in the storage policy. Residue: files 0, objects 0, projects 0, probe policy 0.
+- `npm run db:fingerprint` → latest migration `20261790000000` (functions n=311, unchanged — policies
+  are not fingerprinted); both baseline files committed with the migration (`1a50a1b8`).
+- Sweep for older tests encoding the old rule (CLAUDE.md, S157): grep `project_files_insert_non_client`
+  / `markup.jpg` / `derivativePathFor` across `test/`, `e2e/`, `docs/specs` — 11 test files. None
+  asserts that an UNASSIGNED user may write a derivative; `s157` A7/A8 cover the SELECT arm
+  (unchanged); `s111-photo-conversion` 4a/4b are consistent with the new rule and passed.
+
+## Step H5 — local e2e against the migrated rebuild-test
+
+Production build (`next start`, the H3 build; no app code changed since). Actions API 0/0 before.
+`desktop-photos-conversion-s111`, `m-photos` (incl. the crew markup SAVE, which writes a derivative),
+`desktop-photos-add-s111`, `m-photos-add-s111`: **45 passed, 0 failed, 0 flaky, PW_EXIT=0**. Server
+stopped by PID.
+
+## Owed to production — `20261790000000` (NOT applied; Josh applies)
+
+**Policy-only. It governs no existing row or object** — an INSERT policy is evaluated only on new
+writes. Production must already carry `20261780000000`, which this replaces. What changes going
+forward: a non owner/admin can write a `.markup.jpg` only beside a file on a project they are
+assigned to.
+
+Sizing query, read-only, for Josh to run on production first. The last column is how many EXISTING
+derivatives were written by someone the new rule would not admit. On rebuild-test: 17 derivative
+objects, 1 by a non owner/admin — orphaned test residue with no original row — so the last column is
+**0**. It was **not** run on production (this session has no production access and did not use any).
+
+```sql
+SELECT count(*) AS derivative_objects,
+       count(*) FILTER (WHERE f.id IS NULL) AS no_original_row,
+       count(*) FILTER (WHERE pr.role NOT IN ('owner','admin')) AS written_by_non_owner_admin,
+       count(*) FILTER (
+         WHERE f.id IS NOT NULL AND pr.role NOT IN ('owner','admin')
+           AND NOT EXISTS (
+             SELECT 1 FROM project_assignments pa
+               JOIN company_members m ON m.id = pa.member_id
+              WHERE pa.project_id = f.project_id AND m.profile_id = pr.id
+                AND pa.is_deleted = false AND m.is_deleted = false)
+       ) AS would_not_be_admitted_now
+FROM storage.objects o
+LEFT JOIN files f ON f.file_path = left(o.name, length(o.name) - 11)
+LEFT JOIN profiles pr ON pr.user_id = o.owner AND pr.is_deleted = false
+WHERE o.bucket_id = 'project-files' AND o.name LIKE '%.markup.jpg';
+```
+
+A non-zero last column does not block the migration (nothing existing is touched); it would mean
+someone once wrote a derivative on a project they are not assigned to now.
+
+## Not done, recorded for a ruling
+
+- **The same coupling remains in `project_files_select_non_client` and `project_files_update_non_client`.**
+  Both carry the identical `.markup.jpg` arm scoped only by `files` RLS. UPDATE is the path the
+  `saveMarkup()` upsert takes on every save after the first. Item 2 named the INSERT arm only, so both
+  are untouched.
