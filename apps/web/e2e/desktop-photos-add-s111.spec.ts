@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { adminClient } from './hub-fixture';
 import { signInAs } from './sign-in-as';
+import { withThumbnails } from './storage-cleanup';
 
 // S111 Part Two, RULED Q16 — the desktop Photos page gains "Add photos", which
 // opens the LIBRARY (no `capture`) and writes category 'photos' through the
@@ -22,7 +23,7 @@ test.afterAll(async () => {
   const { data } = await admin.from('files').select('id, file_path').eq('file_name', NAME);
   const rows = (data ?? []) as { id: string; file_path: string }[];
   if (rows.length) {
-    await admin.storage.from(BUCKET).remove(rows.map((r) => r.file_path));
+    await admin.storage.from(BUCKET).remove(withThumbnails(rows.map((r) => r.file_path)));
     await admin.from('files').delete().in('id', rows.map((r) => r.id));
   }
 });

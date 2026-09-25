@@ -30,8 +30,15 @@ export async function sweepThumbFixture(tag: string): Promise<void> {
   const { data: files } = await admin.from('files').select('id, file_path').in('project_id', ids);
   const rows = (files ?? []) as { id: string; file_path: string }[];
   const objects = rows.flatMap((r) => [r.file_path, thumbPathFor(r.file_path, null)]);
+  // ⚠️ CHECKED AND RETRIED. This used to ignore remove()'s result: under
+  // Storage's "SlowDown" the removal failed silently while the rows below were
+  // deleted, stranding 89 thumbnails from one CI run with no row pointing at them.
   for (let i = 0; i < objects.length; i += 100) {
-    await admin.storage.from(BUCKET).remove(objects.slice(i, i + 100));
+    const batch = objects.slice(i, i + 100);
+    await withSlowDownRetry(async () => {
+      const { error } = await admin.storage.from(BUCKET).remove(batch);
+      if (error) throw new Error(`sweep remove: ${error.message}`);
+    });
   }
   if (rows.length) await admin.from('files').delete().in('id', rows.map((r) => r.id));
   await deleteProjects(admin, ids);

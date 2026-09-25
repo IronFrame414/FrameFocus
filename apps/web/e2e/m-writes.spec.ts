@@ -1,6 +1,7 @@
 import { test, expect, type Page } from '@playwright/test';
 import { signInAs } from './sign-in-as';
 import { adminClient } from './hub-fixture';
+import { withThumbnails } from './storage-cleanup';
 
 // M6M Part C — the write paths. D-51 (CO create → edit → send), D-52 as
 // corrected (punch create / complete / verify), D-60 (the list target),
@@ -194,7 +195,7 @@ async function cleanUpFixtures(): Promise<Record<string, number>> {
   if (photoIds.length > 0) {
     const { data: files } = await admin.from('files').select('id, file_path').in('id', photoIds);
     const paths = (files ?? []).map((f) => f.file_path).filter(Boolean) as string[];
-    if (paths.length > 0) await admin.storage.from('project-files').remove(paths);
+    if (paths.length > 0) await admin.storage.from('project-files').remove(withThumbnails(paths));
 
     const { count } = await admin.from('files').delete({ count: 'exact' }).in('id', photoIds);
     removed.files += count ?? 0;

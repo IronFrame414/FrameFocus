@@ -131,7 +131,8 @@ async function main() {
   console.log(`[backfill] target ${urlRef} — ${opt.apply ? 'APPLY (writes thumbnails)' : 'DRY RUN (writes nothing)'}`);
 
   const db = createClient(url, key, { auth: { persistSession: false } });
-  const t = { rows: 0, sourceBytes: 0, existing: 0, missing: 0, generated: 0, failed: 0, originalMissing: 0, thumbBytes: 0, ms: [] };
+  const t = { rows: 0, sourceBytes: 0, existing: 0, missing: 0, generated: 0, failed: 0, originalMissing: 0, unrenderable: 0, thumbBytes: 0, ms: [] };
+  const unrenderable = [];
   const failures = [];
 
   for (let from = 0; ; from += PAGE) {
@@ -174,7 +175,13 @@ async function main() {
               // counted apart and does not set a failing exit code; the grid shows
               // such a row exactly as it did before.
               if (/Object not found/i.test(message)) t.originalMissing++;
-              else {
+              // Storage cannot render these bytes (corrupt, or not really an image —
+              // measured on rebuild-test fixtures). Also permanent: listed, not retried
+              // into a failing exit. The grid shows the full file, as before.
+              else if (/invalid or unsupported for rendering/i.test(message)) {
+                t.unrenderable++;
+                unrenderable.push({ id: r.id, path: r.file_path });
+              } else {
                 t.failed++;
                 failures.push({ id: r.id, path: r.file_path, error: message });
               }
@@ -204,6 +211,7 @@ async function main() {
               generated: t.generated,
               failed: t.failed,
               source_object_missing: t.originalMissing,
+              source_unrenderable: t.unrenderable,
               thumbnail_mb_written: mb(t.thumbBytes),
               mean_kb: t.generated ? (t.thumbBytes / t.generated / 1024).toFixed(1) : null,
               ms_per_photo: sorted.length
@@ -216,6 +224,10 @@ async function main() {
       2
     )
   );
+  if (unrenderable.length) {
+    console.log(`[backfill] ${unrenderable.length} source(s) Storage cannot render — permanent, not retried:`);
+    for (const u of unrenderable.slice(0, 50)) console.log(JSON.stringify(u));
+  }
   if (failures.length) {
     console.log(`[backfill] ${failures.length} failure(s) — safe to re-run; these are retried:`);
     for (const f of failures.slice(0, 50)) console.log(JSON.stringify(f));
