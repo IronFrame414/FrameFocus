@@ -496,8 +496,9 @@ top of this file is advanced to `#164` in the same commit, which is what keeps t
   **Approve** (`timesheets-client.tsx:427-430`), **Delete bid / Send request**
   (`bidding-tab.tsx:376-386,522-534` — the same rows as **#159**), **Unassign**
   (`po-lines-panel.tsx:241-245`), and the densest set in the app,
-  `components/notifications/notification-list.tsx` (rollup `:195`, open `:234`, open `:264`, star
-  `:253`, dismiss `:274`). Plus **12 in-row checkboxes**, **5 `<select>`s**, and **inline-edit
+  `components/notifications/notification-list.tsx` (rollup `:232`, open `:297`, star `:319`,
+  mark-read `:329`, dismiss `:341` — re-pointed after the /m visual sweep restyle [2026-09-24];
+  _was_ rollup `:195`, open `:234`, open `:264`, star `:253`, dismiss `:274`). Plus **12 in-row checkboxes**, **5 `<select>`s**, and **inline-edit
   `<input>`s used AS cells** (`bidding-tab.tsx:332`, `payments-view.tsx:555`,
   `estimates/inline-edit.tsx` throughout `items-tab.tsx`).
   ✅ **The pattern to copy already exists:** `projects/[id]/files/file-row.tsx:61,107,118` wraps
@@ -558,6 +559,46 @@ top of this file is advanced to `#164` in the same commit, which is what keeps t
   precedent). The #13 line above, found still open while closed elsewhere, is struck here.
   Traps: `test/s109-row-activation.test.tsx` + `e2e/desktop-row-activation-s109.spec.ts`, each
   proven by sabotage — see `S109-report.md` Step 4.
+
+### Branch-scoped, awaiting real numbers — `feature/m-visual-sweep` [2026-09-24]
+
+> Provisional ids per the S136 rule: never allocate a bare `#N` on a branch.
+
+- **#1-msweep — rebuild-test carries enough fixture and E2E residue to make a visual sweep
+  misleading. FILED, NOT CLEANED — by ruling [Josh, sweep decision 7]:** data cleanup inside a UI
+  diff makes both unreadable.
+
+  **Measured 2026-09-24** (Bishop Contracting, the QA company): **585 `company_members`, 579 of
+  them with no profile** — so `/m/team` renders **585 rows** for crew and owner alike (sweep
+  `results-after.json`, `rows.li`). **289 notifications** company-wide; the QA owner alone holds
+  **127**, of which **62** carry an `E2E …` body and most of the rest are repeats of one
+  QuickBooks-refund notice. `/m/notifications` caps at 100, so the owner's screen is entirely
+  test output.
+
+  **Why it matters beyond tidiness — it is what made the sweep's first impression wrong.** Josh's
+  report that "most lists/rows look bad" was not confirmed: 17 screens use the shared row from
+  `app/m/mobile-ui.tsx` and are consistent. What he saw was the one genuinely unstyled screen
+  (notifications, since fixed on this branch) **plus a 585-row roster and a wall of `E2E Assigned
+  605854` rows**. Every future visual review on rebuild-test inherits the same distortion.
+
+  **Constraints on the cleanup.** Pinned fixtures are hand-curated and not reproducible from a
+  script (**#149**), so no blanket delete: `eaf0e25b…` and the rows the sweep's `IDS` table pins
+  must survive. The 579 profile-less members are the population `detail-access.ts` calls out
+  (*"33 members with member_type='subcontractor' of which 32 have no profile"* — now far larger),
+  so check what the #149 fixtures and the A-47 tests depend on before removing any. A cleanup is
+  better paired with teaching the E2E specs that create these rows to remove them.
+
+- **#2-msweep — at 320px the /m tab bar overflows: "Field" runs 34px off-screen.** Found while
+  checking decision 5's measurement row at 320 (`measure-row-320.mjs`); the row fits, the shell
+  does not. The tab bar's `scrollWidth` is **354** at a 320 viewport — tab right edges at
+  70 / 126 / 242 / 298 / **354**. Phase 1 swept 390 and 360 only, where it fits.
+
+  **Not fixed here, deliberately.** The bar's geometry is ruled (M6M D-3, the -26px camera break,
+  A-40c "the bottom bar is untouched", ND-13's arithmetic against a sixth slot), and 320 is not a
+  width any ruling names as supported. **The decision owed first is whether 320 is a supported
+  width at all** (iPhone SE 1st gen / small Androids). If yes, the budget to work within is the bar's
+  `px-[14px]` each side, four tabs at `min-w-[56px]`, the 66px FAB and the 44px gallery button —
+  re-measure before choosing what gives.
 
 ### Branch-scoped, awaiting real numbers — `feature/s110-h-language` [S110]
 
@@ -1605,6 +1646,28 @@ Decide once, for this AND the event log's identical prune (G1 #4 is the same rul
 
   Observed S150, verifying Gate 4's `[UNVERIFIED]` PWA-install half.
 
+  **⚠️ AMENDED [/m visual sweep, 2026-09-24] — the BOTTOM inset is dead too, and turning
+  `viewport-fit=cover` on is DEFERRED BY RULING [Josh, sweep decision 4].** Measured in the sweep's
+  Phase 1 (`79063f77`): `env(safe-area-inset-bottom)` resolves to **0** today, because without
+  `viewport-fit=cover` the browser never reports an inset. So the tab bar's
+  `paddingBottom: calc(14px + env(safe-area-inset-bottom))` (`app/m/mobile-shell.tsx`) is a
+  flat 14px on every device — this entry's line above, *"pads the safe area at the bottom only"*,
+  describes code that is written but has **no effect**. Nothing is visibly wrong on it either:
+  without `cover`, iOS keeps the page out of the home-indicator zone itself.
+
+  **Why deferred rather than done, as Josh gave it:** no reported symptom; it changes how
+  **every** screen sits against the notch and the home indicator at once; it needs the
+  **no-tab-bar photo screens** (viewer and markup, `data-chrome="dark"`, which have no bottom
+  padding of their own) handled in the same change; and **none of it is verifiable in a
+  headless browser**, which reports a zero inset regardless. When it moves, the fix shape
+  above gains a third item — bottom insets for the dark-canvas branch — and the test is a real
+  iPhone, installed to the home screen.
+
+  **Interaction with the sweep's FAB rule.** `--m-fab-inset` (39px, `mobile-shell.tsx`) is
+  measured from the FAB's overhang into the content region, which is independent of the
+  bottom inset — the FAB rides on the tab bar. Enabling `cover` later grows the tab bar, not the
+  overhang, so the FAB rule should not need to change; re-measure anyway.
+
 ### Branch-scoped, awaiting real numbers — `feature/7i-stage1-settings` [S150]
 
 > Provisional ids per the S136 rule: never allocate a bare `#N` on a branch.
@@ -1993,24 +2056,9 @@ non-role portal identity; then build the sub-facing surface that issues these in
 
 - **#151 — RENUMBERED FROM `#149` [S139].** It was filed as `#149` on this branch in S123; main independently allocated `#149` to "e2e fixtures not reproducible", and `feature/m6m-mobile` allocated it to a third item. Main's `TECH_DEBT.md` is the assignment authority and its header reconciliation table assigns this item **`#151`**. Verified against main rather than trusted: main's own entries stop at `#150`, and the table allocates `#151`–`#154`. **Every citation on this branch was grepped before the move** — there were exactly two, both in this file, and no code, comment or test referenced it. The two items this branch numbers `#147` and `#148` are byte-identical to main's and are NOT renumbered.
 
-- **#151** **The push enrolment control does not read as tappable. A UI PASS, NOT A DEFECT — the control works, it just does not announce itself.** Found by Josh on a real device, S123: he located it and turned notifications on, but the affordance does not look like a button.
-
-  **Where it lives.** `apps/web/components/notifications/push-enrolment.tsx` — ONE component serving both surfaces, which is CLAUDE.md's parity rule applied deliberately: each surface passes a `surface` prop and neither owns a copy. Rendered at exactly two sites:
-  - `app/dashboard/notifications/page.tsx:66` — `surface="desktop"`, inside a `<section>` beneath an `<h2>Push notifications</h2>`.
-  - `app/m/notifications/page.tsx:53` — `surface="mobile"`, inside a bare `<section style={{ marginTop: '24px' }}>` with **no heading at all**, so on the phone it reads as an unlabelled sentence under the notifications list.
-
-  **What it looks like today, and why — so the fix does not start with rediscovery.** The component contains **zero `className` attributes**, in any branch (verified by count, not by eye). `app/globals.css` loads `@tailwind base`, so Preflight is in force: it sets `background-color: transparent` and `background-image: none` on buttons, and `border-width: 0` universally. An unstyled `<button>` therefore renders with **no background, no border, no radius and an inherited type ramp** — visually a line of body text that happens to respond to a click. This is CSS *absence*, not CSS error, which is why nothing looks broken and nothing fails. There is also no sizing class, so the button's height is content-driven and **will not meet A-5's 44px floor without one** — measure it during the pass rather than trusting a number written here.
-
-  **Why this outranks ordinary polish, recorded because it is the reason it was raised.** This is the one control standing between a user and ever receiving a notification, so an unclear affordance means most people never enrol at all. And on iOS the permission prompt is **one-shot and sticky per origin** — a denial cannot be re-prompted — so a user who meets this control in a confusing state and taps through wrongly ends up in a *permanent* state, not a recoverable one.
-
-  **Constraints any refinement inherits.**
-  1. **A-5's 44px floor.** `notification-bell.tsx:53` (`h-11 w-11`) is the in-repo reference for 44px in this Tailwind scale.
-  2. **§2's tokens** — the `m6m.*` namespace at `tailwind.config.ts:55` (`navy, blue, amber, danger, surface, card, border, muted, …`). §2 names `blue` as the primary button and `amber` as the primary FIELD CTA; choosing between them here is a design call, not a build detail. Note both render sites currently use raw inline styles for spacing, so the pass should decide whether to tokenise those too or deliberately leave them.
-  3. **⚠️ THE iOS INSTALL-GATE BRANCH MUST NOT BECOME PRESSABLE.** `state === 'ios-needs-install'` renders instructions and **no control**, on purpose — §10.2, *"the UI must not offer a control that cannot succeed"* — because pressing it cannot work and a denial there is permanent for the origin. A styling pass that hands that block a card, a border and a tappable-looking surface reinstates the exact offer the branch exists to withhold. The same applies to `denied` and `unsupported`: those branches are **statements, not actions**.
-
-  **What a pass would be working without.** **No test references this component anywhere** — `push-enrolment`, `push-enable`, `push-ios-install`, `push-disable`, A-N26 and A-N27 appear in no unit or e2e file. The criteria the component's own header cites are asserted nowhere, so there is currently no safety net for constraint 3 above. The pass should add at minimum an A-N26 assertion — *no button in the iOS branch* — **before** restyling, so the one thing that must not change is pinned while the rest moves.
-
-  **Not a behaviour change.** The enrolment path, the user-gesture guard on `requestPermission()` and the per-surface service-worker scoping are all correct and were exercised on a real device. Observed S123.
+- **#151** — ✅ **CLOSED [/m visual sweep, `feature/m-visual-sweep`, 2026-09-24]; moved to
+  [`TECH_DEBT_CLOSED.md`](TECH_DEBT_CLOSED.md).** Pointer kept so the number does not read as
+  vanished. Full original text in git history (the commit before this closure).
 
 - **`#152` / `#153` / `#154` — RENUMBERED FROM `#147` / `#148` / `#149` [S139].** All three were filed on this branch in S123, and all three collided: main allocated `#147`–`#149` to three DIFFERENT items ("contact holds only ONE address", "estimate cannot create a contact", "e2e fixtures not reproducible"), and `feat/notifications` took `#149` for a fourth. **The divergence starts at `#147`, not `#148`.** Main's `TECH_DEBT.md` is the assignment authority and its header table assigns exactly these three numbers. Verified against main as it now stands rather than trusted: main's own entries stop at `#150`, and `#152`–`#154` were unused on this branch before the move.
 
