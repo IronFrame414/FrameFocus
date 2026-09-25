@@ -1,5 +1,5 @@
 import { createClient } from '@/lib/supabase-server';
-import { hasMarkup, derivativePathFor } from '@framefocus/shared/utils/markup';
+import { hasMarkup, derivativePathFor, thumbPathFor } from '@framefocus/shared/utils/markup';
 import type { MarkupData } from '@framefocus/shared/types/markup';
 import { getFiles, getSignedUrls, type FileRecord } from './files';
 
@@ -50,6 +50,14 @@ export interface PhotoRecord {
    * unmarked photo off as marked (A-23t).
    */
   derivativeMissing: boolean;
+  /**
+   * [S111 D, option A] The GRID's image — the STORED 400x400 WebP thumbnail of
+   * the file `displayUrl` points at (the derivative when annotated, D-31).
+   * When no thumbnail exists yet (generation failed, pending, or pre-backfill)
+   * it is `displayUrl` itself — the full file — so the photo is never
+   * invisible. Null unless the caller asked (`{ thumbnails: true }`).
+   */
+  thumbUrl: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -150,8 +158,18 @@ async function resolveUrlsSingle(
   return resolveUrls(file, annotated, await getSignedUrls(paths));
 }
 
-/** M-8's list. Newest first — §4.8 groups by day, newest day first. */
-export async function getProjectPhotos(projectId: string): Promise<PhotoRecord[]> {
+/**
+ * M-8's list. Newest first — §4.8 groups by day, newest day first.
+ *
+ * [S111 D, option A] `thumbnails: true` also resolves `thumbUrl` — the STORED
+ * thumbnail (lib/photos/thumbnail-server.ts), signed in the SAME single batch
+ * call as the originals and derivatives: no extra Storage round trip per photo.
+ * Opt-in only so callers that never render a tile do not sign paths they ignore.
+ */
+export async function getProjectPhotos(
+  projectId: string,
+  opts: { thumbnails?: boolean } = {}
+): Promise<PhotoRecord[]> {
   const [files, punchIds] = await Promise.all([
     getFiles({ project_id: projectId, category: 'photos' }),
     getPunchPhotoIds(projectId),
@@ -163,6 +181,7 @@ export async function getProjectPhotos(projectId: string): Promise<PhotoRecord[]
   for (const file of files) {
     signPaths.push(file.file_path);
     if (readMarkup(file.markup_data) !== null) signPaths.push(derivativePathFor(file.file_path));
+    if (opts.thumbnails) signPaths.push(thumbPathFor(file.file_path, file.markup_data));
   }
   const urls = await getSignedUrls(signPaths);
 
@@ -188,6 +207,13 @@ export async function getProjectPhotos(projectId: string): Promise<PhotoRecord[]
         displayUrl,
         originalUrl,
         derivativeMissing,
+        // ⚠️ RULED [Josh]: a missing thumbnail falls back to the FULL display
+        // file. A slow tile is acceptable; an invisible photo is not. The
+        // thumbnail's name carries the markup fingerprint, so a stale one can
+        // never be picked — an absent one falls through to displayUrl.
+        thumbUrl: opts.thumbnails
+          ? (urls.get(thumbPathFor(file.file_path, file.markup_data)) ?? displayUrl)
+          : null,
       } satisfies PhotoRecord;
   });
 }
@@ -257,6 +283,8 @@ export async function getPhoto(fileId: string, projectId: string): Promise<Photo
     displayUrl,
     originalUrl,
     derivativeMissing,
+    // A single photo is opened, not tiled: no thumbnail is signed.
+    thumbUrl: null,
   } satisfies PhotoRecord;
 }
 
@@ -331,6 +359,7 @@ export async function getReceiptFile(
     displayUrl,
     originalUrl,
     derivativeMissing: false,
+    thumbUrl: null,
   } satisfies PhotoRecord;
 }
 

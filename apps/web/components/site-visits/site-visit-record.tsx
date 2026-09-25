@@ -243,6 +243,8 @@ interface PhotoFile {
   mime_type: string;
   created_at: string | null;
   url: string | null;
+  /** [S111 D] Stored thumbnail for the tile; null → `url`. */
+  thumbUrl: string | null;
   phase: Phase;
 }
 
@@ -428,7 +430,8 @@ export function SiteVisitRecord({
                 {group.map((p) =>
                   p.url ? (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img key={p.id} data-testid="sv-photo" src={p.url} alt={p.file_name} className="aspect-square w-full rounded-[8px] object-cover" />
+                    // [S111 D] The stored thumbnail, or the full file when there is none.
+                    <img key={p.id} data-testid="sv-photo" src={p.thumbUrl ?? p.url} alt={p.file_name} className="aspect-square w-full rounded-[8px] object-cover" />
                   ) : (
                     <div key={p.id} data-testid="sv-photo-missing" className="aspect-square rounded-[8px] bg-m6m-border" />
                   )

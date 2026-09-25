@@ -5,6 +5,7 @@ import {
   type MarkupShape,
 } from '@framefocus/shared/types/markup';
 import { derivativePathFor } from '@framefocus/shared/utils/markup';
+import { requestThumbnail } from '@/lib/photos/request-thumbnail';
 
 const BUCKET = 'project-files';
 
@@ -139,5 +140,9 @@ export async function saveMarkup(
     return { status: 'derivative_failed', error: uploadError.message };
   }
 
+  // [S111 D] The grid shows the marked-up version, so it needs a thumbnail of
+  // THIS markup. Its name carries the markup's fingerprint, so until it exists
+  // the grid falls back to the full derivative — never to a stale thumbnail.
+  requestThumbnail(fileId);
   return { status: 'saved' };
 }

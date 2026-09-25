@@ -39,6 +39,12 @@ export interface EstimateFileUrlResponse {
   url: string;
   file_name: string;
   mime_type: string;
+  /**
+   * [S111 D] The stored 400px grid thumbnail, signed in the SAME call as `url`.
+   * Null for a non-image, or when no thumbnail exists yet — a consumer showing
+   * a tile then uses `url` (ruled: never an invisible photo).
+   */
+  thumb_url: string | null;
 }
 
 /** Every error body these routes return. */

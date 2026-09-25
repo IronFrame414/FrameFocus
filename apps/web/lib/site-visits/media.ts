@@ -30,20 +30,29 @@ export type ListedFile = Pick<EstimateFileListItem, 'id' | 'file_name' | 'mime_t
 
 export interface ResolvedMediaFile extends ListedFile {
   url: string | null;
+  /** [S111 D] The stored thumbnail, for the record's tiles; null → `url`. */
+  thumbUrl: string | null;
   /** [S110 A] captured before the estimate was sent, or added after. */
   phase: Phase;
 }
 
 type FetchLike = (input: string) => Promise<{ ok: boolean; json: () => Promise<unknown> }>;
 
-async function resolveOne(estimateId: string, fileId: string, fetchImpl: FetchLike): Promise<string | null> {
+async function resolveOne(
+  estimateId: string,
+  fileId: string,
+  fetchImpl: FetchLike
+): Promise<{ url: string | null; thumbUrl: string | null }> {
   try {
     const res = await fetchImpl(`/api/estimates/${estimateId}/files/${fileId}/url`);
-    if (!res.ok) return null;
+    if (!res.ok) return { url: null, thumbUrl: null };
     const body = (await res.json()) as Partial<EstimateFileUrlResponse>;
-    return typeof body.url === 'string' ? body.url : null;
+    return {
+      url: typeof body.url === 'string' ? body.url : null,
+      thumbUrl: typeof body.thumb_url === 'string' ? body.thumb_url : null,
+    };
   } catch {
-    return null;
+    return { url: null, thumbUrl: null };
   }
 }
 
@@ -63,7 +72,7 @@ export async function resolveSiteVisitMedia(
   ]);
 
   return {
-    photos: photoFiles.map((f, i) => ({ ...f, url: photoUrls[i] })),
-    audioUrls: Object.fromEntries(audioFiles.map((f, i) => [f.id, audioList[i]])),
+    photos: photoFiles.map((f, i) => ({ ...f, url: photoUrls[i].url, thumbUrl: photoUrls[i].thumbUrl })),
+    audioUrls: Object.fromEntries(audioFiles.map((f, i) => [f.id, audioList[i].url])),
   };
 }

@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useCallback, useMemo, useRef, useState } from 'react';
+import { useLazySrc } from '@/lib/photos/use-lazy-src';
 import { softDeleteFile } from '@/lib/services/files-client';
 import { shareFailureNote, shareImages } from '@/lib/share-image';
 import { useT } from '@/components/i18n/language-provider';
@@ -18,11 +19,21 @@ import type { MsgKey } from '@/lib/i18n/messages';
 // on the server (photos.ts) precisely so this component never holds "an
 // original plus some marks" and never has an opportunity to paint the wrong
 // one first (A-23f, A-23s).
+//
+// [S111 D] The tile renders `thumbUrl` — a 400x400 thumbnail of that same file
+// — lazily, ahead of the scroll (lib/photos). `displayUrl` stays the FULL file
+// and is used only by Share; the grid never loads an original.
 
 export type GridPhoto = {
   id: string;
   file_name: string;
+  /** The FULL file — used by Share, never by the tile (S111 D). */
   displayUrl: string | null;
+  /**
+   * [S111 D] The tile's image: a 400x400 thumbnail of the same file, loaded
+   * ahead of the viewport (lib/photos). The grid never loads an original.
+   */
+  thumbUrl: string | null;
   hasMarkup: boolean;
   source: 'log' | 'delivery' | 'safety' | 'punch' | null;
   /** ISO day, `YYYY-MM-DD`, precomputed on the server. */
@@ -218,6 +229,18 @@ function Tile({
   // for the user (a grey square that will never resolve) and for A-23s.
   const [loadState, setLoadState] = useState<'pending' | 'loaded' | 'error'>('pending');
   const loaded = loadState !== 'pending';
+  // [S111 D] src stays unset until the tile is within the mobile buffer.
+  const lazy = useLazySrc<HTMLImageElement>(photo.thumbUrl, 'mobile');
+  const lazyRef = lazy.ref;
+  // STABLE, so it runs on attach/detach only — an inline callback ref re-runs
+  // every render, and this one now sets state (via lazyRef).
+  const imgRef = useCallback(
+    (el: HTMLImageElement | null) => {
+      lazyRef(el);
+      if (el?.complete && el.naturalWidth > 0) setLoadState('loaded');
+    },
+    [lazyRef]
+  );
 
   const badge = photo.source ? BADGE[photo.source] : null;
 
@@ -230,30 +253,37 @@ function Tile({
           loaded ? 'pointer-events-none opacity-0' : 'opacity-100'
         }`}
       />
-      {photo.displayUrl ? (
+      {photo.thumbUrl ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
-          src={photo.displayUrl}
+          src={lazy.src}
           alt={photo.file_name}
           data-testid="m-tile-image"
           // The reveal state, readable directly. Opacity alone is ambiguous
           // mid-transition; this is the fact the placeholder rule is about.
           data-loaded={loaded ? 'true' : 'false'}
           data-state={loadState}
+          data-lazy={lazy.src ? 'loaded' : lazy.inRange ? 'queued' : 'pending'}
           // THE `complete` CHECK IS NOT BELT-AND-BRACES — it is the fix for a
           // real stuck state. This markup is server-rendered, so a cached or
           // fast image can finish loading BEFORE hydration attaches `onLoad`;
           // that event has already fired and never fires again, leaving the
           // tile showing its placeholder forever. The ref runs at attach time
           // and asks the element directly.
-          ref={(el) => {
-            if (el?.complete && el.naturalWidth > 0) setLoadState('loaded');
+          // A thumbnail the lazy loader starts AFTER hydration is caught by
+          // onLoad; this covers one that finished before hydration.
+          ref={imgRef}
+          onLoad={() => {
+            lazy.onLoad();
+            setLoadState('loaded');
           }}
-          onLoad={() => setLoadState('loaded')}
           // A broken image must not hold the placeholder either — reveal the
           // element so the browser's own broken-image state is visible rather
           // than a grey square that looks like it is still loading.
-          onError={() => setLoadState('error')}
+          // A retry is scheduled first (lib/photos) — only a final failure shows broken.
+          onError={() => {
+            if (!lazy.onError()) setLoadState('error');
+          }}
           className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-150 ${
             loaded ? 'opacity-100' : 'opacity-0'
           }`}

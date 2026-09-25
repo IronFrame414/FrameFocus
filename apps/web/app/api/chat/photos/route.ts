@@ -42,13 +42,15 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'You do not have access to this project.' }, { status: 403 });
   }
 
-  const photos = await getProjectPhotos(projectId);
+  const photos = await getProjectPhotos(projectId, { thumbnails: true });
 
   return NextResponse.json({
     photos: photos.map((p) => ({
       fileId: p.id,
       fileName: p.file_name,
       displayUrl: p.displayUrl,
+      // [S111 D] The picker's squares — stored thumbnail, full file as fallback.
+      thumbUrl: p.thumbUrl,
       hasMarkup: p.hasMarkup,
     })),
   });

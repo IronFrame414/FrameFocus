@@ -49,6 +49,11 @@ vi.mock('@/lib/supabase-admin', () => ({
             data: { signedUrl: `https://signed/${path}?ttl=${ttl}` },
             error: null,
           }),
+          // [S111 D] the route now signs [file, thumbnail] in one batch call.
+          createSignedUrls: async (paths: string[], ttl: number) => ({
+            data: paths.map((path) => ({ path, signedUrl: `https://signed/${path}?ttl=${ttl}`, error: null })),
+            error: null,
+          }),
         }),
       },
     };

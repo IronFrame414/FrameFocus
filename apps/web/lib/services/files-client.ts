@@ -3,6 +3,8 @@ import type { AnyFileCategory, FileCategory } from './files';
 import { applied, DISCARDED } from './mutation-result';
 import { SIGNED_URL_TTL_SECONDS } from './signed-url-ttl';
 import { uploadBlockedByCap, STORAGE_LIMIT_ERROR } from './storage-status-client';
+import { thumbPathFor } from '@framefocus/shared/utils/markup';
+import { requestThumbnail } from '@/lib/photos/request-thumbnail';
 
 const BUCKET = 'project-files';
 const MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024; // 50 MB
@@ -243,6 +245,8 @@ export async function uploadFile(
       await supabase.storage.from(BUCKET).remove([storagePath]);
       return { success: true, id: options.id };
     }
+    // [S111 D] Stored grid thumbnail — fire-and-forget (lib/photos).
+    if (mimeType.startsWith('image/')) requestThumbnail(data.id);
     return { success: true, id: data.id };
   }
 
@@ -258,6 +262,8 @@ export async function uploadFile(
     return { success: false, error: `Database insert failed: ${insertError.message}` };
   }
 
+  // [S111 D] Stored grid thumbnail — fire-and-forget (lib/photos).
+  if (mimeType.startsWith('image/')) requestThumbnail(data.id);
   return { success: true, id: data.id };
 }
 
@@ -429,7 +435,7 @@ export async function permanentDeleteFile(id: string): Promise<MutationResult> {
   // Look up file_path so we can delete the storage blob
   const { data: file, error: fetchError } = await supabase
     .from('files')
-    .select('file_path')
+    .select('file_path, markup_data')
     .eq('id', id)
     .single();
 
@@ -463,6 +469,14 @@ export async function permanentDeleteFile(id: string): Promise<MutationResult> {
     // permanently with no record pointing at them.
     return { success: false, error: DISCARDED };
   }
+
+  // [S111 D] The stored grid thumbnails have no row; remove the two names this
+  // row can reach (plain, and the current markup version). Older versions are
+  // pruned on every generation, and the trash purge removes any by listing.
+  // Best-effort: a leftover is unreadable (the read policy needs the row).
+  await supabase.storage
+    .from(BUCKET)
+    .remove([thumbPathFor(file.file_path, null), thumbPathFor(file.file_path, file.markup_data)]);
 
   // Delete row (RLS enforces owner/admin only).
   //

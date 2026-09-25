@@ -125,7 +125,10 @@ describe('SiteVisitRecord renders what the resolver produced — one component, 
     expect(record).toMatch(/setPhotos\(media\.photos\)/);
     expect(record).toMatch(/setAudioUrls\(media\.audioUrls\)/);
     expect(record, 'the record reads url off the LIST again').not.toMatch(/\[f\.id, f\.url\]/);
-    expect(record).toMatch(/data-testid="sv-photo" src=\{p\.url\}/);
+    // [S111 D] The tile shows the resolver's stored thumbnail, falling back to
+    // its full url. _Superseded pattern, quoted:_ `/data-testid="sv-photo" src=\{p\.url\}/`.
+    // Still the resolver's output either way — never a url off the list.
+    expect(record).toMatch(/data-testid="sv-photo" src=\{p\.thumbUrl \?\? p\.url\}/);
     expect(read('../components/site-visits/voice-notes.tsx')).toMatch(/data-testid="sv-voice-audio"[^>]*src=\{url\}/);
   });
 

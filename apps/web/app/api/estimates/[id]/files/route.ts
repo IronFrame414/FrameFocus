@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
 import { resolveEstimateFileAccess } from '@/lib/site-visits/access';
+import { generateThumbnail } from '@/lib/photos/thumbnail-server';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@framefocus/shared/types/database';
 import type {
@@ -203,6 +204,23 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       message: insertError?.message,
     });
     return NextResponse.json({ error: 'Could not store the file.' }, { status: 500 });
+  }
+  // [S111 D] The stored grid thumbnail, generated here because this route
+  // already holds the service role and the access floor has passed. Awaited so
+  // a serverless runtime does not drop it after the response; a failure is
+  // logged and NEVER fails the upload — the grid falls back to the full file.
+  if (mime.startsWith('image/')) {
+    const thumb = await generateThumbnail(admin as unknown as SupabaseClient, {
+      file_path: storagePath,
+      mime_type: mime,
+      markup_data: null,
+    });
+    if (!thumb.ok && !thumb.skipped) {
+      console.error('[POST /api/estimates/[id]/files] thumbnail generation failed', {
+        estimateId,
+        error: thumb.error,
+      });
+    }
   }
   return NextResponse.json({ file: row } satisfies EstimateFileUploadResponse);
 }
