@@ -176,7 +176,15 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       company_id: access.companyId,
       project_id: null,
       estimate_id: estimateId,
-      category: 'other',
+      // [S111 Part Two, RULED Q14 → D] An IMAGE is a photo from the moment it is
+      // written, so it lands under Photos (where markup lives) when the estimate
+      // converts. _Superseded, quoted:_ `category: 'other',` — every site-visit
+      // photo and estimate attachment was filed as 'other' and arrived on the
+      // project under Files. PDFs stay 'other'. Nothing before conversion reads
+      // an estimate file's category (the list keys on estimate_id), and the
+      // conversion also reclassifies images still 'other' — so rows written
+      // before this line are caught there (20261770000000).
+      category: mime.startsWith('image/') ? 'photos' : 'other',
       site_visit_capture: capture,
       file_name: file.name,
       file_path: storagePath,

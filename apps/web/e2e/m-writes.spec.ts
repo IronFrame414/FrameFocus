@@ -704,6 +704,43 @@ test.describe('M-34 · complete, and the photo gate the service function owns', 
     // requires_verification also defaults true.
     await expect(page.getByTestId('m-punch-complete')).toHaveCount(0, { timeout: 30_000 });
   });
+
+  test('[S111 Q16] the completion photo can come from the camera roll, not only the camera', async ({
+    page,
+  }) => {
+    // Before S111 the gate offered ONE input, `capture="environment"` — camera
+    // only; on a phone the photo library was unreachable. The camera stays the
+    // default (M6M §6 D-8 / A-20b); the library is now beside it, and this drives
+    // the whole completion through IT rather than asserting an attribute.
+    test.setTimeout(150_000);
+    await signInAs(page, CREW);
+
+    const id = stamp();
+    const itemTitle = `E2E Library ${id}`;
+    await page.goto(`/m/p/${PROJECT}/punch/new`);
+    await page.getByTestId('m-punch-list-__new__').click();
+    await page.getByTestId('m-punch-new-list-name').fill(`E2E LList ${id}`);
+    await page.getByTestId('m-punch-title').fill(itemTitle);
+    await page.getByTestId('m-punch-create').click();
+    await expect(page).toHaveURL(new RegExp(`/m/p/${PROJECT}/punch$`), { timeout: 30_000 });
+    await page.getByTestId('m-punch-row').filter({ hasText: itemTitle }).click();
+    await expect(page).toHaveURL(/\/punch\/[0-9a-f-]{36}$/, { timeout: 30_000 });
+
+    // Camera first, library secondary — both present.
+    await expect(page.getByTestId('m-punch-photo-input')).toHaveAttribute('capture', 'environment');
+    const library = page.getByTestId('m-punch-photo-library').locator('input[type=file]');
+    await expect(library).toHaveAttribute('accept', 'image/*');
+    await expect(library).not.toHaveAttribute('capture', /./);
+
+    await library.setInputFiles({
+      name: 'from-roll.png',
+      mimeType: 'image/png',
+      buffer: Buffer.from(PNG_8, 'base64'),
+    });
+    await expect(page.getByTestId('m-punch-photo-attached')).toBeVisible({ timeout: 30_000 });
+    await page.getByTestId('m-punch-complete').click();
+    await expect(page.getByTestId('m-punch-complete')).toHaveCount(0, { timeout: 30_000 });
+  });
 });
 
 // ===========================================================================

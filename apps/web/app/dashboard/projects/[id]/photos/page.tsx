@@ -5,6 +5,7 @@ import { getCompanyTimeSettings } from '@/lib/services/company';
 import { calendarDayInZone, companyToday } from '@framefocus/shared/utils/dates';
 import { cardStyle, color, font, microLabelStyle } from '@/lib/theme';
 import PhotoVisibilityToggle from './photo-visibility-toggle';
+import { AddPhotosButton } from './add-photos-button';
 
 // Redesign 6.2 — the desktop gallery: A SURFACING JOB, NOT A BUILD. The data
 // derivation is the SAME `getProjectPhotos()` the mobile gallery uses (lib —
@@ -87,6 +88,9 @@ export default async function ProjectPhotosPage({
         <p style={{ ...microLabelStyle, margin: 0 }}>
           Photos · {photos.length} total
         </p>
+        {/* [S111 Q16] Staff only: files_insert_non_client refuses a client, and a
+            subcontractor never reaches /dashboard. */}
+        {isStaff && <AddPhotosButton projectId={params.id} />}
       </div>
 
       {/* Provenance chips + the two newly surfaced filters. URL-param driven
