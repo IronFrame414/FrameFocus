@@ -37,10 +37,14 @@ const ROLES = [
   { role: 'crew', email: 'josh+crew@worthprop.com' },
   { role: 'owner', email: 'josh+test50@worthprop.com' },
 ];
-const WIDTHS = [
-  { w: 390, h: 844 },
-  { w: 360, h: 800 },
-];
+// SWEEP_WIDTHS=320x640,360x800 overrides (added for the 320 check on the
+// site-visit measurement row).
+const WIDTHS = process.env.SWEEP_WIDTHS
+  ? process.env.SWEEP_WIDTHS.split(',').map((p) => { const [w, h] = p.split('x').map(Number); return { w, h }; })
+  : [
+      { w: 390, h: 844 },
+      { w: 360, h: 800 },
+    ];
 
 // ---- seed one site visit (none exist on rebuild-test) --------------------
 const { data: co } = await admin.from('companies').select('id').eq('slug', 'bishop-contracting').single();
