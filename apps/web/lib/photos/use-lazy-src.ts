@@ -177,12 +177,15 @@ export function useLazySrc<T extends Element>(
 
   const onError = useCallback((): boolean => {
     free();
-    // ⚠️ RETRY THUMBNAILS ONLY — MEASURED. A stored thumbnail is always a
-    // decodable WebP, so its error is transient (Storage "SlowDown"). A tile on
-    // the FULL-FILE fallback can fail for good — a HEIC original Chrome cannot
-    // decode — and retrying it re-downloaded a multi-MB original 4 times: 236
-    // requests / 409.6 MB for 80 photos, against 133.5 MB of originals.
-    if (!url || !/\.thumb\.webp\?/.test(url) || attempt >= RETRIES) {
+    // ⚠️ RETRY EVERYTHING EXCEPT A HEIC/HEIF FULL FILE — BOTH HALVES MEASURED.
+    //  * A HEIC original on the full-file fallback fails for good in Chrome
+    //    (it cannot decode HEIC), and retrying it re-downloaded the multi-MB
+    //    original 4×: 236 requests / 409.6 MB for 80 photos vs 133.5 MB.
+    //  * But NOT retrying fallbacks at all (b4d7b7e2) left 4–6 of 80 tiles
+    //    permanently broken in CI when Storage throttled them — an invisible
+    //    photo, which the ruling forbids.
+    // A corrupt non-HEIC original can still cost up to 4 downloads; rare.
+    if (!url || /\.(heic|heif)\?/i.test(url) || attempt >= RETRIES) {
       setPhase('done');
       return false;
     }

@@ -252,6 +252,11 @@ database"**.
    HEIC original fails in Chrome for good, and retrying it re-downloaded the multi-MB original **4×** —
    **236 requests / 409.6 MB for 80 photos**. **Fix (`b4d7b7e2`): only thumbnails retry;** a full-file
    fallback gets one attempt. Re-measured: 80 requests / 133.49 MB.
+   ⚠️ **That fix was itself wrong, and CI caught it** (run 36190114550 on `1536e3ce`): with fallbacks never
+   retried, Storage throttling left **74–76 of 80** fallback tiles permanently broken — an invisible photo.
+   _Superseded rule, quoted:_ "only thumbnails retry". **Final rule: everything retries except a HEIC/HEIF
+   full file** (the only thing measured to fail for good). Re-measured locally: fallback runs made 84 and
+   82 requests for 80 photos — the refusals retried and recovered; 13/13 passed.
 5. **Test hygiene:** 111 orphaned thumbnails were found — fixture sweeps ignored `remove()`'s result
    under SlowDown, and seven specs' teardowns removed only the original of an app upload (which now has a
    thumbnail). Sweeps now check and retry; teardowns use `e2e/storage-cleanup.ts` `withThumbnails()`.
