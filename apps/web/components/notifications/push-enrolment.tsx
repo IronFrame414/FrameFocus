@@ -52,7 +52,6 @@ export function PushEnrolment({
   const [state, setState] = useState<PushState | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
-  const t = useT();
 
   const target = PUSH_TARGETS[surface];
 
@@ -85,6 +84,49 @@ export function PushEnrolment({
   // Nothing rendered until the state is known. A flash of "Enable" that becomes
   // install instructions a tick later is the same wrong offer, just briefly.
   if (state === null) return null;
+
+  return (
+    <PushEnrolmentView
+      state={state}
+      surface={surface}
+      framed={framed}
+      busy={busy}
+      message={message}
+      onEnable={onEnable}
+      onDisable={onDisable}
+    />
+  );
+}
+
+/**
+ * The markup for one known state — split out so each branch can be rendered
+ * directly in a test (test/push-enrolment-view.test.tsx pins A-N26: no button
+ * in the iOS install branch). PushEnrolment above owns state and effects; this
+ * owns nothing and decides nothing about which branch applies.
+ *
+ * ⚠️ TECH_DEBT #151 constraint 3: the card is a titled PANEL, not a pressable
+ * surface — no hover, no cursor, no shadow, no fill distinct from the page's
+ * other cards. The only things here that look pressable are real buttons, and
+ * they exist only in `available` and `enabled`.
+ */
+export function PushEnrolmentView({
+  state,
+  surface,
+  framed,
+  busy,
+  message,
+  onEnable,
+  onDisable,
+}: {
+  state: PushState;
+  surface: Surface;
+  framed: boolean;
+  busy: boolean;
+  message: string | null;
+  onEnable: () => void;
+  onDisable: () => void;
+}) {
+  const t = useT();
 
   // [2026-09-24, /m visual sweep Q1] Styled for the first time — it shipped with
   // no classes on either surface. One card, both surfaces; the button meets
