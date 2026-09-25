@@ -110,3 +110,16 @@ breaks either of those surfaces. Those two surfaces are safe — they select by 
 Photos-page query, with chat keeping `'photos'` only, stated in code as a deliberate difference;
 (B) (A) but daily logs only, safety excluded (safety images carry injury/incident evidence and
 crew cannot read `safety_incidents`); (C) defer.
+
+## Step P5 — Add photos (Q16 part 2), markup storage arm, live test, prepared backfill — built
+
+- `74892486` — desktop `AddPhotosButton` (library, shared `uploadFile()`, category 'photos');
+  /m "Add photos" is a `<label htmlFor>` on the tab bar's own library input
+  (`app/m/library-input.ts`), one pipeline. e2e written for both, not yet run.
+- Migration `20261780000000` — `project_files_insert_non_client` gains the derivative arm SELECT and
+  UPDATE already carry. Not applied yet.
+- `test/s111-photo-conversion.live.ts` — before/after proof for the conversion, the freeze and the
+  markup write. Not yet run.
+- `docs/sessions/S111-photos-backfill-PREPARED.sql` — Q15 count, UPDATE (commented), undo. Not run.
+- Local, no database: unit suite **117 files / 1638 tests passed, exit 0** (the new guard is among
+  the 117 — checked with `vitest list --filesOnly`); `next build` **BUILD_EXIT_LINE=0**.
