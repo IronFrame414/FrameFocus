@@ -73,6 +73,58 @@ export function isDerivativePath(path: string): boolean {
 }
 
 // ---------------------------------------------------------------------------
+// [S111 D, option A] THE GRID THUMBNAIL'S PATH — a stored 400x400 WebP of the
+// file the photo DISPLAYS AS (the derivative when annotated, D-31).
+//
+//   plain photo      {original}.thumb.webp
+//   annotated photo  {original}.m{8 hex}.thumb.webp   — hex = markupFingerprint()
+//
+// ⚠️ WHY THE MARKUP FINGERPRINT IS IN THE NAME. One fixed name per file would go
+// STALE on a markup save whose thumbnail regeneration failed or never ran: the
+// grid would show the old unmarked thumbnail beside the "marked up" indicator —
+// an annotated photo displayed as unannotated, which is #129's silent loss.
+// With the fingerprint in the name, a new markup is a new name; until its
+// thumbnail exists the batch sign finds nothing and the grid falls back to the
+// full display file. A stale thumbnail can never be selected.
+//
+// Same appended-suffix rule as the derivative: the whole original path, so the
+// company_id first segment every storage policy keys on is kept.
+// ⚠️ scripts/s111-thumbnail-backfill.mjs re-implements markupFingerprint() and
+// thumbPathFor() (a .mjs cannot import this TS); test/s111-thumbnail-path.test.ts
+// asserts the two agree.
+// ---------------------------------------------------------------------------
+export const THUMB_SUFFIX = '.thumb.webp';
+
+/**
+ * FNV-1a 32-bit over the markup's JSON, as 8 hex. Not a security hash — a
+ * version tag. Stable because Postgres returns jsonb with a canonical key
+ * order, so the same stored markup always serialises the same way.
+ */
+export function markupFingerprint(markup: unknown): string {
+  const s = JSON.stringify(markup);
+  let h = 0x811c9dc5;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return h.toString(16).padStart(8, '0');
+}
+
+export function thumbPathFor(originalPath: string, markup: unknown): string {
+  return hasMarkup(markup)
+    ? `${originalPath}.m${markupFingerprint(markup)}${THUMB_SUFFIX}`
+    : `${originalPath}${THUMB_SUFFIX}`;
+}
+
+/** Matches every thumbnail name this module generates; group 0 is the suffix. */
+export const THUMB_NAME_RE = /(\.m[0-9a-f]{8})?\.thumb\.webp$/;
+
+/** True for a storage path that is a grid thumbnail. */
+export function isThumbnailPath(path: string): boolean {
+  return THUMB_NAME_RE.test(path);
+}
+
+// ---------------------------------------------------------------------------
 // A-23t / §4.7a.5 — SHARING A MARKED-UP PHOTO WHOSE DERIVATIVE IS MISSING.
 //
 // "Degrades to the original WITH A WARNING — it never silently shares an
