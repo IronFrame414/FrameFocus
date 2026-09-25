@@ -1,5 +1,6 @@
 'use client';
 
+import { prepareImageForUpload } from '@/lib/services/files-client';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { fmtMoney } from '../labels';
 import { useFileSheet } from '@/components/files/file-sheet';
@@ -85,8 +86,10 @@ export default function EstimateFilesTab({
     setUploading(true);
     setError(null);
     try {
+      // [S111] HEIC → JPEG first, the same step every other upload runs.
+      const { file: prepared } = await prepareImageForUpload(file);
       const form = new FormData();
-      form.append('file', file);
+      form.append('file', prepared);
       const res = await fetch(`/api/estimates/${estimateId}/files`, { method: 'POST', body: form });
       const body = await res.json();
       if (!res.ok) {

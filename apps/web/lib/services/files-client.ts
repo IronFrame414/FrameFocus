@@ -66,6 +66,28 @@ async function convertHeicToJpeg(file: File): Promise<File | null> {
   }
 }
 
+/**
+ * #94's HEIC → JPEG step and the MIME inference, as ONE function every upload
+ * path calls [S111 Part Two]. `uploadFile()` below uses it, and so do the two
+ * callers of the estimate-files ROUTE (site-visit photos, estimate Files tab),
+ * which post the bytes to the server instead of writing storage themselves —
+ * before S111 they skipped it, so an iPhone HEIC went into storage as HEIC and,
+ * once it showed under Photos, rendered nowhere but Safari.
+ *
+ * Returns a File whose `type` is the inferred/converted MIME, because the route
+ * reads `file.type` (and an iPhone HEIC often arrives with an EMPTY type).
+ * Never throws: a failed conversion returns the original bytes, as before.
+ */
+export async function prepareImageForUpload(file: File): Promise<{ file: File; mimeType: string }> {
+  const inferred = inferMimeType(file);
+  if (HEIC_MIME_TYPES.has(inferred)) {
+    const converted = await convertHeicToJpeg(file);
+    if (converted) return { file: converted, mimeType: 'image/jpeg' };
+  }
+  const typed = file.type === inferred ? file : new File([file], file.name, { type: inferred });
+  return { file: typed, mimeType: inferred };
+}
+
 export async function uploadFile(
   file: File,
   options: {
@@ -132,15 +154,7 @@ export async function uploadFile(
   // original file and its inferred HEIC mime (today's stored-but-unrendered
   // behavior). All downstream fields (path, name, size, mime_type) follow
   // `upload`, never `file`.
-  let upload = file;
-  let mimeType = inferMimeType(file);
-  if (HEIC_MIME_TYPES.has(mimeType)) {
-    const converted = await convertHeicToJpeg(file);
-    if (converted) {
-      upload = converted;
-      mimeType = 'image/jpeg';
-    }
-  }
+  const { file: upload, mimeType } = await prepareImageForUpload(file);
 
   const supabase = createClient();
 
