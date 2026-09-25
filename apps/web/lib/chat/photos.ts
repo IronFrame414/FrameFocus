@@ -28,6 +28,12 @@ export interface ChatPhoto {
   fileName: string;
   /** D-31's resolution. Null when the URL could not be signed. */
   displayUrl: string | null;
+  /**
+   * [S111 D] The 78px tile's image — the stored thumbnail of the same file, or
+   * `displayUrl` when there is none (ruled fallback). Links, the sheet and
+   * share keep using `displayUrl`, the full file.
+   */
+  thumbUrl: string | null;
   sortOrder: number;
 }
 
@@ -118,7 +124,9 @@ export async function withPhotos(
    * testable without a request and the route stays the only thing that knows
    * how a gallery is fetched.
    */
-  resolveGallery: () => Promise<Array<{ id: string; file_name: string; displayUrl: string | null }>>
+  resolveGallery: () => Promise<
+    Array<{ id: string; file_name: string; displayUrl: string | null; thumbUrl: string | null }>
+  >
 ): Promise<ChatMessageWithPhotos[]> {
   if (messages.length === 0) return [];
 
@@ -142,7 +150,7 @@ export async function withPhotos(
 
   const gallery = await resolveGallery();
   const urlFor = new Map(
-    gallery.map((p) => [p.id, { fileName: p.file_name, displayUrl: p.displayUrl }])
+    gallery.map((p) => [p.id, { fileName: p.file_name, displayUrl: p.displayUrl, thumbUrl: p.thumbUrl }])
   );
 
   const byMessage = new Map<string, ChatPhoto[]>();
@@ -156,6 +164,7 @@ export async function withPhotos(
       // by this request) or could not be signed. The renderer skips it rather
       // than showing a broken image.
       displayUrl: resolved?.displayUrl ?? null,
+      thumbUrl: resolved?.thumbUrl ?? null,
       sortOrder: row.sort_order,
     });
     byMessage.set(row.message_id, list);

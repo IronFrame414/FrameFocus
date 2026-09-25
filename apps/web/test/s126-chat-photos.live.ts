@@ -58,7 +58,9 @@ beforeAll(async () => {
 afterAll(cleanup);
 
 /** Stands in for getProjectPhotos(), which needs a request scope. */
-async function gallery(): Promise<Array<{ id: string; file_name: string; displayUrl: string | null }>> {
+async function gallery(): Promise<
+  Array<{ id: string; file_name: string; displayUrl: string | null; thumbUrl: string | null }>
+> {
   const { data } = await admin
     .from('files')
     .select('id, file_name')
@@ -68,6 +70,8 @@ async function gallery(): Promise<Array<{ id: string; file_name: string; display
     id: f.id,
     file_name: f.file_name,
     displayUrl: `https://example.test/${f.id}`,
+    // [S111 D] getProjectPhotos(…, { thumbnails: true }) now carries this too.
+    thumbUrl: null,
   }));
 }
 

@@ -37,6 +37,8 @@ export interface PickablePhoto {
   fileId: string;
   fileName: string;
   displayUrl: string | null;
+  /** [S111 D] The picker/attachment squares; null → displayUrl. */
+  thumbUrl: string | null;
   hasMarkup: boolean;
 }
 
@@ -358,7 +360,7 @@ export function ChatComposer({ projectId, kind, disabled, onSend }: ChatComposer
                   {photo.displayUrl && (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
-                      src={photo.displayUrl}
+                      src={photo.thumbUrl ?? photo.displayUrl}
                       alt={photo.fileName}
                       style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                     />
@@ -393,7 +395,7 @@ export function ChatComposer({ projectId, kind, disabled, onSend }: ChatComposer
               {photo.displayUrl && (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
-                  src={photo.displayUrl}
+                  src={photo.thumbUrl ?? photo.displayUrl}
                   alt={photo.fileName}
                   style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                 />

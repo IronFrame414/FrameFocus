@@ -180,7 +180,7 @@ export async function POST(request: NextRequest) {
   // in on the first poll.
   const { getProjectPhotos } = await import('@/lib/services/photos');
   const withRefs = await withPhotos(session.supabase, messages, () =>
-    getProjectPhotos(input.project_id)
+    getProjectPhotos(input.project_id, { thumbnails: true })
   );
 
   return NextResponse.json({ thread, messages: withRefs, pageSize: limit, canPost });
