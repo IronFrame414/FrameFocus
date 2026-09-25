@@ -207,3 +207,56 @@ payload is 18 bytes against the seeded 17, so a real write moves the size.
 In run 2 the post-update `download()` returned the new bytes, so **the run-1 stale read is NOT proven
 to be a CDN cache** — what is proven is that `download()` was not a reliable instrument, and the row
 metadata is. **No live leak: both policies refuse an unassigned subcontractor today. Proceeding to B3.**
+
+## Step H7 — ruling B3: both arms made self-contained — `20261800000000`, rebuild-test only
+
+**One migration covers both policies** — they can be replaced together; a migration is one
+transaction, so there is no window with either missing. Held until CI run **36136891619 on
+`279597fb`** completed (**success**; 0 in progress / 0 queued).
+
+- **The coupling, BEFORE** (rolled-back `DO` block as the sub; derivative seeded as a `storage.objects`
+  row beside a `files` row on unassigned project `3a01d018…`): `files` SELECT narrow → **read 0,
+  updated 0**; `files` SELECT widened to `USING (true)` → **read 1, updated 1**. Same coupling as INSERT.
+- `db push --dry-run` listed exactly `20261800000000`; link `nmyphyhmfttxkdoposvf`; DBPUSH_EXIT=0.
+- `pg_policies` after: the `.markup.jpg` arm JOINs `project_assignments` in INSERT's WITH CHECK,
+  SELECT's USING, and UPDATE's USING **and** WITH CHECK. `TO authenticated` preserved on both.
+- **The coupling, AFTER** (same block, `files` widened): unassigned → **read 0, updated 0**; CONTROL,
+  a project the sub is assigned to (`4a4f8567…`) → **read 1, updated 1**.
+- **Deliberately NOT changed: the ORIGINALS arm** of both policies,
+  `EXISTS (SELECT 1 FROM files f WHERE f.file_path = objects.name)`. It is the designed delegation
+  (`20261007000000`, `s157` A5–A8): an original's bytes are exactly as readable/writable as its
+  `files` row — including `files` RLS carve-outs that are NOT assignment (a PM reads invoices they
+  authored). Tying it to assignment would silently remove those. It is the same class of coupling;
+  **recorded for a ruling, not changed.** The CLIENT policies' derivative arm (`project_files_select_client`)
+  is likewise untouched — outside ruling B, which named the non-client READ and UPDATE.
+- **AFTER, live, real sessions — VITEST_EXIT=0, 74 passed / 74:** `s111-markup-derivative-floor` 6,
+  `s111-markup-derivative-read-update-floor` 9 (unassigned: 0 readable, 0 changed on both paths;
+  assigned control: 1 readable, row 17 B → 18 B), `s111-photo-conversion` 8, and as regression guards
+  `s157-m3-m4-fixes` 16 (incl. A7 crew reads the derivative of a photo it may read, A8 not of one it may
+  not) and `s164-m9-read-arms` 35 (client derivative arms). Residue: files 0, objects 0, projects 0,
+  probe policy 0.
+- `npm run db:fingerprint` → latest migration `20261800000000`; both baseline files committed with the
+  migration (`26582cf7`).
+
+## Step H8 — local e2e against the migrated rebuild-test
+
+Production build (`next start`; no app code changed). Actions API 0/0 before. Photo specs
+(`desktop-photos-conversion-s111`, `m-photos` incl. the crew markup save, `desktop-photos-add-s111`,
+`m-photos-add-s111`) plus the surfaces that render derivatives to other roles (`desktop-chat-photos`,
+`desktop-chat-sub`, `m-chat-sub`, `portal-pages`): **58 passed, 0 failed, 0 flaky, 0 skipped,
+PW_EXIT=0**. Server stopped by PID.
+
+## ⚠️ Owed to production — ONE attended push, both together (ruling C)
+
+Production sits at **`20261780000000`** (already applied — see the correction above). Owed:
+
+1. `20261790000000_s111_markup_derivative_self_contained.sql` — INSERT arm
+2. `20261800000000_s111_markup_derivative_read_update_self_contained.sql` — SELECT and UPDATE arms
+
+**Together, in one push — never `20261790000000` alone.** Both are policy-only: no row or object is
+governed, moved or rewritten. The sizing query under "Owed to production — `20261790000000`" above
+covers both: `would_not_be_admitted_now` is the count of existing derivatives whose writer is not
+assigned to the original's project now — after this pair, those users could no longer read or
+overwrite them (owner/admin unaffected). Not run on production by this session.
+
+**Merge:** not until Josh has applied both and approved it.
