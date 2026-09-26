@@ -111,6 +111,23 @@ role floor", which is stale.
 **Recommendation: 2**, since it matches the notice crew already get on a CO link. Either way the
 stale comment gets fixed.
 
+### R7 — Queue B: HEIC full-size — one-time conversion, or leave as is?
+
+**The question.** Old HEIC objects display blank outside Safari (served as
+`application/octet-stream`). Thumbnails already work.
+
+**Options:**
+1. **One-time conversion.** A script converts each HEIC through `/render/image/` to a stored JPEG
+   (measured 2.88 MB at 3000×4000), then repoints `files.file_path`/`mime_type`, keeping the
+   original. That's a production data change; it would get a dry-run count and an undo list, like Q15.
+2. **Read-time transform.** The viewer, share and chat request `/render/image/` per view. No data
+   change, but 1.2–2.5 s per open, and it's exactly the per-view signing that exhausted Storage's
+   connections in S111.
+3. Leave it. New uploads already convert, per the S111 ride-along.
+
+**Recommendation: 1**, sized by query 4 in OWED TO PRODUCTION. If the production count is tiny,
+3 is reasonable.
+
 ### R6 — Audit F11 is NOT fixable as proposed: the spec pins what the audit wanted to change
 
 The hub Punch tile badge truncates ("1 mine · 1 a…") and is amber text on white at 2.15:1. My audit
@@ -224,6 +241,56 @@ payment, on the PE's own project, so "exactly the rule's set" was vacuously true
 creates its own negative payments.
 
 
+### Queue A — the thumbnail read policy's "missing" Owner/Admin arm: NOT a defect (measured)
+
+**The claim:** `20261810000000` requires `project_assignments`, so an Owner or Admin not assigned to
+a new project would get no thumbnails.
+
+**Measured, as real sessions on rebuild-test:**
+- The seeded **Admin is assigned to 0 projects** and read **27 of 27** stored thumbnails.
+- The Owner, assigned to 9, read the **2 of 2** on projects it isn't on.
+
+**Why:** thumbnails are also covered by `project_files_select_non_client`, whose first arm is
+`get_my_role() = ANY (owner, admin)` over **every object in the company folder**. Permissive
+policies are OR'd, so the thumbnail policy only ADDS access for assigned staff.
+
+**The other half of the question:** both project-creation paths assign **only the creator**. That's
+desktop `createProject()` client-side (`role_on_project 'creator'`, a separate request whose error
+is ignored) and `convert_estimate_to_project` inside the RPC (`'converter'`). Other Owners and
+Admins are never assigned, and don't need to be. **No migration proposed.**
+
+### Queue B — HEIC full-size outside Safari (measured, not built)
+
+- **Why it's blank:** on a real 3.65 MB iPhone HEIC, the raw object is served as
+  **`application/octet-stream`**, which no browser renders inline.
+- **Can `/render/image/` produce a displayable full-size image? Yes, including JPEG.** It
+  negotiates on `Accept`:
+  - `Accept: image/jpeg` → **JPEG 3000×4000, 2.88 MB, 1.2 s**
+  - WebP accepted → **WebP 3000×4000, 2.62 MB, 2.5 s**
+  - at 2,048 wide → WebP 1.57 MB
+- **Read-time vs one-time:** read-time would be a fresh 1.2–2.5 s transform per view, and per-view
+  signing of `/render/image/` is the documented cause of Storage's "Too many connections" (S111
+  T4, which also failed uploads). **A one-time conversion is the right shape.** That means a
+  stored JPEG per HEIC plus a repoint of `files.file_path`/`mime_type`: a production data change,
+  so it's R7 below.
+- **rebuild-test count:** 9 HEIC rows (7 `daily_logs`, 2 `photos`).
+
+### Queue C — the Q15 backfill: NOT made moot by the conversion fix
+
+`20261770000000` changes `convert_estimate_to_project` **at the moment of conversion**, and states
+it "governs no existing row". It fixes every conversion after it's applied, including estimates
+still unconverted today. **Images on estimates converted BEFORE it keep `category = 'other'`**,
+because nothing revisits them. It's moot only if Josh's production count is 0.
+
+- Step 1 of `docs/sessions/S111-photos-backfill-PREPARED.sql` runs cleanly on rebuild-test and
+  returns **0 rows**. So does its control without the category filter. rebuild-test has no
+  converted estimate with images under `estimates/` at all, so **the criterion is unproven by a
+  positive row here**; it rests on S111's design.
+- The path it keys on matches the writer exactly: `{company}/estimates/{estimateId}/…`
+  (`app/api/estimates/[id]/files/route.ts:159`).
+- The query is in OWED TO PRODUCTION. **Not run on production.**
+
+
 ## BUILT BUT UNTESTED
 
 - **S111 Part One — `retainage_releases` and `client_refunds` arms.** Both tables hold **0 rows
@@ -239,7 +306,51 @@ _(none yet)_
 
 ## OWED TO PRODUCTION
 
-_(none yet)_
+Nothing was run on production tonight. Each migration below carries the read-only query to run first.
+
+1. **`20261820000000_s111_project_executive_role`** (Part One step 1; branch
+   `feature/s111-project-role`, not mergeable yet, see BRANCHES). It widens two CHECKs, so it
+   governs no existing row, but run these first anyway:
+   ```sql
+   SELECT role, count(*) FROM profiles GROUP BY role ORDER BY 1;
+   SELECT role, count(*) FROM invitations GROUP BY role ORDER BY 1;
+   ```
+   Every row must be in the new lists; they're supersets, so this can't fail. ⚠️ It also stops an
+   **Admin** inserting or editing an **Admin** invitation at the database level. TypeScript already
+   refused that, so no working flow changes.
+2. **`20261830000000_s111_project_executive_floor_reads`**: new policies and functions only, plus a
+   `record_client_payment` replacement whose Owner/Admin path is unchanged. No data governed.
+   Nothing to count; `SELECT count(*) FROM profiles WHERE role = 'project_executive';` should be 0
+   on production until the Owner grants the role.
+3. **Q15 backfill: count only** (from `docs/sessions/S111-photos-backfill-PREPARED.sql`, step 1):
+   ```sql
+   SELECT c.name AS company, f.company_id,
+     count(*) FILTER (WHERE f.site_visit_capture)     AS site_visit_imgs,
+     count(*) FILTER (WHERE NOT f.site_visit_capture) AS estimate_tab_imgs,
+     count(*)                                         AS total,
+     count(*) FILTER (WHERE f.is_deleted)             AS of_which_soft_deleted,
+     string_agg(DISTINCT f.category, ',')             AS categories
+   FROM files f
+   JOIN projects p ON p.id = f.project_id
+   LEFT JOIN companies c ON c.id = f.company_id
+   WHERE f.estimate_id IS NULL
+     AND p.source_estimate_id IS NOT NULL
+     AND split_part(f.file_path, '/', 2) = 'estimates'
+     AND split_part(f.file_path, '/', 3) = p.source_estimate_id::text
+     AND f.mime_type LIKE 'image/%'
+     AND f.category <> 'photos'
+   GROUP BY c.name, f.company_id ORDER BY total DESC;
+   ```
+   Zero rows means the backfill is moot. Otherwise the UPDATE in step 2 of that file is ready. It
+   isn't run and waits for your decision.
+4. **HEIC count (queue B)**, read-only:
+   ```sql
+   SELECT category, mime_type, count(*) AS n, pg_size_pretty(sum(file_size)::bigint) AS total
+   FROM files
+   WHERE is_deleted = false
+     AND (mime_type IN ('image/heic','image/heif') OR lower(file_name) ~ '\.(heic|heif)$')
+   GROUP BY category, mime_type ORDER BY n DESC;
+   ```
 
 ## WHAT JOSH MUST CLICK
 
@@ -255,6 +366,10 @@ _(none yet)_
 
 ## Log
 
+- 04:35Z — 3c pushed; CI run 36217531323 live. Queue A, B, C measured (read-only; the 4 HEIC
+  transform calls ran sequentially to spare the connection pool while CI was live).
+- 04:10Z — Part One migrations applied (CI idle); FILL-7.2/7.3 proven; 3d measured; hold branch
+  parked and documented.
 - 03:43Z — **S111 Part One started** on `feature/s111-project-role` (fast-forwarded to main
   `528bc76b`; parked). Committed, **not yet applied** because CI is live:
   - **step 1** (`5a1eef2e`): the role exists; only the Owner can grant it. The database guard
