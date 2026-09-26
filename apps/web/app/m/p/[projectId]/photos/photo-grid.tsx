@@ -488,7 +488,7 @@ function SelectionBar({
           data-testid="m-bulk-delete-confirm"
           role="dialog"
           aria-label={t('photos.grid.confirmDelete')}
-          className="absolute inset-x-[18px] top-[56px] z-50 rounded-[14px] border border-m6m-border bg-m6m-card p-[14px] shadow-lg"
+          className="absolute inset-x-[18px] top-full z-50 mt-[6px] rounded-[14px] border border-m6m-border bg-m6m-card p-[14px] shadow-lg"
         >
           <p className="text-[15px] font-semibold text-m6m-navy">
             {count === 1
