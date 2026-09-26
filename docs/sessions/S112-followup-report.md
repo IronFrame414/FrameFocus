@@ -283,3 +283,63 @@ still carries the seven unmerged migrations in §3. #1-s112f is the fix.
 
 **Still not merged, by the authorization's own terms:** `s112-amber-sweep`, which is blocked on
 `s112-audit-rulings`; see above.
+
+## 8. `s111-project-role`: finishing the role [ruling 5]
+
+**Rebased** onto main `80e15bad`. It was textually clean, and the one predicted compile conflict
+(`app/m/settings/page.tsx:33`) is fixed: audit F9's total role map gains `project_executive`,
+en "Project Executive", es "Ejecutivo de proyecto".
+
+**What "the UI hides the money" turned into.** A read-only survey found no central gate. There
+were about 25 inline owner/admin literals, every one excluding the role. The work is in steps,
+each one committed:
+
+| Step | What | State |
+| --- | --- | --- |
+| 2 | `seesProjectMoney()` / `seesCompanyMoney()` in `packages/shared/constants/roles.ts`, one list for desktop and `/m`. Visibility only: Budget & Cost (7 columns), overview KPIs, Invoices (all authors), Payments (Q9-safe, see below), Profitability (Q10), CO figures and rates (desktop and `/m`), contract amounts, budget picker. Q13 time rank added to the TypeScript mirror. | ✅ committed |
+| 3 | `20261910000000` write arms plus approve/void authority, each `pe_on_*`-scoped. Invoices join their already `can_view_project`-scoped list. COs and their lines get **their own** arms, because their existing write policies have **no project scope at all**. The money side tables and retainage get their own arms too. The invoice void, invoice approve, CO void and contract void triggers each gain one scoped clause. | drafted, **not applied**: CI holds rebuild-test |
+| 3 proof | `s111-project-executive-writes.live.ts`: two disposable projects (ON/OFF). ON: every write lands. OFF: it touches 0 rows, and the service role confirms the OFF rows are unchanged. **Run before the migration too (negative first).** | written, not run |
+| 4 | Authority in the UI and routes, matched only to what step 3 admits. Every route keeps its RLS-scoped first fetch, which confines the role. Payments: `canRecord` was split, so the role records a new payment and nothing else (unapply, void, credit, refund, retainage/lien and reminders stay Owner/Admin). | ✅ committed; rests on step 3 |
+
+**Payments is Q9-safe by construction, and I checked why.** `pe_can_see_payment()` admits a payment
+only when every live application is on the role's projects **and** the applications sum to the
+whole payment. So every payment the role can see has zero unapplied surplus, and neither
+`creditAvailable` nor "Credit on account" can show it a balance.
+
+**Deliberately NOT given to the role, each written into the migration header:**
+
+- **refunds:** keyed to the client, money going out, and Owner approves them
+- **`apply_client_credit`:** it works on the unapplied balance, which Q9 forbids
+- **lien releases:** there's no read arm either, and binding the company is unruled (§8.2), so the tab stays hidden
+- **rate supersede:** Owner-only by §7.3
+- **CO delete:** S168's conservative default
+- **sub-contract schedules, payables and expense approval:** these go through `expenses` policies this migration doesn't open
+
+**Remaining scope, stated so "finished" isn't over-claimed.** RULED 2 says "full access to the
+projects it is on". The **non-money** project operations still exclude the role, because each needs
+its own write arms: contacts, team assignment (Q8), POs and deliveries, schedule, selections,
+status transitions, translate. So do the sub-contract and payables money above. **Josh, one
+question:** is lien-release authority in or out for this role?
+
+### ⚠️ My formatting noise, found and removed
+
+I ran `prettier --write` over whole files that main has never formatted. That buried about 40 lines
+of real change in about 1,300 lines of reflow (budget/page 739, invoice-builder 676, payments-view
+355).
+
+- **The fix, on `s111-project-role` (`bd7982a2`):** every touched file was rebuilt from its
+  pre-edit version with only the S111 edits.
+- **The verification:** each file, formatted on both sides, is identical to the committed intent
+  (26/26).
+- **What the verification caught.** The hunk filter I first used for the rebuild misplaced two
+  zero-context patches:
+  - `canRecordPayment`'s body landed in `canIssueRefund`, which **would have opened refunds to the
+    role**;
+  - `budget-columns`' expected counts were dropped.
+
+  Both were rebuilt against anchors and re-verified.
+- **Already on main from the wave-1 conflict resolution, and left there:** 2 long i18n strings
+  wrapped per language, and one `return` wrapped in parentheses in `photos/page.tsx`. Semantically
+  identical and CI-tested. Not worth another change to main, but it is formatting nobody asked for.
+- **On the guard branch:** `schema-drift.ts` has two reflowed signature lines besides the real
+  change.
