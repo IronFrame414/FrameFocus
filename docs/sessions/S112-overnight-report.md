@@ -1,6 +1,24 @@
 # S112 overnight report
 
-**No production issue found** (so far; nothing on production was touched, by rule.)
+**No production issue found.** Nothing on production was touched, queried or migrated, by rule.
+
+## Read this first (60 seconds)
+
+- **Ready to merge, CI green, no migrations,** in this order:
+  1. `feature/s112-router-staleness`: the markup-vanishes-after-save fix and its human-path test.
+  2. `feature/s112-markup-local-display`: 3c. The save shows its own image; −2 MB per save, and
+     Fast 3G drops from 42.1 s to 29.9 s.
+  3. `feature/s112-audit-fixes`: 16 audit fixes, each measured before and after.
+- **Proven but NOT mergeable:** `feature/s111-project-role`. The Project Executive's money reads and
+  Q9 payments are enforced in the database, proven with row counts and a sabotage run. But the UI
+  doesn't show the role its money yet, and its two migrations need production first.
+- **Needs your ruling:** R1 (derivative size: an export consumer needs full resolution, so the
+  resize is not built), R2–R6 (audit items the audit marked for a ruling), R7 (HEIC).
+- **One incident, mine, contained:** my Part One test identity briefly broke one chat test for
+  every branch (a shared rebuild-test assignment). Found by CI, undone, and prevented from
+  recurring. Details are in the Log at 05:24Z.
+- **Production queries for you to run** are under OWED TO PRODUCTION (Q15 count, HEIC count, the
+  role CHECK counts).
 
 > Resume point for a session with no memory: read this whole file first. The "Log" at the bottom
 > says which step was last completed and pushed. The order is: ruling 1 (push the rebased fix
@@ -469,7 +487,7 @@ head commit, so it survives a Codespace restart without taking the one CI slot.
 | --- | --- | --- | --- |
 | `feature/s112-router-staleness` | markup save reorder + human-path e2e + measurement docs (hold documented) | **GREEN**, run 36214441654: 591 passed / 0 failed / 0 flaky. Later commits are docs-only `[skip ci]`. | **Yes.** No migration. |
 | `feature/s112-markup-local-display` | 3c: show the just-built image (stacked on the one above) | **GREEN**, run 36220665117: 591 passed / 0 failed. The first run (36217531323) failed on my unit-mock miss and my seeding; both explained in the Log. | **Yes, after router-staleness** (it contains it). No migration. |
-| `feature/s112-audit-fixes` | 17 audit fixes (F4–F7, F9, F10, F13–F21, F24), measured | Run **36222852746** live at 06:08Z; result in the Log if it finished before the report closed. | Yes if green. No migration. |
+| `feature/s112-audit-fixes` | 16 audit fixes (F4, F5, F6, F7, F9, F10, F13, F14, F15, F16, F17, F18, F19, F20, F21, F24), measured before/after | **GREEN**, run 36222852746: 590 passed / 0 failed / 0 flaky | **Yes.** No migration. |
 | `feature/s111-project-role` | Part One steps 1–2 + the proof. Migrations `20261820000000`, `20261830000000` are APPLIED ON REBUILD-TEST | Not run yet (parked); requested after audit-fixes | **No.** The UI still hides the money (BLOCKED). Also needs its migrations on production first (Q20). |
 | `feature/s112-staletimes-hold` | `staleTimes.dynamic: 0`, held (ruling 2) | never run, by design | **No, held.** Revisit when `/m` has loading feedback. |
 | `feature/s112-catalog-importer` | queue D importer script | parked, not run: a script with no app change | Yes, script only. Josh runs it (WHAT JOSH MUST CLICK #2). |
@@ -488,6 +506,8 @@ type-check of each result:**
 
 ## Log
 
+- 06:37Z — audit-fixes CI GREEN (590/0/0). Part One CI requested (run 36224321539).
+- 06:08Z — 3c rerun GREEN (591/0/0). Audit-fixes CI requested.
 - 05:24Z — **INCIDENT, mine, contained.** 3c's first CI run (36217531323) failed two ways:
   1. **Unit step:** `m6m-markup-save.test.ts` mocked the save's UPDATE without the new
      `.select`. I hadn't run the full unit suite on that branch. Fixed, with a new unit test and a
@@ -500,7 +520,7 @@ type-check of each result:**
      the proof harness assigns it for its own run and removes it (rerun 7/7, 0 assignments left).
   3c rerun: 36220665117.
 - 05:10Z — audit fixes re-measured (table in DONE AND PROVEN).
-- 04:35Z (really ~04:22) — 3c pushed; CI run 36217531323 live. Queue A, B, C measured (read-only; the 4 HEIC
+- 04:20Z — 3c pushed; CI run 36217531323 live. Queue A, B, C measured (read-only; the 4 HEIC
   transform calls ran sequentially to spare the connection pool while CI was live).
 - 04:10Z — Part One migrations applied (CI idle); FILL-7.2/7.3 proven; 3d measured; hold branch
   parked and documented.
@@ -532,7 +552,7 @@ type-check of each result:**
   either branch runs CI for the whole branch. Audit fixes committed so far: F16, F20, F15, F10,
   F18, F14, F5, F4, F9, F6, F7. **F12 withdrawn:** M6M §2 names 34px colour swatches "the only
   permitted sub-44px target", so it was never a defect.
-- 03:05Z (logged as 03:12 in error) — 3c built and committed locally on `feature/s112-markup-local-display` (`5ba64596`),
+- ~03:05Z — 3c built and committed locally on `feature/s112-markup-local-display` (`5ba64596`),
   stacked on the fix branch; build exit 0, tsc exit 0. 3a measured (in R1). Waiting on main CI to
   push and to run e2e.
 - 02:58Z — ruling 3b enumeration done: export consumers need full res → R1, resize NOT built.
