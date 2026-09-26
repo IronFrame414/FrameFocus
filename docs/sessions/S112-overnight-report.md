@@ -9,7 +9,7 @@
   2. `feature/s112-markup-local-display`: 3c. The save shows its own image; −2 MB per save, and
      Fast 3G drops from 42.1 s to 29.9 s.
   3. `feature/s112-audit-fixes`: 16 audit fixes, each measured before and after.
-- **Proven but NOT mergeable:** `feature/s111-project-role`. The Project Executive's money reads and
+- **Proven, CI green, but NOT mergeable:** `feature/s111-project-role`. The Project Executive's money reads and
   Q9 payments are enforced in the database, proven with row counts and a sabotage run. But the UI
   doesn't show the role its money yet, and its two migrations need production first.
 - **Needs your ruling:** R1 (derivative size: an export consumer needs full resolution, so the
@@ -323,7 +323,7 @@ because nothing revisits them. It's moot only if Josh's production count is 0.
 
 | Company | Existing items | Valid rows | Invalid | Already present | **Would insert** |
 | --- | --- | --- | --- | --- | --- |
-| Sabal Point Construction (A) | 2 | 282 | 0 | 0 | **282** |
+| Sabal Point Construction (A) | 3 rows (2 distinct names; "fb" twice) | 282 | 0 | 0 | **282** |
 | Ridgeline Builders (B) | 0 | 282 | 0 | 0 | **282** |
 
 By category: concrete 20, drywall 22, electrical 36, fasteners 21, finishes 35, hardware 15,
@@ -488,7 +488,7 @@ head commit, so it survives a Codespace restart without taking the one CI slot.
 | `feature/s112-router-staleness` | markup save reorder + human-path e2e + measurement docs (hold documented) | **GREEN**, run 36214441654: 591 passed / 0 failed / 0 flaky. Later commits are docs-only `[skip ci]`. | **Yes.** No migration. |
 | `feature/s112-markup-local-display` | 3c: show the just-built image (stacked on the one above) | **GREEN**, run 36220665117: 591 passed / 0 failed. The first run (36217531323) failed on my unit-mock miss and my seeding; both explained in the Log. | **Yes, after router-staleness** (it contains it). No migration. |
 | `feature/s112-audit-fixes` | 16 audit fixes (F4, F5, F6, F7, F9, F10, F13, F14, F15, F16, F17, F18, F19, F20, F21, F24), measured before/after | **GREEN**, run 36222852746: 590 passed / 0 failed / 0 flaky | **Yes.** No migration. |
-| `feature/s111-project-role` | Part One steps 1–2 + the proof. Migrations `20261820000000`, `20261830000000` are APPLIED ON REBUILD-TEST | Not run yet (parked); requested after audit-fixes | **No.** The UI still hides the money (BLOCKED). Also needs its migrations on production first (Q20). |
+| `feature/s111-project-role` | Part One steps 1–2 + the proof. Migrations `20261820000000`, `20261830000000` are APPLIED ON REBUILD-TEST | **GREEN**, run 36224321539: 590 passed / 0 failed / 0 flaky | **No.** The UI still hides the money (BLOCKED). Also needs its migrations on production first (Q20). |
 | `feature/s112-staletimes-hold` | `staleTimes.dynamic: 0`, held (ruling 2) | never run, by design | **No, held.** Revisit when `/m` has loading feedback. |
 | `feature/s112-catalog-importer` | queue D importer script | parked, not run: a script with no app change | Yes, script only. Josh runs it (WHAT JOSH MUST CLICK #2). |
 | `feature/s112-m-audit` | the S112 /m audit report | parked, `[skip ci]` | Docs only. |
@@ -506,6 +506,19 @@ type-check of each result:**
 
 ## Log
 
+- 07:10Z — **FINAL.** Part One CI GREEN (590/0/0). No CI is live.
+  The final rebuild-test state check (read-only) shows everything I touched is back:
+  - 0 `S112*` site visits
+  - crew and owner language `en`
+  - 0 live Project Executive assignments
+  - 0 Q9 test payments
+  - 0 profiling files
+  - 13 PE arms in place (intended: Part One's migrations, applied)
+  - catalog unchanged (newest row 2026-09-05)
+
+  That check also caught the importer printing distinct NAMES as "items" (3 rows, 2 names). Fixed
+  on its branch, and the report table corrected.
+  **Queue finished. Stopping.**
 - 06:37Z — audit-fixes CI GREEN (590/0/0). Part One CI requested (run 36224321539).
 - 06:08Z — 3c rerun GREEN (591/0/0). Audit-fixes CI requested.
 - 05:24Z — **INCIDENT, mine, contained.** 3c's first CI run (36217531323) failed two ways:
