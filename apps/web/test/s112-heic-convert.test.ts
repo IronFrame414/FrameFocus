@@ -245,7 +245,7 @@ describe('S112 convertRow against fakes — order, magic check, rollback', () =>
   // [S112 Q3] The converter is ImageMagick now, not /render/image/ — which
   // measured to drop capture time and GPS. Injected here; the real one runs in
   // s112-heic-convert.live.ts. _Superseded:_ a stubbed fetch of the render URL.
-  const ok = (bytes: Uint8Array) => async () => bytes;
+  const ok = (bytes: Uint8Array) => async () => new Uint8Array(bytes);
   const fails = (message: string) => async () => {
     throw new Error(message);
   };

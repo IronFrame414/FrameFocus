@@ -370,8 +370,8 @@ function magick(args, input) {
 
 /** Pixel size and evidence fields of an image, via ImageMagick. */
 function inspect(bytes) {
-  const fmt = ['%w', '%h', ...EVIDENCE_FIELDS.map((k) => `%[EXIF:${k}]`)].join('\\t');
-  const [w, h, ...vals] = String(magick(['identify', '-format', fmt, '-'], bytes)).split('\t');
+  const fmt = ['%w', '%h', ...EVIDENCE_FIELDS.map((k) => `%[EXIF:${k}]`)].join('|');
+  const [w, h, ...vals] = String(magick(['identify', '-format', fmt, '-'], bytes)).split('|');
   const evidence = {};
   EVIDENCE_FIELDS.forEach((k, i) => {
     if (vals[i]) evidence[k] = vals[i];
