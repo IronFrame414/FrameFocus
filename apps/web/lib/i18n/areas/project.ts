@@ -50,6 +50,11 @@ export const en = {
   'project.overview.siteAddress': 'Site address',
   'project.overview.schedule': 'Schedule',
   'project.overview.noPhases': 'No phases yet.',
+  // [S112 audit F9] Phase status rendered as the raw token ('not_started').
+  'project.overview.status.not_started': 'Not started',
+  'project.overview.status.in_progress': 'In progress',
+  'project.overview.status.blocked': 'Blocked',
+  'project.overview.status.complete': 'Complete',
   'project.overview.details': 'Details',
   // ── schedule ──
   'project.schedule.empty': 'Nothing scheduled.',
@@ -299,6 +304,10 @@ export const es: Record<keyof typeof en, string> = {
   'project.overview.siteAddress': 'Dirección de la obra',
   'project.overview.schedule': 'Calendario',
   'project.overview.noPhases': 'Todavía no hay fases.',
+  'project.overview.status.not_started': 'Sin empezar',
+  'project.overview.status.in_progress': 'En curso',
+  'project.overview.status.blocked': 'Bloqueada',
+  'project.overview.status.complete': 'Terminada',
   'project.overview.details': 'Detalles',
   'project.schedule.empty': 'Nada programado.',
   'project.schedule.todaySuffix': ' · Hoy',

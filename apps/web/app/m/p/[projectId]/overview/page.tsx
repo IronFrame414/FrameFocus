@@ -1,7 +1,7 @@
 import { getProject, PROJECT_TYPE_LABELS } from '@/lib/services/projects';
 import { getPhases, getTasks } from '@/lib/services/tasks';
 import { formatSiteAddress, getProjectSiteAddress } from '@/lib/services/contact-addresses';
-import { rollupPhases } from '@/lib/services/tasks-shared';
+import { rollupPhases, type TaskStatus } from '@/lib/services/tasks-shared';
 import { SectionHeader } from '../section-header';
 import { getMobileT } from '@/lib/i18n/server';
 import type { MsgKey } from '@/lib/i18n/messages';
@@ -27,6 +27,15 @@ import { EmptyState, SectionLabel } from '../../../mobile-ui';
 
 // S110 H — project_type code → message key; unknown codes fall back to the
 // English label table, then the raw code.
+// [S112 audit F9] Phase status rendered the raw token ('not_started'). Typed on
+// TaskStatus, so a new status is a compile error rather than a raw word.
+const PHASE_STATUS_KEY: Record<TaskStatus, MsgKey> = {
+  not_started: 'project.overview.status.not_started',
+  in_progress: 'project.overview.status.in_progress',
+  blocked: 'project.overview.status.blocked',
+  complete: 'project.overview.status.complete',
+};
+
 const PROJECT_TYPE_KEY: Record<string, MsgKey> = {
   fixed_price: 'project.type.fixed_price',
   time_and_materials: 'project.type.time_and_materials',
@@ -138,7 +147,7 @@ export default async function ProjectOverviewPage({
               </span>
               {/* Status as TEXT, never colour alone. NO percent — D-19, A-31b. */}
               <span className="shrink-0 font-mono text-[11px] font-semibold text-m6m-muted">
-                {r.status}
+                {t(PHASE_STATUS_KEY[r.status])}
               </span>
             </li>
           ))}
