@@ -462,11 +462,29 @@ Nothing was run on production tonight. Each migration below carries the read-onl
 
 ## BRANCHES
 
-| Branch | Contains | CI | Ready to merge |
+Nothing is merged; merging is Josh's. "Parked" means pushed to origin under an empty `[skip ci]`
+head commit, so it survives a Codespace restart without taking the one CI slot.
+
+| Branch | Contains | CI | Ready to merge? |
 | --- | --- | --- | --- |
-| `feature/s112-router-staleness` | markup save reorder + human-path e2e + measurement doc; rebased onto main `528bc76b` | not pushed yet — waiting for main's CI run 36212856885 | — |
-| `feature/s112-staletimes-hold` | `staleTimes.dynamic: 0`, held by measurement | not pushed (ruled: push after the fix branch's CI clears) | **No — held** |
-| `feature/s112-m-audit` | the S112 /m UI audit report (local commit `d71014ce`) | not pushed | docs only |
+| `feature/s112-router-staleness` | markup save reorder + human-path e2e + measurement docs (hold documented) | **GREEN**, run 36214441654: 591 passed / 0 failed / 0 flaky. Later commits are docs-only `[skip ci]`. | **Yes.** No migration. |
+| `feature/s112-markup-local-display` | 3c: show the just-built image (stacked on the one above) | **GREEN**, run 36220665117: 591 passed / 0 failed. The first run (36217531323) failed on my unit-mock miss and my seeding; both explained in the Log. | **Yes, after router-staleness** (it contains it). No migration. |
+| `feature/s112-audit-fixes` | 17 audit fixes (F4–F7, F9, F10, F13–F21, F24), measured | Run **36222852746** live at 06:08Z; result in the Log if it finished before the report closed. | Yes if green. No migration. |
+| `feature/s111-project-role` | Part One steps 1–2 + the proof. Migrations `20261820000000`, `20261830000000` are APPLIED ON REBUILD-TEST | Not run yet (parked); requested after audit-fixes | **No.** The UI still hides the money (BLOCKED). Also needs its migrations on production first (Q20). |
+| `feature/s112-staletimes-hold` | `staleTimes.dynamic: 0`, held (ruling 2) | never run, by design | **No, held.** Revisit when `/m` has loading feedback. |
+| `feature/s112-catalog-importer` | queue D importer script | parked, not run: a script with no app change | Yes, script only. Josh runs it (WHAT JOSH MUST CLICK #2). |
+| `feature/s112-m-audit` | the S112 /m audit report | parked, `[skip ci]` | Docs only. |
+| `feature/s112-overnight-report` | this report | `[skip ci]` on every commit | Docs only. |
+
+**Merge-order facts, measured with in-memory trial merges (`git merge-tree`, no refs made) and a
+type-check of each result:**
+- router-staleness → markup-local-display → audit-fixes: **textually clean, and the merged tree
+  type-checks** (tsc exit 0).
+- audit-fixes + s111-project-role: **textually clean but does NOT compile, on purpose.** Audit F9's
+  Settings role map is a total `Record<CompanyRole, MsgKey>`, and Part One adds `project_executive`.
+  Whichever lands second must add `'shell.role.project_executive'` (en "Project Executive", es
+  "Ejecutivo de proyecto") and the map entry. The compiler names the exact line:
+  `app/m/settings/page.tsx:33`.
 
 ## Log
 
