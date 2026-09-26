@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { MarkupData } from '@framefocus/shared/types/markup';
 import {
   EXPORT_WARNING_DISPLAY_SIZE,
+  storedDerivativeResolverForFile,
   EXPORT_WARNING_UNMARKED,
   exportFileName,
   exportPhotoBlob,
@@ -351,5 +352,29 @@ describe('share-image · bytes already built are shared as a File', () => {
       ok: false,
       reason: 'cancelled',
     });
+  });
+});
+
+describe('[S112 Q4] storedDerivativeResolverForFile — chat resolves by ID, never by path', () => {
+  const routeReturns = (url: string | null, ok = true) =>
+    fetchSpy.mockImplementation(async () => ({ ok, json: async () => ({ url }) }));
+
+  it('asks the route by fileId, and accepts a real .markup.jpg', async () => {
+    routeReturns(DERIVATIVE);
+    expect(await storedDerivativeResolverForFile('file-9')()).toBe(DERIVATIVE);
+    const asked = String(fetchSpy.mock.calls[0][0]);
+    expect(asked).toContain('fileId=file-9');
+    expect(asked).toContain('markup=1');
+    expect(asked).not.toContain('path=');
+  });
+
+  it('CONTROL — the route degraded to the ORIGINAL (no derivative): rejected, so nothing marked is claimed', async () => {
+    routeReturns(ORIGINAL);
+    expect(await storedDerivativeResolverForFile('file-9')()).toBeNull();
+  });
+
+  it('a 403 from the route → null (the export falls through to the original)', async () => {
+    routeReturns(null, false);
+    expect(await storedDerivativeResolverForFile('file-9')()).toBeNull();
   });
 });

@@ -156,6 +156,28 @@ export function storedDerivativeResolver(filePath: string): () => Promise<string
 }
 
 /**
+ * [S112 R1 (a), Josh Q4] The same, for a surface that holds the file's ID and
+ * must never hold its path (chat — D-31). The route resolves the path from the
+ * row under the caller's RLS; this side sees only the signed URL, and accepts
+ * it only if it really is a `.markup.jpg` (the route degrades to the original
+ * when there is no derivative).
+ */
+export function storedDerivativeResolverForFile(fileId: string): () => Promise<string | null> {
+  return async () => {
+    const url = await signViaRoute(fileId, true, 'fileId');
+    return url && isDerivativeUrl(url) ? url : null;
+  };
+}
+
+function isDerivativeUrl(url: string): boolean {
+  try {
+    return new URL(url).pathname.endsWith(DERIVATIVE_SUFFIX);
+  } catch {
+    return false;
+  }
+}
+
+/**
  * The name to save an export under. A flattened image is always a JPEG
  * (canvas export, `.markup.jpg`), so a marked export of `IMG_1.HEIC` or
  * `plan.png` is saved as `IMG_1.jpg` / `plan.jpg` — a receiving app trusts the
@@ -186,10 +208,14 @@ export function saveBlobAs(blob: Blob, fileName: string): void {
   setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
 
-async function signViaRoute(path: string, markup: boolean): Promise<string | null> {
+async function signViaRoute(
+  path: string,
+  markup: boolean,
+  key: 'path' | 'fileId' = 'path'
+): Promise<string | null> {
   try {
     const res = await fetch(
-      `/api/files/signed-url?path=${encodeURIComponent(path)}${markup ? '&markup=1' : ''}`
+      `/api/files/signed-url?${key}=${encodeURIComponent(path)}${markup ? '&markup=1' : ''}`
     );
     if (!res.ok) return null;
     const { url } = (await res.json()) as { url?: string };
@@ -241,21 +267,22 @@ export function sheetExportFromUrls({
   markup,
   fallbackUrl,
   fileName,
-  filePath,
+  fileId,
 }: {
   originalUrl: string | null;
   markup: MarkupData | null | undefined;
   fallbackUrl: string | null;
   fileName: string;
-  /** [S112 R1 (a)] Enables the lost-mark-list fallback; see exportPhotoBlob. */
-  filePath?: string | null;
+  /** [S112 R1 (a)] Enables the lost-mark-list fallback by FILE ID (no path —
+   *  chat, D-31); see exportPhotoBlob. */
+  fileId?: string | null;
 }): SheetExport {
   return async () => {
     const r = await exportPhotoBlob({
       originalUrl,
       markup,
       fallbackUrl,
-      resolveStoredDerivative: filePath ? storedDerivativeResolver(filePath) : undefined,
+      resolveStoredDerivative: fileId ? storedDerivativeResolverForFile(fileId) : undefined,
     });
     return r ? { blob: r.blob, fileName: exportFileName(fileName, r.source) } : null;
   };

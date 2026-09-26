@@ -16,10 +16,13 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // where the error carries `status` / `statusCode` / `message`.
 
 const createSignedUrl = vi.fn();
+/** [S112 Q4] the files row read by ?fileId= — under the caller's RLS. */
+const fileSingle = vi.fn();
 
 vi.mock('@/lib/supabase-server', () => ({
   createClient: async () => ({
     storage: { from: () => ({ createSignedUrl }) },
+    from: () => ({ select: () => ({ eq: () => ({ single: fileSingle }) }) }),
   }),
 }));
 
@@ -30,6 +33,7 @@ const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
 beforeEach(() => {
   createSignedUrl.mockReset();
+  fileSingle.mockReset();
   errorSpy.mockClear();
 });
 
@@ -126,10 +130,7 @@ describe('#142 — the route reports a refusal as 403 and logs the cause', () =>
 
     // The response may be generic; the log never is.
     expect(errorSpy).toHaveBeenCalledTimes(1);
-    const [label, detail] = errorSpy.mock.calls[0] as unknown as [
-      string,
-      Record<string, unknown>,
-    ];
+    const [label, detail] = errorSpy.mock.calls[0] as unknown as [string, Record<string, unknown>];
 
     expect(label).toContain('/api/files/signed-url');
     expect(String(detail.check)).toContain('project_files_select_non_client');
@@ -153,5 +154,32 @@ describe('#142 — the route reports a refusal as 403 and logs the cause', () =>
 
     expect(response.status).toBe(400);
     expect(createSignedUrl).not.toHaveBeenCalled();
+  });
+});
+
+describe('[S112 Q4] ?fileId= — a surface that must never hold a path (chat, D-31)', () => {
+  async function getById(id = 'f1', markup = true) {
+    const { GET } = await import('../app/api/files/signed-url/route');
+    return GET(
+      new Request(`https://x.test/api/files/signed-url?fileId=${id}${markup ? '&markup=1' : ''}`)
+    );
+  }
+
+  it('a readable row: the route signs ITS path (derivative first, as with ?path=)', async () => {
+    fileSingle.mockResolvedValue({ data: { id: 'f1', file_path: 'co/p/IMG.jpg' }, error: null });
+    createSignedUrl.mockResolvedValue(SIGNED);
+    const res = await getById();
+    expect(res.status).toBe(200);
+    expect(createSignedUrl.mock.calls[0][0]).toBe('co/p/IMG.jpg.markup.jpg');
+  });
+
+  it('CONTROL — a row the caller cannot read: 403 (never "not found"), logged, and NO storage call', async () => {
+    fileSingle.mockResolvedValue({ data: null, error: { message: 'no rows' } });
+    const res = await getById('hidden');
+    expect(res.status).toBe(403);
+    expect(createSignedUrl).not.toHaveBeenCalled();
+    const [label, detail] = errorSpy.mock.calls[0] as unknown as [string, Record<string, unknown>];
+    expect(label).toContain('/api/files/signed-url');
+    expect(String(detail.check)).toContain('files RLS');
   });
 });
