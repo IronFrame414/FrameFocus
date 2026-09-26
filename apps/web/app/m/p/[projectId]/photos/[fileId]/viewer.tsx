@@ -11,6 +11,7 @@ import { shareFailureNote, shareImages, shareSupported } from '@/lib/share-image
 import {
   exportFileName,
   exportPhotoBlob,
+  storedDerivativeResolver,
   exportWarningKind,
   saveBlobAs,
   type ExportedPhoto,
@@ -59,6 +60,8 @@ export type ViewerPhoto = {
    * (`displayUrl`) is display-size and is only the fallback.
    */
   markup: MarkupData | null;
+  /** [S112 R1 (a)] files.file_path — see exportPhotoBlob's lost-mark-list branch. */
+  filePath: string;
   /** [S112] PhotoRecord.markupFingerprint — keys the just-saved local image. */
   markupFingerprint: string | null;
   derivativeMissing: boolean;
@@ -222,7 +225,10 @@ export function PhotoViewer({
       if (!d) return;
       // Clamped to the SAME bounds the buttons use, so the two routes to zoom
       // cannot disagree about how far in is too far.
-      const next = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, pinch.current.zoom * (d / pinch.current.distance)));
+      const next = Math.min(
+        MAX_ZOOM,
+        Math.max(MIN_ZOOM, pinch.current.zoom * (d / pinch.current.distance))
+      );
       setZoom(next);
       // Pinching back out to 1 re-centres, matching what the fit button does —
       // otherwise the photo settles off-centre with no way to tell why.
@@ -294,6 +300,11 @@ export function PhotoViewer({
         photo.hasMarkup && !photo.derivativeMissing
           ? (localDerivativeFor(photo.id, photo.markupFingerprint) ?? photo.displayUrl)
           : null,
+      // [S112 R1 (a)] No mark list on the row: look for a stored derivative at
+      // export time (lost markup_data), rather than exporting unmarked.
+      resolveStoredDerivative: photo.hasMarkup
+        ? undefined
+        : storedDerivativeResolver(photo.filePath),
     });
     if (result) lastExport.current = { key, result };
     return result;
@@ -625,10 +636,7 @@ export function PhotoViewer({
       {/* ---------------------------------------------------------------- */}
       {/* §4.9 FILMSTRIP — 52px squares, current ringed amber               */}
       {/* ---------------------------------------------------------------- */}
-      <div
-        data-testid="m-filmstrip"
-        className="mt-[12px] flex gap-[7px] overflow-x-auto px-[18px]"
-      >
+      <div data-testid="m-filmstrip" className="mt-[12px] flex gap-[7px] overflow-x-auto px-[18px]">
         {photos.map((p, i) => (
           <Link
             key={p.id}
@@ -637,11 +645,7 @@ export function PhotoViewer({
             data-current={i === index ? 'true' : 'false'}
             aria-current={i === index ? 'true' : undefined}
             className="relative block h-[52px] w-[52px] shrink-0 overflow-hidden rounded-[8px] bg-[#161d2f]"
-            style={
-              i === index
-                ? { boxShadow: '0 0 0 2px #f59e0b' }
-                : { opacity: 0.45 }
-            }
+            style={i === index ? { boxShadow: '0 0 0 2px #f59e0b' } : { opacity: 0.45 }}
           >
             {/* The filmstrip is the THIRD surface D-31 governs — it shows the
                 same flat file the stage and the gallery do (A-23g).
@@ -691,12 +695,17 @@ export function PhotoViewer({
           </button>
         </div>
 
-        <dl className="mt-[14px] border-t pt-[12px]" style={{ borderColor: 'rgba(255,255,255,.08)' }}>
+        <dl
+          className="mt-[14px] border-t pt-[12px]"
+          style={{ borderColor: 'rgba(255,255,255,.08)' }}
+        >
           <Row label={t('photos.viewer.taken')} value={takenText} mono />
           <Row label={t('photos.viewer.by')} value={photo.by ?? '—'} />
           {photo.sourceHref ? (
             <div className="flex items-center gap-[10px] py-[8px]">
-              <dt className="w-[70px] shrink-0 text-[13px] text-m6m-muted-navy">{t('photos.viewer.source')}</dt>
+              <dt className="w-[70px] shrink-0 text-[13px] text-m6m-muted-navy">
+                {t('photos.viewer.source')}
+              </dt>
               {/* A-25c — tapping Source navigates to the record it came from. */}
               <dd className="min-w-0 flex-1">
                 <Link
@@ -715,7 +724,11 @@ export function PhotoViewer({
       </div>
 
       {note ? (
-        <p data-testid="m-viewer-note" role="status" className="px-[18px] pt-[8px] text-[13px] text-[#f0908a]">
+        <p
+          data-testid="m-viewer-note"
+          role="status"
+          className="px-[18px] pt-[8px] text-[13px] text-[#f0908a]"
+        >
           {note}
         </p>
       ) : null}

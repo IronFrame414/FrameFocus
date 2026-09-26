@@ -47,8 +47,7 @@ export interface ExportedPhoto {
 
 export const EXPORT_WARNING_DISPLAY_SIZE =
   'Full-resolution version could not be built — this is the display-size marked-up image.';
-export const EXPORT_WARNING_UNMARKED =
-  'Markup image unavailable — this is the unmarked original.';
+export const EXPORT_WARNING_UNMARKED = 'Markup image unavailable — this is the unmarked original.';
 
 /**
  * Which warning an export carries, as a kind a surface can translate (the /m
@@ -86,10 +85,16 @@ export async function exportPhotoBlob({
   originalUrl,
   markup,
   fallbackUrl,
+  resolveStoredDerivative,
 }: {
   originalUrl: string | null;
   markup: MarkupData | null | undefined;
   fallbackUrl: string | null;
+  /**
+   * [S112 R1 (a)] Looks for a stored derivative when the row carries NO mark
+   * list — called only then, and only at export time. See the branch below.
+   */
+  resolveStoredDerivative?: () => Promise<string | null>;
 }): Promise<ExportedPhoto | null> {
   if (hasMarkup(markup) && originalUrl) {
     let rebuilt: Blob | null = null;
@@ -115,8 +120,39 @@ export async function exportPhotoBlob({
   // the whole photo.
   const stored = await fetchBlob(fallbackUrl);
   if (stored) return { blob: stored, source: 'fallback-derivative', warning: null };
+
+  // [S112 R1 (a), RULED Josh] "if ... markup_data is absent or empty, export
+  // the stored display-size derivative rather than failing." Nothing in the
+  // app clears markup_data while leaving a derivative (measured S112: the only
+  // `markup_data: null` write is a new-file insert), so a derivative with no
+  // mark list is lost data — and the derivative is the only marked copy left.
+  // Measured before this branch existed: the /m viewer exported the UNMARKED
+  // original here, silently.
+  if (!fallbackUrl && resolveStoredDerivative) {
+    let url: string | null = null;
+    try {
+      url = await resolveStoredDerivative();
+    } catch {
+      url = null;
+    }
+    const orphan = await fetchBlob(url);
+    if (orphan) {
+      return { blob: orphan, source: 'fallback-derivative', warning: EXPORT_WARNING_DISPLAY_SIZE };
+    }
+  }
+
   const original = await fetchBlob(originalUrl);
   return original ? { blob: original, source: 'original', warning: null } : null;
+}
+
+/**
+ * [S112 R1 (a)] A `resolveStoredDerivative` for a surface that holds the
+ * file's path: signs `{path}.markup.jpg` at CLICK time through the same route
+ * desktop uses, and accepts only a real derivative (the route silently hands
+ * back the original when there is none — see signExportUrls).
+ */
+export function storedDerivativeResolver(filePath: string): () => Promise<string | null> {
+  return async () => (await signExportUrls(filePath)).derivativeUrl;
 }
 
 /**
@@ -205,14 +241,22 @@ export function sheetExportFromUrls({
   markup,
   fallbackUrl,
   fileName,
+  filePath,
 }: {
   originalUrl: string | null;
   markup: MarkupData | null | undefined;
   fallbackUrl: string | null;
   fileName: string;
+  /** [S112 R1 (a)] Enables the lost-mark-list fallback; see exportPhotoBlob. */
+  filePath?: string | null;
 }): SheetExport {
   return async () => {
-    const r = await exportPhotoBlob({ originalUrl, markup, fallbackUrl });
+    const r = await exportPhotoBlob({
+      originalUrl,
+      markup,
+      fallbackUrl,
+      resolveStoredDerivative: filePath ? storedDerivativeResolver(filePath) : undefined,
+    });
     return r ? { blob: r.blob, fileName: exportFileName(fileName, r.source) } : null;
   };
 }

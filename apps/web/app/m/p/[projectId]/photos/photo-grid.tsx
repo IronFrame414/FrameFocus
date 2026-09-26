@@ -10,6 +10,7 @@ import type { MarkupData } from '@framefocus/shared/types/markup';
 import {
   exportFileName,
   exportPhotoBlob,
+  storedDerivativeResolver,
   exportWarningKind,
   type ExportedPhoto,
 } from '@/lib/markup/export-marked';
@@ -49,6 +50,8 @@ export type GridPhoto = {
   /** [S112 R1] Share rebuilds a marked photo from this + `markup`. */
   originalUrl: string | null;
   markup: MarkupData | null;
+  /** [S112 R1 (a)] files.file_path — see exportPhotoBlob's lost-mark-list branch. */
+  filePath: string;
   /** Annotated, but the stored derivative could not be signed. */
   derivativeMissing: boolean;
   /**
@@ -116,15 +119,12 @@ export function PhotoGrid({
   // -------------------------------------------------------------------------
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const startPress = useCallback(
-    (id: string) => {
-      timer.current = setTimeout(() => {
-        setSelection((cur) => (cur ? cur : new Set([id])));
-        timer.current = null;
-      }, 450);
-    },
-    []
-  );
+  const startPress = useCallback((id: string) => {
+    timer.current = setTimeout(() => {
+      setSelection((cur) => (cur ? cur : new Set([id])));
+      timer.current = null;
+    }, 450);
+  }, []);
 
   const endPress = useCallback(() => {
     if (timer.current) {
@@ -367,8 +367,7 @@ function Tile({
     </>
   );
 
-  const shell =
-    'relative block aspect-square overflow-hidden rounded-[11px] bg-[#e4e8ef]';
+  const shell = 'relative block aspect-square overflow-hidden rounded-[11px] bg-[#e4e8ef]';
 
   // In selection mode the tile is a control, not a link — tapping selects
   // rather than navigating away from the set being built.
@@ -479,6 +478,7 @@ function SelectionBar({
             originalUrl: p.originalUrl,
             markup: p.markup,
             fallbackUrl: p.hasMarkup && !p.derivativeMissing ? p.displayUrl : null,
+            resolveStoredDerivative: p.hasMarkup ? undefined : storedDerivativeResolver(p.filePath),
           })
         );
       }

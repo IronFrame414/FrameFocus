@@ -95,8 +95,16 @@ const DERIVATIVE = 'https://s.test/object/sign/project-files/c/p/IMG_1.jpg.marku
 
 describe('R1 · scaledSize — the cap is pure arithmetic', () => {
   it('caps the long edge, never upscales, full size when uncapped', () => {
-    expect(scaledSize(4032, 3024, DISPLAY_MAX_EDGE)).toEqual({ width: 2048, height: 1536, scale: 2048 / 4032 });
-    expect(scaledSize(1600, 1200, DISPLAY_MAX_EDGE)).toEqual({ width: 1600, height: 1200, scale: 1 });
+    expect(scaledSize(4032, 3024, DISPLAY_MAX_EDGE)).toEqual({
+      width: 2048,
+      height: 1536,
+      scale: 2048 / 4032,
+    });
+    expect(scaledSize(1600, 1200, DISPLAY_MAX_EDGE)).toEqual({
+      width: 1600,
+      height: 1200,
+      scale: 1,
+    });
     expect(scaledSize(4032, 3024)).toEqual({ width: 4032, height: 3024, scale: 1 });
   });
 });
@@ -104,7 +112,11 @@ describe('R1 · scaledSize — the cap is pure arithmetic', () => {
 describe('R1 · an export of a marked photo is REBUILT at natural size', () => {
   it('4032×3024 → a 4032×3024 canvas, no scale, source regenerated, nothing fetched', async () => {
     stubBrowser();
-    const out = await exportPhotoBlob({ originalUrl: ORIGINAL, markup: MARKUP, fallbackUrl: DERIVATIVE });
+    const out = await exportPhotoBlob({
+      originalUrl: ORIGINAL,
+      markup: MARKUP,
+      fallbackUrl: DERIVATIVE,
+    });
 
     expect(out?.source).toBe('regenerated');
     expect(out?.warning).toBeNull();
@@ -122,7 +134,11 @@ describe('R1 · an export of a marked photo is REBUILT at natural size', () => {
 describe('R1 (a) · FALLBACK — an export degrades, it does not fail', () => {
   it('markup_data ABSENT → no rebuild; the stored derivative when one is known', async () => {
     stubBrowser();
-    const out = await exportPhotoBlob({ originalUrl: ORIGINAL, markup: null, fallbackUrl: DERIVATIVE });
+    const out = await exportPhotoBlob({
+      originalUrl: ORIGINAL,
+      markup: null,
+      fallbackUrl: DERIVATIVE,
+    });
     expect(canvases).toHaveLength(0);
     expect(fetchSpy.mock.calls.map((c) => c[0])).toEqual([DERIVATIVE]);
     expect(out?.source).toBe('fallback-derivative');
@@ -135,6 +151,66 @@ describe('R1 (a) · FALLBACK — an export degrades, it does not fail', () => {
     expect(fetchSpy.mock.calls.map((c) => c[0])).toEqual([ORIGINAL]);
     expect(out?.source).toBe('original');
     expect(out?.warning).toBeNull();
+  });
+
+  // [S112 R1 (a), measured] The surfaces that hold only URLs (the /m viewer,
+  // grid, chat) were never OFFERED the stored derivative when the row had lost
+  // its mark list — the harness exported the unmarked original. The resolver
+  // looks for one at export time.
+  it('markup_data LOST, derivative still stored → the resolver finds it; exported marked, warned', async () => {
+    stubBrowser();
+    const out = await exportPhotoBlob({
+      originalUrl: ORIGINAL,
+      markup: null,
+      fallbackUrl: null,
+      resolveStoredDerivative: async () => DERIVATIVE,
+    });
+    expect(canvases).toHaveLength(0);
+    expect(fetchSpy.mock.calls.map((c) => c[0])).toEqual([DERIVATIVE]);
+    expect(out?.source).toBe('fallback-derivative');
+    expect(out?.warning).toBe(EXPORT_WARNING_DISPLAY_SIZE);
+  });
+
+  it('CONTROL — the same row WITHOUT the resolver exports the unmarked original (the measured defect)', async () => {
+    stubBrowser();
+    const out = await exportPhotoBlob({ originalUrl: ORIGINAL, markup: null, fallbackUrl: null });
+    expect(out?.source).toBe('original');
+  });
+
+  it('a plain photo: the resolver finds nothing (or throws) → the original, no warning', async () => {
+    stubBrowser();
+    for (const resolveStoredDerivative of [
+      async () => null,
+      async () => Promise.reject(new Error('403')),
+    ]) {
+      fetchSpy.mockClear();
+      const out = await exportPhotoBlob({
+        originalUrl: ORIGINAL,
+        markup: null,
+        fallbackUrl: null,
+        resolveStoredDerivative,
+      });
+      expect(fetchSpy.mock.calls.map((c) => c[0])).toEqual([ORIGINAL]);
+      expect(out?.source).toBe('original');
+      expect(out?.warning).toBeNull();
+    }
+  });
+
+  it('a MARKED photo never calls the resolver (it rebuilds)', async () => {
+    stubBrowser();
+    const resolver = vi.fn(async () => DERIVATIVE);
+    await exportPhotoBlob({
+      originalUrl: ORIGINAL,
+      markup: {
+        version: 2,
+        imageWidth: 4032,
+        imageHeight: 3024,
+        shapes: [{ type: 'pin', x: 1, y: 1, color: '#f00' }],
+      } as never,
+      fallbackUrl: DERIVATIVE,
+      resolveStoredDerivative: resolver,
+    });
+    expect(resolver).not.toHaveBeenCalled();
   });
 
   it('markup_data with EMPTY shapes is not markup (A-23h) → same as absent', async () => {
@@ -152,7 +228,11 @@ describe('R1 (a) · FALLBACK — an export degrades, it does not fail', () => {
   for (const mode of ['no-context', 'image-error', 'createElement-throws'] as const) {
     it(`the rebuild fails (${mode}) → the STORED derivative, source fallback-derivative`, async () => {
       stubBrowser({ mode });
-      const out = await exportPhotoBlob({ originalUrl: ORIGINAL, markup: MARKUP, fallbackUrl: DERIVATIVE });
+      const out = await exportPhotoBlob({
+        originalUrl: ORIGINAL,
+        markup: MARKUP,
+        fallbackUrl: DERIVATIVE,
+      });
       expect(out?.source).toBe('fallback-derivative');
       expect(out?.warning).toBe(EXPORT_WARNING_DISPLAY_SIZE);
       expect(fetchSpy.mock.calls.map((c) => c[0])).toEqual([DERIVATIVE]);
@@ -174,7 +254,11 @@ describe('R1 (a) · FALLBACK — an export degrades, it does not fail', () => {
         ? { ok: false, blob: async () => new Blob([]) }
         : { ok: true, blob: async () => new Blob(['o'], { type: 'image/jpeg' }) }
     );
-    const out = await exportPhotoBlob({ originalUrl: ORIGINAL, markup: MARKUP, fallbackUrl: DERIVATIVE });
+    const out = await exportPhotoBlob({
+      originalUrl: ORIGINAL,
+      markup: MARKUP,
+      fallbackUrl: DERIVATIVE,
+    });
     expect(fetchSpy.mock.calls.map((c) => c[0])).toEqual([DERIVATIVE, ORIGINAL]);
     expect(out?.source).toBe('original');
     expect(out?.warning).toBe(EXPORT_WARNING_UNMARKED);
@@ -183,7 +267,9 @@ describe('R1 (a) · FALLBACK — an export degrades, it does not fail', () => {
   it('nothing fetchable at all → null (the caller says so)', async () => {
     stubBrowser({ mode: 'no-context' });
     fetchSpy.mockResolvedValue({ ok: false, blob: async () => new Blob([]) });
-    expect(await exportPhotoBlob({ originalUrl: ORIGINAL, markup: MARKUP, fallbackUrl: DERIVATIVE })).toBeNull();
+    expect(
+      await exportPhotoBlob({ originalUrl: ORIGINAL, markup: MARKUP, fallbackUrl: DERIVATIVE })
+    ).toBeNull();
   });
 });
 
@@ -205,10 +291,16 @@ describe('signExportUrls — a markup=1 answer that is really the original is dr
       }),
     });
     fetchSpy.mockImplementation(answer(true));
-    expect(await signExportUrls('c/p/IMG_1.jpg')).toEqual({ originalUrl: ORIGINAL, derivativeUrl: DERIVATIVE });
+    expect(await signExportUrls('c/p/IMG_1.jpg')).toEqual({
+      originalUrl: ORIGINAL,
+      derivativeUrl: DERIVATIVE,
+    });
     // CONTROL: the same call when the route degraded.
     fetchSpy.mockImplementation(answer(false));
-    expect(await signExportUrls('c/p/IMG_1.jpg')).toEqual({ originalUrl: ORIGINAL, derivativeUrl: null });
+    expect(await signExportUrls('c/p/IMG_1.jpg')).toEqual({
+      originalUrl: ORIGINAL,
+      derivativeUrl: null,
+    });
   });
 });
 
@@ -227,7 +319,9 @@ describe('share-image · bytes already built are shared as a File', () => {
 
   it('a blob item is sent as a named File; no URL is fetched', async () => {
     const shared = stubShare(async () => undefined);
-    const out = await shareImages([{ blob: new Blob(['x'], { type: 'image/jpeg' }), fileName: 'IMG_1.jpg' }]);
+    const out = await shareImages([
+      { blob: new Blob(['x'], { type: 'image/jpeg' }), fileName: 'IMG_1.jpg' },
+    ]);
     expect(out).toEqual({ ok: true });
     const files = shared[0].files as File[];
     expect(files.map((f) => f.name)).toEqual(['IMG_1.jpg']);
@@ -236,7 +330,10 @@ describe('share-image · bytes already built are shared as a File', () => {
 
   it('a null blob is fetch-failed, not no-url', async () => {
     stubShare(async () => undefined);
-    expect(await shareImages([{ blob: null, fileName: 'a.jpg' }])).toEqual({ ok: false, reason: 'fetch-failed' });
+    expect(await shareImages([{ blob: null, fileName: 'a.jpg' }])).toEqual({
+      ok: false,
+      reason: 'fetch-failed',
+    });
   });
 
   it('NotAllowedError (activation expired during the rebuild) is NOT a silent cancel', async () => {

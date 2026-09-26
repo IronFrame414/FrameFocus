@@ -64,7 +64,8 @@ export default async function PhotoViewerPage({
   // Before this, every receipt link 404'd — 100% of them, because M-26 uploads
   // receipts as category 'receipts' and this page resolved only 'photos'.
   const galleryIndex = gallery.findIndex((p) => p.id === params.fileId);
-  const receipt = galleryIndex === -1 ? await getReceiptFile(params.projectId, params.fileId) : null;
+  const receipt =
+    galleryIndex === -1 ? await getReceiptFile(params.projectId, params.fileId) : null;
   if (galleryIndex === -1 && !receipt) notFound();
 
   const photos = receipt ? [receipt] : gallery;
@@ -85,6 +86,7 @@ export default async function PhotoViewerPage({
       hasMarkup: p.hasMarkup,
       // [S112 R1] Save / Share rebuild full resolution from original + this.
       markup: p.markup,
+      filePath: p.file_path,
       markupFingerprint: p.markupFingerprint,
       derivativeMissing: p.derivativeMissing,
       source: p.source,
