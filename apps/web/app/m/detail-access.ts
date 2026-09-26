@@ -202,6 +202,10 @@ export function canWriteCo(role: string | null | undefined): boolean {
  * one place, rather than hunted through the list.
  *
  * A PM is "true" even with no authored COs — for them the empty state is true.
+ *
+ * [S112 R5b] This is still the FULL-ROW rule and is unchanged. The approved-CO
+ * summary that widened the read for foreman and crew is a separate projection
+ * with its own role list: `readsCoSummaries()` in lib/change-orders/summaries.ts.
  */
 export function readsChangeOrders(role: string | null | undefined): boolean {
   return ['owner', 'admin', 'project_manager'].includes(role ?? '');
