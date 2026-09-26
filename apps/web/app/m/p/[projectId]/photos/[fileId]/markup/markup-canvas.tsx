@@ -9,7 +9,6 @@ import { saveMarkup, type MarkupSaveResult } from '@/lib/services/photos-client'
 // Moved out of this route folder for #129 [S122] — the desktop editor now
 // writes the SAME derivative from the SAME rasteriser. A flattener living under
 // /m implied mobile owned the format; it does not.
-import { drawShapes } from '@/lib/markup/flatten-shapes';
 import { useT } from '@/components/i18n/language-provider';
 import type { MsgKey } from '@/lib/i18n/messages';
 
@@ -280,8 +279,7 @@ export function MarkupCanvas({
       filePath,
       originalUrl,
       shapes,
-      imageDims,
-      drawShapes
+      imageDims
     );
 
     setSaving(false);

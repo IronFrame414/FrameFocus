@@ -47,9 +47,7 @@ function chips(t: T): readonly Chip[] {
 function dayLabel(iso: string, todayIso: string, t: T): string {
   if (iso === todayIso) return t('photos.day.today');
   const d = new Date(`${iso}T00:00:00`);
-  return d
-    .toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-    .toUpperCase();
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }).toUpperCase();
 }
 
 export default async function ProjectPhotosPage({
@@ -105,6 +103,13 @@ export default async function ProjectPhotosPage({
       file_name: p.file_name,
       displayUrl: p.displayUrl,
       thumbUrl: p.thumbUrl,
+      // [S112 R1] Share rebuilds full resolution from these. Already signed in
+      // getProjectPhotos()' one batch call — no extra Storage round trip; the
+      // mark list is small JSON.
+      originalUrl: p.originalUrl,
+      filePath: p.file_path,
+      markup: p.markup,
+      derivativeMissing: p.derivativeMissing,
       hasMarkup: p.hasMarkup,
       source: p.source,
       day,

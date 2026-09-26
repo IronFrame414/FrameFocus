@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { signedUrlFor } from '@/lib/services/files';
+import { getFile, signedUrlFor } from '@/lib/services/files';
 import { SIGNED_URL_TTL_SECONDS } from '@/lib/services/signed-url-ttl';
 import { derivativePathFor } from '@framefocus/shared/utils/markup';
 
@@ -37,7 +37,28 @@ import { derivativePathFor } from '@framefocus/shared/utils/markup';
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
-  const path = searchParams.get('path');
+  let path = searchParams.get('path');
+  const fileId = searchParams.get('fileId');
+
+  // [S112 R1 (a), Josh Q4] BY FILE ID, for a surface that must never hold a
+  // path — chat (D-31: "chat never resolves a file path itself"). The row is
+  // read with the CALLER's RLS-scoped client, so this can resolve only a path
+  // the caller could already read, and a row they cannot see gets the same
+  // 403 as a refused path (anti-enumeration: never "not found").
+  if (!path && fileId) {
+    const file = await getFile(fileId);
+    if (!file) {
+      console.error('[GET /api/files/signed-url] file row not readable', {
+        check: 'files RLS — getFile(fileId) returned no row',
+        fileId,
+      });
+      return NextResponse.json(
+        { error: 'You do not have access to this file, or it is no longer available' },
+        { status: 403 }
+      );
+    }
+    path = file.file_path;
+  }
 
   if (!path) {
     return NextResponse.json({ error: 'Missing path' }, { status: 400 });

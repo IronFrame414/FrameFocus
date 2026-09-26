@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useConfirm, useAlert } from '@/components/confirm/confirm-provider';
 import { softDeleteFile } from '@/lib/services/files-client';
+import { sheetExportFromPath } from '@/lib/markup/export-marked';
 
 export default function FileRowActions({
   fileId,
@@ -12,6 +13,7 @@ export default function FileRowActions({
   fileName,
   mimeType,
   annotated = false,
+  markup = null,
   projectId,
 }: {
   fileId: string;
@@ -20,6 +22,11 @@ export default function FileRowActions({
   mimeType: string | null;
   /** #100: file has markup — download the flattened `.markup.jpg` derivative. */
   annotated?: boolean;
+  /**
+   * [S112 R1] `files.markup_data` — the sheet's Download rebuilds the marked
+   * image at full resolution from it (the derivative is display-size).
+   */
+  markup?: unknown;
   projectId: string;
 }) {
   const router = useRouter();
@@ -43,7 +50,12 @@ export default function FileRowActions({
   // _Superseded, quoted:_ `window.open(url + '?download=' + fileName, '_blank')`.
   // The sheet's own Download action still saves under the original name.
   function handleDownload() {
-    openFile({ fileName, mimeType, resolveUrl: getSignedUrl });
+    openFile({
+      fileName,
+      mimeType,
+      resolveUrl: getSignedUrl,
+      exportBlob: annotated ? sheetExportFromPath({ filePath, markup, fileName }) : undefined,
+    });
   }
 
   async function handleDelete() {

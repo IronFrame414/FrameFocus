@@ -15,6 +15,7 @@ import { PdfPages } from '@/components/files/pdf-pages';
 import { canPrint, fileViewKind, isIOS, withDownload, type FileViewKind } from '@/lib/files/file-view';
 import { SIGNED_URL_TTL_SECONDS } from '@/lib/services/signed-url-ttl';
 import { useT } from '@/components/i18n/language-provider';
+import { saveBlobAs } from '@/lib/markup/export-marked';
 
 /**
  * S109 #161 — A FILE OPENS IN A SHEET OVER THE CURRENT SCREEN.
@@ -43,6 +44,9 @@ import { useT } from '@/components/i18n/language-provider';
  * "Open in new tab" and "Download" are real `<a>` elements over a URL the
  * sheet ALREADY HOLDS — not `window.open` after an `await`, which is detached
  * from the click and is what popup blockers stop.
+ * [S112 R1] Except Download for a request carrying `exportBlob` (an annotated
+ * photo): that is a button, because its bytes are built after the click. A
+ * blob download is not popup-blocked, so the `await` costs nothing there.
  */
 
 /** What a resolver may return: a URL, or a URL plus the name/type it learned
@@ -58,6 +62,19 @@ export interface OpenFileRequest {
   mimeType?: string | null;
   /** Returns a URL the browser can load, or null when it cannot be signed. */
   resolveUrl: () => Promise<ResolvedFile>;
+  /**
+   * [S112 R1] When present, Download BUILDS the file instead of linking to the
+   * resolved URL. An annotated photo passes this: the URL the sheet shows is
+   * the display-size derivative, and the download must be the full-resolution
+   * rebuild from original + `markup_data` (lib/markup/export-marked.ts).
+   * Null (or a throw) falls back to the plain signed-URL download — the
+   * export must degrade, not fail (R1 a).
+   *
+   * Print and "Open in new tab" stay on the displayed image, deliberately:
+   * print is a page-sized render where 2,048 px is already more than the
+   * paper holds, and a new tab is a view.
+   */
+  exportBlob?: () => Promise<{ blob: Blob; fileName: string } | null>;
 }
 
 function urlOf(r: ResolvedFile): string | null {
@@ -114,6 +131,7 @@ export function FileSheet({ request, onClose }: { request: OpenFileRequest; onCl
   const [actionUrl, setActionUrl] = useState<string | null>(null);
   const [previewBroken, setPreviewBroken] = useState(false);
   const [printing, setPrinting] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const t = useT();
   const retried = useRef(false);
   const resolveRef = useRef(request.resolveUrl);
@@ -225,6 +243,28 @@ export function FileSheet({ request, onClose }: { request: OpenFileRequest; onCl
     }
   }
 
+  /** [S112 R1] Download for a request that builds its bytes (exportBlob). */
+  async function exportDownload() {
+    const build = request.exportBlob;
+    if (!build || exporting) return;
+    setExporting(true);
+    let built: { blob: Blob; fileName: string } | null = null;
+    try {
+      built = await build();
+    } catch {
+      built = null;
+    } finally {
+      setExporting(false);
+    }
+    if (built) {
+      saveBlobAs(built.blob, built.fileName);
+      return;
+    }
+    // Nothing could be built or fetched — the old plain download, which is at
+    // worst the display-size derivative.
+    if (actionUrl) window.location.assign(withDownload(actionUrl, meta.fileName));
+  }
+
   const actionClass =
     'rounded-md border border-gray-300 bg-white px-2.5 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50 sm:text-sm';
   const actions = actionUrl ? (
@@ -250,13 +290,26 @@ export function FileSheet({ request, onClose }: { request: OpenFileRequest; onCl
           {printing ? t('shell.file.preparing') : t('shell.file.print')}
         </button>
       )}
-      <a
-        href={withDownload(actionUrl, meta.fileName)}
-        className={actionClass}
-        data-testid="file-sheet-download"
-      >
-        {t('shell.file.download')}
-      </a>
+      {request.exportBlob ? (
+        <button
+          type="button"
+          onClick={() => void exportDownload()}
+          disabled={exporting}
+          aria-busy={exporting || undefined}
+          className={actionClass}
+          data-testid="file-sheet-download"
+        >
+          {exporting ? t('shell.file.preparing') : t('shell.file.download')}
+        </button>
+      ) : (
+        <a
+          href={withDownload(actionUrl, meta.fileName)}
+          className={actionClass}
+          data-testid="file-sheet-download"
+        >
+          {t('shell.file.download')}
+        </a>
+      )}
     </>
   ) : null;
 
