@@ -5,6 +5,8 @@ import { useCallback, useEffect, useRef, useState, useMemo } from 'react';
 import { RotateCw } from 'lucide-react';
 import { color, font } from '@/lib/theme';
 import type { ChatMessageWithPhotos } from '@/lib/chat/photos';
+import { hasMarkup } from '@framefocus/shared/utils/markup';
+import { sheetExportFromUrls } from '@/lib/markup/export-marked';
 import type { ThreadKind } from '@/lib/chat/threads';
 import { useChatThread } from './use-chat-thread';
 import { ChatComposer } from './chat-composer';
@@ -291,7 +293,22 @@ export function ChatThreadView({
                             if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
                             e.preventDefault();
                             const url = photo.displayUrl!;
-                            openFile({ fileName: photo.fileName, mimeType: 'image/jpeg', resolveUrl: async () => url });
+                            openFile({
+                              fileName: photo.fileName,
+                              mimeType: 'image/jpeg',
+                              resolveUrl: async () => url,
+                              // [S112 R1] The sheet shows the display-size
+                              // derivative; Download rebuilds full resolution
+                              // from the original + marks (built at click).
+                              exportBlob: hasMarkup(photo.markup)
+                                ? sheetExportFromUrls({
+                                    originalUrl: photo.originalUrl,
+                                    markup: photo.markup,
+                                    fallbackUrl: photo.derivativeMissing ? null : url,
+                                    fileName: photo.fileName,
+                                  })
+                                : undefined,
+                            });
                           }}
                           title={photo.fileName}
                           style={{

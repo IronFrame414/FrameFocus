@@ -2,6 +2,7 @@ import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@framefocus/shared/types/database';
 import type { ChatMessageRow } from '@/lib/chat/messages';
+import type { MarkupData } from '@framefocus/shared/types/markup';
 
 /**
  * ND-22 / ND-28 — the photo REFERENCE. Slice 6.
@@ -30,10 +31,26 @@ export interface ChatPhoto {
   displayUrl: string | null;
   /**
    * [S111 D] The 78px tile's image — the stored thumbnail of the same file, or
-   * `displayUrl` when there is none (ruled fallback). Links, the sheet and
-   * share keep using `displayUrl`, the full file.
+   * `displayUrl` when there is none (ruled fallback). Links and the sheet's
+   * VIEW keep using `displayUrl`.
+   *
+   * _Superseded, quoted:_ "Links, the sheet and share keep using `displayUrl`,
+   * the full file." — [S112 R1] `displayUrl` is no longer the full file for an
+   * annotated photo: the stored derivative is DISPLAY-SIZE (2,048 px). The
+   * sheet's DOWNLOAD rebuilds full resolution from `originalUrl` + `markup`
+   * (lib/markup/export-marked.ts), falling back to `displayUrl`.
    */
   thumbUrl: string | null;
+  /**
+   * [S112 R1] The original, for the full-res export only — never displayed
+   * (D-31). Already signed by the same getProjectPhotos() batch that signs
+   * `displayUrl`, so carrying it costs no Storage call.
+   */
+  originalUrl: string | null;
+  /** [S112 R1] The mark list the export rebuilds from; null when unmarked. */
+  markup: MarkupData | null;
+  /** Annotated, but the stored derivative could not be signed. */
+  derivativeMissing: boolean;
   sortOrder: number;
 }
 
@@ -125,7 +142,17 @@ export async function withPhotos(
    * how a gallery is fetched.
    */
   resolveGallery: () => Promise<
-    Array<{ id: string; file_name: string; displayUrl: string | null; thumbUrl: string | null }>
+    Array<{
+      id: string;
+      file_name: string;
+      displayUrl: string | null;
+      thumbUrl: string | null;
+      // [S112 R1] Optional so a gallery that resolves only what it displays
+      // still fits; without them the export falls back to `displayUrl`.
+      originalUrl?: string | null;
+      markup?: MarkupData | null;
+      derivativeMissing?: boolean;
+    }>
   >
 ): Promise<ChatMessageWithPhotos[]> {
   if (messages.length === 0) return [];
@@ -150,7 +177,17 @@ export async function withPhotos(
 
   const gallery = await resolveGallery();
   const urlFor = new Map(
-    gallery.map((p) => [p.id, { fileName: p.file_name, displayUrl: p.displayUrl, thumbUrl: p.thumbUrl }])
+    gallery.map((p) => [
+      p.id,
+      {
+        fileName: p.file_name,
+        displayUrl: p.displayUrl,
+        thumbUrl: p.thumbUrl,
+        originalUrl: p.originalUrl ?? null,
+        markup: p.markup ?? null,
+        derivativeMissing: p.derivativeMissing ?? false,
+      },
+    ])
   );
 
   const byMessage = new Map<string, ChatPhoto[]>();
@@ -165,6 +202,9 @@ export async function withPhotos(
       // than showing a broken image.
       displayUrl: resolved?.displayUrl ?? null,
       thumbUrl: resolved?.thumbUrl ?? null,
+      originalUrl: resolved?.originalUrl ?? null,
+      markup: resolved?.markup ?? null,
+      derivativeMissing: resolved?.derivativeMissing ?? false,
       sortOrder: row.sort_order,
     });
     byMessage.set(row.message_id, list);
