@@ -39,22 +39,3 @@ export function bidderCanSeeFile(file: {
   if (!file.created_by) return false;
   return !(file.tags ?? []).includes(SUB_UPLOAD_TAG);
 }
-
-// ===========================================================================
-// [S112, RULED Josh] THE TOKEN PROVES WHO; THE BID'S CURRENT STATUS DECIDES WHETHER.
-// ===========================================================================
-// Before S112 the bid token was checked for `is_deleted` and `expires_at` only,
-// so a CANCELLED or DECLINED bid's token went on serving the scope documents —
-// and accepting uploads — for the rest of its 14 days. Measured on rebuild-test:
-// 200 and a fetchable URL for both. Ruled:
-//   cancelled / declined (and any "withdrawn" — no such status exists today) → refused
-//   submitted → still served (a sub may reference what they bid on)
-//   expired  → refused, as before
-// The same set is enforced in the database for the page's read
-// (get_sub_bid_request, 20261850000000), so the page, the API and a direct RPC
-// call cannot disagree. Read on EVERY request, never cached from token issue.
-export const BID_TOKEN_OPEN_STATUSES: readonly string[] = ['sent', 'viewed', 'submitted'];
-
-export function bidTokenIsOpen(status: string | null | undefined): boolean {
-  return BID_TOKEN_OPEN_STATUSES.includes(status ?? '');
-}

@@ -83,7 +83,9 @@ export async function listSubBidRequests(estimateId: string): Promise<SubBidRequ
   const supabase = createClient();
   const { data } = await supabase
     .from('estimate_sub_bid_requests')
-    .select('id, line_item_id, subcontractor_id, token, status, expires_at, sent_at, submitted_at, sub_bid_id')
+    .select(
+      'id, line_item_id, subcontractor_id, token, status, expires_at, sent_at, submitted_at, sub_bid_id'
+    )
     .eq('estimate_id', estimateId)
     .eq('is_deleted', false)
     .order('created_at', { ascending: false });
@@ -105,11 +107,33 @@ export async function sendSubBidRequest(
   estimateId: string,
   requestId: string
 ): Promise<{ success: boolean; error?: string; to?: string }> {
-  const res = await fetch(
-    `/api/estimates/${estimateId}/bid-requests/${requestId}/send`,
-    { method: 'POST' }
-  );
+  const res = await fetch(`/api/estimates/${estimateId}/bid-requests/${requestId}/send`, {
+    method: 'POST',
+  });
   const body = (await res.json().catch(() => ({}))) as { error?: string; to?: string };
   if (!res.ok) return { success: false, error: body.error ?? `Send failed (${res.status})` };
   return { success: true, to: body.to };
+}
+
+/**
+ * [S112, RULED Josh] CANCEL or DECLINE a bid request — the way to cut a sub off.
+ *
+ * Before S112 nothing wrote either status, so a sub's link served the scope
+ * documents for its full 14 days whatever happened. The database decides both
+ * WHO (the caller's own RLS: owner/admin, or the PM who owns the estimate) and
+ * WHAT (`close_sub_bid_request`: cancel from sent/viewed/submitted, decline a
+ * submitted bid only). The token is refused on its next request — the page, the
+ * scope documents and uploads all read `bid_token_state()`.
+ */
+export async function closeSubBidRequest(
+  requestId: string,
+  status: 'cancelled' | 'declined'
+): Promise<Result> {
+  const supabase = createClient();
+  const { error } = await supabase.rpc('close_sub_bid_request', {
+    p_request_id: requestId,
+    p_status: status,
+  });
+  if (error) return { success: false, error: error.message };
+  return { success: true };
 }

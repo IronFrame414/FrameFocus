@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
-import { SUB_UPLOAD_TAG, bidTokenIsOpen, bidderCanSeeFile } from '@/lib/services/sub-bid-files';
+import { SUB_UPLOAD_TAG, bidderCanSeeFile } from '@/lib/services/sub-bid-files';
 
 // S106 Part C — the SUB upload path. `/bid/[token]` is anonymous; the TOKEN is the
 // credential (same model as get_sub_bid_request / submit_sub_bid_reply). The sub's file
@@ -20,43 +20,57 @@ const ALLOWED_MIME = new Set([
 
 /** Token → the bid request, or an error response. The ONE resolution both
  *  handlers use, so GET and POST cannot drift on what a valid token is
- *  (CLAUDE.md parity: share the mechanism, not the intent). */
+ *  (CLAUDE.md parity: share the mechanism, not the intent).
+ *
+ *  [S112, RULED Josh] THE TOKEN PROVES WHO; THE BID'S CURRENT STATE DECIDES
+ *  WHETHER — read on every request from `bid_token_state()`
+ *  (20261860000000), the same rule `get_sub_bid_request` uses for the page.
+ *  Closed: cancelled / declined / expired, a line awarded to another sub, the
+ *  estimate converted, voided or deleted. _Superseded, quoted:_ this checked
+ *  only `is_deleted` and `expires_at`, so a cancelled bid's token went on
+ *  serving the scope documents (measured: 200, URL fetched) and accepting
+ *  uploads for the rest of its 14 days. */
 async function resolveToken(
   admin: ReturnType<typeof getSupabaseAdmin>,
   token: string
 ): Promise<
-  | { ok: true; row: { estimate_id: string; company_id: string } }
-  | { ok: false; res: NextResponse }
+  { ok: true; row: { estimate_id: string; company_id: string } } | { ok: false; res: NextResponse }
 > {
-  const { data: reqRow } = await admin
-    .from('estimate_sub_bid_requests')
-    .select('estimate_id, company_id, expires_at, is_deleted, status')
-    .eq('token', token)
-    .maybeSingle();
-  if (!reqRow || reqRow.is_deleted) {
-    return { ok: false, res: NextResponse.json({ error: 'This link is no longer valid.' }, { status: 404 }) };
+  const { data, error } = await admin.rpc('bid_token_state', { p_token: token });
+  const state = (data ?? [])[0] as
+    | { estimate_id: string; company_id: string; is_open: boolean; reason: string | null }
+    | undefined;
+  if (error) {
+    console.error('[/api/bid/[token]/files] bid_token_state failed', { message: error.message });
+    return {
+      ok: false,
+      res: NextResponse.json({ error: 'Could not check this link.' }, { status: 500 }),
+    };
   }
-  if (reqRow.expires_at && new Date(reqRow.expires_at as string) < new Date()) {
-    return { ok: false, res: NextResponse.json({ error: 'This link has expired.' }, { status: 410 }) };
+  if (!state) {
+    return {
+      ok: false,
+      res: NextResponse.json({ error: 'This link is no longer valid.' }, { status: 404 }),
+    };
   }
-  // [S112, RULED Josh] The bid's CURRENT status, read on every request — a
-  // cancelled or declined bid's token is refused at once, for GET and POST
-  // alike (one resolver, so they cannot drift). See BID_TOKEN_OPEN_STATUSES.
-  if (!bidTokenIsOpen(reqRow.status as string)) {
+  if (state.reason === 'expired') {
+    return {
+      ok: false,
+      res: NextResponse.json({ error: 'This link has expired.' }, { status: 410 }),
+    };
+  }
+  if (!state.is_open) {
     console.error('[/api/bid/[token]/files] refused: bid request not open', {
-      check: 'estimate_sub_bid_requests.status not in BID_TOKEN_OPEN_STATUSES',
-      status: reqRow.status,
-      estimateId: reqRow.estimate_id,
+      check: 'bid_token_state(p_token).is_open',
+      reason: state.reason,
+      estimateId: state.estimate_id,
     });
     return {
       ok: false,
       res: NextResponse.json({ error: 'This bid request is no longer open.' }, { status: 403 }),
     };
   }
-  return {
-    ok: true,
-    row: { estimate_id: reqRow.estimate_id as string, company_id: reqRow.company_id as string },
-  };
+  return { ok: true, row: { estimate_id: state.estimate_id, company_id: state.company_id } };
 }
 
 // GET — the SCOPE DOCUMENTS the estimator attached, so the sub can bid the plans
@@ -140,7 +154,8 @@ export async function POST(req: Request, { params }: { params: { token: string }
 
   const form = await req.formData();
   const file = form.get('file');
-  if (!(file instanceof File)) return NextResponse.json({ error: 'No file provided' }, { status: 400 });
+  if (!(file instanceof File))
+    return NextResponse.json({ error: 'No file provided' }, { status: 400 });
   if (file.size > MAX_SIZE) {
     return NextResponse.json({ error: 'File too large. Max size is 25 MB.' }, { status: 400 });
   }

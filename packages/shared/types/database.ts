@@ -10182,6 +10182,16 @@ export type Database = {
         Args: { p_member_id: string; p_week_end: string; p_week_start: string }
         Returns: number
       }
+      bid_token_state: {
+        Args: { p_token: string }
+        Returns: {
+          company_id: string
+          estimate_id: string
+          is_open: boolean
+          reason: string
+          request_id: string
+        }[]
+      }
       budget_line_policy_digest: {
         Args: never
         Returns: {
@@ -10283,6 +10293,10 @@ export type Database = {
           p_new_estimate_id: string
           p_new_subcategory_id: string
         }
+        Returns: string
+      }
+      close_sub_bid_request: {
+        Args: { p_request_id: string; p_status: string }
         Returns: string
       }
       company_ai_tags_this_month: { Args: never; Returns: number }
