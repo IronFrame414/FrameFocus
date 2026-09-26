@@ -62,7 +62,7 @@ project team members.
 | a | `/bid/{token}` | renders; **Submit bid** → row `submitted`, 1234 (via `submit_sub_bid_reply`, anon); documents route 200, scope PDF fetched 200 logged out. ⚠️ **the page itself names no document — on main and every branch; nothing calls the GET route. Pre-dates the lockdown.** |
 | b | `/invite/accept?token=` | form renders with the invitee (both invitation RPCs, anon); **signUp 200**; profile `crew_member` in the tenant; invitation `accepted`; the new login signs in → `/dashboard` |
 | c | `/sign/{token}` | typed signature → session `completed`, estimate `accepted` |
-| d | `/sign-co/{token}` | typed signature → session `completed`, change order `signed` (the complete route runs the CO budget path as the service role — migration 2's caller check admits it) |
+| d | `/sign-co/{token}` | typed signature → session `completed`, change order `signed` (signing calls `apply_change_order_budget` as the service role, `co-signing-service.ts:263`; a failure there is LOGGED, not thrown, so `signed` alone would not prove it — the run's captured server stderr carries no such error) |
 | e | `/auth/confirm?token_hash=…&type=recovery` | → `/reset-password`, new password set, **signed in with the new password** |
 
 ⚠️ **One thing (e) does NOT cover:** the self-service `/forgot-password` link goes through
