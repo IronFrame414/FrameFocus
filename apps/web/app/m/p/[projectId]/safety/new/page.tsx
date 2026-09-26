@@ -4,6 +4,7 @@ import { getMembers } from '@/lib/services/members';
 import { getCompanyTimeSettings } from '@/lib/services/company';
 import { companyToday } from '@framefocus/shared/utils/dates';
 import { IncidentForm, type RosterMember } from './incident-form';
+import { sectionSubLine } from '../../section-header';
 
 // M6M §4.12.5 — M-23 · Incident report (7e). "No contradictions — the
 // best-grounded screen in the handoff." A PAGE (D-28).
@@ -20,9 +21,10 @@ export default async function NewIncidentPage({
   params: { projectId: string };
   searchParams: { date?: string };
 }) {
-  const [project, members] = await Promise.all([
+  const [project, members, subLine] = await Promise.all([
     getProject(params.projectId),
     getMembers().catch(() => []),
+    sectionSubLine(params.projectId),
   ]);
   if (!project) notFound();
 
@@ -44,6 +46,7 @@ export default async function NewIncidentPage({
     <IncidentForm
       projectId={params.projectId}
       projectName={project.name}
+      subLine={subLine}
       roster={roster}
       initialDate={date}
     />

@@ -435,7 +435,9 @@ test.describe('M-3 · Project sections hub', () => {
     // The rendered colour, for the badges that have something to show.
     const punchBadge = page.getByTestId('m-tile-punch').getByTestId('m-tile-badge');
     expect(await punchBadge.evaluate((el) => getComputedStyle(el).color)).toBe(
-      'rgb(245, 158, 11)'
+      // #9d6506 — m6m.amber-text, RULED [Josh, S112 R6]: amber badge TEXT must
+      // clear AA on the white tile. Was rgb(245, 158, 11) #f59e0b (2.15:1).
+      'rgb(157, 101, 6)'
     );
     const photoBadge = page.getByTestId('m-tile-photos').getByTestId('m-tile-badge');
     expect(await photoBadge.evaluate((el) => getComputedStyle(el).color)).toBe(

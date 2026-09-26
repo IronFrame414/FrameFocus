@@ -46,11 +46,14 @@ const INCIDENT_TYPE_KEY: Record<IncidentType, MsgKey> = {
 export function IncidentForm({
   projectId,
   projectName,
+  subLine,
   roster,
   initialDate,
 }: {
   projectId: string;
   projectName: string;
+  /** §4.11's `PRJ-### · {client}` app-bar sub-line (section-header.tsx). */
+  subLine: string | null;
   roster: RosterMember[];
   initialDate: string;
 }) {
@@ -118,7 +121,13 @@ export function IncidentForm({
 
   return (
     <div className="pb-[18px]">
-      <SetMobileHeader title={t('project.incident.title')} sub={projectName} />
+      {/* [S112 audit F22, RULED Josh] The app bar names the SECTION, as every
+          safety screen's does (SectionHeader: section name + `PRJ-### ·
+          {client}`). _Superseded, quoted not deleted:_
+          `title={t('project.incident.title')} sub={projectName}` — the exact
+          title and project the red header directly beneath repeats. The red
+          header keeps both: it is 7e's identity. */}
+      <SetMobileHeader title={t('project.safety.title')} sub={subLine} />
 
       {/* The red header block — 7e's identity. */}
       <header

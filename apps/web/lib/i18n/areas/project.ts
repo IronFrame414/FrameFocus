@@ -36,6 +36,9 @@ export const en = {
   'project.hub.punchMineOne': '{n} mine',
   'project.hub.punchOpen': '{n} open',
   'project.hub.punchOpenOne': '{n} open',
+  // [S112 audit F11] The hub's app-bar title — the screen, not the project
+  // name, which the hero directly beneath already shows.
+  'project.hub.title': 'Project',
   'project.hub.daysLeft': 'Days left',
   'project.hub.punch': 'Punch',
   'project.hub.nothingScheduled': 'Nothing scheduled',
@@ -291,6 +294,7 @@ export const es: Record<keyof typeof en, string> = {
   'project.hub.punchMineOne': '{n} mío',
   'project.hub.punchOpen': '{n} abiertos',
   'project.hub.punchOpenOne': '{n} abierto',
+  'project.hub.title': 'Proyecto',
   'project.hub.daysLeft': 'Días restantes',
   'project.hub.punch': 'Pendientes',
   'project.hub.nothingScheduled': 'Nada programado',

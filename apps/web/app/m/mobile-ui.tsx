@@ -254,7 +254,7 @@ export function Tile({
 }) {
   const badgeClass =
     tone === 'amber'
-      ? 'text-m6m-amber'
+      ? 'text-m6m-amber-text' // [S112 R6] AA on the white tile; `amber` is 2.15:1
       : tone === 'danger'
         ? 'text-m6m-danger'
         : 'text-m6m-muted';
@@ -273,9 +273,18 @@ export function Tile({
       <span className="text-[15px] font-bold leading-none text-m6m-navy">{label}</span>
       {badge !== null && badge !== undefined ? (
         // §2 — every number is mono, badges included.
+        //
+        // [S112 R6] NOT truncated. `max-w-[60%] truncate` clipped the Punch
+        // badge's "{mine} mine · {total} open" (A-11b) to "3 mine · 4…". The
+        // badge now spans from just right of the 20px icon (12px pad + 20px +
+        // 8px gap = left 40px) to the right edge and WRAPS at a space instead.
+        // At 360px the tile is 157px wide, so the box is ~107px: English
+        // "12 mine · 34 open" (17 mono chars at 6.6px = 112px) and Spanish
+        // "12 míos · 34 abiertos" wrap to two 14px lines, ending at 38px — the
+        // label below starts at 49px (76 − 12 pad − 15), so they cannot meet.
         <span
           data-testid="m-tile-badge"
-          className={`absolute right-[10px] top-[10px] max-w-[60%] truncate text-right font-mono text-[11px] font-semibold ${badgeClass}`}
+          className={`absolute left-[40px] right-[10px] top-[10px] text-right font-mono text-[11px] font-semibold leading-[14px] ${badgeClass}`}
         >
           {badge}
         </span>
