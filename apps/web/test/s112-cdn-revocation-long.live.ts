@@ -38,6 +38,12 @@ const RUN = process.env.S112_CDN_LONG === '1';
 const TICK_MS = Number(process.env.S112_CDN_TICK_MS ?? 60_000);
 const MAX_MS = Number(process.env.S112_CDN_MAX_MS ?? 90 * 60_000);
 const SWEEP = process.env.S112_CDN_SWEEP === '1';
+// [S112, after the 90-min run] P2 is read only every Nth tick. The 90-min run
+// read both primed files every 60 s and both stayed HIT to t+5390 — 1,792 s
+// past the token's expiry. That cannot tell "the entry outlives its max-age"
+// from "our own polling keeps it warm". P1 keeps the 60 s cadence; P2 is left
+// alone for N ticks, so if the polling is what extends it, P2 stops first.
+const P2_EVERY = Number(process.env.S112_CDN_P2_EVERY ?? 1);
 const DISPOSABLE_NAME = 'DISPOSABLE S112 CDN PROBE — delete me';
 const EMAIL_PREFIX = 'disposable-s112-cdn-probe-';
 const BUCKET = 'project-files';
@@ -58,7 +64,12 @@ const urlFor = (p: string) =>
 async function get(t: string, p: string) {
   const r = await fetch(urlFor(p), { headers: { apikey: ANON, Authorization: `Bearer ${t}` } });
   await r.arrayBuffer();
-  return { s: r.status, cf: r.headers.get('cf-cache-status') ?? '-' };
+  return {
+    s: r.status,
+    cf: r.headers.get('cf-cache-status') ?? '-',
+    age: r.headers.get('age') ?? '-',
+    cc: r.headers.get('cache-control') ?? '-',
+  };
 }
 async function signIn() {
   const c = createClient(URL_, ANON, { auth: { persistSession: false } });
@@ -212,14 +223,12 @@ beforeAll(async () => {
     .single();
   expect(pErr, pErr?.message).toBeNull();
   projectId = (p as { id: string }).id;
-  const a = await admin
-    .from('project_assignments')
-    .insert({
-      company_id: companyId,
-      project_id: projectId,
-      member_id: memberId,
-      role_on_project: 'crew',
-    });
+  const a = await admin.from('project_assignments').insert({
+    company_id: companyId,
+    project_id: projectId,
+    member_id: memberId,
+    role_on_project: 'crew',
+  });
   expect(a.error, a.error?.message).toBeNull();
   for (const k of ['P1', 'P2', 'N1'] as const) {
     const id = crypto.randomUUID();
@@ -228,18 +237,16 @@ beforeAll(async () => {
     expect(
       (await admin.storage.from(BUCKET).upload(path, bytes, { contentType: 'image/webp' })).error
     ).toBeNull();
-    const ins = await admin
-      .from('files')
-      .insert({
-        id,
-        company_id: companyId,
-        project_id: projectId,
-        category: 'photos',
-        file_name: `disposable-${k}.webp`,
-        file_path: path,
-        file_size: bytes.length,
-        mime_type: 'image/webp',
-      });
+    const ins = await admin.from('files').insert({
+      id,
+      company_id: companyId,
+      project_id: projectId,
+      category: 'photos',
+      file_name: `disposable-${k}.webp`,
+      file_path: path,
+      file_size: bytes.length,
+      mime_type: 'image/webp',
+    });
     expect(ins.error, ins.error?.message).toBeNull();
     paths[k] = path;
   }
@@ -275,19 +282,24 @@ it.skipIf(!RUN)(
 
     const first: Record<string, number | null> = { P1: null, P2: null, N1_ever_served: null };
     let closedTicks = 0;
+    let tick = 0;
+    let p2 = { s: 200, cf: '-', age: '-', cc: '-' };
     while (Date.now() - t0 < MAX_MS) {
       const sec = Math.round((Date.now() - t0) / 1000);
       const p1 = await get(token, paths.P1);
-      const p2 = await get(token, paths.P2);
+      const readP2 = tick % P2_EVERY === 0;
+      if (readP2) p2 = await get(token, paths.P2);
+      tick++;
       const n1 = await get(token, paths.N1);
       if (p1.s !== 200 && first.P1 === null) first.P1 = sec;
-      if (p2.s !== 200 && first.P2 === null) first.P2 = sec;
+      if (readP2 && p2.s !== 200 && first.P2 === null) first.P2 = sec;
       if (n1.s === 200 && first.N1_ever_served === null) first.N1_ever_served = sec;
       const pastExp = Math.round(Date.now() / 1000 - tokenExp);
       console.log(
-        `[Q6 long] t+${sec}s (token ${pastExp > 0 ? `expired ${pastExp}s ago` : `valid ${-pastExp}s more`}) P1 ${p1.s}/${p1.cf} P2 ${p2.s}/${p2.cf} N1(never primed) ${n1.s}/${n1.cf}`
+        `[Q6 long] t+${sec}s (token ${pastExp > 0 ? `expired ${pastExp}s ago` : `valid ${-pastExp}s more`}) P1 ${p1.s}/${p1.cf}/age ${p1.age} P2 ${readP2 ? `${p2.s}/${p2.cf}/age ${p2.age}` : '(left alone)'} N1(never primed) ${n1.s}/${n1.cf}`
       );
       closedTicks = p1.s !== 200 && p2.s !== 200 ? closedTicks + 1 : 0;
+      if (tick === 1) console.log(`[Q6 long] cache-control on P1: ${p1.cc}`);
       if (closedTicks >= 3) break;
       await new Promise((r) => setTimeout(r, TICK_MS));
     }
