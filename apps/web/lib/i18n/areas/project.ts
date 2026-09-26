@@ -82,9 +82,9 @@ export const en = {
   // rather than as a bug (Josh: "legible ... rather than missing data").
   'project.changes.approvedHeading': 'Approved changes',
   'project.changes.summaryNoteCrew':
-    'Only approved change orders are listed: what changed, never the price. Amounts stay with the office.',
+    'Only approved change orders are listed: what changed, never the price. Pricing stays with the office.',
   'project.changes.summaryNotePm':
-    'Approved change orders written by someone else. You see what changed; the amount is for the owner, the admin and the author.',
+    'Approved change orders written by someone else. You see what changed; pricing is for the owner, the admin and the author.',
   'project.changes.noApproved': 'No approved change orders yet.',
   'project.changes.scopeOnly': 'Scope only',
   'project.approvedOn': 'approved {date}',
@@ -344,9 +344,9 @@ export const es: Record<keyof typeof en, string> = {
     'La oficina se encarga de las órdenes de cambio. Tu gerente de proyecto te puede decir qué cambió.',
   'project.changes.approvedHeading': 'Cambios aprobados',
   'project.changes.summaryNoteCrew':
-    'Solo se muestran las órdenes de cambio aprobadas: qué cambió, nunca el precio. Los montos los maneja la oficina.',
+    'Solo se muestran las órdenes de cambio aprobadas: qué cambió, nunca el precio. Los precios los maneja la oficina.',
   'project.changes.summaryNotePm':
-    'Órdenes de cambio aprobadas que escribió otra persona. Ves qué cambió; el monto es para el dueño, el administrador y quien la escribió.',
+    'Órdenes de cambio aprobadas que escribió otra persona. Ves qué cambió; el precio es para el dueño, el administrador y quien la escribió.',
   'project.changes.noApproved': 'Todavía no hay órdenes de cambio aprobadas.',
   'project.changes.scopeOnly': 'Solo alcance',
   'project.approvedOn': 'aprobada {date}',
