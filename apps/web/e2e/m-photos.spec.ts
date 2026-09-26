@@ -874,6 +874,99 @@ test.describe('the markup save', () => {
 });
 
 // ===========================================================================
+// [S112] THE SAVE, WALKED THE WAY A HUMAN WALKS IT.
+// ===========================================================================
+// ⚠️ NO page.goto AFTER THE LAUNCH. DO NOT "SIMPLIFY" THIS INTO ONE.
+//
+// The test above (A-23i) passed for the whole life of a production defect:
+// save a markup and the viewer came back UNMARKED; reopen the editor and the
+// drawing was gone. Both were the client Router Cache handing back a page the
+// browser already held: `router.refresh(); router.push()` had its refresh
+// DISCARDED by Next's action queue, and 14.2's default reused a visited page
+// for 30s without asking the server. A-23i never saw it because it opens the
+// editor with page.goto — a hard load gives the browser a cache it never had,
+// so the push after Save HAD to fetch. A human arrives at the editor from the
+// viewer, by taps, and returns to a viewer the client is still holding.
+//
+// So the ONE page.goto below is the launch: `/m`, the PWA's start_url — what
+// tapping the home-screen icon does. Everything after it is a tap. Replacing
+// any tap with a goto re-creates the blind spot this test exists to close.
+//
+// It must also finish inside the 30s window the defect lived in, or it would
+// pass against the old code for the wrong reason; the elapsed-time assertion
+// at the end is that guard, not a performance check.
+test.describe('[S112] the markup save, by taps', () => {
+  test('viewer → ⋮ → Markup → draw → Save → viewer is marked → reopen keeps the drawing', async ({
+    page,
+  }) => {
+    const target = px.humanPath;
+
+    // Launch. The only navigation that is not a tap.
+    await page.goto('/m');
+
+    // Projects tab → the fixture project → Photos → the photo.
+    await page.getByTestId('m-tab-projects').click();
+    await page.locator(`a[href="/m/p/${fx.futureProject}"]`).first().click();
+    await expect(page).toHaveURL(new RegExp(`/m/p/${fx.futureProject}$`));
+    await page.getByTestId('m-tile-photos').click();
+    await expect(page).toHaveURL(new RegExp(`/m/p/${fx.futureProject}/photos$`));
+    await tile(page, target.id).click();
+    await expect(page).toHaveURL(new RegExp(`/photos/${target.id}$`));
+    // The viewer is now a page the client holds. The clock starts here.
+    const viewerFirstSeen = Date.now();
+    await expect(page.getByTestId('m-viewer-markup-indicator')).toHaveCount(0);
+
+    // ⋮ → Markup, by tap.
+    await page.getByTestId('m-viewer-overflow').click();
+    await page.getByTestId('m-viewer-markup').click();
+    await expect(page).toHaveURL(new RegExp(`/photos/${target.id}/markup$`));
+    const svg = page.getByTestId('m-markup-svg');
+    await expect(svg).toBeVisible();
+    await expect(svg.locator('rect')).toHaveCount(0);
+
+    // Draw one box, Save.
+    const box = await svg.boundingBox();
+    await page.getByTestId('m-tool-rectangle').click();
+    await page.mouse.move(box!.x + 40, box!.y + 40);
+    await page.mouse.down();
+    await page.mouse.move(box!.x + 100, box!.y + 100, { steps: 6 });
+    await page.mouse.up();
+    await expect(svg.locator('rect')).toHaveCount(1);
+    await page.getByTestId('m-markup-save').click();
+
+    // Symptom 1 — back on the viewer, it must already be the MARKED photo.
+    await expect(page).toHaveURL(new RegExp(`/photos/${target.id}$`), { timeout: 20_000 });
+    await expect(page.getByTestId('m-save-note')).toHaveCount(0);
+    await expect(page.getByTestId('m-viewer-markup-indicator')).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByTestId('m-stage-image')).toHaveAttribute('src', /\.markup\.jpg\?/);
+
+    // Symptom 2 — reopen by tap: the editor must start from the saved drawing.
+    await page.getByTestId('m-viewer-overflow').click();
+    await page.getByTestId('m-viewer-markup').click();
+    await expect(page).toHaveURL(new RegExp(`/photos/${target.id}/markup$`));
+    await expect(page.getByTestId('m-markup-svg').locator('rect')).toHaveCount(1);
+
+    // The guard: all of the above happened inside the old 30s reuse window,
+    // so under the old code this test would have gone red rather than passed.
+    expect(Date.now() - viewerFirstSeen).toBeLessThan(30_000);
+
+    // Reset. Read the markup first: the thumbnail's name is derived from it.
+    const { data: saved } = await fx.admin
+      .from('files')
+      .select('markup_data')
+      .eq('id', target.id)
+      .single();
+    await fx.admin.from('files').update({ markup_data: null }).eq('id', target.id);
+    await fx.admin.storage
+      .from('project-files')
+      .remove([
+        derivativePathFor(target.path),
+        thumbPathFor(target.path, saved?.markup_data ?? null),
+      ]);
+  });
+});
+
+// ===========================================================================
 // A-25d / A-22e — THE HALVES A CREW IDENTITY CANNOT REACH.
 //
 // Everything above runs as CREW, which is right: it is the least-privileged
