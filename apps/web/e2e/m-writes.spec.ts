@@ -1,6 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
 import { signInAs } from './sign-in-as';
-import { adminClient } from './hub-fixture';
+import { COMPANY_A, adminClient } from './hub-fixture';
 import { withThumbnails } from './storage-cleanup';
 
 // M6M Part C — the write paths. D-51 (CO create → edit → send), D-52 as
@@ -112,7 +112,12 @@ async function createDraftCo(page: Page, title: string): Promise<string> {
 async function cleanUpFixtures(): Promise<Record<string, number>> {
   const admin = adminClient();
   const removed: Record<string, number> = {
-    coRows: 0, coLines: 0, cos: 0, punchItems: 0, punchLists: 0, files: 0,
+    coRows: 0,
+    coLines: 0,
+    cos: 0,
+    punchItems: 0,
+    punchLists: 0,
+    files: 0,
   };
 
   // ── Change orders ───────────────────────────────────────────────────────
@@ -147,7 +152,10 @@ async function cleanUpFixtures(): Promise<Record<string, number>> {
     const { count } = await admin
       .from('change_orders')
       .delete({ count: 'exact' })
-      .in('id', (cos ?? []).map((c) => c.id));
+      .in(
+        'id',
+        (cos ?? []).map((c) => c.id)
+      );
     removed.cos += count ?? 0;
   }
 
@@ -179,14 +187,14 @@ async function cleanUpFixtures(): Promise<Record<string, number>> {
     const { count } = await admin
       .from('punch_list_items')
       .delete({ count: 'exact' })
-      .in('id', (items ?? []).map((i) => i.id));
+      .in(
+        'id',
+        (items ?? []).map((i) => i.id)
+      );
     removed.punchItems += count ?? 0;
   }
   if (listIds.length > 0) {
-    const { count } = await admin
-      .from('punch_lists')
-      .delete({ count: 'exact' })
-      .in('id', listIds);
+    const { count } = await admin.from('punch_lists').delete({ count: 'exact' }).in('id', listIds);
     removed.punchLists += count ?? 0;
   }
 
@@ -1084,7 +1092,9 @@ test.describe('D-65 · Team or Sub/Vendor first, then the list', () => {
     await page.goto(`/m/p/${PROJECT}/punch/new`);
 
     const memberOptions = () =>
-      page.locator('[data-testid^="m-punch-assignee-"]:not([data-testid^="m-punch-assignee-side-"])');
+      page.locator(
+        '[data-testid^="m-punch-assignee-"]:not([data-testid^="m-punch-assignee-side-"])'
+      );
 
     await page.getByTestId('m-punch-assignee-side-crew').click();
     const crewCount = await memberOptions().count();
@@ -1137,7 +1147,9 @@ test.describe('D-65 · Team or Sub/Vendor first, then the list', () => {
     await page.goto(`/m/p/${PROJECT}/punch/new`);
 
     const memberOptions = () =>
-      page.locator('[data-testid^="m-punch-assignee-"]:not([data-testid^="m-punch-assignee-side-"])');
+      page.locator(
+        '[data-testid^="m-punch-assignee-"]:not([data-testid^="m-punch-assignee-side-"])'
+      );
 
     const admin = adminClient();
     const { data: roster } = await admin
@@ -1182,8 +1194,11 @@ test.describe('D-65 · Team or Sub/Vendor first, then the list', () => {
 
     // Open the item and confirm the assignee is the one picked — proof the
     // two-step wrote `assignee_id` and did not merely look right.
-    await page.getByTestId('m-punch-row').filter({ hasText: `E2E Assigned ${id}` })
-      .getByTestId('m-row-link').click();
+    await page
+      .getByTestId('m-punch-row')
+      .filter({ hasText: `E2E Assigned ${id}` })
+      .getByTestId('m-row-link')
+      .click();
     await expect(page).toHaveURL(/\/punch\/[0-9a-f-]{36}$/, { timeout: 20_000 });
     await expect(page.getByTestId('m-content')).toContainText(who);
   });
@@ -1542,8 +1557,14 @@ test.describe('M-40 · team edit writes both tables', () => {
     const { data: target } = await db
       .from('company_members')
       .select('id, display_name, profile_id')
+      // [S112] SCOPED to the signed-in user's company and ORDERED (CLAUDE.md,
+      // .limit(1) category 2): unscoped, a member of ANOTHER tenant was picked in
+      // CI run 36243095129 and the owner correctly got "not found".
+      .eq('company_id', COMPANY_A)
       .not('profile_id', 'is', null)
       .eq('is_deleted', false)
+      .order('created_at')
+      .order('id')
       .limit(1)
       .single();
     expect(target, 'no member with a profile to edit').toBeTruthy();
@@ -1597,8 +1618,14 @@ test.describe('M-40 · team edit writes both tables', () => {
     const { data: noProfile } = await db
       .from('company_members')
       .select('id')
+      // [S112] SCOPED to the signed-in user's company and ORDERED (CLAUDE.md,
+      // .limit(1) category 2): unscoped, a member of ANOTHER tenant was picked in
+      // CI run 36243095129 and the owner correctly got "not found".
+      .eq('company_id', COMPANY_A)
       .is('profile_id', null)
       .eq('is_deleted', false)
+      .order('created_at')
+      .order('id')
       .limit(1)
       .single();
     expect(noProfile, 'every member has a profile — A-47 s trap cannot be tested').toBeTruthy();
@@ -1619,7 +1646,13 @@ test.describe('M-40 · team edit writes both tables', () => {
     const { data: any1 } = await db
       .from('company_members')
       .select('id')
+      // [S112] SCOPED to the signed-in user's company and ORDERED (CLAUDE.md,
+      // .limit(1) category 2): unscoped, a member of ANOTHER tenant was picked in
+      // CI run 36243095129 and the owner correctly got "not found".
+      .eq('company_id', COMPANY_A)
       .eq('is_deleted', false)
+      .order('created_at')
+      .order('id')
       .limit(1)
       .single();
 
