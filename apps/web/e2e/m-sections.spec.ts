@@ -328,6 +328,32 @@ test.describe('A-33c · no money on M-13 under ANY role', () => {
 // M-14 Punch — §4.11.4
 // ===========================================================================
 test.describe('M-14 · Punch List', () => {
+  // [S112 R2] A tap that STAYS inside the project is not reached by
+  // app/m/loading.tsx (the /m boundary does not remount), so it was a dead tap
+  // for the whole 3s the next screen took. The shell's pending bar covers it.
+  // Measured before the bar: 0 of 4 punch-row taps changed by 800ms.
+  test('R2 · a held punch-row tap shows the pending bar at once, and it clears on arrival', async ({
+    page,
+  }) => {
+    await page.goto(routeFor('punch')); // no filter = All
+    const row = page.getByTestId('m-punch-row').first();
+    // Not a skip: a green skip over an empty list would read as a pass.
+    await expect(row, 'no punch item on the fixture — the test would be vacuous').toBeVisible();
+    let hold = true;
+    await page.route('**/*', async (route) => {
+      if (hold && route.request().headers()['rsc'] === '1') {
+        await new Promise((r) => setTimeout(r, 3000));
+      }
+      await route.continue().catch(() => {});
+    });
+    const from = page.url();
+    await row.getByTestId('m-row-link').click({ noWaitAfter: true });
+    await expect(page.getByTestId('m-nav-pending')).toBeVisible({ timeout: 800 });
+    await page.waitForURL((u) => u.toString() !== from, { timeout: 15_000 });
+    hold = false;
+    await expect(page.getByTestId('m-nav-pending')).toHaveCount(0);
+  });
+
   test('chips are Mine / Open / All and each changes the list', async ({ page }) => {
     await page.goto(routeFor('punch'));
     const chips = page.getByTestId('m-chips').getByRole('link');

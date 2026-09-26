@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { useCallback, useEffect, useState } from 'react';
+import { Suspense, useCallback, useEffect, useState } from 'react';
 import {
   Camera,
   ChevronLeft,
@@ -37,6 +37,7 @@ import { getOpenClockProjectId } from '@/lib/services/time-tracking-client';
 import { MobileChatOverlay } from '@/components/chat/mobile-chat-overlay';
 import { useT } from '@/components/i18n/language-provider';
 import { M_LIBRARY_INPUT_ID } from './library-input';
+import { NavPending } from './nav-pending';
 import type { MsgKey, T } from '@/lib/i18n/messages';
 
 // M6M §3 — THE MOBILE SHELL.
@@ -554,6 +555,11 @@ function MobileShellInner({
       {/* CONTENT + SHEET HOST                                                */}
       {/* ------------------------------------------------------------------ */}
       <div className="relative min-h-0 flex-1">
+        {/* S112 R2 — the pending bar for taps app/m/loading.tsx cannot reach.
+            Suspense: useSearchParams() needs a boundary in Next 14. */}
+        <Suspense fallback={null}>
+          <NavPending />
+        </Suspense>
         {/* FAB CLEARANCE — one rule here, not 48 per-page paddings [/m visual
             sweep, 2026-09-24]. The camera overhangs this region by 15px, so
             every screen's last row ended under it (28 screens cleared it by
