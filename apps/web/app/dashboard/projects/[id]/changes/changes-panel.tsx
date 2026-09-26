@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useConfirm } from '@/components/confirm/confirm-provider';
 import type { RedactedCo } from '@/lib/co-redaction';
+import type { ApprovedCoSummary } from '@/lib/change-orders/summaries';
 import {
   createChangeOrder,
   softDeleteChangeOrder,
@@ -69,6 +70,14 @@ interface ChangesPanelProps {
    * would be worse than no caption.
    */
   canSeeSums: boolean;
+  /**
+   * [S112 R5b] Approved change orders the caller does NOT hold in full, as
+   * scope only — no figure exists in these rows. null = not a summary reader
+   * (Owner/Admin hold every row).
+   */
+  approvedSummaries: ApprovedCoSummary[] | null;
+  /** Foreman/crew: no full rows at all, so the summaries replace cards + table. */
+  summariesOnly: boolean;
 }
 
 export function ChangesPanel({
@@ -80,6 +89,8 @@ export function ChangesPanel({
   canDelete,
   canSeeFinancials,
   canSeeSums,
+  approvedSummaries,
+  summariesOnly,
 }: ChangesPanelProps) {
   const router = useRouter();
   const confirm = useConfirm();
@@ -263,201 +274,304 @@ export function ChangesPanel({
         </form>
       )}
 
-      {/* Summary — 3 cards (ui-06 §4) */}
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(3, 1fr)',
-          gap: '14px',
-          marginBottom: '18px',
-        }}
-      >
-        {summaryCards.map((card) => (
-          <div key={card.label} style={{ ...cardStyle, padding: '16px 17px' }}>
-            <div style={microLabelStyle}>{card.label}</div>
-            <div
-              style={{
-                fontFamily: font.mono,
-                fontSize: '28px',
-                fontWeight: 600,
-                color: card.valueColor,
-                margin: '4px 0 2px',
-              }}
-            >
-              {card.value}
-            </div>
-            <div style={{ fontSize: '12px', color: color.muted }}>{card.caption}</div>
-          </div>
-        ))}
-      </div>
-
-      {/* CO table */}
-      {changeOrders.length === 0 ? (
-        <div style={{ ...cardStyle, padding: '48px', textAlign: 'center', color: color.muted }}>
-          No change orders yet.
-          {canManage && ' Create one to record added or removed scope.'}
-        </div>
+      {summariesOnly ? (
+        <ApprovedSummaries
+          summaries={approvedSummaries ?? []}
+          note="Only approved change orders are listed: what changed, never the price. Amounts stay with the office."
+        />
       ) : (
-        <div style={{ ...cardStyle, overflow: 'hidden' }}>
+        <>
+          {/* Summary — 3 cards (ui-06 §4) */}
           <div
             style={{
               display: 'grid',
-              gridTemplateColumns: gridTemplate,
-              gap: '12px',
-              padding: '12px 20px',
-              backgroundColor: color.tableHeadBg,
-              borderBottom: `1px solid ${color.neutralBadgeBg}`,
+              gridTemplateColumns: 'repeat(3, 1fr)',
+              gap: '14px',
+              marginBottom: '18px',
             }}
           >
-            <span style={microLabelStyle}>CO #</span>
-            <span style={microLabelStyle}>Description</span>
-            {canSeeFinancials && (
-              <span style={{ ...microLabelStyle, textAlign: 'right' }}>Amount</span>
-            )}
-            <span style={microLabelStyle}>Status</span>
-            <span style={microLabelStyle}>Impact</span>
-            <span style={microLabelStyle}>Sent</span>
-            {canSeeFinancials && canDelete && <span />}
+            {summaryCards.map((card) => (
+              <div key={card.label} style={{ ...cardStyle, padding: '16px 17px' }}>
+                <div style={microLabelStyle}>{card.label}</div>
+                <div
+                  style={{
+                    fontFamily: font.mono,
+                    fontSize: '28px',
+                    fontWeight: 600,
+                    color: card.valueColor,
+                    margin: '4px 0 2px',
+                  }}
+                >
+                  {card.value}
+                </div>
+                <div style={{ fontSize: '12px', color: color.muted }}>{card.caption}</div>
+              </div>
+            ))}
           </div>
-          {noImpactCount > 0 && (
-            <div
-              style={{
-                padding: '7px 20px',
-                fontSize: '12px',
-                color: color.warning,
-                backgroundColor: color.rowTintAttention,
-                borderBottom: `1px solid ${color.neutralBadgeBg}`,
-              }}
-            >
-              {noImpactCount} CO{noImpactCount === 1 ? ' has' : 's have'} no schedule impact
-              entered
-            </div>
-          )}
 
-          {changeOrders.map((co, i) => {
-            const badge = STATUS_BADGES[co.status];
-            return (
+          {/* CO table */}
+          {changeOrders.length === 0 ? (
+            <div style={{ ...cardStyle, padding: '48px', textAlign: 'center', color: color.muted }}>
+              No change orders yet.
+              {canManage && ' Create one to record added or removed scope.'}
+            </div>
+          ) : (
+            <div style={{ ...cardStyle, overflow: 'hidden' }}>
               <div
-                key={co.id}
-                // S109 #163 — was a bare onClick: mouse-only, unannounced. The
-                // delete span's own stopPropagation stays; the primitive's guard
-                // is the second layer.
-                {...rowActivation(
-                  () => router.push(`/dashboard/projects/${projectId}/changes/${co.id}`),
-                  `Open change order ${co.co_number ?? ''}`.trim()
-                )}
-                onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = color.tableHeadBg)}
-                onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
                 style={{
                   display: 'grid',
                   gridTemplateColumns: gridTemplate,
                   gap: '12px',
-                  alignItems: 'center',
-                  padding: '15px 20px',
-                  borderBottom:
-                    i === changeOrders.length - 1 ? 'none' : `1px solid ${color.rowDivider}`,
-                  cursor: 'pointer',
+                  padding: '12px 20px',
+                  backgroundColor: color.tableHeadBg,
+                  borderBottom: `1px solid ${color.neutralBadgeBg}`,
                 }}
               >
-                <span style={{ fontFamily: font.mono, fontSize: '13px', fontWeight: 600, color: color.faint }}>
-                  {co.co_number}
-                </span>
-                <span style={{ fontFamily: font.sans, fontSize: '14px', fontWeight: 600, color: color.navy }}>
-                  {co.title}
-                </span>
-                {/* `net_delta !== null` is NOT belt-and-braces — it is what
+                <span style={microLabelStyle}>CO #</span>
+                <span style={microLabelStyle}>Description</span>
+                {canSeeFinancials && (
+                  <span style={{ ...microLabelStyle, textAlign: 'right' }}>Amount</span>
+                )}
+                <span style={microLabelStyle}>Status</span>
+                <span style={microLabelStyle}>Impact</span>
+                <span style={microLabelStyle}>Sent</span>
+                {canSeeFinancials && canDelete && <span />}
+              </div>
+              {noImpactCount > 0 && (
+                <div
+                  style={{
+                    padding: '7px 20px',
+                    fontSize: '12px',
+                    color: color.warning,
+                    backgroundColor: color.rowTintAttention,
+                    borderBottom: `1px solid ${color.neutralBadgeBg}`,
+                  }}
+                >
+                  {noImpactCount} CO{noImpactCount === 1 ? ' has' : 's have'} no schedule impact
+                  entered
+                </div>
+              )}
+
+              {changeOrders.map((co, i) => {
+                const badge = STATUS_BADGES[co.status];
+                return (
+                  <div
+                    key={co.id}
+                    // S109 #163 — was a bare onClick: mouse-only, unannounced. The
+                    // delete span's own stopPropagation stays; the primitive's guard
+                    // is the second layer.
+                    {...rowActivation(
+                      () => router.push(`/dashboard/projects/${projectId}/changes/${co.id}`),
+                      `Open change order ${co.co_number ?? ''}`.trim()
+                    )}
+                    onMouseEnter={(e) =>
+                      (e.currentTarget.style.backgroundColor = color.tableHeadBg)
+                    }
+                    onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: gridTemplate,
+                      gap: '12px',
+                      alignItems: 'center',
+                      padding: '15px 20px',
+                      borderBottom:
+                        i === changeOrders.length - 1 ? 'none' : `1px solid ${color.rowDivider}`,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <span
+                      style={{
+                        fontFamily: font.mono,
+                        fontSize: '13px',
+                        fontWeight: 600,
+                        color: color.faint,
+                      }}
+                    >
+                      {co.co_number}
+                    </span>
+                    <span
+                      style={{
+                        fontFamily: font.sans,
+                        fontSize: '14px',
+                        fontWeight: 600,
+                        color: color.navy,
+                      }}
+                    >
+                      {co.title}
+                    </span>
+                    {/* `net_delta !== null` is NOT belt-and-braces — it is what
                     makes the compiler prove the figure exists here. It is null
                     for exactly the roles `canSeeFinancials` is false for, so
                     the two conditions agree by construction; the second one is
                     the machine-checkable half. */}
-                {canSeeFinancials && co.net_delta !== null && (
-                  <span
-                    style={{
-                      fontFamily: font.mono,
-                      fontSize: '14px',
-                      fontWeight: 600,
-                      textAlign: 'right',
-                      // Negative COs (credits) render RED per §S4 (round 2).
-                      color: co.net_delta < 0 ? color.danger : color.navy,
-                    }}
-                  >
-                    {co.net_delta < 0 ? '−' : ''}
-                    {money(co.net_delta)}
-                  </span>
-                )}
-                <span>
-                  <span style={{ ...badgeStyle, backgroundColor: badge.bg, color: badge.fg }}>
-                    {badge.label}
-                  </span>
-                  {/* §8.8.2 CO age — drafts wear how long they have sat. */}
-                  {co.status === 'draft' && co.created_at && (
-                    <span
-                      style={{
-                        display: 'block',
-                        fontSize: '10.5px',
-                        color: color.faint,
-                        marginTop: '3px',
-                      }}
-                    >
-                      in draft{' '}
-                      {Math.max(
-                        0,
-                        Math.floor((Date.now() - new Date(co.created_at).getTime()) / 86_400_000)
-                      )}
-                      d
-                    </span>
-                  )}
-                </span>
-                {/* §8.8.2 schedule impact — NULL renders as the mockup's "no
-                    impact entered" state, never a fake +0. */}
-                <span
-                  style={{
-                    fontFamily: font.mono,
-                    fontSize: '12px',
-                    color: co.schedule_impact_days === null ? color.faintAlt : color.bodyAlt,
-                  }}
-                >
-                  {co.schedule_impact_days === null
-                    ? 'not entered'
-                    : `${co.schedule_impact_days >= 0 ? '+' : ''}${co.schedule_impact_days} days`}
-                </span>
-                <span
-                  style={{
-                    fontFamily: font.mono,
-                    fontSize: '12px',
-                    fontWeight: 500,
-                    color: co.sent_at ? color.muted : color.faintAlt,
-                  }}
-                >
-                  {co.sent_at ? new Date(co.sent_at).toLocaleDateString() : '—'}
-                </span>
-                {canSeeFinancials && canDelete && (
-                  <span onClick={(e) => e.stopPropagation()}>
-                    {co.status !== 'signed' && (
-                      <button
-                        type="button"
-                        onClick={() => handleDelete(co)}
+                    {canSeeFinancials && co.net_delta !== null && (
+                      <span
                         style={{
-                          padding: '4px 10px',
-                          fontSize: '12px',
+                          fontFamily: font.mono,
+                          fontSize: '14px',
                           fontWeight: 600,
-                          color: color.danger,
-                          backgroundColor: '#fff',
-                          border: '1px solid #fecaca',
-                          borderRadius: '8px',
-                          cursor: 'pointer',
+                          textAlign: 'right',
+                          // Negative COs (credits) render RED per §S4 (round 2).
+                          color: co.net_delta < 0 ? color.danger : color.navy,
                         }}
                       >
-                        Delete
-                      </button>
+                        {co.net_delta < 0 ? '−' : ''}
+                        {money(co.net_delta)}
+                      </span>
                     )}
+                    <span>
+                      <span style={{ ...badgeStyle, backgroundColor: badge.bg, color: badge.fg }}>
+                        {badge.label}
+                      </span>
+                      {/* §8.8.2 CO age — drafts wear how long they have sat. */}
+                      {co.status === 'draft' && co.created_at && (
+                        <span
+                          style={{
+                            display: 'block',
+                            fontSize: '10.5px',
+                            color: color.faint,
+                            marginTop: '3px',
+                          }}
+                        >
+                          in draft{' '}
+                          {Math.max(
+                            0,
+                            Math.floor(
+                              (Date.now() - new Date(co.created_at).getTime()) / 86_400_000
+                            )
+                          )}
+                          d
+                        </span>
+                      )}
+                    </span>
+                    {/* §8.8.2 schedule impact — NULL renders as the mockup's "no
+                    impact entered" state, never a fake +0. */}
+                    <span
+                      style={{
+                        fontFamily: font.mono,
+                        fontSize: '12px',
+                        color: co.schedule_impact_days === null ? color.faintAlt : color.bodyAlt,
+                      }}
+                    >
+                      {co.schedule_impact_days === null
+                        ? 'not entered'
+                        : `${co.schedule_impact_days >= 0 ? '+' : ''}${co.schedule_impact_days} days`}
+                    </span>
+                    <span
+                      style={{
+                        fontFamily: font.mono,
+                        fontSize: '12px',
+                        fontWeight: 500,
+                        color: co.sent_at ? color.muted : color.faintAlt,
+                      }}
+                    >
+                      {co.sent_at ? new Date(co.sent_at).toLocaleDateString() : '—'}
+                    </span>
+                    {canSeeFinancials && canDelete && (
+                      <span onClick={(e) => e.stopPropagation()}>
+                        {co.status !== 'signed' && (
+                          <button
+                            type="button"
+                            onClick={() => handleDelete(co)}
+                            style={{
+                              padding: '4px 10px',
+                              fontSize: '12px',
+                              fontWeight: 600,
+                              color: color.danger,
+                              backgroundColor: '#fff',
+                              border: '1px solid #fecaca',
+                              borderRadius: '8px',
+                              cursor: 'pointer',
+                            }}
+                          >
+                            Delete
+                          </button>
+                        )}
+                      </span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          {approvedSummaries && approvedSummaries.length > 0 && (
+            <ApprovedSummaries
+              summaries={approvedSummaries}
+              note="Approved change orders written by someone else. You see what changed; the amount is for the owner, the admin and the author."
+            />
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+/**
+ * [S112 R5b] Approved change orders as SCOPE ONLY. Not clickable: the detail
+ * page is refused to these readers by the S121 row floor. The "Scope only"
+ * badge and the note state the boundary, so a missing amount reads as a rule
+ * rather than as missing data.
+ */
+function ApprovedSummaries({ summaries, note }: { summaries: ApprovedCoSummary[]; note: string }) {
+  return (
+    <section data-testid="co-summaries" style={{ marginTop: '18px' }}>
+      <div style={{ ...microLabelStyle, marginBottom: '4px' }}>Approved changes</div>
+      <p style={{ fontSize: '13px', color: color.muted, margin: '0 0 10px' }}>{note}</p>
+      {summaries.length === 0 ? (
+        <div style={{ ...cardStyle, padding: '32px', textAlign: 'center', color: color.muted }}>
+          No approved change orders yet.
+        </div>
+      ) : (
+        <div style={{ ...cardStyle, overflow: 'hidden' }}>
+          {summaries.map((co, i) => (
+            <div
+              key={co.id}
+              data-testid="co-summary-row"
+              style={{
+                padding: '14px 20px',
+                borderTop: i === 0 ? 'none' : `1px solid ${color.neutralBadgeBg}`,
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ fontFamily: font.mono, fontSize: '12px', color: color.muted }}>
+                  {co.co_number}
+                </span>
+                <span
+                  style={{
+                    ...badgeStyle,
+                    backgroundColor: color.neutralBadgeBg,
+                    color: color.muted,
+                  }}
+                >
+                  Scope only
+                </span>
+                {co.signed_at && (
+                  <span style={{ fontFamily: font.mono, fontSize: '12px', color: color.muted }}>
+                    approved {new Date(co.signed_at).toLocaleDateString()}
                   </span>
                 )}
               </div>
-            );
-          })}
+              <div
+                style={{ fontSize: '15px', fontWeight: 700, color: color.body, marginTop: '4px' }}
+              >
+                {co.title}
+              </div>
+              {co.description && (
+                <div
+                  style={{
+                    fontSize: '13px',
+                    color: color.bodyAlt,
+                    marginTop: '4px',
+                    whiteSpace: 'pre-line',
+                  }}
+                >
+                  {co.description}
+                </div>
+              )}
+            </div>
+          ))}
         </div>
       )}
-    </div>
+    </section>
   );
 }

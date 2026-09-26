@@ -1,7 +1,8 @@
 import { createClient } from '@/lib/supabase-server';
 import { redirect } from 'next/navigation';
 import { redactCo } from '@/lib/co-redaction';
-import { getChangeOrders } from '@/lib/services/change-orders';
+import { getApprovedCoSummaries, getChangeOrders } from '@/lib/services/change-orders';
+import { readsCoSummaries, summariesToShow } from '@/lib/change-orders/summaries';
 import { getRevisedContract } from '@/lib/services/contract-value';
 import { getProject } from '@/lib/services/projects';
 import { ChangesPanel } from './changes-panel';
@@ -31,6 +32,17 @@ export default async function ProjectChangesPage({ params }: { params: { id: str
     getProject(params.id),
     getRevisedContract(params.id),
   ]);
+
+  // [S112 R5b, RULED Josh] Approved change orders as a NO-MONEY summary, for
+  // every staff role on projects they can view. Same service and the same
+  // summariesToShow() as /m (PARITY): the database returns no figure, and a CO
+  // the caller already holds in full is never repeated as a summary.
+  const approvedSummaries = readsCoSummaries(profile.role)
+    ? summariesToShow(
+        await getApprovedCoSummaries(params.id),
+        changeOrders.map((co) => co.id)
+      )
+    : null;
 
   const canManage = ['owner', 'admin', 'project_manager'].includes(profile.role);
   const canDelete = ['owner', 'admin'].includes(profile.role);
@@ -80,6 +92,11 @@ export default async function ProjectChangesPage({ params }: { params: { id: str
       // authors is not a figure the authored-by ruling grants a PM, and a
       // PARTIAL total labelled "pending" would be worse than none.
       canSeeSums={isFinanceRole}
+      approvedSummaries={approvedSummaries}
+      // Foreman and crew hold NO full rows (S121 read floor), so the count
+      // cards and the table would state zero about a project that has change
+      // orders. For them the summaries ARE the list.
+      summariesOnly={!canManage}
     />
   );
 }

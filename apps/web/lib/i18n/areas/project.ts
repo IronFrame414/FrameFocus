@@ -77,6 +77,17 @@ export const en = {
   // orders." would be false for them. Worded by role, like shell.denied.coRead.
   'project.changes.officeOnly':
     'Change orders are handled by the office. Your project manager can tell you what changed.',
+  // [S112 R5b] The no-money summary of an APPROVED change order. The two notes
+  // say out loud why the figure is missing, so the boundary reads as deliberate
+  // rather than as a bug (Josh: "legible ... rather than missing data").
+  'project.changes.approvedHeading': 'Approved changes',
+  'project.changes.summaryNoteCrew':
+    'Only approved change orders are listed: what changed, never the price. Amounts stay with the office.',
+  'project.changes.summaryNotePm':
+    'Approved change orders written by someone else. You see what changed; the amount is for the owner, the admin and the author.',
+  'project.changes.noApproved': 'No approved change orders yet.',
+  'project.changes.scopeOnly': 'Scope only',
+  'project.approvedOn': 'approved {date}',
   'project.co.title': 'Change Order',
   'project.co.titleField': 'Title',
   'project.co.description': 'Description',
@@ -331,6 +342,14 @@ export const es: Record<keyof typeof en, string> = {
   'project.changes.empty': 'No hay órdenes de cambio.',
   'project.changes.officeOnly':
     'La oficina se encarga de las órdenes de cambio. Tu gerente de proyecto te puede decir qué cambió.',
+  'project.changes.approvedHeading': 'Cambios aprobados',
+  'project.changes.summaryNoteCrew':
+    'Solo se muestran las órdenes de cambio aprobadas: qué cambió, nunca el precio. Los montos los maneja la oficina.',
+  'project.changes.summaryNotePm':
+    'Órdenes de cambio aprobadas que escribió otra persona. Ves qué cambió; el monto es para el dueño, el administrador y quien la escribió.',
+  'project.changes.noApproved': 'Todavía no hay órdenes de cambio aprobadas.',
+  'project.changes.scopeOnly': 'Solo alcance',
+  'project.approvedOn': 'aprobada {date}',
   'project.co.title': 'Orden de cambio',
   'project.co.titleField': 'Título',
   'project.co.description': 'Descripción',
@@ -375,7 +394,8 @@ export const es: Record<keyof typeof en, string> = {
   'project.coActions.reissuing': 'Emitiendo…',
   'project.coActions.voided': 'Anulada.',
   'project.coActions.deletePermanently': 'Eliminar para siempre',
-  'project.coActions.deleteNote': 'Eliminarla no deja ningún registro. Para conservarlo, mejor anúlala.',
+  'project.coActions.deleteNote':
+    'Eliminarla no deja ningún registro. Para conservarlo, mejor anúlala.',
   'project.coCreate.typeFixed': 'Precio fijo',
   'project.coCreate.typeFixedSub': 'una suma global acordada',
   'project.coCreate.typeCostPlus': 'Costo más margen',
@@ -403,7 +423,8 @@ export const es: Record<keyof typeof en, string> = {
   'project.coEditor.notEditable':
     'Esta orden de cambio ya se envió y no se puede editar. Anúlala y haz una nueva para corregirla.',
   'project.coEditor.saveDetails': 'Guardar detalles',
-  'project.coEditor.noLines': 'Todavía no hay partidas — una orden de cambio sin partidas no vale nada.',
+  'project.coEditor.noLines':
+    'Todavía no hay partidas — una orden de cambio sin partidas no vale nada.',
   'project.coEditor.newLinePlaceholder': 'Nueva partida',
   'project.coEditor.add': 'Agregar',
   'project.coEditor.done': 'Listo — revisar y enviar',

@@ -13,6 +13,18 @@ export interface ApprovedCoSummary {
 }
 
 /**
+ * Roles for whom a summary can ever add something. Mirrors the role arm of
+ * `get_approved_change_order_summaries` minus Owner/Admin, who already hold
+ * every row in full. A UI convenience that saves a round-trip — NOT the rule:
+ * the function applies its own role check whatever the caller does.
+ */
+export const SUMMARY_READER_ROLES = ['project_manager', 'foreman', 'crew_member'] as const;
+
+export function readsCoSummaries(role: string | null | undefined): boolean {
+  return (SUMMARY_READER_ROLES as readonly string[]).includes(role ?? '');
+}
+
+/**
  * The summaries to render BESIDE the caller's full rows.
  *
  * `fullRowIds` is whatever `change_orders` returned under RLS — every CO for
