@@ -1,3 +1,4 @@
+import { prepareImageForUpload } from './files-client';
 import { createClient } from '@/lib/supabase-browser';
 import type {
   SiteVisit,
@@ -152,8 +153,14 @@ export async function abandonSiteVisit(estimateId: string): Promise<Result> {
  *  project-less file), as a site-visit capture. `id` makes a replay from the
  *  offline queue idempotent. */
 export async function uploadSiteVisitPhoto(estimateId: string, file: Blob, fileName: string, id: string): Promise<Result> {
+  // [S111] HEIC → JPEG and MIME inference, the SAME step uploadFile() runs.
+  // _Superseded, quoted:_ `new File([file], fileName, { type: file.type || 'image/jpeg' })`
+  // — which labelled an untyped iPhone HEIC as image/jpeg and stored the HEIC
+  // bytes under that label. Runs at SEND time, so an offline-queued photo is
+  // converted when it replays; the id is unchanged, so the replay stays idempotent.
+  const { file: prepared } = await prepareImageForUpload(new File([file], fileName, { type: file.type }));
   const form = new FormData();
-  form.set('file', new File([file], fileName, { type: file.type || 'image/jpeg' }));
+  form.set('file', prepared);
   form.set('id', id);
   // [S110 A] a site-visit CAPTURE: allowed at every status, and marked so that
   // foreman and crew can read it (and only it) on the estimate.

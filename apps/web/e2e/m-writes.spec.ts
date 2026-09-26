@@ -1,6 +1,7 @@
 import { test, expect, type Page } from '@playwright/test';
 import { signInAs } from './sign-in-as';
 import { adminClient } from './hub-fixture';
+import { withThumbnails } from './storage-cleanup';
 
 // M6M Part C — the write paths. D-51 (CO create → edit → send), D-52 as
 // corrected (punch create / complete / verify), D-60 (the list target),
@@ -194,7 +195,7 @@ async function cleanUpFixtures(): Promise<Record<string, number>> {
   if (photoIds.length > 0) {
     const { data: files } = await admin.from('files').select('id, file_path').in('id', photoIds);
     const paths = (files ?? []).map((f) => f.file_path).filter(Boolean) as string[];
-    if (paths.length > 0) await admin.storage.from('project-files').remove(paths);
+    if (paths.length > 0) await admin.storage.from('project-files').remove(withThumbnails(paths));
 
     const { count } = await admin.from('files').delete({ count: 'exact' }).in('id', photoIds);
     removed.files += count ?? 0;
@@ -707,6 +708,43 @@ test.describe('M-34 · complete, and the photo gate the service function owns', 
 
     // Complete — and now the VERIFY half of the screen appears, because
     // requires_verification also defaults true.
+    await expect(page.getByTestId('m-punch-complete')).toHaveCount(0, { timeout: 30_000 });
+  });
+
+  test('[S111 Q16] the completion photo can come from the camera roll, not only the camera', async ({
+    page,
+  }) => {
+    // Before S111 the gate offered ONE input, `capture="environment"` — camera
+    // only; on a phone the photo library was unreachable. The camera stays the
+    // default (M6M §6 D-8 / A-20b); the library is now beside it, and this drives
+    // the whole completion through IT rather than asserting an attribute.
+    test.setTimeout(150_000);
+    await signInAs(page, CREW);
+
+    const id = stamp();
+    const itemTitle = `E2E Library ${id}`;
+    await page.goto(`/m/p/${PROJECT}/punch/new`);
+    await page.getByTestId('m-punch-list-__new__').click();
+    await page.getByTestId('m-punch-new-list-name').fill(`E2E LList ${id}`);
+    await page.getByTestId('m-punch-title').fill(itemTitle);
+    await page.getByTestId('m-punch-create').click();
+    await expect(page).toHaveURL(new RegExp(`/m/p/${PROJECT}/punch$`), { timeout: 30_000 });
+    await page.getByTestId('m-punch-row').filter({ hasText: itemTitle }).click();
+    await expect(page).toHaveURL(/\/punch\/[0-9a-f-]{36}$/, { timeout: 30_000 });
+
+    // Camera first, library secondary — both present.
+    await expect(page.getByTestId('m-punch-photo-input')).toHaveAttribute('capture', 'environment');
+    const library = page.getByTestId('m-punch-photo-library').locator('input[type=file]');
+    await expect(library).toHaveAttribute('accept', 'image/*');
+    await expect(library).not.toHaveAttribute('capture', /./);
+
+    await library.setInputFiles({
+      name: 'from-roll.png',
+      mimeType: 'image/png',
+      buffer: Buffer.from(PNG_8, 'base64'),
+    });
+    await expect(page.getByTestId('m-punch-photo-attached')).toBeVisible({ timeout: 30_000 });
+    await page.getByTestId('m-punch-complete').click();
     await expect(page.getByTestId('m-punch-complete')).toHaveCount(0, { timeout: 30_000 });
   });
 });

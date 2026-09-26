@@ -48,7 +48,7 @@ export default async function PhotoViewerPage({
   params: { projectId: string; fileId: string };
 }) {
   const [gallery, profile, t] = await Promise.all([
-    getProjectPhotos(params.projectId),
+    getProjectPhotos(params.projectId, { thumbnails: true }),
     getMyProfile(),
     getMobileT(),
   ]);
@@ -78,6 +78,9 @@ export default async function PhotoViewerPage({
       id: p.id,
       file_name: p.file_name,
       displayUrl: p.displayUrl,
+      // [S111 D] The filmstrip's 52px squares — the stored thumbnail, or the
+      // full file when there is none (ruled fallback). The stage keeps displayUrl.
+      thumbUrl: p.thumbUrl,
       originalUrl: p.originalUrl,
       hasMarkup: p.hasMarkup,
       derivativeMissing: p.derivativeMissing,

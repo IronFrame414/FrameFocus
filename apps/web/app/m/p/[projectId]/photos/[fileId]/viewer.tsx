@@ -41,6 +41,8 @@ export type ViewerPhoto = {
   id: string;
   file_name: string;
   displayUrl: string | null;
+  /** [S111 D] Filmstrip only — the stored thumbnail; null → displayUrl. */
+  thumbUrl: string | null;
   originalUrl: string | null;
   hasMarkup: boolean;
   derivativeMissing: boolean;
@@ -544,11 +546,13 @@ export function PhotoViewer({
             }
           >
             {/* The filmstrip is the THIRD surface D-31 governs — it shows the
-                same flat file the stage and the gallery do (A-23g). */}
-            {p.displayUrl ? (
+                same flat file the stage and the gallery do (A-23g).
+                [S111 D] …as its stored THUMBNAIL (same pixels, 400px), with the
+                full file as the fallback — never a missing square. */}
+            {(p.thumbUrl ?? p.displayUrl) ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
-                src={p.displayUrl}
+                src={(p.thumbUrl ?? p.displayUrl)!}
                 alt=""
                 data-testid="m-filmstrip-image"
                 className="h-full w-full object-cover"

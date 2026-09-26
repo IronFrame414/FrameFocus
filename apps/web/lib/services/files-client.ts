@@ -3,6 +3,8 @@ import type { AnyFileCategory, FileCategory } from './files';
 import { applied, DISCARDED } from './mutation-result';
 import { SIGNED_URL_TTL_SECONDS } from './signed-url-ttl';
 import { uploadBlockedByCap, STORAGE_LIMIT_ERROR } from './storage-status-client';
+import { thumbPathFor } from '@framefocus/shared/utils/markup';
+import { requestThumbnail } from '@/lib/photos/request-thumbnail';
 
 const BUCKET = 'project-files';
 const MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024; // 50 MB
@@ -64,6 +66,28 @@ async function convertHeicToJpeg(file: File): Promise<File | null> {
     console.error('HEIC conversion failed — uploading original bytes:', err);
     return null;
   }
+}
+
+/**
+ * #94's HEIC → JPEG step and the MIME inference, as ONE function every upload
+ * path calls [S111 Part Two]. `uploadFile()` below uses it, and so do the two
+ * callers of the estimate-files ROUTE (site-visit photos, estimate Files tab),
+ * which post the bytes to the server instead of writing storage themselves —
+ * before S111 they skipped it, so an iPhone HEIC went into storage as HEIC and,
+ * once it showed under Photos, rendered nowhere but Safari.
+ *
+ * Returns a File whose `type` is the inferred/converted MIME, because the route
+ * reads `file.type` (and an iPhone HEIC often arrives with an EMPTY type).
+ * Never throws: a failed conversion returns the original bytes, as before.
+ */
+export async function prepareImageForUpload(file: File): Promise<{ file: File; mimeType: string }> {
+  const inferred = inferMimeType(file);
+  if (HEIC_MIME_TYPES.has(inferred)) {
+    const converted = await convertHeicToJpeg(file);
+    if (converted) return { file: converted, mimeType: 'image/jpeg' };
+  }
+  const typed = file.type === inferred ? file : new File([file], file.name, { type: inferred });
+  return { file: typed, mimeType: inferred };
 }
 
 export async function uploadFile(
@@ -132,15 +156,7 @@ export async function uploadFile(
   // original file and its inferred HEIC mime (today's stored-but-unrendered
   // behavior). All downstream fields (path, name, size, mime_type) follow
   // `upload`, never `file`.
-  let upload = file;
-  let mimeType = inferMimeType(file);
-  if (HEIC_MIME_TYPES.has(mimeType)) {
-    const converted = await convertHeicToJpeg(file);
-    if (converted) {
-      upload = converted;
-      mimeType = 'image/jpeg';
-    }
-  }
+  const { file: upload, mimeType } = await prepareImageForUpload(file);
 
   const supabase = createClient();
 
@@ -229,6 +245,8 @@ export async function uploadFile(
       await supabase.storage.from(BUCKET).remove([storagePath]);
       return { success: true, id: options.id };
     }
+    // [S111 D] Stored grid thumbnail — fire-and-forget (lib/photos).
+    if (mimeType.startsWith('image/')) requestThumbnail(data.id);
     return { success: true, id: data.id };
   }
 
@@ -244,6 +262,8 @@ export async function uploadFile(
     return { success: false, error: `Database insert failed: ${insertError.message}` };
   }
 
+  // [S111 D] Stored grid thumbnail — fire-and-forget (lib/photos).
+  if (mimeType.startsWith('image/')) requestThumbnail(data.id);
   return { success: true, id: data.id };
 }
 
@@ -415,7 +435,7 @@ export async function permanentDeleteFile(id: string): Promise<MutationResult> {
   // Look up file_path so we can delete the storage blob
   const { data: file, error: fetchError } = await supabase
     .from('files')
-    .select('file_path')
+    .select('file_path, markup_data')
     .eq('id', id)
     .single();
 
@@ -449,6 +469,14 @@ export async function permanentDeleteFile(id: string): Promise<MutationResult> {
     // permanently with no record pointing at them.
     return { success: false, error: DISCARDED };
   }
+
+  // [S111 D] The stored grid thumbnails have no row; remove the two names this
+  // row can reach (plain, and the current markup version). Older versions are
+  // pruned on every generation, and the trash purge removes any by listing.
+  // Best-effort: a leftover is unreadable (the read policy needs the row).
+  await supabase.storage
+    .from(BUCKET)
+    .remove([thumbPathFor(file.file_path, null), thumbPathFor(file.file_path, file.markup_data)]);
 
   // Delete row (RLS enforces owner/admin only).
   //

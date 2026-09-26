@@ -1,4 +1,5 @@
 import { getProjectPhotos } from '@/lib/services/photos';
+import { M_LIBRARY_INPUT_ID } from '@/app/m/library-input';
 import { getMyProfile } from '@/lib/services/profiles';
 import { getProject } from '@/lib/services/projects';
 import { getCompanyTimeSettings } from '@/lib/services/company';
@@ -63,7 +64,7 @@ export default async function ProjectPhotosPage({
   const active = raw === 'log' || raw === 'delivery' || raw === 'punch' ? raw : null;
 
   const [photos, profile, project] = await Promise.all([
-    getProjectPhotos(params.projectId),
+    getProjectPhotos(params.projectId, { thumbnails: true }),
     getMyProfile(),
     getProject(params.projectId),
   ]);
@@ -103,6 +104,7 @@ export default async function ProjectPhotosPage({
       id: p.id,
       file_name: p.file_name,
       displayUrl: p.displayUrl,
+      thumbUrl: p.thumbUrl,
       hasMarkup: p.hasMarkup,
       source: p.source,
       day,
@@ -140,6 +142,22 @@ export default async function ProjectPhotosPage({
           source={active}
           initial={searchParams.q ?? ''}
         />
+
+        {/* [S111 Part Two, RULED Q16] "Add photos" opens the photo LIBRARY. Before
+            S111 this screen had no upload control; the only way in was the tab
+            bar, whose big amber control is camera-only (M6M D-8) with the
+            library as a small icon beside it. This is a label on that SAME
+            library input (M_LIBRARY_INPUT_ID), not a second upload path: the
+            project comes from this URL, bursts work, and it queues offline
+            exactly as the tab bar does. Same authority as the tab bar, which
+            every /m role already has. */}
+        <label
+          htmlFor={M_LIBRARY_INPUT_ID}
+          data-testid="m-photos-add"
+          className="mt-[12px] flex min-h-[48px] w-full cursor-pointer items-center justify-center rounded-[14px] border border-m6m-border bg-m6m-card text-[15px] font-bold text-m6m-blue"
+        >
+          {t('photos.gallery.addPhotos')}
+        </label>
 
         <div className="mt-[12px]">
           <FilterChips

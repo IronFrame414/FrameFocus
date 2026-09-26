@@ -9,6 +9,7 @@ import {
   type HubFixture,
 } from './hub-fixture';
 import { requireTestEnv } from './env';
+import { withThumbnails } from './storage-cleanup';
 
 /**
  * A REAL member JWT on the anon key — RLS and the column-scope triggers apply
@@ -660,7 +661,7 @@ test.describe('7d · M-22 delivery check-in', () => {
       .select('id, file_path')
       .eq('delivery_id', delivery!.id);
     for (const f of pdfs ?? []) {
-      await fx.admin.storage.from('project-files').remove([f.file_path]);
+      await fx.admin.storage.from('project-files').remove(withThumbnails([f.file_path]));
     }
     if (pdfs?.length) {
       await fx.admin
@@ -738,7 +739,7 @@ test.describe('7e · M-23 incident report', () => {
       .select('id, file_path')
       .eq('safety_incident_id', incident!.id);
     for (const f of pdfs ?? []) {
-      await fx.admin.storage.from('project-files').remove([f.file_path]);
+      await fx.admin.storage.from('project-files').remove(withThumbnails([f.file_path]));
     }
     if (pdfs?.length)
       await fx.admin

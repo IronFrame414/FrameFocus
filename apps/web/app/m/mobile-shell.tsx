@@ -36,6 +36,7 @@ import {
 import { getOpenClockProjectId } from '@/lib/services/time-tracking-client';
 import { MobileChatOverlay } from '@/components/chat/mobile-chat-overlay';
 import { useT } from '@/components/i18n/language-provider';
+import { M_LIBRARY_INPUT_ID } from './library-input';
 import type { MsgKey, T } from '@/lib/i18n/messages';
 
 // M6M §3 — THE MOBILE SHELL.
@@ -665,6 +666,10 @@ function MobileShellInner({
               // beside it — a camera-capture session returns one photo — which
               // is why the camera stays one-per-tap.
               multiple
+              // [S111 Q16] The id is how M-8's "Add photos" button reaches THIS
+              // input (a <label htmlFor>), so the gallery's button and the tab
+              // bar share one pipeline — project from the URL, burst, offline queue.
+              id={M_LIBRARY_INPUT_ID}
               data-testid="m-camera-library-input"
               className="hidden"
               onChange={onShot}

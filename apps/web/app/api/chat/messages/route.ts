@@ -76,7 +76,7 @@ async function decorate(
 
   if (!projectId) return named.map((m) => ({ ...m, photos: [] }));
   const { getProjectPhotos } = await import('@/lib/services/photos');
-  return withPhotos(supabase, named, () => getProjectPhotos(projectId));
+  return withPhotos(supabase, named, () => getProjectPhotos(projectId, { thumbnails: true }));
 }
 
 export async function GET(request: NextRequest) {

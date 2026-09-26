@@ -1,5 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
 import { adminClient } from './hub-fixture';
+import { withThumbnails } from './storage-cleanup';
 
 // M6M §6 — CAMERA-FIRST CAPTURE. A-20, A-20b, A-20c, A-20d, A-21, A-21b,
 // A-21c, A-21c2.
@@ -80,7 +81,7 @@ test.afterAll(async () => {
     .eq('project_id', PROJECT)
     .like('file_name', 'shot%');
   const paths = (data ?? []).map((f) => f.file_path).filter(Boolean) as string[];
-  if (paths.length > 0) await admin.storage.from('project-files').remove(paths);
+  if (paths.length > 0) await admin.storage.from('project-files').remove(withThumbnails(paths));
   if ((data ?? []).length > 0) {
     await admin.from('files').delete().in('id', (data ?? []).map((f) => f.id));
   }

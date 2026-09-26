@@ -2,6 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
+import { Image as ImageIcon } from 'lucide-react';
 import { completePunchItem, verifyPunchItem } from '@/lib/services/punch-client';
 import { uploadFile } from '@/lib/services/files-client';
 import type { PunchItem } from '@/lib/services/punch-client';
@@ -164,21 +165,46 @@ export function PunchActions({
                   {t('photos.punch.photoAttached')}
                 </p>
               ) : (
-                <label className="mt-[8px] flex min-h-[52px] cursor-pointer items-center justify-center rounded-[10px] border border-dashed border-m6m-border text-[14px] font-semibold text-m6m-blue">
-                  {uploading ? t('photos.punch.uploading') : t('photos.punch.takePhoto')}
-                  <input
-                    type="file"
-                    accept="image/*"
-                    capture="environment"
-                    data-testid="m-punch-photo-input"
-                    className="hidden"
-                    onChange={(e) => {
-                      const f = e.target.files?.[0];
-                      if (f) void capture(f);
-                      e.target.value = '';
-                    }}
-                  />
-                </label>
+                <div className="mt-[8px] flex items-stretch gap-[8px]">
+                  <label className="flex min-h-[52px] flex-1 cursor-pointer items-center justify-center rounded-[10px] border border-dashed border-m6m-border text-[14px] font-semibold text-m6m-blue">
+                    {uploading ? t('photos.punch.uploading') : t('photos.punch.takePhoto')}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      capture="environment"
+                      data-testid="m-punch-photo-input"
+                      className="hidden"
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        if (f) void capture(f);
+                        e.target.value = '';
+                      }}
+                    />
+                  </label>
+                  {/* [S111 Part Two, RULED Q16] The camera-roll option this input
+                      never had — it was the ONE camera-only image input in the app
+                      (FILL-10: 6 `capture` inputs, 5 with a library sibling). §6 /
+                      A-20b: camera first, the gallery as the SECONDARY control —
+                      the same input WITHOUT `capture`, which is the whole
+                      difference. Same `capture()` handler: one upload path. */}
+                  <label
+                    data-testid="m-punch-photo-library"
+                    aria-label={t('shell.photoLibrary')}
+                    className="flex min-h-[52px] w-11 shrink-0 cursor-pointer items-center justify-center rounded-[10px] border border-m6m-border bg-m6m-card text-m6m-muted"
+                  >
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        if (f) void capture(f);
+                        e.target.value = '';
+                      }}
+                    />
+                    <ImageIcon size={18} aria-hidden />
+                  </label>
+                </div>
               )}
             </div>
           ) : null}

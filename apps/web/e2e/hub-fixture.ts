@@ -1,5 +1,6 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { requireTestEnv } from './env';
+import { withThumbnails } from './storage-cleanup';
 
 // M6M — deterministic data for the M-2 / M-3 / M-7 criteria.
 //
@@ -445,7 +446,7 @@ async function hardDelete(admin: SupabaseClient, prefix: string): Promise<void> 
         'id',
         files.map((f) => f.id)
       );
-    await admin.storage.from('project-files').remove(files.map((f) => f.file_path));
+    await admin.storage.from('project-files').remove(withThumbnails(files.map((f) => f.file_path)));
   }
 
   await admin.from('daily_logs').delete().in('project_id', ids);

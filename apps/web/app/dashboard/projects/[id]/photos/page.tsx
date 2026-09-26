@@ -5,6 +5,8 @@ import { getCompanyTimeSettings } from '@/lib/services/company';
 import { calendarDayInZone, companyToday } from '@framefocus/shared/utils/dates';
 import { cardStyle, color, font, microLabelStyle } from '@/lib/theme';
 import PhotoVisibilityToggle from './photo-visibility-toggle';
+import { AddPhotosButton } from './add-photos-button';
+import { GridThumb } from './grid-thumb';
 
 // Redesign 6.2 — the desktop gallery: A SURFACING JOB, NOT A BUILD. The data
 // derivation is the SAME `getProjectPhotos()` the mobile gallery uses (lib —
@@ -12,6 +14,8 @@ import PhotoVisibilityToggle from './photo-visibility-toggle';
 // tile is ONE flat <img> whose src is already the correct file — the
 // `.markup.jpg` derivative for an annotated photo, the original otherwise.
 // No overlay, no markup_data on the render path.
+// [S111 D] …as a 400x400 THUMBNAIL of that file (`thumbUrl`), loaded ahead of
+// the viewport — lib/photos/thumbnail.ts. The grid never loads an original.
 //
 // The chip set carries the mobile four PLUS the two that were data-ready and
 // unrendered (§8.9.2): Safety (files.safety_incident_id — the service already
@@ -54,7 +58,7 @@ export default async function ProjectPhotosPage({
       : null;
 
   const [photos, profile, timeSettings] = await Promise.all([
-    getProjectPhotos(params.id),
+    getProjectPhotos(params.id, { thumbnails: true }),
     getMyProfile(),
     getCompanyTimeSettings(),
   ]);
@@ -87,6 +91,9 @@ export default async function ProjectPhotosPage({
         <p style={{ ...microLabelStyle, margin: 0 }}>
           Photos · {photos.length} total
         </p>
+        {/* [S111 Q16] Staff only: files_insert_non_client refuses a client, and a
+            subcontractor never reaches /dashboard. */}
+        {isStaff && <AddPhotosButton projectId={params.id} />}
       </div>
 
       {/* Provenance chips + the two newly surfaced filters. URL-param driven
@@ -147,14 +154,9 @@ export default async function ProjectPhotosPage({
                     backgroundColor: '#e4e8ef',
                   }}
                 >
-                  {p.displayUrl && (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={p.displayUrl}
-                      alt={p.file_name}
-                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                    />
-                  )}
+                  {/* [S111 D] A thumbnail, loaded ahead of the viewport — never the
+                      original (the markup page it links to loads that). */}
+                  <GridThumb url={p.thumbUrl} alt={p.file_name} />
                   {p.hasMarkup && (
                     <span
                       style={{

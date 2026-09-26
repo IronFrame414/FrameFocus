@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { adminClient, COMPANY_A } from './hub-fixture';
 import { OWNER, signIn } from './chat-fixture';
+import { withThumbnails } from './storage-cleanup';
 
 // S109 #161 — a file opens in a SHEET over the current screen, with new tab /
 // print / download on it. Driven on the ESTIMATE Files tab, because that tab is
@@ -104,7 +105,7 @@ test.beforeAll(async () => {
 });
 
 test.afterAll(async () => {
-  if (paths.length) await admin.storage.from(BUCKET).remove(paths);
+  if (paths.length) await admin.storage.from(BUCKET).remove(withThumbnails(paths));
   if (estimateId) {
     await admin.from('files').delete().eq('estimate_id', estimateId);
     await admin.from('estimates').delete().eq('id', estimateId);

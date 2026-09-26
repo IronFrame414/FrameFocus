@@ -305,8 +305,10 @@ export function ChatThreadView({
                           }}
                         >
                           {/* eslint-disable-next-line @next/next/no-img-element */}
+                          {/* [S111 D] The 78px tile is the stored thumbnail (full file
+                              as fallback); the link and the sheet above keep the full file. */}
                           <img
-                            src={photo.displayUrl!}
+                            src={(photo.thumbUrl ?? photo.displayUrl)!}
                             alt={photo.fileName}
                             style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                           />

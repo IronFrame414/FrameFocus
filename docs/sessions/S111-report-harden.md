@@ -1,0 +1,281 @@
+# S111 — photos hardening report (`feature/s111-photos-harden`) — appended after every step
+
+> Two hardening items on Part Two (already merged at `ec8eb72a`). Kept apart from
+> `S111-report-photos.md` so this branch does not conflict on an append-only file.
+
+## Step H0 — branch, and the state found [2026-09-25]
+
+- `feature/s111-photos-harden` cut from `main` at `ec8eb72a`.
+- ⚠️ **The Supabase CLI is linked to PRODUCTION.** `supabase/.temp/project-ref` =
+  `jwkcknyuyvcwcdeskrmz`, `linked-project.json` name "FrameFocus", written 03:08Z today — after
+  Part Two's last step (P8, 03:03Z). STATE.md says the link must be rebuild-test
+  (`nmyphyhmfttxkdoposvf`). Presumably Josh re-linked to apply Part Two's migrations. **No `db push`
+  was run while it pointed there.** It is re-linked to rebuild-test before this branch's migration
+  (Step H4), and that is stated here so the change is not a surprise.
+- The Supabase MCP targets rebuild-test (`get_project_url` → `nmyphyhmfttxkdoposvf`). Every SQL
+  read in this report went through it. **Nothing in this session read or wrote production.**
+- Actions API: `main` run 36125818354 on `ec8eb72a` was in progress. All rebuild-test work was held
+  until it completed (**success, 11:29:06Z**; 0 in progress, 0 queued).
+
+## Step H1 — item 1: the conversion tripwire in CI (written; CI run pending)
+
+`apps/web/e2e/desktop-photos-conversion-s111.spec.ts` (`e683b008`). `test/s111-photo-conversion.live.ts`
+is **unchanged**.
+
+- Fixture: the owner records a site visit (`create_site_visit`, real session), the service role
+  attaches **exactly 3 files — 2 images + 1 PDF control**: a `site_visit_capture` image in category
+  `'other'` (the pre-S111 write path, i.e. what production rows look like), a `'photos'` image, and a
+  PDF. Promoted, then **accepted**, so the capture is frozen.
+- Fixture checks, asserted before converting: `frozen_at` is stamped; **CONTROL** — a direct
+  re-point of the capture raises `frozen` (so the regression's trigger is really armed); the estimate
+  carries **3 files, 2 images** (exact).
+- The conversion is the **real UI**: owner clicks "Convert to Project", accepts the confirm dialog,
+  lands on `/dashboard/projects/{id}`.
+- Assertions, all exact: the Photos query (`project_id` + `category = 'photos'` + not deleted — the
+  predicate `getProjectPhotos()` runs) on the **owner's session returns exactly the 2 image ids**; the
+  page reads `Photos · 2 total`; each image tile's `naturalWidth` is **8** (the real bytes resolved
+  through the signed URL, not a broken tile); the PDF has **0** tiles.
+- **Row count the e2e asserts on: 2** Photos-query rows (and 3 attached files / 2 images before
+  conversion). A pass on 0 attached images is impossible: `toHaveLength(3)`, `toBe(2)` and
+  `toEqual([2 ids])` all fail on zero.
+- Type-check: `tsc --noEmit` **TSC_EXIT=0, 0 errors**. Not yet run — see H3.
+
+## Step H2 — item 2(a): the negative test, FIRST, against the CURRENT policy — ✅ PASSES (no live leak)
+
+`apps/web/test/s111-markup-derivative-floor.live.ts` (`f8eb80a7`), written and run **before any
+policy change**. Policy under test: `project_files_insert_non_client` as of `20261780000000`,
+confirmed from `pg_policies` on rebuild-test.
+
+- Actor: `josh+qa-sub@worthprop.com`, role `subcontractor` (in the policy's role array — asserted), same
+  company as the owner (asserted, so the folder check is not what refuses). A fresh project with the
+  sub **not assigned: 0 assignment rows** (asserted).
+- Two originals on that project: one on the normal `{company}/{projectId}/…` path, and one on the
+  `{company}/estimates/{uuid}/…` path a converted photo keeps. On the second, segment 2 is not a
+  UUID, so the CASE arm is false and **the markup arm is the only way in**.
+- "Zero rows written" is **measured with the service role** (exact-name object lookup) after each
+  attempt, not inferred from the client error.
+
+`npx vitest run --config test/live.vitest.config.ts s111-markup-derivative-floor --reporter=verbose --silent=false`
+→ **VITEST_EXIT=0, 6 passed / 6**, live-guard `nmyphyhmfttxkdoposvf`:
+
+| case | client | objects written (service role) |
+| --- | --- | --- |
+| 2-projpath, unassigned sub | `new row violates row-level security policy` | **0** |
+| 2-estpath, unassigned sub | `new row violates row-level security policy` | **0** |
+| 3b CONTROL, same sub **after** assignment, estpath | success | **1** |
+
+The control proves the probe can register a write, so the two zeros are the policy refusing, not a
+bad path or a dead session. **No live leak → proceeding to 2(b).**
+
+### The coupling, measured rather than argued (rolled back)
+
+One `DO` block on rebuild-test, run as the sub (`SET LOCAL ROLE authenticated` + JWT claims), a
+`files` row on a project the sub is not assigned to (`3a01d018…`), estimates-shaped path, direct
+`INSERT INTO storage.objects` of its `.markup.jpg`; ended by `RAISE EXCEPTION`, so **everything
+rolled back**:
+
+- `files` SELECT as today → **REFUSED** (`new row violates row-level security policy for table "objects"`)
+- `files` SELECT widened (`CREATE POLICY … USING (true)`, inside the block) → **WRITTEN**
+
+So under today's arm, a later widening of `files` SELECT widens **who can write storage** with no
+edit to the storage policy. Residue afterwards: files 0, objects 0, projects 0, probe policy 0.
+
+## Step H3 — item 1 proven in CI
+
+CI run **36129811882 on `440d71b4`**: Lint & Type Check **success**, E2E (Playwright) **success**
+(head SHA matches the pushed tip). The new spec **ran** — its lines are in the job log:
+`[S111 e2e] attached to the estimate: 3 files, 2 images`, `[S111 e2e] Photos query rows: 2 (expected 2)`.
+Suite tally **585 passed, 10 skipped, 0 failed, 0 flaky** (the 13 "failed" grep hits are all
+`[WebServer]` app log lines — translate/english-check with no model key, an invoice-send delivery, a
+deliveries PDF — not test results). `next build` locally: **BUILD_EXIT_LINE=0**; eslint on both new
+files exit 0.
+
+**Item 1 is done: the conversion regression now has a CI tripwire, asserting on 2 Photos-query rows.**
+
+## Step H4 — item 2(b): the arm made self-contained — `20261790000000`, rebuild-test only
+
+- CLI re-linked: `supabase link --project-ref nmyphyhmfttxkdoposvf` → `linked-project.json` name
+  **framefocus-rebuild-test**. Actions API 0 in progress / 0 queued. `db push --dry-run` listed exactly
+  one pending migration, `20261790000000`; pushed, DBPUSH_EXIT=0.
+- The `.markup.jpg` arm now JOINs `files → project_assignments → company_members → profiles` on
+  `p.user_id = auth.uid()`, with `f.project_id IS NOT NULL` — the same assignment test the CASE arm
+  already uses. `files` RLS still applies on top (it can only narrow). Owner/admin unchanged.
+  Confirmed from `pg_policies` after the push.
+- **AFTER, real sessions** — `s111-markup-derivative-floor` + the unchanged `s111-photo-conversion`:
+  **VITEST_EXIT=0, 14 passed / 14**. Unassigned sub: **0 objects** on both paths; assigned sub
+  (control): **1**; conversion 2b rows moved **3**, 2c Photos rows **2**; 4a assigned PM still writes
+  the derivative; 4b unassigned crew still refused.
+- **AFTER, the coupling probe** (same rolled-back `DO` block, `files` SELECT widened to `USING (true)`):
+  unassigned project `3a01d018…` → **REFUSED**; CONTROL, a project the sub IS assigned to
+  (`4a4f8567…`) → **WRITTEN**. Before the migration the unassigned case was **WRITTEN**. The authority
+  now sits in the storage policy. Residue: files 0, objects 0, projects 0, probe policy 0.
+- `npm run db:fingerprint` → latest migration `20261790000000` (functions n=311, unchanged — policies
+  are not fingerprinted); both baseline files committed with the migration (`1a50a1b8`).
+- Sweep for older tests encoding the old rule (CLAUDE.md, S157): grep `project_files_insert_non_client`
+  / `markup.jpg` / `derivativePathFor` across `test/`, `e2e/`, `docs/specs` — 11 test files. None
+  asserts that an UNASSIGNED user may write a derivative; `s157` A7/A8 cover the SELECT arm
+  (unchanged); `s111-photo-conversion` 4a/4b are consistent with the new rule and passed.
+
+## Step H5 — local e2e against the migrated rebuild-test
+
+Production build (`next start`, the H3 build; no app code changed since). Actions API 0/0 before.
+`desktop-photos-conversion-s111`, `m-photos` (incl. the crew markup SAVE, which writes a derivative),
+`desktop-photos-add-s111`, `m-photos-add-s111`: **45 passed, 0 failed, 0 flaky, PW_EXIT=0**. Server
+stopped by PID.
+
+## Owed to production — `20261790000000` (NOT applied; Josh applies)
+
+**Policy-only. It governs no existing row or object** — an INSERT policy is evaluated only on new
+writes. What changes going forward: a non owner/admin can write a `.markup.jpg` only beside a file on
+a project they are assigned to.
+
+> **CORRECTION [Josh, 2026-09-25].** _Superseded text, quoted:_ _"Production must already carry
+> `20261780000000`, which this replaces"_, and the final summary's _"Apply `20261780000000` and then
+> `20261790000000` to production"_. **`20261780000000` is ALREADY on production** — applied 23:10
+> 2026-09-24 in an attended push, verified by object (ledger row present; `pg_policies` showed
+> `project_files_insert_non_client` live with the `.markup.jpg` arm). Production sits at
+> `20261780000000`. **Owed: `20261790000000` and the ruling-B migration only**, and per ruling C they
+> go in ONE attended push together — not `20261790000000` alone, which would leave production with a
+> tight INSERT and a loose READ/UPDATE.
+
+Sizing query, read-only, for Josh to run on production first. The last column is how many EXISTING
+derivatives were written by someone the new rule would not admit. On rebuild-test: 17 derivative
+objects, 1 by a non owner/admin — orphaned test residue with no original row — so the last column is
+**0**. It was **not** run on production (this session has no production access and did not use any).
+
+```sql
+SELECT count(*) AS derivative_objects,
+       count(*) FILTER (WHERE f.id IS NULL) AS no_original_row,
+       count(*) FILTER (WHERE pr.role NOT IN ('owner','admin')) AS written_by_non_owner_admin,
+       count(*) FILTER (
+         WHERE f.id IS NOT NULL AND pr.role NOT IN ('owner','admin')
+           AND NOT EXISTS (
+             SELECT 1 FROM project_assignments pa
+               JOIN company_members m ON m.id = pa.member_id
+              WHERE pa.project_id = f.project_id AND m.profile_id = pr.id
+                AND pa.is_deleted = false AND m.is_deleted = false)
+       ) AS would_not_be_admitted_now
+FROM storage.objects o
+LEFT JOIN files f ON f.file_path = left(o.name, length(o.name) - 11)
+LEFT JOIN profiles pr ON pr.user_id = o.owner AND pr.is_deleted = false
+WHERE o.bucket_id = 'project-files' AND o.name LIKE '%.markup.jpg';
+```
+
+A non-zero last column does not block the migration (nothing existing is touched); it would mean
+someone once wrote a derivative on a project they are not assigned to now.
+
+## Not done, recorded for a ruling
+
+- **The same coupling remains in `project_files_select_non_client` and `project_files_update_non_client`.**
+  Both carry the identical `.markup.jpg` arm scoped only by `files` RLS. UPDATE is the path the
+  `saveMarkup()` upsert takes on every save after the first. Item 2 named the INSERT arm only, so both
+  are untouched.
+  → **RULED B [Josh, 2026-09-25]: harden both, same branch.** Steps H6–H8 below.
+
+## Step H6 — ruling B1: negative tests FIRST, against the CURRENT SELECT and UPDATE policies — ✅ both refuse (B2 did not fire)
+
+`apps/web/test/s111-markup-derivative-read-update-floor.live.ts` (`279597fb`), run before any change.
+Held until CI run 36132906069 on `05df48af` completed (**success**, both jobs; 0 in progress / 0 queued).
+Policies under test, from `pg_policies` on rebuild-test: `project_files_select_non_client` and
+`project_files_update_non_client` exactly as `20261008000000` left them.
+
+Same actor and shape as H2 — `josh+qa-sub` (subcontractor; passes both policies' `role <> 'client'`
+gate), a project the sub is **not assigned to (0 rows)**, two originals (project path, estimates path),
+each with a derivative **already in storage** written by the service role (17 bytes, `SEEDED-DERIVATIVE`).
+
+**Run 1 — VITEST_EXIT=1, 7 passed / 2 failed.** Both failures were the **CONTROL** (4b): the assigned
+sub's `update()` returned **no error**, yet the service role's `download()` still read the seeded
+bytes. That makes `download()` an instrument that could not see a change — so "0 changed" for the
+unassigned case was **not proven** by run 1, even though it printed 0. The unassigned READ cases in run
+1 were sound (refusals, not reads).
+
+**Instrument replaced:** "changed" is now the `storage.objects` **row** — `metadata.size` and
+`updated_at`, read with the service role via `list()` before and after the attempt. The overwrite
+payload is 18 bytes against the seeded 17, so a real write moves the size.
+
+**Run 2 — VITEST_EXIT=0, 9 passed / 9**, live-guard `nmyphyhmfttxkdoposvf`:
+
+| case | client | measured |
+| --- | --- | --- |
+| READ projpath, unassigned | download refused, signed URL refused | **0 readable** |
+| READ estpath, unassigned | download refused, signed URL refused | **0 readable** |
+| UPDATE projpath, unassigned | `new row violates row-level security policy` | row 17 B → 17 B, `updated_at` unchanged: **0 changed** |
+| UPDATE estpath, unassigned | same | **0 changed** |
+| CONTROL, same sub **assigned**, projpath | reads; update OK | **1 readable; row 17 B → 18 B, `updated_at` moved: 1 changed** |
+| CONTROL, assigned, estpath | same | **1 readable; 1 changed** |
+
+In run 2 the post-update `download()` returned the new bytes, so **the run-1 stale read is NOT proven
+to be a CDN cache** — what is proven is that `download()` was not a reliable instrument, and the row
+metadata is. **No live leak: both policies refuse an unassigned subcontractor today. Proceeding to B3.**
+
+## Step H7 — ruling B3: both arms made self-contained — `20261800000000`, rebuild-test only
+
+**One migration covers both policies** — they can be replaced together; a migration is one
+transaction, so there is no window with either missing. Held until CI run **36136891619 on
+`279597fb`** completed (**success**; 0 in progress / 0 queued).
+
+- **The coupling, BEFORE** (rolled-back `DO` block as the sub; derivative seeded as a `storage.objects`
+  row beside a `files` row on unassigned project `3a01d018…`): `files` SELECT narrow → **read 0,
+  updated 0**; `files` SELECT widened to `USING (true)` → **read 1, updated 1**. Same coupling as INSERT.
+- `db push --dry-run` listed exactly `20261800000000`; link `nmyphyhmfttxkdoposvf`; DBPUSH_EXIT=0.
+- `pg_policies` after: the `.markup.jpg` arm JOINs `project_assignments` in INSERT's WITH CHECK,
+  SELECT's USING, and UPDATE's USING **and** WITH CHECK. `TO authenticated` preserved on both.
+- **The coupling, AFTER** (same block, `files` widened): unassigned → **read 0, updated 0**; CONTROL,
+  a project the sub is assigned to (`4a4f8567…`) → **read 1, updated 1**.
+- **Deliberately NOT changed: the ORIGINALS arm** of both policies,
+  `EXISTS (SELECT 1 FROM files f WHERE f.file_path = objects.name)`. It is the designed delegation
+  (`20261007000000`, `s157` A5–A8): an original's bytes are exactly as readable/writable as its
+  `files` row — including `files` RLS carve-outs that are NOT assignment (a PM reads invoices they
+  authored). Tying it to assignment would silently remove those. It is the same class of coupling;
+  **recorded for a ruling, not changed.** The CLIENT policies' derivative arm (`project_files_select_client`)
+  is likewise untouched — outside ruling B, which named the non-client READ and UPDATE.
+
+  > ### ✅ RULED [Josh, 2026-09-25]: the ORIGINALS arm stays exactly as it is. It is NOT the same defect.
+  >
+  > _Superseded wording above, quoted: "It is the same class of coupling."_ **It is not**, and this
+  > is recorded so nobody "fixes" it later.
+  >
+  > **A markup derivative has NO `files` row of its own.** So "can you see the ORIGINAL's row" was a
+  > **proxy** for authority over a different object — which is why the derivative arms were wrong and
+  > were given their own assignment check (`20261790000000`, `20261800000000`).
+  >
+  > **An original DOES have its own `files` row, and that row IS the authority for that file.**
+  > Following it is direct, not a proxy: whatever `files` RLS says about the row is, by design, what
+  > holds for its bytes. If `files` RLS is widened later, the widening is a decision about those files,
+  > and their bytes should follow it.
+  >
+  > **The PM-reads-an-invoice-they-authored case is that authority working correctly. Not a bug.**
+  > Tying originals to assignment would have broken it.
+  >
+  > **The client-side derivative rule (`project_files_select_client`) also stays untouched.**
+- **AFTER, live, real sessions — VITEST_EXIT=0, 74 passed / 74:** `s111-markup-derivative-floor` 6,
+  `s111-markup-derivative-read-update-floor` 9 (unassigned: 0 readable, 0 changed on both paths;
+  assigned control: 1 readable, row 17 B → 18 B), `s111-photo-conversion` 8, and as regression guards
+  `s157-m3-m4-fixes` 16 (incl. A7 crew reads the derivative of a photo it may read, A8 not of one it may
+  not) and `s164-m9-read-arms` 35 (client derivative arms). Residue: files 0, objects 0, projects 0,
+  probe policy 0.
+- `npm run db:fingerprint` → latest migration `20261800000000`; both baseline files committed with the
+  migration (`26582cf7`).
+
+## Step H8 — local e2e against the migrated rebuild-test
+
+Production build (`next start`; no app code changed). Actions API 0/0 before. Photo specs
+(`desktop-photos-conversion-s111`, `m-photos` incl. the crew markup save, `desktop-photos-add-s111`,
+`m-photos-add-s111`) plus the surfaces that render derivatives to other roles (`desktop-chat-photos`,
+`desktop-chat-sub`, `m-chat-sub`, `portal-pages`): **58 passed, 0 failed, 0 flaky, 0 skipped,
+PW_EXIT=0**. Server stopped by PID.
+
+## ⚠️ Owed to production — ONE attended push, both together (ruling C)
+
+Production sits at **`20261780000000`** (already applied — see the correction above). Owed:
+
+1. `20261790000000_s111_markup_derivative_self_contained.sql` — INSERT arm
+2. `20261800000000_s111_markup_derivative_read_update_self_contained.sql` — SELECT and UPDATE arms
+
+**Together, in one push — never `20261790000000` alone.** Both are policy-only: no row or object is
+governed, moved or rewritten. The sizing query under "Owed to production — `20261790000000`" above
+covers both: `would_not_be_admitted_now` is the count of existing derivatives whose writer is not
+assigned to the original's project now — after this pair, those users could no longer read or
+overwrite them (owner/admin unaffected). Not run on production by this session.
+
+**Merge:** not until Josh has applied both and approved it.

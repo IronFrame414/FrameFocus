@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { adminClient } from './hub-fixture';
 import { signInAs } from './sign-in-as';
+import { withThumbnails } from './storage-cleanup';
 
 // S108 Spec A — the site visit through the REAL UI, end to end:
 //   crew records a visit on the phone (existing contact, address later) →
@@ -33,7 +34,7 @@ async function sweep() {
   await admin.from('notifications').delete().eq('type', 'site_visit_recorded').in('source_id', ids);
   const { data: files } = await admin.from('files').select('file_path').in('estimate_id', ids);
   const paths = (files ?? []).map((f) => f.file_path as string);
-  if (paths.length) await admin.storage.from('project-files').remove(paths);
+  if (paths.length) await admin.storage.from('project-files').remove(withThumbnails(paths));
   await admin.from('files').delete().in('estimate_id', ids);
   await admin.from('estimates').delete().in('id', ids); // cascades the site_visit_* rows
 }

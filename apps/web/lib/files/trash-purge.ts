@@ -1,6 +1,7 @@
 import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@framefocus/shared/types/database';
+import { removeThumbnails } from '@/lib/photos/thumbnail-server';
 
 /**
  * The 6-month trash purge [storage-archive-ai-spec §3, RULED]. A file in
@@ -75,6 +76,12 @@ export async function runTrashPurge(
       continue;
     }
     const objectWasThere = (removed ?? []).length > 0;
+    // [S111 D] Its stored grid thumbnails go with it (they have no row of
+    // their own). Best-effort: a leftover thumbnail is unreachable clutter —
+    // the read policy needs the original's row — never a reason to hold the purge.
+    await removeThumbnails(admin as unknown as SupabaseClient, row.file_path).catch((e) =>
+      console.error('[trash-purge] thumbnail cleanup failed', { id: row.id, error: String(e) })
+    );
 
     const { error: rowError } = await admin.from('files').delete().eq('id', row.id);
     if (rowError) {
