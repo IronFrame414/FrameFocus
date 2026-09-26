@@ -258,3 +258,32 @@ Josh runs the production count, then dry run, one-row canary (`--only-ids`), app
    FROM change_orders WHERE NOT is_deleted;
    ```
 2. **R7:** the HEIC count (unchanged from the overnight report), then the PREPARED runbook.
+
+---
+
+## Anon lockdown — PRODUCTION VERIFIED, and the half that is not closed [Josh, S112]
+
+Production after both migrations: `anon_can_execute` **272 → 3** (exactly `get_invitation_by_token`,
+`get_invitation_status`, `submit_sub_bid_reply`); `functions_in_public` 311 → 310
+(`test_invite_lookup` dropped). But `pg_default_acl` still carries
+`supabase_admin | f | {postgres=X, anon=X, ...}` — only the `postgres` default was fixed.
+
+**1. Can a migration alter it? NO — measured on rebuild-test, not assumed.** Migrations run as
+`postgres`; the connector used for this test runs as `postgres` too (`rolsuper = false`;
+`supabase_admin` is the superuser). Inside a block forced to roll back:
+
+- `ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public REVOKE EXECUTE ON FUNCTIONS FROM anon`
+  → **`ERROR: 42501: permission denied to change default privileges`**
+- CONTROL, the identical statement `FOR ROLE postgres` → succeeded (then rolled back by design;
+  `pg_default_acl` re-read unchanged afterwards). So the statement is fine; the ROLE is refused.
+
+**2. So the answer is a recurring GUARD.** Proposed home: **the schema-drift cron**, as a fifth
+fingerprint dimension. See the proposal in the chat reply; not built.
+
+**3. What `supabase_admin` creates in `public`: NOTHING, on rebuild-test.** All 320 functions in
+`public` are owned by `postgres` (3 anon-executable). Extensions live in `extensions`
+(`pgcrypto`, `uuid-ossp`, `pg_stat_statements`), `vault` and `pg_catalog` — none in `public`.
+The default only fires on objects `supabase_admin` itself creates in `public`: the realistic
+case is **enabling an extension into `public` from the dashboard** (e.g. pgvector, which the AI
+roadmap names), whose functions would be anon-executable on creation. Production not yet
+queried for this — the query is in the chat reply.
