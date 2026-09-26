@@ -148,9 +148,90 @@ calls and aren't built.
   That's why `dynamic: 0` is **not** on this branch: the reorder alone fixes the markup defect
   (m-photos 43/43; the new human-path test is red on main's build and green on the fix).
 
+### Ruling 1 CI result — `feature/s112-router-staleness` GREEN
+
+Run 36214441654: **591 passed, 10 skipped, 0 failed, 0 flaky** (40.4 min). That's one more test
+than main's run: the new human-path test.
+
+### Ruling 3c/3d — show the save's own image; before/after measured
+
+`feature/s112-markup-local-display`. Same base, same real 12 MP iPhone photo, one box saved as crew
+through the UI:
+
+| Condition | Save → marked photo visible | GETs of its own `.markup.jpg` after Save | Bytes downloaded after Save |
+| --- | --- | --- | --- |
+| Local | 2,725 → **2,593 ms** | 1 → **0** | 2,095,107 → **3,022** |
+| 1 Mbps uplink (CPU 4×) | 25,346 → **20,994 ms** | 1 → **0** | 2,107,482 → **15,382** |
+| Fast 3G (CPU 4×) | 42,142 → **29,871 ms** | 1 → **0** | 2,120,016 → **28,038** |
+
+- The stage `src` is `blob:` after, `https://…markup.jpg` before. The before run's 1 GET is the
+  control for the counter.
+- m-photos passed locally, 43/43. One run failed at the upload with Supabase's `Too many connections
+  issued to the database`. That was **contention, not code**: the app correctly refused to navigate
+  and showed its `derivative_failed` notice, and the rerun passed.
+- The remaining time is the 2 MB upload plus the flatten, which is R1's resize (not built).
+- Details: `docs/sessions/S112-markup-local-display.md`.
+
+### Ruling 2 — hold branch parked and documented
+
+`feature/s112-staletimes-hold` was rebased onto the rebased fix branch: one commit, `next.config.js`
+only. It's parked on origin (`[skip ci]` head; it never needs CI to survive).
+`S112-router-staleness.md` §Hold records what it contains, what it would and would not fix (Back is
+untouched), and the **revisit condition: loading feedback on `/m`** (audit F1 / R2).
+
+### S111 Part One — the Floor READ side and Q9, PROVEN on rebuild-test
+
+Migrations **20261820000000** (role, CHECKs, time rank, Owner-only grant) and **20261830000000**
+(13 read arms, 7 helpers, Q9) were applied with CI idle. They're verified live (CHECK text, 13
+policies, rank 3). Types and the fingerprint baseline were regenerated; the drift detector passes
+8/8 against it.
+
+**FILL-7.2** — `test/s111-project-executive-floor.live.ts`, **7/7**, run as the real
+`josh+qa-pe@worthprop.com` session. It's assigned to 2 of 17 projects. In every table the PE's rows
+equal the Owner's rows on those projects:
+
+| Table | Owner: on PE / off PE | PE: on / **off** |
+| --- | --- | --- |
+| project_financials (contract value) | 1 / 8 | 1 / **0** |
+| project_budget_amounts (budgeted) | 4 / 75 | 4 / **0** |
+| instrument_rates | 3 / 23 | 3 / **0** |
+| change_orders (all authors) | 115 / 87 | 115 / **0** |
+| CO line items / rows | 7 / 94, 7 / 82 | 7 / **0**, 7 / **0** |
+| invoices (all authors) | 12 / 7 | 12 / **0** |
+| invoice_lines (contained, measured) | 13 / 6 | 13 / **0** |
+| estimates (converted only, Q7) | 2 / 27 | 2 / **0** |
+| client_contract_amounts | 1 / 7 | 1 / **0** |
+| client_payment_applications | 1 / 0 (+1 off made by the test) | 1 / **0** |
+
+**Q9, the piece this build is judged on:**
+
+- The Owner reads 3 payment headers, the rule admits 1, and the PE reads exactly that 1.
+- The off-project payment and the unapplied-surplus payment, both made by the Owner for the test,
+  are **invisible** to the PE. The surplus payment's own on-project application is visible (1); the
+  off-project application is not (0).
+- The PE **recorded** a payment on its own invoice and then read its header.
+- A surplus is **refused** ("must apply the whole payment"), and so is an off-project invoice ("not
+  on one of your projects"). The payment row count was unchanged (4 → 4) both times.
+- All test payments were removed afterwards (0 leftover, 0 orphans, invoice statuses restored).
+
+**FILL-7.3 sabotage:** I replaced the PE `project_financials` and `client_payments` arms with
+unscoped ones. The proof went **red**: an 8-row leak on project_financials, and all 3 payment
+headers visible, including both controls. After restoring the policies exactly as the migration
+defines them it went **green** (7/7).
+
+**Found and fixed on the way:** the first run failed only its control. The company held exactly one
+payment, on the PE's own project, so "exactly the rule's set" was vacuously true. The harness now
+creates its own negative payments.
+
+
 ## BUILT BUT UNTESTED
 
-_(none yet)_
+- **S111 Part One — `retainage_releases` and `client_refunds` arms.** Both tables hold **0 rows
+  company-wide** on rebuild-test, so their arms were never exercised. Unblock: a fixture with a
+  retainage release and a refund on one PE project and one other project, then rerun the proof.
+- **Audit fixes (`feature/s112-audit-fixes`):** covered by the unit suite (121 files / 1,673 tests)
+  and the build. The measured `/m` re-run is pending a free CI slot, because it flips a shared
+  user's language. Status is in the Log.
 
 ## BLOCKED
 
