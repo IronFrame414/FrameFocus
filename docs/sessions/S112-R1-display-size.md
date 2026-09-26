@@ -15,11 +15,11 @@ included). Stored derivative and exported file read back and their JPEG dimensio
 
 | Condition | Save → marked photo visible: 3d (full-res store) → **R1** | Stored `.markup.jpg` | **Export (Save to device)** | Exported file |
 | --- | --- | --- | --- | --- |
-| Local (CPU 1×, no throttle) | 2,593 → **2,536 ms** | 559,442 B, 2048×1536 | **1,826 ms** | 2,090,890 B, **4032×3024** |
-| 1 Mbps uplink (CPU 4×, LTE 4 Mbps down, 150 ms) | 20,994 → **8,236 ms** | 559,442 B, 2048×1536 | **7,954 ms** | 2,090,890 B, **4032×3024** |
-| Fast 3G (CPU 4×, 1.44 Mbps down, 562 ms) | 29,871 → **11,209 ms** | 559,442 B, 2048×1536 | **14,827 ms** | 2,090,890 B, **4032×3024** |
+| Local (CPU 1×, no throttle) | 2,593 → **2,536 ms** | 559,442 B, 1536×2048 | **1,826 ms** | 2,090,890 B, **3024×4032** |
+| 1 Mbps uplink (CPU 4×, LTE 4 Mbps down, 150 ms) | 20,994 → **8,236 ms** | 559,442 B, 1536×2048 | **7,954 ms** | 2,090,890 B, **3024×4032** |
+| Fast 3G (CPU 4×, 1.44 Mbps down, 562 ms) | 29,871 → **11,209 ms** | 559,442 B, 1536×2048 | **14,827 ms** | 2,090,890 B, **3024×4032** |
 
-(Dimensions as width×height of the landscape original; the parser read them portrait-first.) The 3d
+(Width×height as stored. The original is 4032×3024 with an EXIF rotation tag; a canvas draws it upright, so the derivative and the export are portrait with the rotation baked in — the same pixel count, full resolution.) The 3d
 column is the overnight measurement on the base branch, same photo and conditions, a different
 harness; the R1 column was measured twice this session (first run 2,645 / 8,395 / 11,188 ms save,
 1,745 / 7,720 / 14,911 ms export).
@@ -33,8 +33,8 @@ attribute browsers ignore, so it opened the image rather than saving it.
 
 | Case | What was exported |
 | --- | --- |
-| Regeneration FAILS (the original's bytes refused by the harness), mark list intact | the stored derivative: 559,442 B, 2048×1536, in 235 ms, with the note "The full-resolution version could not be built — this is the display-size marked-up image." |
-| `markup_data` REMOVED from the row, derivative still in storage | the stored derivative: 559,442 B, 2048×1536, in 1,071 ms |
+| Regeneration FAILS (the original's bytes refused by the harness), mark list intact | the stored derivative: 559,442 B, 1536×2048, in 235 ms, with the note "The full-resolution version could not be built — this is the display-size marked-up image." |
+| `markup_data` REMOVED from the row, derivative still in storage | the stored derivative: 559,442 B, 1536×2048, in 1,071 ms |
 
 **The second case failed before a fix made during this measurement.** The /m viewer and grid were
 never offered the stored derivative when the row had no mark list (`fallbackUrl` is null whenever
