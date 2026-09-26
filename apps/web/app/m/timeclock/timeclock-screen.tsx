@@ -339,7 +339,17 @@ function ClockInForm({
           <h2 className="mb-[8px] mt-[18px] font-mono text-[11px] font-medium uppercase tracking-wide text-m6m-muted">
             {t('field.projectHeading')}
           </h2>
-          <ul className="overflow-hidden rounded-[14px] border border-m6m-border bg-m6m-card">
+          {ordered.length === 0 ? (
+            // [S112 audit F21] A crew member on no project (their first day, say)
+            // got an empty heading over nothing. Say why, and who can fix it.
+            <p
+              data-testid="m-clock-no-projects"
+              className="rounded-[14px] border border-dashed border-m6m-border bg-m6m-card px-[16px] py-[18px] text-center text-[15px] text-m6m-navy"
+            >
+              {t('field.clock.noProjects')}
+            </p>
+          ) : null}
+          <ul className="overflow-hidden rounded-[14px] border border-m6m-border bg-m6m-card empty:hidden">
             {ordered.map((p) => {
               const on = projectId === p.id;
               return (
@@ -395,6 +405,14 @@ function ClockInForm({
       >
         {busy ? t('field.clock.clockingIn') : t('field.clock.clockIn')}
       </button>
+      {/* [S112 audit F13] A disabled button explained nothing. Say what it is
+          waiting for — the same pattern as the punch screen's "Attach the
+          photo first." */}
+      {!ready && !busy && !(needsProject && ordered.length === 0) ? (
+        <p data-testid="m-clock-hint" className="mt-[8px] text-center text-[12px] text-m6m-muted">
+          {type === null ? t('field.clock.pickType') : t('field.clock.pickProject')}
+        </p>
+      ) : null}
     </div>
   );
 }
