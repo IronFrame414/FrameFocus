@@ -6,7 +6,9 @@ import { listSiteVisits } from '@/lib/services/site-visits';
 import { groupSiteVisits } from '@/lib/site-visits/groups';
 import { SetMobileHeader } from '../mobile-header';
 import { EmptyState, ListRowLink, SectionLabel } from '../mobile-ui';
-import { getMobileT } from '@/lib/i18n/server';
+import { getMobileT, getMyLanguage } from '@/lib/i18n/server';
+import { dateLocale } from '@/lib/i18n/dates';
+import { getCompanyTimeSettings } from '@/lib/services/company';
 
 // S108 Spec A — the site visits list on the phone.
 //
@@ -32,7 +34,16 @@ export default async function SiteVisitsPage() {
     );
   }
 
-  const visits = await listSiteVisits();
+  const [visits, timeSettings, lang] = await Promise.all([
+    listSiteVisits(),
+    getCompanyTimeSettings(),
+    getMyLanguage(),
+  ]);
+  // [S112 audit F19] This formatted on the SERVER with no zone and no locale —
+  // the UTC day, in the server's language — so an evening visit showed as the
+  // next day. The company's zone (as the photo gallery uses) and the reader's words.
+  const visitedOn = (iso: string) =>
+    new Date(iso).toLocaleDateString(dateLocale(lang), { timeZone: timeSettings.timezone });
   // Three states, never two: RECORDING (still capturing), FINISHED (the
   // recorder's "done" — no number, not an estimate), and BECAME ESTIMATES
   // (the office promoted it). [S108 follow-up — finish is not promotion.]
@@ -54,7 +65,7 @@ export default async function SiteVisitsPage() {
       >
         <span className="block truncate text-[15px] font-semibold text-m6m-navy">{v.title}</span>
         <span className="block truncate font-mono text-[11px] text-m6m-muted">
-          {[who, where, new Date(v.visited_at).toLocaleDateString()].filter(Boolean).join(' · ')}
+          {[who, where, visitedOn(v.visited_at)].filter(Boolean).join(' · ')}
         </span>
       </ListRowLink>
     );
