@@ -53,6 +53,10 @@ const COMPANY_A_IDENTITIES = [
   { email: 'josh+test50@worthprop.com', role: 'owner', first: 'Dave', last: 'Whitfield' },
   { email: 'josh+qa-admin@worthprop.com', role: 'admin', first: 'QA', last: 'Admin A' },
   { email: 'josh+pm@worthprop.com', role: 'project_manager', first: 'QA', last: 'PM A' },
+  // [S111 Part One] The new role's identity. Assigned to the fixture project by
+  // the role-check block below like PM/foreman/crew, and to NO other project —
+  // so s111-project-executive-floor.live.ts has an off-project zero to prove.
+  { email: 'josh+qa-pe@worthprop.com', role: 'project_executive', first: 'QA', last: 'Project Exec A' },
   { email: 'josh+qa-foreman@worthprop.com', role: 'foreman', first: 'QA', last: 'Foreman A' },
   { email: 'josh+crew@worthprop.com', role: 'crew_member', first: 'QA', last: 'Crew A' },
 ];
