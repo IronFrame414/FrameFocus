@@ -295,7 +295,9 @@ export function NotificationList({
                     type="button"
                     onClick={() => void onOpen(item)}
                     data-testid="notification-open"
-                    className="block w-full rounded-[6px] text-left hover:opacity-80"
+                    // [S112 audit F24] measured 306x42 on /m — the one row control
+                    // the sweep's compact floor (`target`) missed.
+                    className={`block w-full rounded-[6px] text-left hover:opacity-80 ${target}`}
                   >
                     {text}
                   </button>
