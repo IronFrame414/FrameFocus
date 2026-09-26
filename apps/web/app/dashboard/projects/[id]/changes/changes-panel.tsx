@@ -277,7 +277,7 @@ export function ChangesPanel({
       {summariesOnly ? (
         <ApprovedSummaries
           summaries={approvedSummaries ?? []}
-          note="Only approved change orders are listed: what changed, never the price. Amounts stay with the office."
+          note="Only approved change orders are listed: what changed, never the price. Pricing stays with the office."
         />
       ) : (
         <>
@@ -497,7 +497,7 @@ export function ChangesPanel({
           {approvedSummaries && approvedSummaries.length > 0 && (
             <ApprovedSummaries
               summaries={approvedSummaries}
-              note="Approved change orders written by someone else. You see what changed; the amount is for the owner, the admin and the author."
+              note="Approved change orders written by someone else. You see what changed; pricing is for the owner, the admin and the author."
             />
           )}
         </>
