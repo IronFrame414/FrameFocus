@@ -16,6 +16,19 @@ Harness: `apps/web/test/s112-cdn-revocation.live.ts` + `s112-cdn-probe.live.ts` 
 | **(d) Exposure** | **4 of 4** previously-fetched objects stayed readable with the pre-revocation token for the whole 70 min, under BOTH revocations. Everything else closed: a NEW signature refused at **0 s**; a token minted after revocation refused by **14 s**; a 20 s signed URL refused **6 s** after it expired (Supabase's docs say an expired token's cached response may keep being served — measured, it was not). A 7,200 s signed URL issued before revocation still works, by design, until it expires. |
 | **(e) Third parties** | **None.** Across 569 ticks × 4 objects the unassigned crew member and the other company's owner were served **0** times. Only the holder of the previously-authorised token — a bearer credential, so exactly as exposed as that session itself. |
 
+**⚠️ STANDING PRACTICE [RULED Josh, S112]: a long-running probe gets its OWN identity, never a
+shared one.** Unmistakably disposable (tenant "DISPOSABLE S112 CDN PROBE — delete me",
+`disposable-…@example.invalid`), outside every fixture CI touches, deleted at the end with an
+assertion that nothing is left. Sharing `josh+crew` produced a false red; a signup control that
+deleted only the auth user left three tenants that turned two e2e tests red (fixed, cleaned).
+Reference: `apps/web/test/s112-cdn-revocation-long.live.ts`.
+
+**Settled since, by the disposable run's smoke pass:** a file the revoked user had NEVER fetched is
+refused from t+0 (`400 BYPASS`) while the ones they had fetched keep being served — so the exposure
+is confined to objects already read. The full-length run (until the old token's reads stop, ≤ 8 h)
+is in progress; Josh's ruling: support is asked only with that number in hand, and no purge is built
+for an unproven cause.
+
 **What this means for the policies hardened this week** (20261790000000, 1800, 1810, the R5b
 function): they stop NEW reads at once, but a user who had already fetched an object keeps re-reading
 it through Storage's authenticated endpoint with the token they already hold, for at least 70 minutes
