@@ -20,7 +20,10 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const read = (rel: string) => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), 'utf8');
 
 describe('the predicate agrees with the constant', () => {
-  it('admits exactly the five dashboard roles', () => {
+  // [S111] Superseded title, quoted: 'admits exactly the five dashboard roles' —
+  // project_executive made it six. The body iterates the constant, so it never
+  // pinned a count; the title did, and was wrong the day the role landed.
+  it('admits exactly the DASHBOARD_ROLES (six since S111 project_executive)', () => {
     for (const role of DASHBOARD_ROLES) {
       expect(isDashboardRole(role), `${role} should reach the dashboard`).toBe(true);
       expect(dashboardDeniedRedirect(role), `${role} should not be redirected`).toBeNull();

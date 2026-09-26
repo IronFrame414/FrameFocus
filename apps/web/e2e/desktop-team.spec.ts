@@ -96,7 +96,7 @@ test.describe('S175 · #1-s168 — clients are off the Team side', () => {
     await expect(page.getByRole('heading', { name: 'Edit Team Member' })).toBeVisible();
   });
 
-  test('the invite form no longer offers Client, and still offers the four staff roles', async ({
+  test('the invite form no longer offers Client, and offers the staff roles (five since S111)', async ({
     page,
   }) => {
     // Limb 1. The local `INVITABLE_ROLES` duplicate is gone and the form renders
@@ -113,9 +113,18 @@ test.describe('S175 · #1-s168 — clients are off the Team side', () => {
     );
 
     expect(values, 'the Team invite form still offers a Client role').not.toContain('client');
-    // Non-vacuous, and the Owner arm: `admin` is only offered to an Owner, so
-    // all four being present is also the paired positive for that filter.
-    expect(values.sort()).toEqual(['admin', 'crew_member', 'foreman', 'project_manager']);
+    // Non-vacuous, and the Owner arm: `admin` AND `project_executive` are only
+    // offered to an Owner (OWNER_ONLY_GRANT_ROLES, S111 Q11), so all five being
+    // present is also the paired positive for that filter.
+    // [S111] Superseded, quoted rather than deleted:
+    //   expect(values.sort()).toEqual(['admin', 'crew_member', 'foreman', 'project_manager']);
+    expect(values.sort()).toEqual([
+      'admin',
+      'crew_member',
+      'foreman',
+      'project_executive',
+      'project_manager',
+    ]);
     await expect(page.getByText('Portal access to project timeline')).toHaveCount(0);
   });
 });
