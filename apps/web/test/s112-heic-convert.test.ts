@@ -243,7 +243,7 @@ describe('S112 convertRow against fakes — order, magic check, rollback', () =>
     if (dir) fs.rmSync(dir, { recursive: true, force: true });
   });
   const stubFetch = (type: string, bytes: Uint8Array) =>
-    vi.stubGlobal('fetch', vi.fn(async () => new Response(bytes, { status: 200, headers: { 'content-type': type } })));
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(bytes.slice().buffer as ArrayBuffer, { status: 200, headers: { 'content-type': type } })));
 
   it('JPEG render → upload, copy each side object, then UPDATE; undo file reads pending, done', async () => {
     stubFetch('image/jpeg', jpegBytes(3000, 4000));
