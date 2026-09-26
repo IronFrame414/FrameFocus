@@ -41,7 +41,7 @@ never offered the stored derivative when the row had no mark list (`fallbackUrl`
 `hasMarkup` is false), so they exported the **unmarked original, silently**. Now resolved at export
 time (`storedDerivativeResolver`). Nothing in the app clears `markup_data` while leaving a
 derivative (the only `markup_data: null` write is a new-file insert), so this case is lost data by
-definition. Desktop Files already handled it. **Chat does not** — see residuals.
+definition. Desktop Files already handled it. **Chat now does too** [Josh Q4]: it passes the file's ID, never its path, and `/api/files/signed-url?fileId=` resolves the path from the row under the caller's RLS (unreadable row → the same 403, no Storage call). D-31's guard is unchanged and green.
 
 ## (b) Mixed content, for a user
 
@@ -58,9 +58,10 @@ Derivatives saved before R1 stay full resolution; new saves are 2,048 px. What a
 
 ## Residuals
 
-1. **Chat**, for a row that lost its `markup_data`, still exports the unmarked original. Fixing it
-   means chat holding a file path, which the D-31 guard (`s126-chat-ui` "chat never resolves a file
-   path itself") forbids. Left for a ruling rather than weakening the guard.
+1. ~~**Chat**, for a row that lost its `markup_data`, still exports the unmarked original.~~ **CLOSED
+   [Josh Q4]:** done by file ID through the shared helper (`storedDerivativeResolverForFile`); chat
+   never touches a path and D-31 is intact. Covered by unit tests of the route and the helper; not yet
+   exercised in a browser against the live route.
 2. **Web Share on iOS after a 12 MP rebuild** is not verified on a device; a share that outlives the
    tap's activation now says "tap Share again" (the built bytes are kept, so the second tap is
    instant).
