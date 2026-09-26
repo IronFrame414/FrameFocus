@@ -146,11 +146,13 @@ export function UserText({
             }}
             // …and a 44px-tall target (M6M §2) around the unchanged 11px text;
             // the negative margin keeps the line where it was. Was 74x14.
+            // 16px, not 15: the 11px text's line box is 13.75px, so 15px
+            // measured 43.75 — under the floor by a quarter pixel.
             style={{
               background: 'none',
               border: 'none',
-              padding: '15px 0',
-              margin: '-15px 0',
+              padding: '16px 0',
+              margin: '-16px 0',
               color: '#2f49d1',
               cursor: 'pointer',
               fontSize: '11px',
