@@ -54,6 +54,8 @@ export type PhotoFixture = {
   orphanMarkup: { id: string; path: string };
   /** Written to by the save test, and by nothing else. */
   saveTarget: { id: string; path: string };
+  /** Written only by the human-path save test (S112) — reached by taps, never page.goto. */
+  humanPath: { id: string; path: string };
   /** Deleted by the owner-role test — A-25d's positive half. */
   deletable: { id: string; path: string };
   /** Bulk-deleted by the owner-role test — A-22e's delete half. */
@@ -127,6 +129,8 @@ export async function setupPhotoFixture(fx: HubFixture): Promise<PhotoFixture> {
   // A photo of its own for the save test, so a mutation there cannot disturb
   // the read-only assertions the other fixtures back.
   const saveTarget = await putPhoto(admin, projectId, p, 'savetarget', PNG_8);
+  // [S112] The human-path save test's own photo, for the same reason.
+  const humanPath = await putPhoto(admin, projectId, p, 'humanpath', PNG_8);
   // Owned by the delete tests. Separate photos so a destructive assertion can
   // run for real rather than being simulated, without disturbing anything else.
   const deletable = await putPhoto(admin, projectId, p, 'deletable', PNG_8);
@@ -182,6 +186,7 @@ export async function setupPhotoFixture(fx: HubFixture): Promise<PhotoFixture> {
     punchLinked,
     orphanMarkup,
     saveTarget,
+    humanPath,
     deletable,
     bulkA,
     bulkB,
