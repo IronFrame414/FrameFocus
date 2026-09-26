@@ -29,7 +29,10 @@ describe('S109 #162 — one password check, one form, both surfaces', () => {
     for (const page of ['../app/dashboard/account/page.tsx', '../app/m/account/page.tsx']) {
       const src = read(page);
       expect(src, page).toMatch(/import \{ PasswordForm \} from '@\/components\/account\/password-form'/);
-      expect(src, page).toMatch(/<PasswordForm \/>/);
+      // [S112 audit F17] /m passes `compact` — presentation only (account-styles.ts),
+      // the same component and the same writes. Superseded, quoted: /<PasswordForm \/>/.
+      // Any OTHER prop would be a second behaviour and still fails here.
+      expect(src, page).toMatch(/<PasswordForm( compact)? \/>/);
     }
   });
 

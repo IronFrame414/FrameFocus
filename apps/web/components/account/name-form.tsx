@@ -1,5 +1,6 @@
 'use client';
 
+import { accountClasses } from './account-styles';
 import { useState } from 'react';
 import { updateMyName } from '@/lib/services/profile-self';
 import { useT } from '@/components/i18n/language-provider';
@@ -11,10 +12,14 @@ import { useT } from '@/components/i18n/language-provider';
 export function NameForm({
   initialFirstName,
   initialLastName,
+  compact = false,
 }: {
   initialFirstName: string;
   initialLastName: string;
+  /** [S112 audit F17] /m presentation — see account-styles.ts. */
+  compact?: boolean;
 }) {
+  const cls = accountClasses(compact);
   const [firstName, setFirstName] = useState(initialFirstName);
   const [lastName, setLastName] = useState(initialLastName);
   const [status, setStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
@@ -39,7 +44,7 @@ export function NameForm({
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div>
-        <label htmlFor="firstName" className="block text-sm font-medium text-gray-700 mb-1">
+        <label htmlFor="firstName" className={cls.label}>
           {t('shell.account.firstName')}
         </label>
         <input
@@ -51,11 +56,11 @@ export function NameForm({
             setFirstName(e.target.value);
             setStatus('idle');
           }}
-          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-gray-900 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+          className={cls.input}
         />
       </div>
       <div>
-        <label htmlFor="lastName" className="block text-sm font-medium text-gray-700 mb-1">
+        <label htmlFor="lastName" className={cls.label}>
           {t('shell.account.lastName')}
         </label>
         <input
@@ -67,15 +72,15 @@ export function NameForm({
             setLastName(e.target.value);
             setStatus('idle');
           }}
-          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-gray-900 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+          className={cls.input}
         />
       </div>
 
       {status === 'error' && (
-        <div className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</div>
+        <div className={cls.error}>{error}</div>
       )}
       {status === 'saved' && (
-        <div className="rounded-lg bg-green-50 p-3 text-sm text-green-700">
+        <div className={cls.success}>
           {t('shell.account.nameUpdated')}
         </div>
       )}
@@ -83,7 +88,7 @@ export function NameForm({
       <button
         type="submit"
         disabled={status === 'saving' || !dirty || !firstName.trim() || !lastName.trim()}
-        className="rounded-lg bg-brand-500 px-5 py-2.5 text-sm font-semibold text-white hover:bg-brand-600 disabled:cursor-not-allowed disabled:opacity-50"
+        className={cls.button}
       >
         {status === 'saving' ? t('account.saving') : t('account.save')}
       </button>
