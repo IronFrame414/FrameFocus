@@ -131,10 +131,14 @@ if (!WRITERS.has(me.role)) {
 }
 
 // Existing live catalog for THIS company (RLS scopes the read to it).
+// A SET of names (dedup is by name), plus the ROW count — they differ when the
+// catalog already holds same-named rows (measured: Sabal Point has 3 rows, 2 names).
 const existing = new Set();
+let existingRows = 0;
 for (let from = 0; ; from += 1000) {
   const { data, error } = await db.from('cost_catalog').select('name').eq('is_deleted', false).range(from, from + 999);
   if (error) { console.error(`reading the existing catalog failed: ${error.message}`); process.exit(1); }
+  existingRows += (data ?? []).length;
   for (const r of data ?? []) existing.add(norm(r.name));
   if (!data || data.length < 1000) break;
 }
@@ -143,7 +147,7 @@ const already = valid.length - toInsert.length;
 
 const byCat = {};
 for (const r of toInsert) byCat[r.category] = (byCat[r.category] ?? 0) + 1;
-console.log(`\n  existing catalog items   ${existing.size}`);
+console.log(`\n  existing catalog rows    ${existingRows} (${existing.size} distinct names)`);
 console.log(`  valid rows in file       ${valid.length}`);
 console.log(`  invalid rows (skipped)   ${invalid.length}`);
 for (const x of invalid) console.log(`    line ${x.line} "${x.name}": ${x.problems.join('; ')}`);
@@ -165,4 +169,4 @@ for (let i = 0; i < toInsert.length; i += 100) {
   inserted += data.length;
 }
 const { count } = await db.from('cost_catalog').select('id', { count: 'exact', head: true }).eq('is_deleted', false);
-console.log(`\n  INSERTED ${inserted}. Live catalog now ${count} (was ${existing.size}).\n`);
+console.log(`\n  INSERTED ${inserted}. Live catalog now ${count} rows (was ${existingRows}).\n`);
