@@ -68,6 +68,64 @@ shrink to display size, so the 47s Fast 3G save drops by the upload share.
   - **2,048×1,536: 557,985 B (−70%)**, with the 4×-CPU draw + encode dropping 2,085 → 1,275 ms
   - 1,600×1,200: 358,478 B
 
+### R2 — Audit F1: `/m` loading feedback. You wrote it's "ruled and coming"; its FORM isn't in writing
+
+**The question.** With the next screen's data held 3s, 20 of 20 taps showed nothing for 800 ms.
+You've said loading feedback is ruled, but not which mechanism, so it isn't built.
+
+**Options:**
+1. `app/m/loading.tsx`: a skeleton inside the persistent shell. Next shows it on every
+   navigation to a dynamic `/m` page.
+2. A shell-level pending bar keyed to the router's navigation state.
+3. Both.
+
+**Recommendation: 1 first.** It's the Next-native mechanism, a single file, and it's what would let
+the held `staleTimes.dynamic: 0` ship (its only cost was dead time with no feedback).
+
+### R3 — Audit F2: every `/m` text field is 15px (the chat composer 13px), so iOS zooms on focus
+
+**Options:**
+1. Text inputs at 16px on `/m`.
+2. `maximum-scale=1` in the viewport meta. This also disables pinch-zoom, which crews use on
+   photos and small print.
+
+**Recommendation: 1.** (The `/m` account form built tonight for F17 already uses 16px.)
+
+### R4 — Audit F3: `m6m-muted #8792a8` fails contrast (3.13:1 on cards, 2.89:1 on the page)
+
+It's the palette's caption/inactive-tab grey, used on almost every screen. The nearest same-hue
+shade that passes both backgrounds is **`#687081`** (4.97 / 4.60). This is a design-token decision,
+not built.
+
+### R5 — Audit F8: crew and foreman see "No change orders." on a project that has some
+
+Since the S121 read floor, crew and foreman can't read COs, but the hub still shows them the tile
+and the list renders its normal empty state. `changes/page.tsx:21` still says the policy "has NO
+role floor", which is stale.
+
+**Options:**
+1. Hide the tile for foreman/crew.
+2. Keep the tile, and have the list show a role-worded notice ("Change orders are handled by the
+   office"), like the sweep's `co-read` notice.
+
+**Recommendation: 2**, since it matches the notice crew already get on a CO link. Either way the
+stale comment gets fixed.
+
+### R6 — Audit F11 is NOT fixable as proposed: the spec pins what the audit wanted to change
+
+The hub Punch tile badge truncates ("1 mine · 1 a…") and is amber text on white at 2.15:1. My audit
+proposed "count only", but e2e **A-11b** requires the tile to read `{mine} mine · {total} open`,
+and §4.3 makes the tone amber.
+
+**Options:**
+1. Widen the badge (drop its `max-w-[60%]`) and keep the text.
+2. Amend A-11b to show the count only.
+3. Keep amber but darken the badge text (a palette decision, with R4).
+
+**Recommendation: 1 now, 3 with R4.** The duplicated project title (F11's second half), the repeated
+safety title (F22) and the unlabeled "—" (F23, whose em-dash is specified in A-10e) are design
+calls and aren't built.
+
 ## DONE AND PROVEN
 
 ### Ruling 1 — fix branch rebased and pushed; the staleTimes cost measurement owed
@@ -116,6 +174,18 @@ _(none yet)_
 
 ## Log
 
+- 03:31Z — **audit fixes complete to the extent ruled**, on `feature/s112-audit-fixes`, parked.
+  Built: F4, F5, F6, F7, F9, F10, F13, F14, F15, F16, F17, F18, F19, F20, F21, F24.
+  Withdrawn: F12 (the ruled swatch exception). Needs a ruling: F1, F2, F3, F8, F11, F22, F23 (R2–R6).
+  Full unit suite on the branch: **121 files / 1,673 tests passed**. Two tests were updated to the
+  new rules, each with a control that must fire: `s109-password-wiring` (admits exactly `compact`)
+  and the new `s112-plurals`. The i18n anti-rot guard: 143 passed.
+  **Found while fixing F7:** tapping "show original" on the `/m/logs` list NAVIGATED to the log.
+  The button sat inside the row `<Link>` without `preventDefault`. Fixed.
+  **F9 partly reclassified:** project contacts' `client` is free text typed on desktop — data, not
+  a token.
+  The measured re-run proving these waits for a free CI slot, because it flips a shared user's
+  language.
 - 03:21Z — main CI green → fix branch pushed (run 36214441654). The 3c and audit-fix branches are
   **parked** on origin under an empty `[skip ci]` head commit. GitHub reads `[skip ci]` from the
   head commit only, so the work survives a restart and uses no CI slot. The next real commit on
