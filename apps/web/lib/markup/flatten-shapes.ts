@@ -22,12 +22,19 @@ import { PIN_IMAGE_DIAMETER } from '@framefocus/shared/utils/markup';
 // than ignored:
 //
 //   · Both draw in the SAME COORDINATE SPACE — the image's natural pixels
-//     (§4.7a.1) — so a shape's geometry is identical by construction. The
-//     canvas is sized to imageWidth × imageHeight and nothing is transformed.
+//     (§4.7a.1) — so a shape's geometry is identical by construction. This
+//     function never transforms anything itself. [S112 R1] The caller
+//     (lib/markup/flatten-image.ts) may scale the CONTEXT uniformly to write a
+//     display-size derivative; the shapes are still drawn in natural pixels
+//     and scale with the photo.
+//     _Superseded, quoted: "The canvas is sized to imageWidth × imageHeight
+//     and nothing is transformed."_
 //   · NO STROKE FLOOR IS APPLIED HERE. The floor is a rendering accommodation
-//     for a shape drawn small on screen (§4.7a.3, A-23o); the derivative is
-//     rasterised at FULL image size, where the authored width is already
-//     correct. Applying it would fatten every stroke in the saved artifact.
+//     for a shape drawn small on screen (§4.7a.3, A-23o); the flatten draws in
+//     IMAGE space, where the authored width is already correct. Applying it
+//     would fatten every stroke in the saved artifact. (A 2,048 px derivative
+//     of a 4,032 px photo halves a stroke's pixels — exactly as it halves the
+//     photo's, so the mark keeps its proportion.)
 //   · The pin uses the same PIN_IMAGE_DIAMETER constant the SVG renderer does,
 //     imported rather than retyped.
 //

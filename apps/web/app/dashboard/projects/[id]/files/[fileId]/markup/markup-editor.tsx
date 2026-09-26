@@ -4,7 +4,6 @@ import * as React from 'react';
 import { useRouter } from 'next/navigation';
 import { type MarkupData, type MarkupShape } from '@framefocus/shared/types/markup';
 import { saveMarkup, type MarkupSaveResult } from '@/lib/services/photos-client';
-import { drawShapes } from '@/lib/markup/flatten-shapes';
 
 type Tool = 'arrow' | 'circle' | 'rectangle' | 'pen' | 'text' | 'select';
 
@@ -247,8 +246,10 @@ export default function MarkupEditor({
   // Silent loss, not an error — the worst shape a bug can take.
   //
   // The fix is not a desktop-specific export. It is `saveMarkup()` — the exact
-  // function the mobile canvas calls — with `drawShapes`, the exact rasteriser
-  // it draws with. Both moved to `lib/` so neither surface owns the format.
+  // function the mobile canvas calls — which flattens through `drawShapes`, the
+  // exact rasteriser (lib/markup/flatten-image.ts, S112 R1: the rasteriser is
+  // no longer a parameter a caller could swap). Both live in `lib/` so neither
+  // surface owns the format.
   // A second desktop-only flattener would have reintroduced the divergence in
   // a form that looks like agreement.
   //
@@ -268,8 +269,7 @@ export default function MarkupEditor({
       filePath,
       imageUrl,
       shapes,
-      imageDims,
-      drawShapes
+      imageDims
     );
 
     setSaving(false);

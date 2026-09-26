@@ -7,6 +7,7 @@ import {
 import { derivativePathFor, markupFingerprint } from '@framefocus/shared/utils/markup';
 import { requestThumbnail } from '@/lib/photos/request-thumbnail';
 import { rememberLocalDerivative } from '@/lib/photos/local-derivative';
+import { DISPLAY_MAX_EDGE, flattenMarked } from '@/lib/markup/flatten-image';
 
 const BUCKET = 'project-files';
 
@@ -36,56 +37,17 @@ export type MarkupSaveResult =
   | { status: 'derivative_failed'; error: string }
   | { status: 'failed'; error: string };
 
-/**
- * Flatten the ORIGINAL bytes plus the shapes into a JPEG blob.
- *
- * A-23c — **always from the original, never from the previous derivative.**
- * Feeding the last derivative back in would compound JPEG loss on every save
- * until the photo visibly degrades. `originalUrl` is the only image input, on
- * every save, including the tenth.
- *
- * Kept separate from the upload so the compositing rule can be reasoned about
- * on its own.
- */
-async function flatten(
-  originalUrl: string,
-  markup: MarkupData,
-  renderShapes: (ctx: CanvasRenderingContext2D, markup: MarkupData) => void
-): Promise<Blob | null> {
-  try {
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    const loaded = new Promise<void>((resolve, reject) => {
-      img.onload = () => resolve();
-      img.onerror = () => reject(new Error('image load failed'));
-    });
-    img.src = originalUrl;
-    await loaded;
-
-    const canvas = document.createElement('canvas');
-    canvas.width = markup.imageWidth || img.naturalWidth;
-    canvas.height = markup.imageHeight || img.naturalHeight;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return null;
-
-    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-    renderShapes(ctx, markup);
-
-    return await new Promise<Blob | null>((resolve) =>
-      canvas.toBlob((b) => resolve(b), 'image/jpeg', 0.92)
-    );
-  } catch {
-    return null;
-  }
-}
+// The flatten itself lives in lib/markup/flatten-image.ts [S112 R1] — the
+// save and every export (Download / Save / Share) call the same function and
+// the same rasteriser, at different sizes. A-23c (always from the ORIGINAL,
+// never from the previous derivative) is enforced there.
 
 export async function saveMarkup(
   fileId: string,
   filePath: string,
   originalUrl: string,
   shapes: MarkupShape[],
-  imageDims: { w: number; h: number },
-  renderShapes: (ctx: CanvasRenderingContext2D, markup: MarkupData) => void
+  imageDims: { w: number; h: number }
 ): Promise<MarkupSaveResult> {
   const supabase = createClient();
 
@@ -119,7 +81,13 @@ export async function saveMarkup(
 
   if (rowError) return { status: 'failed', error: rowError.message };
 
-  const blob = await flatten(originalUrl, markup, renderShapes);
+  // [S112 R1] The STORED derivative is DISPLAY-SIZE (2,048 px long edge). It
+  // is what every surface shows; exports rebuild full resolution on demand
+  // from the original + markup_data (lib/markup/export-marked.ts). A photo
+  // already under the cap is flattened at its own size — never upscaled.
+  // _Superseded, quoted: `canvas.width = markup.imageWidth || img.naturalWidth`_
+  // — the derivative used to be written at full resolution (2 MB on 12 MP).
+  const blob = await flattenMarked({ originalUrl, markup, maxEdge: DISPLAY_MAX_EDGE });
   if (!blob) {
     return {
       status: 'derivative_failed',

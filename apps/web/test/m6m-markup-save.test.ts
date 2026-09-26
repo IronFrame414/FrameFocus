@@ -46,18 +46,50 @@ const SHAPES: MarkupShape[] = [
   { id: 'p1', type: 'pin', x: 4, y: 4, color: '#f2453d', number: 1 },
 ];
 
+/** Every canvas the flatten created, with what was done to its context. */
+type FakeCanvas = { width: number; height: number; calls: Array<[string, unknown[]]> };
+let canvases: FakeCanvas[] = [];
+
+/**
+ * A 2D context that accepts every method `drawShapes()` may call and records
+ * them. [S112 R1] The save now flattens through lib/markup/flatten-image.ts,
+ * which calls the real `drawShapes` (it is no longer a parameter) and may
+ * `scale()` the context — so the old three-method stub would throw.
+ */
+function fakeContext(calls: FakeCanvas['calls']): CanvasRenderingContext2D {
+  return new Proxy({} as Record<string, unknown>, {
+    get: (target, key) =>
+      key in target
+        ? target[key as string]
+        : (...args: unknown[]) => {
+            calls.push([String(key), args]);
+          },
+    set: (target, key, value) => {
+      target[key as string] = value;
+      return true;
+    },
+  }) as unknown as CanvasRenderingContext2D;
+}
+
 /**
  * Minimal browser stubs. `canvasWorks: false` makes getContext return null,
  * which is exactly how a real flatten fails on a device that refuses a canvas
  * context — the case A-23j is about.
  */
-function stubBrowser({ canvasWorks }: { canvasWorks: boolean }) {
+function stubBrowser({
+  canvasWorks,
+  natural = { w: 8, h: 8 },
+}: {
+  canvasWorks: boolean;
+  natural?: { w: number; h: number };
+}) {
+  canvases = [];
   class FakeImage {
     onload: (() => void) | null = null;
     onerror: (() => void) | null = null;
     crossOrigin = '';
-    naturalWidth = 8;
-    naturalHeight = 8;
+    naturalWidth = natural.w;
+    naturalHeight = natural.h;
     set src(_v: string) {
       queueMicrotask(() => this.onload?.());
     }
@@ -65,12 +97,17 @@ function stubBrowser({ canvasWorks }: { canvasWorks: boolean }) {
   (globalThis as Record<string, unknown>).Image = FakeImage;
 
   (globalThis as Record<string, unknown>).document = {
-    createElement: () => ({
-      width: 0,
-      height: 0,
-      getContext: () => (canvasWorks ? { save() {}, restore() {}, drawImage() {} } : null),
-      toBlob: (cb: (b: unknown) => void) => cb({ size: 10, type: 'image/jpeg' }),
-    }),
+    createElement: () => {
+      const c: FakeCanvas & Record<string, unknown> = {
+        width: 0,
+        height: 0,
+        calls: [],
+        getContext: () => (canvasWorks ? fakeContext(c.calls) : null),
+        toBlob: (cb: (b: unknown) => void) => cb({ size: 10, type: 'image/jpeg' }),
+      };
+      canvases.push(c);
+      return c;
+    },
   };
 }
 
@@ -86,15 +123,10 @@ afterEach(() => {
   delete (globalThis as Record<string, unknown>).document;
 });
 
-const call = () =>
-  saveMarkup(
-    'file-1',
-    'comp/proj/photo.jpg',
-    'http://x/original.jpg',
-    SHAPES,
-    { w: 8, h: 8 },
-    () => {}
-  );
+// [S112 R1] No rasteriser argument — the save always flattens through the
+// shared `drawShapes`. _Superseded, quoted: `{ w: 8, h: 8 },\n    () => {}`._
+const call = (dims: { w: number; h: number } = { w: 8, h: 8 }) =>
+  saveMarkup('file-1', 'comp/proj/photo.jpg', 'http://x/original.jpg', SHAPES, dims);
 
 describe('A-23 — a save writes BOTH the mark list and a derivative', () => {
   it('writes markup_data AND uploads the flattened image', async () => {
@@ -227,5 +259,48 @@ describe('3c · the just-built image is remembered under the stored fingerprint'
       g.URL.createObjectURL = had.c;
       g.URL.revokeObjectURL = had.r;
     }
+  });
+});
+
+// ===========================================================================
+// [S112 RULING R1] the STORED derivative is DISPLAY-SIZE — 2,048 px long edge
+// ===========================================================================
+// _Superseded rule, quoted: the canvas was `markup.imageWidth || naturalWidth`
+// — a full-resolution derivative on every save (2 MB on a 12 MP photo). Full
+// resolution is now regenerated on EXPORT (test/s112-markup-export.test.ts).
+describe('R1 · the saved derivative is capped at 2,048 px on the long edge', () => {
+  it('a 4032×3024 photo is flattened onto a 2048×1536 canvas, context scaled, marks drawn', async () => {
+    stubBrowser({ canvasWorks: true, natural: { w: 4032, h: 3024 } });
+    const result = await call({ w: 4032, h: 3024 });
+    expect(result.status).toBe('saved');
+
+    expect(canvases).toHaveLength(1);
+    const [c] = canvases;
+    expect(Math.max(c.width, c.height)).toBe(2048);
+    expect([c.width, c.height]).toEqual([2048, 1536]);
+    // CONTROL THAT MUST FIRE: the context really was scaled, so the image and
+    // the marks (drawn in natural pixels) shrink together rather than the
+    // photo being cropped to its top-left 2048 px.
+    const scale = c.calls.find(([m]) => m === 'scale');
+    expect(scale, 'ctx.scale was never called — the image would be cropped').toBeTruthy();
+    expect(scale![1][0]).toBeCloseTo(2048 / 4032, 10);
+    const draw = c.calls.find(([m]) => m === 'drawImage');
+    expect(draw![1].slice(1)).toEqual([0, 0, 4032, 3024]);
+    // The real rasteriser ran — the pin's disc was drawn onto this canvas.
+    expect(c.calls.some(([m]) => m === 'arc')).toBe(true);
+  });
+
+  it('a 1600×1200 photo is left at its own size — never upscaled, never scaled', async () => {
+    stubBrowser({ canvasWorks: true, natural: { w: 1600, h: 1200 } });
+    await call({ w: 1600, h: 1200 });
+    const [c] = canvases;
+    expect([c.width, c.height]).toEqual([1600, 1200]);
+    expect(c.calls.some(([m]) => m === 'scale')).toBe(false);
+  });
+
+  it('a portrait 3024×4032 photo caps the HEIGHT', async () => {
+    stubBrowser({ canvasWorks: true, natural: { w: 3024, h: 4032 } });
+    await call({ w: 3024, h: 4032 });
+    expect([canvases[0].width, canvases[0].height]).toEqual([1536, 2048]);
   });
 });
