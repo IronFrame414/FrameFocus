@@ -22,8 +22,11 @@ const uploadSpy = vi.fn();
 vi.mock('@/lib/supabase-browser', () => ({
   createClient: () => ({
     from: () => ({
+      // [S112 3c] the save's UPDATE now ends in .select('markup_data') — the
+      // stored row, returned in the same request, keys the local copy.
+      // Superseded mock link, quoted: `eq: async () => updateSpy(payload),`
       update: (payload: unknown) => ({
-        eq: async () => updateSpy(payload),
+        eq: () => ({ select: async () => updateSpy(payload) }),
       }),
     }),
     storage: {
@@ -36,6 +39,8 @@ vi.mock('@/lib/supabase-browser', () => ({
 }));
 
 const { saveMarkup } = await import('@/lib/services/photos-client');
+const { localDerivativeFor } = await import('@/lib/photos/local-derivative');
+const { markupFingerprint } = await import('@framefocus/shared/utils/markup');
 
 const SHAPES: MarkupShape[] = [
   { id: 'p1', type: 'pin', x: 4, y: 4, color: '#f2453d', number: 1 },
@@ -191,5 +196,36 @@ describe('A-23j — a derivative failure is NOT plain success', () => {
     // would be worse than a clean failure, because markup_data is the only
     // thing that cannot be regenerated.
     expect(uploadSpy).not.toHaveBeenCalled();
+  });
+});
+
+// ===========================================================================
+// [S112 ruling 3c] the save keeps the image it built — for the STORED markup only
+// ===========================================================================
+describe('3c · the just-built image is remembered under the stored fingerprint', () => {
+  it('a saved save is found by the stored fingerprint, and by nothing else', async () => {
+    stubBrowser({ canvasWorks: true });
+    const stored = { version: 1, shapes: SHAPES, imageWidth: 8, imageHeight: 8 }; // jsonb order
+    updateSpy.mockResolvedValue({ data: [{ markup_data: stored }], error: null });
+    uploadSpy.mockResolvedValue({ error: null });
+    const created: string[] = [];
+    const g = globalThis as unknown as { URL: { createObjectURL?: unknown; revokeObjectURL?: unknown } };
+    const had = { c: g.URL.createObjectURL, r: g.URL.revokeObjectURL };
+    g.URL.createObjectURL = () => { const u = `blob:test/${created.length}`; created.push(u); return u; };
+    g.URL.revokeObjectURL = () => undefined;
+    try {
+      const result = await call();
+      expect(result.status).toBe('saved');
+      expect(created).toHaveLength(1);
+      expect(localDerivativeFor('file-1', markupFingerprint(stored))).toBe(created[0]);
+      // A different markup (another device's later save, or the client's own
+      // key order) must NOT get these bytes.
+      expect(localDerivativeFor('file-1', markupFingerprint({ ...stored, shapes: [] }))).toBeNull();
+      expect(localDerivativeFor('file-1', null)).toBeNull();
+      expect(localDerivativeFor('another-file', markupFingerprint(stored))).toBeNull();
+    } finally {
+      g.URL.createObjectURL = had.c;
+      g.URL.revokeObjectURL = had.r;
+    }
   });
 });
