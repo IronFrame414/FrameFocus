@@ -32,6 +32,23 @@ authorisation is cached and for how long; (3) serve private files only through s
 which measured as refused promptly after expiry. **To measure (c) to its end** needs a run of several
 hours holding a fixture, and every spare identity is used by CI — it needs a throwaway identity.
 
+
+## Security rulings, round 3 — built and proven on rebuild-test (NOT production)
+
+| Ruling | Branch | Migration | Proof |
+| --- | --- | --- | --- |
+| **Anon lockdown** (migration 1) | `feature/s112-anon-lockdown` | `20261870000000` | anon 280 → **3** functions (allowlist measured from code: `submit_sub_bid_reply`, `get_invitation_status`, `get_invitation_by_token`); defaults closed; `test_invite_lookup` dropped. As anon via PostgREST, `allocate_invoice_number` **INV-0002, sequence 1→2 before → 42501, 1→1 after**. 6 red → 12/12. Rollback **proven exact** (279 / 0 extra / 0 missing) and re-applied. |
+| **Caller checks** (migration 2) | same | `20261880000000` | 13 internal-only definer functions off the API for signed-in users (every caller is itself definer); 2 policy helpers scoped to the caller's company; `apply_change_order_budget` fixed. As two companies' owners: 8 red (A allocated INV-0002 in B; B read A's member role and session member; B told "CO-100-01 is voided") → 12/12. |
+| **Bid: Cancel/Decline, award, conversion** | `feature/s112-bid-token-status` | `20261850000000`, `20261860000000`, `20261890000000` | One DB rule (`bid_token_state`) read on every request. Cancel/Decline built. Losers close at award; **winner survives conversion** (ruled); void/delete close all. 24/24; sabotage 5 red. |
+| **Bid files interim** | same | — | Measured first: served **every** staff file — Files-tab attachments, **site-visit photos, site-visit voice notes**. Now only files ticked "Share with bidders" (`bid-scope` tag). Old rule restored as control → bidder got **3** files, 5 red. Tech debt #1-bidtok, #2-bidtok filed. |
+| **Proposal payload** | `feature/s112-proposal-payload` | — | Signing page + `/api/sign` carry exactly what the format draws; all 13 formats render identically from trimmed data; lump sum/total-only carry no breakdown. 20/20 with 2 controls. |
+
+**Owed to production (read-only first):** the four anon catalog queries; the bid Q1/Q2 queries and
+the bid-files query (`S112-bid-token-status.md`, this report); the R5b money-in-text query (titles
+AND descriptions); the HEIC count and frozen site-visit count (PREPARED doc).
+**Merge note:** `feature/s112-bid-token-status`'s live test now asserts anon is refused
+`get_sub_bid_request`, which is true only once `20261870000000` is applied.
+
 ---
 
 **Nothing touched production.** No migration, backfill or write to production; nothing merged. All
