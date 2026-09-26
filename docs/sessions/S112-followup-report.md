@@ -256,3 +256,30 @@ since S103 (context103 §7). **No tech debt filed.** The instrument stays descri
 ⚠️ The branch also held the **only copy** of the 2026-08-31 incident record, "SQL reached
 rebuild-test outside the migration path". It is moved to
 `docs/incidents/rebuild-test-out-of-band-sql.md` on this branch **before** the branch is deleted.
+
+### Wave 1 result: MERGED
+
+| | |
+| --- | --- |
+| Integration branch | `feature/s112-wave1-integration` @ `6722cf47` |
+| CI | run **36276288630**: Lint & Type Check ✅, E2E ✅ **591 passed, 0 failed, 0 flaky, 21 skipped** (44.1 min) |
+| Merge | **PR #9 → main `80e15bad`**, pinned to the tested SHA. The merged tree is **byte-identical** to `6722cf47`'s. |
+| Vercel | commit status `success`: "Deployment has completed" at 23:18:56Z. Production `/sign-in` and `/` answer 200. |
+
+**The tally was checked, not only the status.** Main's own run (36270462758, `b6288f90`) was
+590 passed / 17 skipped. That's +1 passed and +4 skipped:
+
+- **+1 passed** is `m-photos`' new human-path markup test.
+- **+4 skipped** are exactly the four tests of `m-s112-r1-measure.spec.ts`: 3 network conditions
+  plus 1 fallback. That file is `test.skip(!process.env.S112_MEASURE)`, and CI never sets it.
+
+No existing test stopped running.
+
+**⚠️ The drift baseline is now further out of date.** Main moved again (`80e15bad`), and it still
+carries the `20261810000000` baseline. Wave 1 has no migrations, so it adds no schema difference
+of its own. But main is one more merge away from the tree the baseline was generated for. It can
+only be regenerated once rebuild-test matches main, and that is further off, not nearer: rebuild-test
+still carries the seven unmerged migrations in §3. #1-s112f is the fix.
+
+**Still not merged, by the authorization's own terms:** `s112-amber-sweep`, which is blocked on
+`s112-audit-rulings`; see above.
