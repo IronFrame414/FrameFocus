@@ -294,7 +294,7 @@ export function CoEditor({
             value={newItemName}
             onChange={(e) => setNewItemName(e.target.value)}
             placeholder={t('project.coEditor.newLinePlaceholder')}
-            className="h-[48px] min-w-0 flex-1 rounded-[12px] border border-m6m-border bg-m6m-card px-[14px] text-[15px] text-m6m-navy"
+            className="h-[48px] min-w-0 flex-1 rounded-[12px] border border-m6m-border bg-m6m-card px-[14px] text-[16px] text-m6m-navy"
           />
           <button
             type="button"
@@ -456,7 +456,7 @@ function LineItemBlock({
                   data-testid="m-co-line-name"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  className="h-[44px] min-w-0 flex-1 rounded-[10px] border border-m6m-border px-[12px] text-[14px] text-m6m-navy"
+                  className="h-[44px] min-w-0 flex-1 rounded-[10px] border border-m6m-border px-[12px] text-[16px] text-m6m-navy"
                 />
                 <button
                   type="button"
@@ -721,7 +721,7 @@ function NewRowForm({
               data-testid="m-co-new-row-labor-unit"
               value={laborUnit}
               onChange={(e) => setLaborUnit(e.target.value as CoLaborUnit)}
-              className="h-[48px] w-full rounded-[12px] border border-m6m-border bg-m6m-card px-[12px] text-[15px] text-m6m-navy"
+              className="h-[48px] w-full rounded-[12px] border border-m6m-border bg-m6m-card px-[12px] text-[16px] text-m6m-navy"
             >
               {laborUnits.map((u) => (
                 <option key={u} value={u}>

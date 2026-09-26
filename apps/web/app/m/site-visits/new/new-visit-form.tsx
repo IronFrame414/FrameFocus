@@ -23,7 +23,7 @@ type ContactMode = 'existing' | 'new';
 type AddressMode = 'existing' | 'new' | 'none';
 
 const selectClass =
-  'h-[48px] w-full rounded-[12px] border border-m6m-border bg-m6m-card px-[12px] text-[15px] text-m6m-navy';
+  'h-[48px] w-full rounded-[12px] border border-m6m-border bg-m6m-card px-[12px] text-[16px] text-m6m-navy';
 
 export function NewSiteVisitForm({ contacts }: { contacts: ContactOption[] }) {
   const router = useRouter();
