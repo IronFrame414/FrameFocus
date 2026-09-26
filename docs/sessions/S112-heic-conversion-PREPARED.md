@@ -105,6 +105,7 @@ NEXT_PUBLIC_SUPABASE_URL=https://nmyphyhmfttxkdoposvf.supabase.co SUPABASE_SERVI
   node scripts/s112-heic-convert.cjs --project-ref nmyphyhmfttxkdoposvf
 
 # CANARY: one row, then look at it in the app (desktop grid, /m grid, viewer, markup).
+# --only-ids <id>[,<id>] picks WHICH row (e.g. one you can find in the app); --limit 1 takes the first.
 NEXT_PUBLIC_SUPABASE_URL=https://nmyphyhmfttxkdoposvf.supabase.co SUPABASE_SERVICE_ROLE_KEY="$FF_SERVICE_KEY" \
   node scripts/s112-heic-convert.cjs --project-ref nmyphyhmfttxkdoposvf --apply --undo-file s112-heic-undo.jsonl --limit 1
 
@@ -157,6 +158,37 @@ afterwards. The row never points at a missing object, in either direction.
 
 Skipped, and listed with a reason: already converted · `file_path` shared by another `files` row ·
 frozen site-visit capture (Q3) · original object missing · target name exists.
+
+---
+
+## 3a. PROVEN on rebuild-test [S112, attended session] — `apps/web/test/s112-heic-convert.live.ts`
+
+Its own two rows only (`--only-ids`), made from a copy of a real iPhone HEIC's bytes, stored as
+`application/octet-stream` like the legacy uploads: one on a project path, one marked photo on an
+`estimates/` path. The reader is an assigned **subcontractor**, who can only read a thumbnail
+through `20261810000000`'s `regexp_replace` lookup of the parent row.
+
+| Step | Result |
+| --- | --- |
+| Before: sub reads each thumbnail | 1, 1 (control) |
+| Dry run | exit 0; rows unchanged; no `.jpg` object created |
+| Apply | exit 0; both rows → `{path}.jpg`, `image/jpeg`, `.jpg` name; bytes start `FF D8 FF`; 1,002,021 B from a 1,030,142 B HEIC; **3000×4000**; served `Content-Type: image/jpeg` |
+| **The trap:** sub reads the thumbnail at the NEW name | **1, 1** — the copies |
+| The OLD thumbnail name, for the sub | **sign 0, download 0** on both path shapes — orphaned, exactly as Josh predicted |
+| Marked photo's derivative at the new name | present |
+| Originals | untouched |
+| `--verify` | exit 0 |
+| `--undo --apply` | exit 0; rows restored; every new object gone; sub reads the old thumbnail again |
+
+**Control that must fire:** with the side-object copy removed from the script, the same proof went
+red on 4 checks — both new thumbnails unreadable (0), the derivative missing, and the script's own
+`--verify` exit 1. Restored byte-for-byte (`cmp`), green again 17/17. Fixture teardown: 0 files,
+0 objects, 0 projects left; the 9 real HEIC rows on rebuild-test untouched.
+
+⚠️ **A measurement trap found on the way, recorded so nobody repeats it.** The first version probed
+with `download()` and read the OLD thumbnail as **1** after the repoint — because the "before" step
+had already GOT the same object and the repeat GET was answered from a cache, not by the policy.
+Probing by signing (an RLS decision every call) read 0, and with no earlier GET, download read 0 too.
 
 ---
 
