@@ -32,6 +32,7 @@ import {
   type AgingBucket,
   type AgingSummary,
   type JobPairing,
+  canRecordPayment,
 } from '@/lib/services/payments-shared';
 import {
   cardStyle,
@@ -81,7 +82,12 @@ interface Props {
   payments: PaymentRow[];
   openInvoices: OpenInvoice[];
   refunds: RefundRow[];
-  release: { id: string; signedOffOn: string; amount: number; releaseInvoiceId: string | null } | null;
+  release: {
+    id: string;
+    signedOffOn: string;
+    amount: number;
+    releaseInvoiceId: string | null;
+  } | null;
   pairing: JobPairing;
   projectStatus: string;
 }
@@ -138,7 +144,13 @@ export function PaymentsView(props: Props) {
   const [notice, setNotice] = useState<string | null>(null);
 
   // §8 — money in is Owner/Admin only.
+  // [S111] TWO flags, not one. `canRecord` also gates unapply, void payment,
+  // apply credit, refunds, the retainage/lien release and reminder settings —
+  // all Owner/Admin in the database. A Project Executive may ONLY record a new
+  // payment (Q9, via record_client_payment), so that one panel reads its own
+  // flag and everything else stays exactly as it was.
   const canRecord = role === 'owner' || role === 'admin';
+  const canRecordNew = canRecordPayment(role);
   const invoiceBase = `/dashboard/projects/${projectId}/invoices`;
 
   const creditBalance = useMemo(
@@ -163,21 +175,46 @@ export function PaymentsView(props: Props) {
 
   return (
     <div style={{ padding: '20px 0', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', flexWrap: 'wrap', gap: '10px' }}>
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'baseline',
+          flexWrap: 'wrap',
+          gap: '10px',
+        }}
+      >
         <h2 style={h2Style}>Payments</h2>
-        {!canRecord && (
+        {!canRecordNew && (
           <span style={{ fontSize: '12px', color: color.faint }}>
             Read-only — recording a payment is Owner/Admin (§8).
           </span>
         )}
       </div>
 
-      {error && <div style={{ ...cardStyle, padding: '10px 14px', color: color.danger, fontSize: '13px' }}>{error}</div>}
-      {notice && <div style={{ ...cardStyle, padding: '10px 14px', color: color.primary, fontSize: '13px' }}>{notice}</div>}
+      {error && (
+        <div style={{ ...cardStyle, padding: '10px 14px', color: color.danger, fontSize: '13px' }}>
+          {error}
+        </div>
+      )}
+      {notice && (
+        <div style={{ ...cardStyle, padding: '10px 14px', color: color.primary, fontSize: '13px' }}>
+          {notice}
+        </div>
+      )}
 
       {/* §6a — the pairing. Surfaced here because this is where a payment
           lands; 7H reports the same shared definition. */}
-      <div style={{ ...cardStyle, padding: '14px 16px', display: 'flex', gap: '28px', flexWrap: 'wrap', alignItems: 'flex-end' }}>
+      <div
+        style={{
+          ...cardStyle,
+          padding: '14px 16px',
+          display: 'flex',
+          gap: '28px',
+          flexWrap: 'wrap',
+          alignItems: 'flex-end',
+        }}
+      >
         <Figure label="Collected to date" value={pairing.collected} />
         <Figure label="Spent to date" value={pairing.spent} muted />
         <Figure
@@ -221,8 +258,9 @@ export function PaymentsView(props: Props) {
         >
           <Figure label="Retainage held" value={retainageHeld} warn />
           <span style={{ fontSize: '11px', color: color.faint, maxWidth: '460px' }}>
-            Shown separately and deliberately <strong>outside</strong> every bucket — retainage is not
-            overdue, because it is not yet owed. It is released on completion as its own invoice (§5, §6).
+            Shown separately and deliberately <strong>outside</strong> every bucket — retainage is
+            not overdue, because it is not yet owed. It is released on completion as its own invoice
+            (§5, §6).
           </span>
         </div>
 
@@ -242,7 +280,10 @@ export function PaymentsView(props: Props) {
                 {aging.invoices.map((inv) => (
                   <tr key={inv.id}>
                     <td style={tdStyle}>
-                      <Link href={`${invoiceBase}/${inv.id}`} style={{ color: color.primary, fontWeight: 600, textDecoration: 'none' }}>
+                      <Link
+                        href={`${invoiceBase}/${inv.id}`}
+                        style={{ color: color.primary, fontWeight: 600, textDecoration: 'none' }}
+                      >
                         {inv.invoiceNumber ?? 'Draft'}
                       </Link>
                       {/* acceptance #14 — the clock restarts on a reissue, so
@@ -250,7 +291,12 @@ export function PaymentsView(props: Props) {
                       {inv.supersedesInvoiceId && (
                         <Link
                           href={`${invoiceBase}/${inv.supersedesInvoiceId}`}
-                          style={{ fontSize: '11px', color: color.warning, marginLeft: '6px', textDecoration: 'none' }}
+                          style={{
+                            fontSize: '11px',
+                            color: color.warning,
+                            marginLeft: '6px',
+                            textDecoration: 'none',
+                          }}
                         >
                           · replaces a voided invoice
                         </Link>
@@ -259,7 +305,14 @@ export function PaymentsView(props: Props) {
                     <td style={{ ...tdStyle, color: color.mutedAlt }}>{inv.issueDate}</td>
                     <td style={{ ...tdStyle, color: color.mutedAlt }}>{inv.ageDays} d</td>
                     <td style={tdStyle}>{AGING_BUCKET_LABEL[inv.bucket]}</td>
-                    <td style={{ ...tdStyle, textAlign: 'right', fontFamily: font.mono, fontWeight: 700 }}>
+                    <td
+                      style={{
+                        ...tdStyle,
+                        textAlign: 'right',
+                        fontFamily: font.mono,
+                        fontWeight: 700,
+                      }}
+                    >
                       {money(inv.remaining)}
                     </td>
                   </tr>
@@ -269,8 +322,8 @@ export function PaymentsView(props: Props) {
           </div>
         )}
         <p style={{ fontSize: '11px', color: color.faint, margin: '8px 0 0' }}>
-          PROVISIONAL: aging runs from the invoice&rsquo;s <strong>issue date</strong>. Payment terms are
-          not yet ruled, so no due date exists to age from (7D open item #3).
+          PROVISIONAL: aging runs from the invoice&rsquo;s <strong>issue date</strong>. Payment
+          terms are not yet ruled, so no due date exists to age from (7D open item #3).
         </p>
       </div>
 
@@ -284,7 +337,7 @@ export function PaymentsView(props: Props) {
         schedule={reminderSettings.schedule}
       />
 
-      {canRecord && openInvoices.length > 0 && (
+      {canRecordNew && openInvoices.length > 0 && (
         <RecordPaymentPanel
           contactId={contactId}
           openInvoices={openInvoices}
@@ -298,12 +351,20 @@ export function PaymentsView(props: Props) {
       {creditBalance > 0 && (
         <div style={{ ...cardStyle, padding: '14px 16px' }}>
           <span style={microLabelStyle}>Credit on account</span>
-          <div style={{ fontFamily: font.mono, fontSize: '18px', fontWeight: 700, color: color.navy, marginTop: '2px' }}>
+          <div
+            style={{
+              fontFamily: font.mono,
+              fontSize: '18px',
+              fontWeight: 700,
+              color: color.navy,
+              marginTop: '2px',
+            }}
+          >
             {money(creditBalance)}
           </div>
           <p style={{ fontSize: '11px', color: color.faint, margin: '4px 0 8px' }}>
-            An overpayment surplus. It is <strong>never</strong> applied automatically — choose the invoice
-            it should reduce (§3).
+            An overpayment surplus. It is <strong>never</strong> applied automatically — choose the
+            invoice it should reduce (§3).
           </p>
           {canRecord &&
             payments
@@ -326,7 +387,9 @@ export function PaymentsView(props: Props) {
           <span style={microLabelStyle}>Payments received</span>
         </div>
         {payments.length === 0 ? (
-          <div style={{ padding: '24px', textAlign: 'center', color: color.faint, fontSize: '13px' }}>
+          <div
+            style={{ padding: '24px', textAlign: 'center', color: color.faint, fontSize: '13px' }}
+          >
             No payments recorded on this job yet.
           </div>
         ) : (
@@ -352,15 +415,30 @@ export function PaymentsView(props: Props) {
                     ) : (
                       p.applications.map((a) => (
                         <span key={a.id} style={{ display: 'block' }}>
-                          <Link href={`${invoiceBase}/${a.invoiceId}`} style={{ color: color.primary, textDecoration: 'none' }}>
+                          <Link
+                            href={`${invoiceBase}/${a.invoiceId}`}
+                            style={{ color: color.primary, textDecoration: 'none' }}
+                          >
                             {money(a.amount)}
                           </Link>
                           {canRecord && (
                             <button
                               type="button"
                               disabled={busy}
-                              onClick={() => run(() => unapplyPayment(a.id), 'Unapplied — the money is back on account.')}
-                              style={{ marginLeft: '6px', fontSize: '10px', border: 'none', background: 'none', color: color.faint, cursor: 'pointer' }}
+                              onClick={() =>
+                                run(
+                                  () => unapplyPayment(a.id),
+                                  'Unapplied — the money is back on account.'
+                                )
+                              }
+                              style={{
+                                marginLeft: '6px',
+                                fontSize: '10px',
+                                border: 'none',
+                                background: 'none',
+                                color: color.faint,
+                                cursor: 'pointer',
+                              }}
                             >
                               unapply
                             </button>
@@ -369,8 +447,24 @@ export function PaymentsView(props: Props) {
                       ))
                     )}
                   </td>
-                  <td style={{ ...tdStyle, textAlign: 'right', fontFamily: font.mono, fontWeight: 700 }}>{money(p.amount)}</td>
-                  <td style={{ ...tdStyle, textAlign: 'right', fontFamily: font.mono, color: p.creditAvailable > 0 ? color.warning : color.faint }}>
+                  <td
+                    style={{
+                      ...tdStyle,
+                      textAlign: 'right',
+                      fontFamily: font.mono,
+                      fontWeight: 700,
+                    }}
+                  >
+                    {money(p.amount)}
+                  </td>
+                  <td
+                    style={{
+                      ...tdStyle,
+                      textAlign: 'right',
+                      fontFamily: font.mono,
+                      color: p.creditAvailable > 0 ? color.warning : color.faint,
+                    }}
+                  >
                     {p.creditAvailable > 0 ? money(p.creditAvailable) : '—'}
                   </td>
                   {canRecord && (
@@ -384,8 +478,8 @@ export function PaymentsView(props: Props) {
           </table>
         )}
         <p style={{ fontSize: '11px', color: color.faint, padding: '8px 16px', margin: 0 }}>
-          A recorded payment is immutable — correcting one removes it and re-enters it, so the audit trail
-          survives (§2, the same posture as money-out).
+          A recorded payment is immutable — correcting one removes it and re-enters it, so the audit
+          trail survives (§2, the same posture as money-out).
         </p>
       </div>
 
@@ -405,11 +499,15 @@ export function PaymentsView(props: Props) {
         <div style={{ ...cardStyle, padding: '14px 16px' }}>
           <span style={microLabelStyle}>Retainage release</span>
           <div style={{ fontSize: '13px', color: color.body, marginTop: '4px' }}>
-            Client signed off {release.signedOffOn} · {money(release.amount)} released as its own invoice
+            Client signed off {release.signedOffOn} · {money(release.amount)} released as its own
+            invoice
             {release.releaseInvoiceId && (
               <>
                 {' — '}
-                <Link href={`${invoiceBase}/${release.releaseInvoiceId}`} style={{ color: color.primary, textDecoration: 'none', fontWeight: 600 }}>
+                <Link
+                  href={`${invoiceBase}/${release.releaseInvoiceId}`}
+                  style={{ color: color.primary, textDecoration: 'none', fontWeight: 600 }}
+                >
                   open the release invoice
                 </Link>
               </>
@@ -490,9 +588,8 @@ function RecordPaymentPanel({
 
   const allocated = useMemo(
     () =>
-      Math.round(
-        Object.values(allocations).reduce((sum, v) => sum + (Number(v) || 0), 0) * 100
-      ) / 100,
+      Math.round(Object.values(allocations).reduce((sum, v) => sum + (Number(v) || 0), 0) * 100) /
+      100,
     [allocations]
   );
   const entered = Number(amount) || 0;
@@ -516,13 +613,32 @@ function RecordPaymentPanel({
     <div style={{ ...cardStyle, padding: '14px 16px' }}>
       <span style={microLabelStyle}>Record a payment</span>
       <p style={{ fontSize: '11px', color: color.faint, margin: '4px 0 10px' }}>
-        One check can cover several invoices — that is regular practice, not an edge case (§2). Anything
-        you do not allocate stays on account as a credit (§3).
+        One check can cover several invoices — that is regular practice, not an edge case (§2).
+        Anything you do not allocate stays on account as a credit (§3).
       </p>
 
-      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center', marginBottom: '10px' }}>
-        <input value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="Amount $" inputMode="decimal" style={{ ...inputStyle, width: '120px' }} />
-        <input type="date" value={paymentDate} onChange={(e) => setPaymentDate(e.target.value)} style={inputStyle} />
+      <div
+        style={{
+          display: 'flex',
+          gap: '8px',
+          flexWrap: 'wrap',
+          alignItems: 'center',
+          marginBottom: '10px',
+        }}
+      >
+        <input
+          value={amount}
+          onChange={(e) => setAmount(e.target.value)}
+          placeholder="Amount $"
+          inputMode="decimal"
+          style={{ ...inputStyle, width: '120px' }}
+        />
+        <input
+          type="date"
+          value={paymentDate}
+          onChange={(e) => setPaymentDate(e.target.value)}
+          style={inputStyle}
+        />
         <select value={method} onChange={(e) => setMethod(e.target.value)} style={inputStyle}>
           <option value="check">Check</option>
           <option value="cash">Cash</option>
@@ -530,8 +646,18 @@ function RecordPaymentPanel({
           <option value="card">Card</option>
           <option value="other">Other</option>
         </select>
-        <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Note (check #, etc.)" style={inputStyle} />
-        <button type="button" disabled={busy || !(entered > 0)} onClick={autoAllocate} style={secondaryButtonStyle}>
+        <input
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          placeholder="Note (check #, etc.)"
+          style={inputStyle}
+        />
+        <button
+          type="button"
+          disabled={busy || !(entered > 0)}
+          onClick={autoAllocate}
+          style={secondaryButtonStyle}
+        >
           Auto-allocate oldest first
         </button>
       </div>
@@ -550,7 +676,9 @@ function RecordPaymentPanel({
             <tr key={inv.id}>
               <td style={tdStyle}>{inv.invoiceNumber ?? 'Draft'}</td>
               <td style={{ ...tdStyle, color: color.mutedAlt }}>{inv.issueDate}</td>
-              <td style={{ ...tdStyle, textAlign: 'right', fontFamily: font.mono }}>{money(inv.remaining)}</td>
+              <td style={{ ...tdStyle, textAlign: 'right', fontFamily: font.mono }}>
+                {money(inv.remaining)}
+              </td>
               <td style={{ ...tdStyle, textAlign: 'right' }}>
                 <input
                   value={allocations[inv.id] ?? ''}
@@ -565,7 +693,15 @@ function RecordPaymentPanel({
         </tbody>
       </table>
 
-      <div style={{ display: 'flex', gap: '14px', alignItems: 'center', flexWrap: 'wrap', marginTop: '10px' }}>
+      <div
+        style={{
+          display: 'flex',
+          gap: '14px',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          marginTop: '10px',
+        }}
+      >
         <span style={{ fontSize: '12px', color: color.body }}>
           Allocated <strong style={{ fontFamily: font.mono }}>{money(allocated)}</strong>
           {entered > 0 && (
@@ -634,14 +770,22 @@ function ApplyCreditRow({
   if (openInvoices.length === 0) {
     return (
       <p style={{ fontSize: '12px', color: color.faint, margin: '4px 0' }}>
-        {money(payment.creditAvailable)} from {payment.paymentDate} — no open invoice to apply it to. If
-        nothing is left to bill, refund it below (§5).
+        {money(payment.creditAvailable)} from {payment.paymentDate} — no open invoice to apply it
+        to. If nothing is left to bill, refund it below (§5).
       </p>
     );
   }
 
   return (
-    <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap', marginTop: '6px' }}>
+    <div
+      style={{
+        display: 'flex',
+        gap: '8px',
+        alignItems: 'center',
+        flexWrap: 'wrap',
+        marginTop: '6px',
+      }}
+    >
       <span style={{ fontSize: '12px', color: color.body }}>
         {money(payment.creditAvailable)} from {payment.paymentDate}
       </span>
@@ -652,12 +796,19 @@ function ApplyCreditRow({
           </option>
         ))}
       </select>
-      <input value={amount} onChange={(e) => setAmount(e.target.value)} inputMode="decimal" style={{ ...inputStyle, width: '100px' }} />
+      <input
+        value={amount}
+        onChange={(e) => setAmount(e.target.value)}
+        inputMode="decimal"
+        style={{ ...inputStyle, width: '100px' }}
+      />
       <button
         type="button"
         disabled={busy || !invoiceId}
         style={secondaryButtonStyle}
-        onClick={() => run(() => applyCredit(payment.id, invoiceId, Number(amount) || 0), 'Credit applied.')}
+        onClick={() =>
+          run(() => applyCredit(payment.id, invoiceId, Number(amount) || 0), 'Credit applied.')
+        }
       >
         Apply credit
       </button>
@@ -679,7 +830,12 @@ function RemovePaymentButton({
 
   if (!open) {
     return (
-      <button type="button" disabled={busy} onClick={() => setOpen(true)} style={{ ...secondaryButtonStyle, color: color.danger }}>
+      <button
+        type="button"
+        disabled={busy}
+        onClick={() => setOpen(true)}
+        style={{ ...secondaryButtonStyle, color: color.danger }}
+      >
         Remove
       </button>
     );
@@ -687,13 +843,22 @@ function RemovePaymentButton({
 
   return (
     <span style={{ display: 'inline-flex', gap: '6px', alignItems: 'center' }}>
-      <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Reason (required)" autoFocus style={inputStyle} />
+      <input
+        value={reason}
+        onChange={(e) => setReason(e.target.value)}
+        placeholder="Reason (required)"
+        autoFocus
+        style={inputStyle}
+      />
       <button
         type="button"
         disabled={busy || !reason.trim()}
         style={{ ...primaryButtonStyle, backgroundColor: color.danger }}
         onClick={async () => {
-          const ok = await run(() => voidPayment(paymentId, reason), 'Payment removed. Re-enter it to correct it.');
+          const ok = await run(
+            () => voidPayment(paymentId, reason),
+            'Payment removed. Re-enter it to correct it.'
+          );
           if (ok) setOpen(false);
         }}
       >
@@ -732,22 +897,44 @@ function RetainageReleasePanel({
     <div style={{ ...cardStyle, padding: '14px 16px' }}>
       <span style={microLabelStyle}>Release retainage</span>
       <p style={{ fontSize: '12px', color: color.body, margin: '4px 0 8px' }}>
-        {money(amount)} is held on this job. The trigger is the client&rsquo;s <strong>final
-        walkthrough</strong> sign-off (§4.1) — record the date it happened and {brand.name} generates the
-        release as its <strong>own draft invoice</strong>, which still waits for Owner/Admin approval
-        before sending.
+        {money(amount)} is held on this job. The trigger is the client&rsquo;s{' '}
+        <strong>final walkthrough</strong> sign-off (§4.1) — record the date it happened and{' '}
+        {brand.name} generates the release as its <strong>own draft invoice</strong>, which still
+        waits for Owner/Admin approval before sending.
       </p>
       {projectStatus !== 'complete' && (
         <p style={{ fontSize: '11px', color: color.warning, margin: '0 0 8px' }}>
-          This project is not marked complete. Releasing anyway is allowed — this warns, it does not block.
+          This project is not marked complete. Releasing anyway is allowed — this warns, it does not
+          block.
         </p>
       )}
       <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
-        <label style={{ fontSize: '12px', color: color.body, display: 'inline-flex', gap: '4px', alignItems: 'center' }}>
+        <label
+          style={{
+            fontSize: '12px',
+            color: color.body,
+            display: 'inline-flex',
+            gap: '4px',
+            alignItems: 'center',
+          }}
+        >
           Signed off
-          <input type="date" value={signedOffOn} onChange={(e) => setSignedOffOn(e.target.value)} style={inputStyle} />
+          <input
+            type="date"
+            value={signedOffOn}
+            onChange={(e) => setSignedOffOn(e.target.value)}
+            style={inputStyle}
+          />
         </label>
-        <label style={{ fontSize: '12px', color: color.body, display: 'inline-flex', gap: '4px', alignItems: 'center' }}>
+        <label
+          style={{
+            fontSize: '12px',
+            color: color.body,
+            display: 'inline-flex',
+            gap: '4px',
+            alignItems: 'center',
+          }}
+        >
           <input type="checkbox" checked={warned} onChange={(e) => setWarned(e.target.checked)} />
           Lien release sent
         </label>
@@ -773,8 +960,8 @@ function RetainageReleasePanel({
         </button>
       </div>
       <p style={{ fontSize: '11px', color: color.faint, margin: '6px 0 0' }}>
-        The lien-release prompt is advisory — it warns and proceeds, and never blocks the money (7F F1).
-        Sub-held retainage does not move here; it releases on its own rule in 7C (§4.2).
+        The lien-release prompt is advisory — it warns and proceeds, and never blocks the money (7F
+        F1). Sub-held retainage does not move here; it releases on its own rule in 7C (§4.2).
       </p>
     </div>
   );
@@ -810,7 +997,15 @@ function RefundPanel({
 
   return (
     <div style={{ ...cardStyle, padding: '14px 16px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '10px', flexWrap: 'wrap' }}>
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'baseline',
+          gap: '10px',
+          flexWrap: 'wrap',
+        }}
+      >
         <span style={microLabelStyle}>Refunds</span>
         {!open && (
           <button type="button" style={secondaryButtonStyle} onClick={() => setOpen(true)}>
@@ -819,21 +1014,44 @@ function RefundPanel({
         )}
       </div>
       <p style={{ fontSize: '11px', color: color.faint, margin: '4px 0 0' }}>
-        A refund is money <strong>returned</strong> — a different thing from a credit on account, and a
-        different document in QuickBooks (§5). Use it when nothing is left to bill.
+        A refund is money <strong>returned</strong> — a different thing from a credit on account,
+        and a different document in QuickBooks (§5). Use it when nothing is left to bill.
         {role === 'admin' && ' An Admin-issued refund waits for Owner approval.'}
       </p>
 
       {open && (
-        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap', marginTop: '10px' }}>
-          <input value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="Amount $" inputMode="decimal" style={{ ...inputStyle, width: '110px' }} />
-          <select value={source} onChange={(e) => setSource(e.target.value as RefundSource)} style={inputStyle}>
+        <div
+          style={{
+            display: 'flex',
+            gap: '8px',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            marginTop: '10px',
+          }}
+        >
+          <input
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            placeholder="Amount $"
+            inputMode="decimal"
+            style={{ ...inputStyle, width: '110px' }}
+          />
+          <select
+            value={source}
+            onChange={(e) => setSource(e.target.value as RefundSource)}
+            style={inputStyle}
+          >
             <option value="overpayment">Overpayment</option>
             <option value="negative_co">Negative change order</option>
             <option value="deposit">Deposit refund</option>
             <option value="other">Other</option>
           </select>
-          <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Reason" style={inputStyle} />
+          <input
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            placeholder="Reason"
+            style={inputStyle}
+          />
           <button
             type="button"
             disabled={busy || !(Number(amount) > 0)}
@@ -867,7 +1085,8 @@ function RefundPanel({
           </button>
           {creditBalance > 0 && (
             <span style={{ fontSize: '11px', color: color.faint }}>
-              {money(creditBalance)} sits as credit — refund it only if there is nothing left to bill.
+              {money(creditBalance)} sits as credit — refund it only if there is nothing left to
+              bill.
             </span>
           )}
         </div>
@@ -889,7 +1108,11 @@ function RefundPanel({
                 <td style={tdStyle}>{r.refundDate}</td>
                 <td style={{ ...tdStyle, color: color.mutedAlt }}>{r.source.replace(/_/g, ' ')}</td>
                 <td style={tdStyle}>{r.status.replace(/_/g, ' ')}</td>
-                <td style={{ ...tdStyle, textAlign: 'right', fontFamily: font.mono, fontWeight: 700 }}>{money(r.amount)}</td>
+                <td
+                  style={{ ...tdStyle, textAlign: 'right', fontFamily: font.mono, fontWeight: 700 }}
+                >
+                  {money(r.amount)}
+                </td>
               </tr>
             ))}
           </tbody>

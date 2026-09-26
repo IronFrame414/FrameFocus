@@ -38,10 +38,7 @@ type CoInsert = Database['public']['Tables']['change_orders']['Insert'];
 type ItemInsert = Database['public']['Tables']['change_order_line_items']['Insert'];
 type RowInsert = Database['public']['Tables']['change_order_line_rows']['Insert'];
 
-export async function POST(
-  _request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function POST(_request: NextRequest, { params }: { params: { id: string } }) {
   const supabase = await createClient();
 
   const {
@@ -55,9 +52,15 @@ export async function POST(
     .eq('user_id', user.id)
     .eq('is_deleted', false)
     .single();
-  if (!profile || !['owner', 'admin', 'project_manager'].includes(profile.role)) {
+  // [S111] + a Project Executive, confined to its projects by the RLS fetch below.
+  if (
+    !profile ||
+    !['owner', 'admin', 'project_executive', 'project_manager'].includes(profile.role)
+  ) {
     return NextResponse.json(
-      { error: 'Only Owner, Admin, or Project Manager can reissue change orders' },
+      {
+        error: 'Only Owner, Admin, Project Executive, or Project Manager can reissue change orders',
+      },
       { status: 403 }
     );
   }

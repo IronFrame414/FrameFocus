@@ -40,7 +40,10 @@ export default async function ChangeOrderPage({
     notFound();
   }
 
-  const canManage = ['owner', 'admin', 'project_manager'].includes(profile.role);
+  // [S111] + a Project Executive: CO write arms on its own projects (20261910000000).
+  const canManage = ['owner', 'admin', 'project_executive', 'project_manager'].includes(
+    profile.role
+  );
   // [S168] DELETE is Owner/Admin, narrower than `canManage`. Josh's ruling
   // names the signed/unsigned boundary and is silent on authority; a permanent,
   // unrecoverable removal of a legal document takes the conservative default.

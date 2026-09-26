@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { checkClientFacingEnglish, nonEnglishResponseBody } from '@/lib/language-check/english-check';
+import {
+  checkClientFacingEnglish,
+  nonEnglishResponseBody,
+} from '@/lib/language-check/english-check';
 import { changeOrderFieldsForCheck } from '@/lib/language-check/document-fields';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@framefocus/shared/types/database';
@@ -50,9 +53,13 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     .eq('user_id', user.id)
     .eq('is_deleted', false)
     .single();
-  if (!profile || !['owner', 'admin', 'project_manager'].includes(profile.role)) {
+  // [S111] + a Project Executive, confined to its projects by the RLS fetch below.
+  if (
+    !profile ||
+    !['owner', 'admin', 'project_executive', 'project_manager'].includes(profile.role)
+  ) {
     return NextResponse.json(
-      { error: 'Only Owner, Admin, or Project Manager can send change orders' },
+      { error: 'Only Owner, Admin, Project Executive, or Project Manager can send change orders' },
       { status: 403 }
     );
   }
@@ -125,7 +132,10 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
   if (needsSignature) {
     if (!input.contractor_signature_mode || !input.contractor_signature_name) {
       return NextResponse.json(
-        { error: 'A contractor signature (mode + printed name) is required to send this change order.' },
+        {
+          error:
+            'A contractor signature (mode + printed name) is required to send this change order.',
+        },
         { status: 400 }
       );
     }
@@ -186,8 +196,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
   if (!recipientEmail) {
     return NextResponse.json(
       {
-        error:
-          'No recipient email. Set a primary contact on the project, or pass recipient_email.',
+        error: 'No recipient email. Set a primary contact on the project, or pass recipient_email.',
       },
       { status: 422 }
     );

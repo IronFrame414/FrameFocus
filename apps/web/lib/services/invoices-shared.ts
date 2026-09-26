@@ -363,8 +363,13 @@ export function canVoidInvoice(ctx: VoidContext): VoidDecision {
         'This invoice has a payment applied and cannot be voided. Issue a credit memo or a refund in 7E instead (§9).',
     };
   }
-  if (!['owner', 'admin'].includes(ctx.role)) {
-    return { allowed: false, reason: 'Only Owner or Admin can void an invoice (§9/§12).' };
+  // [S111] + a Project Executive — it only ever reaches invoices on its own
+  // projects, and enforce_invoice_void_authority re-checks that (20261910000000).
+  if (!seesProjectMoney(ctx.role)) {
+    return {
+      allowed: false,
+      reason: 'Only Owner, Admin or a Project Executive can void an invoice (§9/§12).',
+    };
   }
   return { allowed: true };
 }

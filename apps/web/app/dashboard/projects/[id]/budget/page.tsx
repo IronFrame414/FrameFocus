@@ -101,9 +101,9 @@ export default async function BudgetAndCostPage({ params }: { params: { id: stri
   }
   // [S111] Two questions, kept apart. `seesMoney` — may this role SEE this
   // project's money (Owner/Admin, and a Project Executive on its own project:
-  // RLS, 20261830000000). `isOwnerAdmin` — the WRITE actions whose database
-  // guards do not admit a Project Executive yet (rate renegotiate, §5.2 budget
-  // retry via apply_change_order_budget). Widen those with the write arms.
+  // RLS, 20261830000000); it also gates rate renegotiate since the PE's
+  // instrument_rates arm (20261910000000). `isOwnerAdmin` — the §5.2 budget
+  // retry, whose apply_change_order_budget() admits no other role.
   const seesMoney = seesProjectMoney(role);
   const isOwnerAdmin = role === 'owner' || role === 'admin';
   const seesCommitted = seesMoney || role === 'project_manager'; // A-3 widened floor
@@ -591,11 +591,7 @@ export default async function BudgetAndCostPage({ params }: { params: { id: stri
           (Financial Visibility Floor): inside this gate the component never
           renders or fetches for PM/Foreman. */}
       {seesMoney && (
-        <RateSection
-          project={project}
-          canSupersede={role === 'owner'}
-          canRenegotiate={isOwnerAdmin}
-        />
+        <RateSection project={project} canSupersede={role === 'owner'} canRenegotiate={seesMoney} />
       )}
 
       {seesMoney && (

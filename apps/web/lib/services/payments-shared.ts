@@ -1,4 +1,5 @@
 import type { Database } from '@framefocus/shared/types/database';
+import { seesProjectMoney } from '@framefocus/shared/constants/roles';
 import { daysBetween } from '@/lib/services/invoices-shared';
 
 // Module 7E1 — shared payment types and PURE logic. THE definitions.
@@ -50,9 +51,7 @@ export interface LiveAmount {
 }
 
 export function sumLive(rows: LiveAmount[]): number {
-  return round2(
-    rows.reduce((sum, r) => (r.is_deleted ? sum : sum + Number(r.amount)), 0)
-  );
+  return round2(rows.reduce((sum, r) => (r.is_deleted ? sum : sum + Number(r.amount)), 0));
 }
 
 // ── Per invoice (§2) ────────────────────────────────────────────────────────
@@ -102,8 +101,7 @@ export interface PaymentWithApplications {
 export function clientCreditBalance(payments: PaymentWithApplications[]): number {
   return round2(
     payments.reduce(
-      (sum, p) =>
-        p.is_deleted ? sum : sum + creditAvailableOnPayment(p.amount, p.applications),
+      (sum, p) => (p.is_deleted ? sum : sum + creditAvailableOnPayment(p.amount, p.applications)),
       0
     )
   );
@@ -129,7 +127,8 @@ export interface RetainageBearingInvoice {
 export function retainageHeld(invoices: RetainageBearingInvoice[]): number {
   return round2(
     invoices.reduce(
-      (sum, i) => (i.is_deleted || i.status === 'voided' ? sum : sum + Number(i.retainage_withheld)),
+      (sum, i) =>
+        i.is_deleted || i.status === 'voided' ? sum : sum + Number(i.retainage_withheld),
       0
     )
   );
@@ -265,9 +264,7 @@ export function ageReceivables(invoices: AgeableInvoice[], today: string): Aging
 
   return {
     buckets,
-    totalOutstanding: round2(
-      buckets.current + buckets.d31_60 + buckets.d61_90 + buckets.d90_plus
-    ),
+    totalOutstanding: round2(buckets.current + buckets.d31_60 + buckets.d61_90 + buckets.d90_plus),
     retainageHeld: retainageHeld(invoices),
     invoices: aged,
   };
@@ -297,11 +294,7 @@ export interface JobPairing {
  * against until it runs on a real job — that is the point of the feature, not
  * a gap in it.
  */
-export function jobPairing(
-  collected: number,
-  spent: number,
-  spentComplete = true
-): JobPairing {
+export function jobPairing(collected: number, spent: number, spentComplete = true): JobPairing {
   return {
     collected: round2(collected),
     spent: round2(spent),
@@ -336,6 +329,8 @@ export function canApproveRefund(role: string): boolean {
 
 /** §8 — money IN is Owner/Admin only. A PM cannot record a payment received;
  *  the asymmetry with money-out (where a PM may enter bills) is deliberate. */
+// [S111 Q9] + a Project Executive, through record_client_payment() — which
+// admits only applications to invoices on its own projects, whole payments.
 export function canRecordPayment(role: string): boolean {
-  return role === 'owner' || role === 'admin';
+  return seesProjectMoney(role);
 }

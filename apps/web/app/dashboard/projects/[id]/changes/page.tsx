@@ -45,7 +45,10 @@ export default async function ProjectChangesPage({ params }: { params: { id: str
       )
     : null;
 
-  const canManage = ['owner', 'admin', 'project_manager'].includes(profile.role);
+  // [S111] + a Project Executive: CO write arms on its own projects (20261910000000).
+  const canManage = ['owner', 'admin', 'project_executive', 'project_manager'].includes(
+    profile.role
+  );
   const canDelete = ['owner', 'admin'].includes(profile.role);
   // ── Financial floor, AS RULED [Josh, S121] — PM SCOPE IS AUTHORED-BY ──────
   //

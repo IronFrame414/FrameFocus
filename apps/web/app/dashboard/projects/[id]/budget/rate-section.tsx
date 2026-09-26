@@ -116,10 +116,10 @@ interface RateSectionProps {
    *  Owner/Admin visibility): shows the "Correct rates" edit-mode control.
    *  The RPC re-checks Owner inside — this prop is display, not security. */
   canSupersede: boolean;
-  /** [S111] Stage-3 "Renegotiate rate". Separate from seeing the section: a
-   *  Project Executive sees its projects' rates (RLS, 20261830000000) but has
-   *  no instrument_rates WRITE arm yet, so the action stays Owner/Admin until
-   *  it does. Display, not security — the DB refuses the write regardless. */
+  /** [S111] Stage-3 "Renegotiate rate", kept separate from seeing the section.
+   *  Owner/Admin, and a Project Executive on its own project since its
+   *  instrument_rates INSERT arm (20261910000000). Display, not security — the
+   *  DB refuses the write regardless. Supersede stays `canSupersede` (Owner). */
   canRenegotiate: boolean;
 }
 

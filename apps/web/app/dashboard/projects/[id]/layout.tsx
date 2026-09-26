@@ -36,7 +36,8 @@ export default async function ProjectLayout({
     <div>
       <ProjectHeader
         project={project}
-        canManage={['owner', 'admin', 'project_manager'].includes(role)}
+        // [S111] "+ Change Order" — a Project Executive has the CO write arms.
+        canManage={['owner', 'admin', 'project_executive', 'project_manager'].includes(role)}
         role={role}
       />
       {children}
