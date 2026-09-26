@@ -139,7 +139,7 @@ export default async function MobileProjectsPage({
         sub={t('field.projects.activeCount', { n: activeCount })}
       />
 
-      <FilterChips chips={chips} active={active} basePath="/m/projects" param="filter" />
+      <FilterChips chips={chips} active={active} basePath="/m/projects" param="filter" t={t} />
 
       <div className="mt-[12px]">
         <ProjectsList cards={cards} />

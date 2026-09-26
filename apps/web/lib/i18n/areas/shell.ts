@@ -70,6 +70,8 @@ export const en = {
   'shell.tryAgain': 'Try again',
   'shell.keepWorkingOffline': 'Keep working offline',
   'shell.notifications': 'Notifications',
+  // [S112 audit F15] the bell's screen-reader label, which was hard-coded English.
+  'shell.notificationsUnread': 'Notifications, {n} unread',
   'shell.settings.you': 'You',
   'shell.settings.nameAndPassword': 'Your name and password →',
   'shell.settings.yourCompany': 'Your company',
@@ -258,6 +260,7 @@ export const es: Record<keyof typeof en, string> = {
   'shell.tryAgain': 'Reintentar',
   'shell.keepWorkingOffline': 'Seguir trabajando sin conexión',
   'shell.notifications': 'Notificaciones',
+  'shell.notificationsUnread': 'Notificaciones, {n} sin leer',
   'shell.settings.you': 'Tú',
   'shell.settings.nameAndPassword': 'Tu nombre y contraseña →',
   'shell.settings.yourCompany': 'Tu empresa',

@@ -90,7 +90,7 @@ export default async function MobileLogsPage({
         sub={t('field.logs.thisWeek', { n: feed.thisWeek })}
       />
 
-      <FilterChips chips={chips} active={active} basePath={basePath} param="filter" />
+      <FilterChips chips={chips} active={active} basePath={basePath} param="filter" t={t} />
 
       <LogRows rows={feed.rows} projectId={projectId} />
     </div>

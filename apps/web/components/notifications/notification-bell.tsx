@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { Bell } from 'lucide-react';
+import { useT } from '@/components/i18n/language-provider';
 
 /**
  * The app-bar bell. ND-13 as amended [S123, Josh]; M6M §3.1, A-40/A-40b/A-40c.
@@ -42,7 +43,9 @@ export function NotificationBell({
   href?: string;
 }) {
   const showBadge = count > 0;
-  const label = showBadge ? `Notifications, ${count} unread` : 'Notifications';
+  const t = useT();
+  // [S112 audit F15] Was hard-coded English, so Spanish screen readers heard it.
+  const label = showBadge ? t('shell.notificationsUnread', { n: count }) : t('shell.notifications');
 
   return (
     <Link

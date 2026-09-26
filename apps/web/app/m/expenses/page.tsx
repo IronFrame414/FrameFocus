@@ -166,7 +166,7 @@ export default async function MobileExpensesPage({
     <div className="px-[18px] pb-[18px] pt-[14px]">
       <SetMobileHeader title={t('field.expenses.title')} sub={t('field.expenses.sub')} />
 
-      <FilterChips chips={chips} active={active} basePath="/m/expenses" param="filter" />
+      <FilterChips chips={chips} active={active} basePath="/m/expenses" param="filter" t={t} />
 
       {expenses.length === 0 ? (
         <div className="pt-[18px]">

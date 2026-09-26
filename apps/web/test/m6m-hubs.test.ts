@@ -2,6 +2,11 @@ import { describe, it, expect } from 'vitest';
 import type { CalendarEvent } from '@/lib/services/schedule';
 import { selectUpNext, upNextDateLine } from '@/app/m/p/[projectId]/up-next';
 import { daysLeft, daysLeftLabel, formatMoney } from '@/app/m/mobile-ui';
+import { makeT } from '@/lib/i18n/messages';
+
+// [S112 audit F15] `t` is required now — an English default is what let lists
+// ship English in Spanish. These assert the English strings, so pass English.
+const EN = makeT('en');
 import { calendarDayInZone, companyToday } from '@framefocus/shared/utils/dates';
 
 // M6M — the pure rules behind M-2's card footer and M-3's "Up next" card.
@@ -131,12 +136,12 @@ describe('M-2 / M-3 · days left (A-10e, A-11d)', () => {
 
   it('is null when target_end_date is unset — the em-dash state, never zero', () => {
     expect(daysLeft(null, TODAY)).toBeNull();
-    expect(daysLeftLabel(null, TODAY)).toBe('—');
+    expect(daysLeftLabel(null, TODAY, EN)).toBe('—');
   });
 
   it('goes NEGATIVE past target rather than clamping at zero', () => {
     expect(daysLeft('2026-08-02', TODAY)).toBe(-4);
-    expect(daysLeftLabel('2026-08-02', TODAY)).toBe('-4 days left');
+    expect(daysLeftLabel('2026-08-02', TODAY, EN)).toBe('-4 days left');
   });
 
   it('counts forward from today', () => {
@@ -145,7 +150,7 @@ describe('M-2 / M-3 · days left (A-10e, A-11d)', () => {
 
   it('is zero — not null — on the target date itself', () => {
     expect(daysLeft(TODAY, TODAY)).toBe(0);
-    expect(daysLeftLabel(TODAY, TODAY)).toBe('0 days left');
+    expect(daysLeftLabel(TODAY, TODAY, EN)).toBe('0 days left');
   });
 
   it('[S106] counts from the COMPANY day, not the UTC day — an evening in New York', () => {

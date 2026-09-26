@@ -165,6 +165,7 @@ export default async function ProjectPhotosPage({
             active={active}
             basePath={`/m/p/${params.projectId}/photos`}
             param="source"
+            t={t}
           />
         </div>
       </div>

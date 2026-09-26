@@ -71,7 +71,7 @@ export default async function ProjectContactsPage({
                 // Pick of seven columns), so it is not passed. M-36 has it —
                 // getContact() selects '*' — which is one more reason the row
                 // opening the contact is worth having.
-                actions={<ContactActions phone={c?.phone} email={c?.email} name={name} />}
+                actions={<ContactActions phone={c?.phone} email={c?.email} name={name} t={t} />}
               >
                   <p className="truncate text-[17px] font-bold leading-tight text-m6m-navy">
                     {name}
