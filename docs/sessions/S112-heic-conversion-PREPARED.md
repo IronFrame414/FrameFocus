@@ -224,13 +224,15 @@ through `20261810000000`'s `regexp_replace` lookup of the parent row.
 | --- | --- |
 | Before: sub reads each thumbnail | 1, 1 (control) |
 | Dry run | exit 0; rows unchanged; no `.jpg` object created |
-| Apply | exit 0; both rows → `{path}.jpg`, `image/jpeg`, `.jpg` name; bytes start `FF D8 FF`; 1,002,021 B from a 1,030,142 B HEIC; **3000×4000**; served `Content-Type: image/jpeg` |
+| Apply | exit 0; both rows → `{path}.jpg`, `image/jpeg`, `.jpg` name; bytes start `FF D8 FF`; served `Content-Type: image/jpeg`. **Re-proven with the ImageMagick converter [S112 Q3]:** 1,511,118 B from a 1,030,142 B HEIC, **3024×4032 (full size)**, and the JPEG's evidence is **identical** to the HEIC's — DateTimeOriginal 2019:07:29 12:18:34, GPS 26/1,27/1,2270/100 N · 80/1,7/1,4590/100 W. _Superseded (the first, /render/image/ build):_ 1,002,021 B, 3000×4000, no capture time or GPS. |
 | **The trap:** sub reads the thumbnail at the NEW name | **1, 1** — the copies |
 | The OLD thumbnail name, for the sub | **sign 0, download 0** on both path shapes — orphaned, exactly as Josh predicted |
 | Marked photo's derivative at the new name | present |
 | Originals | untouched |
 | `--verify` | exit 0 |
 | `--undo --apply` | exit 0; rows restored; every new object gone; sub reads the old thumbnail again |
+
+**Found by this re-run and fixed:** the evidence read-out joined ImageMagick fields with `\t`, which `identify -format` prints as a literal `t` — every field parsed as NaN and the script **refused both rows** ("resized NaNxNaN", nothing created): failed closed, as designed. Now `|`.
 
 **Control that must fire:** with the side-object copy removed from the script, the same proof went
 red on 4 checks — both new thumbnails unreadable (0), the derivative missing, and the script's own
