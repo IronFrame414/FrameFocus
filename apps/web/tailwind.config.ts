@@ -71,7 +71,11 @@ const config: Config = {
           surface: '#f4f6fa', // page background
           card: '#ffffff', // all cards and tiles
           border: '#e4e8ef', // card border
-          muted: '#8792a8', // inactive tab, captions — on light
+          // RULED [Josh, S112 R4]: was '#8792a8' (3.13:1 on card, 2.89:1 on
+          // page — fails WCAG AA for the captions it carries). #687081 is
+          // 4.97:1 on card, 4.60:1 on page. May be tuned, never below 4.5.
+          // Tracks theme.ts `mutedAlt` (R6).
+          muted: '#687081', // inactive tab, captions — on light
           'muted-navy': '#8fa0c4', // the same role, on navy
           canvas: '#0d1220', // photo viewer and markup ONLY (M-9, M-10)
           // §4.4's amber status strip. Not in the §2 table — §4.4 names the two

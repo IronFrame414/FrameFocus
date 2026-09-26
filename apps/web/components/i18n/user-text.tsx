@@ -130,7 +130,7 @@ export function UserText({
     >
       <span style={{ whiteSpace: 'pre-wrap' }}>{shown}</span>
       {translated ? (
-        <span style={{ display: 'block', fontSize: '11px', color: '#8792a8' }}>
+        <span style={{ display: 'block', fontSize: '11px', color: '#687081' }}>
           {from ? t('usertext.translatedFrom', { lang: from }) : null}
           {from ? ' · ' : null}
           <button
