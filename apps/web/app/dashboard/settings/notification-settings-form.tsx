@@ -152,7 +152,7 @@ export function NotificationSettingsForm({ settings }: NotificationSettingsFormP
           Enrolment is per person, per device. Team members who can&rsquo;t reach Settings enable
           push from the Notifications page — the control there is the same one.
         </p>
-        <PushEnrolment surface="desktop" />
+        <PushEnrolment surface="desktop" framed={false} />
       </div>
 
       <p style={{ fontSize: '0.8125rem', color: color.muted }}>

@@ -50,7 +50,7 @@ export default async function ProjectContactsPage({
   return (
     <div className="px-[18px] pb-[18px] pt-[14px]">
       <SectionHeader projectId={params.projectId} title={t('project.tile.contacts')} />
-      <DeniedNotice kind={searchParams.denied} />
+      <DeniedNotice kind={searchParams.denied} t={t} />
 
       {rows.length === 0 ? (
         <EmptyState>{t('project.contacts.empty')}</EmptyState>

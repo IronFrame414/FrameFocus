@@ -294,6 +294,16 @@ export type MobileShellProps = {
 // other consumer. The signed-in name is not lost: M-30 (§4.13.7) binds it to
 // getMyMember(), which is the right source for it anyway.
 
+// The camera FAB sits -26px above a tab bar with 10px top padding and a 1px
+// top border, so it overhangs the content region by 26 - 10 - 1 = 15px
+// (measured: 15 on all 196 captures). 24px of air on top of that. Exposed as
+// --m-fab-inset on the shell so the content region and the chat overlay use
+// one value. Change the FAB's offset and this moves with it — change one
+// without the other and every screen's last row goes back under the camera.
+const FAB_OVERHANG_PX = 15;
+const FAB_GAP_PX = 24;
+const FAB_INSET_PX = FAB_OVERHANG_PX + FAB_GAP_PX;
+
 export function MobileShell(props: MobileShellProps) {
   return (
     <MobileHeaderProvider>
@@ -459,6 +469,7 @@ function MobileShellInner({
       // so no amount of scrolling can move it. dvh (not vh) so mobile browser
       // chrome collapsing does not crop the bar.
       className="relative flex h-[100dvh] flex-col overflow-hidden bg-m6m-surface font-sans"
+      style={{ ['--m-fab-inset' as string]: `${FAB_INSET_PX}px` }}
     >
       {/* ------------------------------------------------------------------ */}
       {/* §3.1 — APP BAR                                                      */}
@@ -543,7 +554,16 @@ function MobileShellInner({
       {/* CONTENT + SHEET HOST                                                */}
       {/* ------------------------------------------------------------------ */}
       <div className="relative min-h-0 flex-1">
-        <main data-testid="m-content" className="h-full overflow-y-auto">
+        {/* FAB CLEARANCE — one rule here, not 48 per-page paddings [/m visual
+            sweep, 2026-09-24]. The camera overhangs this region by 15px, so
+            every screen's last row ended under it (28 screens cleared it by
+            3px). padding-bottom gives the end of the scroll room to clear it;
+            scroll-padding-bottom is the same value so a focused field is
+            scrolled clear of the camera, not parked under it. */}
+        <main
+          data-testid="m-content"
+          className="h-full overflow-y-auto pb-[var(--m-fab-inset)] scroll-pb-[var(--m-fab-inset)]"
+        >
           {children}
         </main>
 

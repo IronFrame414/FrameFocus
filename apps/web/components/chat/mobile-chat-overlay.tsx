@@ -51,7 +51,13 @@ export function MobileChatOverlay({
     <section
       data-testid="m-chat-overlay"
       aria-label={t('shell.chat')}
-      className="absolute inset-0 z-40 flex flex-col bg-m6m-card"
+      // FAB clearance for the conversation list [/m visual sweep, 2026-09-24]:
+      // it had no bottom padding, so its last project ran under the camera.
+      // Applied from HERE rather than in ChatBody because ChatBody is shared
+      // with the desktop panel, which has no camera — a deliberate surface
+      // difference in spacing, not in behaviour. --m-fab-inset is set on the
+      // /m shell (mobile-shell.tsx). The thread's composer already clears it.
+      className="absolute inset-0 z-40 flex flex-col bg-m6m-card [&_[data-testid=chat-switcher]]:pb-[var(--m-fab-inset)] [&_[data-testid=chat-switcher]]:scroll-pb-[var(--m-fab-inset)]"
     >
       <ChatBody
         myProfileId={myProfileId}

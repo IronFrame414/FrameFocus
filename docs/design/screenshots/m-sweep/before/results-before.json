@@ -1,0 +1,5812 @@
+[
+  {
+    "role": "crew",
+    "width": 390,
+    "route": "/m/account",
+    "url": "/m/account",
+    "status": 200,
+    "finalPath": "/m/account",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 748,
+      "left": 137,
+      "right": 203,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 20,
+    "scrolls": true,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 35,
+    "structuralClearance": 20,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "crew",
+    "width": 390,
+    "route": "/m/capture",
+    "url": "/m/capture",
+    "status": 200,
+    "finalPath": "/m/capture",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 748,
+      "left": 137,
+      "right": 203,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 468,
+    "scrolls": false,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 18,
+    "structuralClearance": 3,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "crew",
+    "width": 390,
+    "route": "/m/contacts/[contactId]/edit",
+    "url": "/m/contacts/8c7c9a6d-287d-4b0e-9a0b-2769adfed704/edit",
+    "status": 200,
+    "finalPath": "/m/contacts/8c7c9a6d-287d-4b0e-9a0b-2769adfed704?denied=contact-edit",
+    "redirected": true,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 748,
+      "left": 137,
+      "right": 203,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 188,
+    "scrolls": false,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 29,
+    "structuralClearance": 14,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "crew",
+    "width": 390,
+    "route": "/m/contacts/[contactId]",
+    "url": "/m/contacts/8c7c9a6d-287d-4b0e-9a0b-2769adfed704",
+    "status": 200,
+    "finalPath": "/m/contacts/8c7c9a6d-287d-4b0e-9a0b-2769adfed704",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 748,
+      "left": 137,
+      "right": 203,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 268,
+    "scrolls": false,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 29,
+    "structuralClearance": 14,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "crew",
+    "width": 390,
+    "route": "/m/contacts",
+    "url": "/m/contacts",
+    "status": 200,
+    "finalPath": "/m/contacts",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 748,
+      "left": 137,
+      "right": 203,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 142,
+    "scrolls": false,
+    "rows": {
+      "li": 7,
+      "shared58": 7,
+      "own": 0
+    },
+    "trailing": 29,
+    "structuralClearance": 14,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "crew",
+    "width": 390,
+    "route": "/m/expenses",
+    "url": "/m/expenses",
+    "status": 200,
+    "finalPath": "/m/expenses",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 748,
+      "left": 137,
+      "right": 203,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 78,
+    "scrolls": false,
+    "rows": {
+      "li": 6,
+      "shared58": 6,
+      "own": 0
+    },
+    "trailing": 29,
+    "structuralClearance": 14,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "crew",
+    "width": 390,
+    "route": "/m/field",
+    "url": "/m/field",
+    "status": 200,
+    "finalPath": "/m/field",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 748,
+      "left": 137,
+      "right": 203,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 376,
+    "scrolls": false,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 18,
+    "structuralClearance": 3,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "crew",
+    "width": 390,
+    "route": "/m/logs/[logId]",
+    "url": "/m/logs/88536d73-254a-4db3-afd2-e24da46411a1",
+    "status": 200,
+    "finalPath": "/m/logs/88536d73-254a-4db3-afd2-e24da46411a1",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 748,
+      "left": 137,
+      "right": 203,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 320,
+    "scrolls": false,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 18,
+    "structuralClearance": 3,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "crew",
+    "width": 390,
+    "route": "/m/logs/new",
+    "url": "/m/logs/new",
+    "status": 200,
+    "finalPath": "/m/logs/new",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 748,
+      "left": 137,
+      "right": 203,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 3,
+    "scrolls": true,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 18,
+    "structuralClearance": 3,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "crew",
+    "width": 390,
+    "route": "/m/logs",
+    "url": "/m/logs",
+    "status": 200,
+    "finalPath": "/m/logs",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 748,
+      "left": 137,
+      "right": 203,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 456,
+    "scrolls": false,
+    "rows": {
+      "li": 1,
+      "shared58": 1,
+      "own": 0
+    },
+    "trailing": 18,
+    "structuralClearance": 3,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "crew",
+    "width": 390,
+    "route": "/m/notifications",
+    "url": "/m/notifications",
+    "status": 200,
+    "finalPath": "/m/notifications",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 748,
+      "left": 137,
+      "right": 203,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 552,
+    "scrolls": false,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 18,
+    "structuralClearance": 3,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "crew",
+    "width": 390,
+    "route": "/m/offline",
+    "url": "/m/offline",
+    "status": 200,
+    "finalPath": "/m/offline",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 748,
+      "left": 137,
+      "right": 203,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 165,
+    "scrolls": false,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 26,
+    "structuralClearance": 11,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "crew",
+    "width": 390,
+    "route": "/m",
+    "url": "/m",
+    "status": 200,
+    "finalPath": "/m/timeclock",
+    "redirected": true,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 748,
+      "left": 137,
+      "right": 203,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 356,
+    "scrolls": false,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 18,
+    "structuralClearance": 3,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "crew",
+    "width": 390,
+    "route": "/m/p/[projectId]/changes/[coId]",
+    "url": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/changes/194cea12-2cae-4878-b3e2-edb4633fc090",
+    "status": 404,
+    "finalPath": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/changes/194cea12-2cae-4878-b3e2-edb4633fc090",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": null,
+    "obscured": [],
+    "clearance": null,
+    "scrolls": false,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "crew",
+    "width": 390,
+    "route": "/m/p/[projectId]/changes/new",
+    "url": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/changes/new",
+    "status": 200,
+    "finalPath": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/changes?denied=co-write",
+    "redirected": true,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 748,
+      "left": 137,
+      "right": 203,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 528,
+    "scrolls": false,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 18,
+    "structuralClearance": 3,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "crew",
+    "width": 390,
+    "route": "/m/p/[projectId]/changes",
+    "url": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/changes",
+    "status": 200,
+    "finalPath": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/changes",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 748,
+      "left": 137,
+      "right": 203,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 608,
+    "scrolls": false,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 18,
+    "structuralClearance": 3,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "crew",
+    "width": 390,
+    "route": "/m/p/[projectId]/contacts",
+    "url": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/contacts",
+    "status": 200,
+    "finalPath": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/contacts",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 748,
+      "left": 137,
+      "right": 203,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 546,
+    "scrolls": false,
+    "rows": {
+      "li": 2,
+      "shared58": 2,
+      "own": 0
+    },
+    "trailing": 29,
+    "structuralClearance": 14,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "crew",
+    "width": 390,
+    "route": "/m/p/[projectId]/deliveries/check-in",
+    "url": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/deliveries/check-in",
+    "status": 200,
+    "finalPath": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/deliveries/check-in",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 748,
+      "left": 137,
+      "right": 203,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 271,
+    "scrolls": false,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 18,
+    "structuralClearance": 3,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "crew",
+    "width": 390,
+    "route": "/m/p/[projectId]/deliveries",
+    "url": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/deliveries",
+    "status": 200,
+    "finalPath": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/deliveries",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 748,
+      "left": 137,
+      "right": 203,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 468,
+    "scrolls": false,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 18,
+    "structuralClearance": 3,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "crew",
+    "width": 390,
+    "route": "/m/p/[projectId]/files",
+    "url": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/files",
+    "status": 200,
+    "finalPath": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/files",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 748,
+      "left": 137,
+      "right": 203,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 608,
+    "scrolls": false,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 18,
+    "structuralClearance": 3,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "crew",
+    "width": 390,
+    "route": "/m/p/[projectId]/overview",
+    "url": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/overview",
+    "status": 200,
+    "finalPath": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/overview",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 748,
+      "left": 137,
+      "right": 203,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 301,
+    "scrolls": false,
+    "rows": {
+      "li": 5,
+      "shared58": 0,
+      "own": 5
+    },
+    "trailing": 33,
+    "structuralClearance": 18,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "crew",
+    "width": 390,
+    "route": "/m/p/[projectId]",
+    "url": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4",
+    "status": 200,
+    "finalPath": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 748,
+      "left": 137,
+      "right": 203,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 3,
+    "scrolls": true,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 18,
+    "structuralClearance": 3,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "crew",
+    "width": 390,
+    "route": "/m/p/[projectId]/photos/[fileId]/markup",
+    "url": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/photos/0f1773b5-7662-429e-9001-64e84a3594b1/markup",
+    "status": 200,
+    "finalPath": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/photos/0f1773b5-7662-429e-9001-64e84a3594b1/markup",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": null,
+    "obscured": [],
+    "clearance": null,
+    "scrolls": false,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 14,
+    "structuralClearance": null,
+    "bareButtons": [
+      "Cancel",
+      "Save"
+    ],
+    "bareButtonCount": 2
+  },
+  {
+    "role": "crew",
+    "width": 390,
+    "route": "/m/p/[projectId]/photos/[fileId]",
+    "url": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/photos/0f1773b5-7662-429e-9001-64e84a3594b1",
+    "status": 200,
+    "finalPath": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/photos/0f1773b5-7662-429e-9001-64e84a3594b1",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": null,
+    "obscured": [],
+    "clearance": null,
+    "scrolls": false,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 18,
+    "structuralClearance": null,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "crew",
+    "width": 390,
+    "route": "/m/p/[projectId]/photos",
+    "url": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/photos",
+    "status": 200,
+    "finalPath": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/photos",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 748,
+      "left": 137,
+      "right": 203,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 88,
+    "scrolls": false,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 36,
+    "structuralClearance": 21,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "crew",
+    "width": 390,
+    "route": "/m/p/[projectId]/punch/[itemId]",
+    "url": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/punch/8a44e1c5-291a-43ad-860f-40675bc1f295",
+    "status": 200,
+    "finalPath": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/punch/8a44e1c5-291a-43ad-860f-40675bc1f295",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 748,
+      "left": 137,
+      "right": 203,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 57,
+    "scrolls": false,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 18,
+    "structuralClearance": 3,
+    "bareButtons": [
+      "show original"
+    ],
+    "bareButtonCount": 1
+  },
+  {
+    "role": "crew",
+    "width": 390,
+    "route": "/m/p/[projectId]/punch/lists/new",
+    "url": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/punch/lists/new",
+    "status": 200,
+    "finalPath": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/punch/lists/new",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 748,
+      "left": 137,
+      "right": 203,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 468,
+    "scrolls": false,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 18,
+    "structuralClearance": 3,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "crew",
+    "width": 390,
+    "route": "/m/p/[projectId]/punch/new",
+    "url": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/punch/new",
+    "status": 200,
+    "finalPath": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/punch/new",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 748,
+      "left": 137,
+      "right": 203,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 3,
+    "scrolls": true,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 18,
+    "structuralClearance": 3,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "crew",
+    "width": 390,
+    "route": "/m/p/[projectId]/punch",
+    "url": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/punch",
+    "status": 200,
+    "finalPath": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/punch",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 748,
+      "left": 137,
+      "right": 203,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 464,
+    "scrolls": false,
+    "rows": {
+      "li": 1,
+      "shared58": 1,
+      "own": 0
+    },
+    "trailing": 29,
+    "structuralClearance": 14,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "crew",
+    "width": 390,
+    "route": "/m/p/[projectId]/safety/new",
+    "url": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/safety/new",
+    "status": 200,
+    "finalPath": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/safety/new",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 748,
+      "left": 137,
+      "right": 203,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 4,
+    "scrolls": true,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 18,
+    "structuralClearance": 3,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "crew",
+    "width": 390,
+    "route": "/m/p/[projectId]/safety",
+    "url": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/safety",
+    "status": 200,
+    "finalPath": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/safety",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 748,
+      "left": 137,
+      "right": 203,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 608,
+    "scrolls": false,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 18,
+    "structuralClearance": 3,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "crew",
+    "width": 390,
+    "route": "/m/p/[projectId]/schedule",
+    "url": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/schedule",
+    "status": 200,
+    "finalPath": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/schedule",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 748,
+      "left": 137,
+      "right": 203,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 314,
+    "scrolls": false,
+    "rows": {
+      "li": 3,
+      "shared58": 3,
+      "own": 0
+    },
+    "trailing": 29,
+    "structuralClearance": 14,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "crew",
+    "width": 390,
+    "route": "/m/p/[projectId]/selections",
+    "url": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/selections",
+    "status": 200,
+    "finalPath": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/selections",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 748,
+      "left": 137,
+      "right": 203,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 622,
+    "scrolls": false,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 24,
+    "structuralClearance": 9,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "crew",
+    "width": 390,
+    "route": "/m/p/[projectId]/team",
+    "url": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/team",
+    "status": 200,
+    "finalPath": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/team",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 748,
+      "left": 137,
+      "right": 203,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 351,
+    "scrolls": false,
+    "rows": {
+      "li": 5,
+      "shared58": 5,
+      "own": 0
+    },
+    "trailing": 29,
+    "structuralClearance": 14,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "crew",
+    "width": 390,
+    "route": "/m/projects",
+    "url": "/m/projects",
+    "status": 200,
+    "finalPath": "/m/projects",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 748,
+      "left": 137,
+      "right": 203,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 229,
+    "scrolls": false,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 18,
+    "structuralClearance": 3,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "crew",
+    "width": 390,
+    "route": "/m/schedule",
+    "url": "/m/schedule",
+    "status": 200,
+    "finalPath": "/m/schedule",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 748,
+      "left": 137,
+      "right": 203,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 3,
+    "scrolls": true,
+    "rows": {
+      "li": 13,
+      "shared58": 13,
+      "own": 0
+    },
+    "trailing": 18,
+    "structuralClearance": 3,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "crew",
+    "width": 390,
+    "route": "/m/settings",
+    "url": "/m/settings",
+    "status": 200,
+    "finalPath": "/m/settings",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 748,
+      "left": 137,
+      "right": 203,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 329,
+    "scrolls": false,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 18,
+    "structuralClearance": 3,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "crew",
+    "width": 390,
+    "route": "/m/site-visits/[id]",
+    "url": "/m/site-visits/a9aaeffa-5241-4d03-995f-f0e64f6d51c3",
+    "status": 200,
+    "finalPath": "/m/site-visits/a9aaeffa-5241-4d03-995f-f0e64f6d51c3",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 748,
+      "left": 137,
+      "right": 203,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 3,
+    "scrolls": true,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 18,
+    "structuralClearance": 3,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "crew",
+    "width": 390,
+    "route": "/m/site-visits/new",
+    "url": "/m/site-visits/new",
+    "status": 200,
+    "finalPath": "/m/site-visits/new",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 748,
+      "left": 137,
+      "right": 203,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 4,
+    "scrolls": true,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 18,
+    "structuralClearance": 3,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "crew",
+    "width": 390,
+    "route": "/m/site-visits",
+    "url": "/m/site-visits",
+    "status": 200,
+    "finalPath": "/m/site-visits",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 748,
+      "left": 137,
+      "right": 203,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 514,
+    "scrolls": false,
+    "rows": {
+      "li": 1,
+      "shared58": 1,
+      "own": 0
+    },
+    "trailing": 28,
+    "structuralClearance": 13,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "crew",
+    "width": 390,
+    "route": "/m/subs",
+    "url": "/m/subs",
+    "status": 200,
+    "finalPath": "/m/subs",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 748,
+      "left": 137,
+      "right": 203,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 308,
+    "scrolls": false,
+    "rows": {
+      "li": 4,
+      "shared58": 4,
+      "own": 0
+    },
+    "trailing": 29,
+    "structuralClearance": 14,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "crew",
+    "width": 390,
+    "route": "/m/subs/[subId]/edit",
+    "url": "/m/subs/00c2bccc-a77e-498e-9ac6-9ee503df89d9/edit",
+    "status": 200,
+    "finalPath": "/m/subs/00c2bccc-a77e-498e-9ac6-9ee503df89d9?denied=sub-edit",
+    "redirected": true,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 748,
+      "left": 137,
+      "right": 203,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 14,
+    "scrolls": true,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 29,
+    "structuralClearance": 14,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "crew",
+    "width": 390,
+    "route": "/m/subs/[subId]",
+    "url": "/m/subs/00c2bccc-a77e-498e-9ac6-9ee503df89d9",
+    "status": 200,
+    "finalPath": "/m/subs/00c2bccc-a77e-498e-9ac6-9ee503df89d9",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 748,
+      "left": 137,
+      "right": 203,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 14,
+    "scrolls": true,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 29,
+    "structuralClearance": 14,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "crew",
+    "width": 390,
+    "route": "/m/team/[memberId]/edit",
+    "url": "/m/team/18a105e7-2ff9-4546-a17b-87524a45e978/edit",
+    "status": 200,
+    "finalPath": "/m/team/18a105e7-2ff9-4546-a17b-87524a45e978?denied=team-edit",
+    "redirected": true,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 748,
+      "left": 137,
+      "right": 203,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 435,
+    "scrolls": false,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 29,
+    "structuralClearance": 14,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "crew",
+    "width": 390,
+    "route": "/m/team/[memberId]",
+    "url": "/m/team/18a105e7-2ff9-4546-a17b-87524a45e978",
+    "status": 200,
+    "finalPath": "/m/team/18a105e7-2ff9-4546-a17b-87524a45e978",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 748,
+      "left": 137,
+      "right": 203,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 494,
+    "scrolls": false,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 29,
+    "structuralClearance": 14,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "crew",
+    "width": 390,
+    "route": "/m/team",
+    "url": "/m/team",
+    "status": 200,
+    "finalPath": "/m/team",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 748,
+      "left": 137,
+      "right": 203,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 4,
+    "scrolls": true,
+    "rows": {
+      "li": 585,
+      "shared58": 585,
+      "own": 0
+    },
+    "trailing": 29,
+    "structuralClearance": 14,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "crew",
+    "width": 390,
+    "route": "/m/timeclock",
+    "url": "/m/timeclock",
+    "status": 200,
+    "finalPath": "/m/timeclock",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 748,
+      "left": 137,
+      "right": 203,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 356,
+    "scrolls": false,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 18,
+    "structuralClearance": 3,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "crew",
+    "width": 390,
+    "route": "/m/timeclock/switch",
+    "url": "/m/timeclock/switch",
+    "status": 200,
+    "finalPath": "/m/timeclock/switch",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 748,
+      "left": 137,
+      "right": 203,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 542,
+    "scrolls": false,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 18,
+    "structuralClearance": 3,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "crew",
+    "width": 390,
+    "route": "#chat (overlay from /m/projects)",
+    "fab": {
+      "top": 748
+    },
+    "obscured": []
+  },
+  {
+    "role": "crew",
+    "width": 360,
+    "route": "/m/account",
+    "url": "/m/account",
+    "status": 200,
+    "finalPath": "/m/account",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 704,
+      "left": 126,
+      "right": 192,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 20,
+    "scrolls": true,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 35,
+    "structuralClearance": 20,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "crew",
+    "width": 360,
+    "route": "/m/capture",
+    "url": "/m/capture",
+    "status": 200,
+    "finalPath": "/m/capture",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 704,
+      "left": 126,
+      "right": 192,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 424,
+    "scrolls": false,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 18,
+    "structuralClearance": 3,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "crew",
+    "width": 360,
+    "route": "/m/contacts/[contactId]/edit",
+    "url": "/m/contacts/8c7c9a6d-287d-4b0e-9a0b-2769adfed704/edit",
+    "status": 200,
+    "finalPath": "/m/contacts/8c7c9a6d-287d-4b0e-9a0b-2769adfed704?denied=contact-edit",
+    "redirected": true,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 704,
+      "left": 126,
+      "right": 192,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 144,
+    "scrolls": false,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 29,
+    "structuralClearance": 14,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "crew",
+    "width": 360,
+    "route": "/m/contacts/[contactId]",
+    "url": "/m/contacts/8c7c9a6d-287d-4b0e-9a0b-2769adfed704",
+    "status": 200,
+    "finalPath": "/m/contacts/8c7c9a6d-287d-4b0e-9a0b-2769adfed704",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 704,
+      "left": 126,
+      "right": 192,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 224,
+    "scrolls": false,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 29,
+    "structuralClearance": 14,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "crew",
+    "width": 360,
+    "route": "/m/contacts",
+    "url": "/m/contacts",
+    "status": 200,
+    "finalPath": "/m/contacts",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 704,
+      "left": 126,
+      "right": 192,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 98,
+    "scrolls": false,
+    "rows": {
+      "li": 7,
+      "shared58": 7,
+      "own": 0
+    },
+    "trailing": 29,
+    "structuralClearance": 14,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "crew",
+    "width": 360,
+    "route": "/m/expenses",
+    "url": "/m/expenses",
+    "status": 200,
+    "finalPath": "/m/expenses",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 704,
+      "left": 126,
+      "right": 192,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 4,
+    "scrolls": true,
+    "rows": {
+      "li": 6,
+      "shared58": 6,
+      "own": 0
+    },
+    "trailing": 29,
+    "structuralClearance": 14,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "crew",
+    "width": 360,
+    "route": "/m/field",
+    "url": "/m/field",
+    "status": 200,
+    "finalPath": "/m/field",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 704,
+      "left": 126,
+      "right": 192,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 332,
+    "scrolls": false,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 18,
+    "structuralClearance": 3,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "crew",
+    "width": 360,
+    "route": "/m/logs/[logId]",
+    "url": "/m/logs/88536d73-254a-4db3-afd2-e24da46411a1",
+    "status": 200,
+    "finalPath": "/m/logs/88536d73-254a-4db3-afd2-e24da46411a1",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 704,
+      "left": 126,
+      "right": 192,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 276,
+    "scrolls": false,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 18,
+    "structuralClearance": 3,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "crew",
+    "width": 360,
+    "route": "/m/logs/new",
+    "url": "/m/logs/new",
+    "status": 200,
+    "finalPath": "/m/logs/new",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 704,
+      "left": 126,
+      "right": 192,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 3,
+    "scrolls": true,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 18,
+    "structuralClearance": 3,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "crew",
+    "width": 360,
+    "route": "/m/logs",
+    "url": "/m/logs",
+    "status": 200,
+    "finalPath": "/m/logs",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 704,
+      "left": 126,
+      "right": 192,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 412,
+    "scrolls": false,
+    "rows": {
+      "li": 1,
+      "shared58": 1,
+      "own": 0
+    },
+    "trailing": 18,
+    "structuralClearance": 3,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "crew",
+    "width": 360,
+    "route": "/m/notifications",
+    "url": "/m/notifications",
+    "status": 200,
+    "finalPath": "/m/notifications",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 704,
+      "left": 126,
+      "right": 192,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 508,
+    "scrolls": false,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 18,
+    "structuralClearance": 3,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "crew",
+    "width": 360,
+    "route": "/m/offline",
+    "url": "/m/offline",
+    "status": 200,
+    "finalPath": "/m/offline",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 704,
+      "left": 126,
+      "right": 192,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 121,
+    "scrolls": false,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 26,
+    "structuralClearance": 11,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "crew",
+    "width": 360,
+    "route": "/m",
+    "url": "/m",
+    "status": 200,
+    "finalPath": "/m/timeclock",
+    "redirected": true,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 704,
+      "left": 126,
+      "right": 192,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 312,
+    "scrolls": false,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 18,
+    "structuralClearance": 3,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "crew",
+    "width": 360,
+    "route": "/m/p/[projectId]/changes/[coId]",
+    "url": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/changes/194cea12-2cae-4878-b3e2-edb4633fc090",
+    "status": 404,
+    "finalPath": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/changes/194cea12-2cae-4878-b3e2-edb4633fc090",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": null,
+    "obscured": [],
+    "clearance": null,
+    "scrolls": false,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "crew",
+    "width": 360,
+    "route": "/m/p/[projectId]/changes/new",
+    "url": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/changes/new",
+    "status": 200,
+    "finalPath": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/changes?denied=co-write",
+    "redirected": true,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 704,
+      "left": 126,
+      "right": 192,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 484,
+    "scrolls": false,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 18,
+    "structuralClearance": 3,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "crew",
+    "width": 360,
+    "route": "/m/p/[projectId]/changes",
+    "url": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/changes",
+    "status": 200,
+    "finalPath": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/changes",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 704,
+      "left": 126,
+      "right": 192,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 564,
+    "scrolls": false,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 18,
+    "structuralClearance": 3,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "crew",
+    "width": 360,
+    "route": "/m/p/[projectId]/contacts",
+    "url": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/contacts",
+    "status": 200,
+    "finalPath": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/contacts",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 704,
+      "left": 126,
+      "right": 192,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 502,
+    "scrolls": false,
+    "rows": {
+      "li": 2,
+      "shared58": 2,
+      "own": 0
+    },
+    "trailing": 29,
+    "structuralClearance": 14,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "crew",
+    "width": 360,
+    "route": "/m/p/[projectId]/deliveries/check-in",
+    "url": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/deliveries/check-in",
+    "status": 200,
+    "finalPath": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/deliveries/check-in",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 704,
+      "left": 126,
+      "right": 192,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 227,
+    "scrolls": false,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 18,
+    "structuralClearance": 3,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "crew",
+    "width": 360,
+    "route": "/m/p/[projectId]/deliveries",
+    "url": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/deliveries",
+    "status": 200,
+    "finalPath": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/deliveries",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 704,
+      "left": 126,
+      "right": 192,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 424,
+    "scrolls": false,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 18,
+    "structuralClearance": 3,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "crew",
+    "width": 360,
+    "route": "/m/p/[projectId]/files",
+    "url": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/files",
+    "status": 200,
+    "finalPath": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/files",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 704,
+      "left": 126,
+      "right": 192,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 564,
+    "scrolls": false,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 18,
+    "structuralClearance": 3,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "crew",
+    "width": 360,
+    "route": "/m/p/[projectId]/overview",
+    "url": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/overview",
+    "status": 200,
+    "finalPath": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/overview",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 704,
+      "left": 126,
+      "right": 192,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 257,
+    "scrolls": false,
+    "rows": {
+      "li": 5,
+      "shared58": 0,
+      "own": 5
+    },
+    "trailing": 33,
+    "structuralClearance": 18,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "crew",
+    "width": 360,
+    "route": "/m/p/[projectId]",
+    "url": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4",
+    "status": 200,
+    "finalPath": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 704,
+      "left": 126,
+      "right": 192,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 3,
+    "scrolls": true,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 18,
+    "structuralClearance": 3,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "crew",
+    "width": 360,
+    "route": "/m/p/[projectId]/photos/[fileId]/markup",
+    "url": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/photos/0f1773b5-7662-429e-9001-64e84a3594b1/markup",
+    "status": 200,
+    "finalPath": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/photos/0f1773b5-7662-429e-9001-64e84a3594b1/markup",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": null,
+    "obscured": [],
+    "clearance": null,
+    "scrolls": false,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 14,
+    "structuralClearance": null,
+    "bareButtons": [
+      "Cancel",
+      "Save"
+    ],
+    "bareButtonCount": 2
+  },
+  {
+    "role": "crew",
+    "width": 360,
+    "route": "/m/p/[projectId]/photos/[fileId]",
+    "url": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/photos/0f1773b5-7662-429e-9001-64e84a3594b1",
+    "status": 200,
+    "finalPath": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/photos/0f1773b5-7662-429e-9001-64e84a3594b1",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": null,
+    "obscured": [],
+    "clearance": null,
+    "scrolls": false,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 18,
+    "structuralClearance": null,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "crew",
+    "width": 360,
+    "route": "/m/p/[projectId]/photos",
+    "url": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/photos",
+    "status": 200,
+    "finalPath": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/photos",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 704,
+      "left": 126,
+      "right": 192,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 74,
+    "scrolls": false,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 36,
+    "structuralClearance": 21,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "crew",
+    "width": 360,
+    "route": "/m/p/[projectId]/punch/[itemId]",
+    "url": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/punch/8a44e1c5-291a-43ad-860f-40675bc1f295",
+    "status": 200,
+    "finalPath": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/punch/8a44e1c5-291a-43ad-860f-40675bc1f295",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 704,
+      "left": 126,
+      "right": 192,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 13,
+    "scrolls": false,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 18,
+    "structuralClearance": 3,
+    "bareButtons": [
+      "show original"
+    ],
+    "bareButtonCount": 1
+  },
+  {
+    "role": "crew",
+    "width": 360,
+    "route": "/m/p/[projectId]/punch/lists/new",
+    "url": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/punch/lists/new",
+    "status": 200,
+    "finalPath": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/punch/lists/new",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 704,
+      "left": 126,
+      "right": 192,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 424,
+    "scrolls": false,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 18,
+    "structuralClearance": 3,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "crew",
+    "width": 360,
+    "route": "/m/p/[projectId]/punch/new",
+    "url": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/punch/new",
+    "status": 200,
+    "finalPath": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/punch/new",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 704,
+      "left": 126,
+      "right": 192,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 3,
+    "scrolls": true,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 18,
+    "structuralClearance": 3,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "crew",
+    "width": 360,
+    "route": "/m/p/[projectId]/punch",
+    "url": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/punch",
+    "status": 200,
+    "finalPath": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/punch",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 704,
+      "left": 126,
+      "right": 192,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 420,
+    "scrolls": false,
+    "rows": {
+      "li": 1,
+      "shared58": 1,
+      "own": 0
+    },
+    "trailing": 29,
+    "structuralClearance": 14,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "crew",
+    "width": 360,
+    "route": "/m/p/[projectId]/safety/new",
+    "url": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/safety/new",
+    "status": 200,
+    "finalPath": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/safety/new",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 704,
+      "left": 126,
+      "right": 192,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 4,
+    "scrolls": true,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 18,
+    "structuralClearance": 3,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "crew",
+    "width": 360,
+    "route": "/m/p/[projectId]/safety",
+    "url": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/safety",
+    "status": 200,
+    "finalPath": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/safety",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 704,
+      "left": 126,
+      "right": 192,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 564,
+    "scrolls": false,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 18,
+    "structuralClearance": 3,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "crew",
+    "width": 360,
+    "route": "/m/p/[projectId]/schedule",
+    "url": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/schedule",
+    "status": 200,
+    "finalPath": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/schedule",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 704,
+      "left": 126,
+      "right": 192,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 270,
+    "scrolls": false,
+    "rows": {
+      "li": 3,
+      "shared58": 3,
+      "own": 0
+    },
+    "trailing": 29,
+    "structuralClearance": 14,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "crew",
+    "width": 360,
+    "route": "/m/p/[projectId]/selections",
+    "url": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/selections",
+    "status": 200,
+    "finalPath": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/selections",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 704,
+      "left": 126,
+      "right": 192,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 578,
+    "scrolls": false,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 24,
+    "structuralClearance": 9,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "crew",
+    "width": 360,
+    "route": "/m/p/[projectId]/team",
+    "url": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/team",
+    "status": 200,
+    "finalPath": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/team",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 704,
+      "left": 126,
+      "right": 192,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 307,
+    "scrolls": false,
+    "rows": {
+      "li": 5,
+      "shared58": 5,
+      "own": 0
+    },
+    "trailing": 29,
+    "structuralClearance": 14,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "crew",
+    "width": 360,
+    "route": "/m/projects",
+    "url": "/m/projects",
+    "status": 200,
+    "finalPath": "/m/projects",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 704,
+      "left": 126,
+      "right": 192,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 185,
+    "scrolls": false,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 18,
+    "structuralClearance": 3,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "crew",
+    "width": 360,
+    "route": "/m/schedule",
+    "url": "/m/schedule",
+    "status": 200,
+    "finalPath": "/m/schedule",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 704,
+      "left": 126,
+      "right": 192,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 3,
+    "scrolls": true,
+    "rows": {
+      "li": 13,
+      "shared58": 13,
+      "own": 0
+    },
+    "trailing": 18,
+    "structuralClearance": 3,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "crew",
+    "width": 360,
+    "route": "/m/settings",
+    "url": "/m/settings",
+    "status": 200,
+    "finalPath": "/m/settings",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 704,
+      "left": 126,
+      "right": 192,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 285,
+    "scrolls": false,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 18,
+    "structuralClearance": 3,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "crew",
+    "width": 360,
+    "route": "/m/site-visits/[id]",
+    "url": "/m/site-visits/a9aaeffa-5241-4d03-995f-f0e64f6d51c3",
+    "status": 200,
+    "finalPath": "/m/site-visits/a9aaeffa-5241-4d03-995f-f0e64f6d51c3",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 30,
+    "worst": {
+      "px": 30,
+      "el": "input[sv-m-width].h-[48px].rounded-[12px].border"
+    },
+    "fab": {
+      "top": 704,
+      "left": 126,
+      "right": 192,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 3,
+    "scrolls": true,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 18,
+    "structuralClearance": 3,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "crew",
+    "width": 360,
+    "route": "/m/site-visits/new",
+    "url": "/m/site-visits/new",
+    "status": 200,
+    "finalPath": "/m/site-visits/new",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 704,
+      "left": 126,
+      "right": 192,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 4,
+    "scrolls": true,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 18,
+    "structuralClearance": 3,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "crew",
+    "width": 360,
+    "route": "/m/site-visits",
+    "url": "/m/site-visits",
+    "status": 200,
+    "finalPath": "/m/site-visits",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 704,
+      "left": 126,
+      "right": 192,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 470,
+    "scrolls": false,
+    "rows": {
+      "li": 1,
+      "shared58": 1,
+      "own": 0
+    },
+    "trailing": 28,
+    "structuralClearance": 13,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "crew",
+    "width": 360,
+    "route": "/m/subs",
+    "url": "/m/subs",
+    "status": 200,
+    "finalPath": "/m/subs",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 704,
+      "left": 126,
+      "right": 192,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 264,
+    "scrolls": false,
+    "rows": {
+      "li": 4,
+      "shared58": 4,
+      "own": 0
+    },
+    "trailing": 29,
+    "structuralClearance": 14,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "crew",
+    "width": 360,
+    "route": "/m/subs/[subId]/edit",
+    "url": "/m/subs/00c2bccc-a77e-498e-9ac6-9ee503df89d9/edit",
+    "status": 200,
+    "finalPath": "/m/subs/00c2bccc-a77e-498e-9ac6-9ee503df89d9?denied=sub-edit",
+    "redirected": true,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 704,
+      "left": 126,
+      "right": 192,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 14,
+    "scrolls": true,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 29,
+    "structuralClearance": 14,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "crew",
+    "width": 360,
+    "route": "/m/subs/[subId]",
+    "url": "/m/subs/00c2bccc-a77e-498e-9ac6-9ee503df89d9",
+    "status": 200,
+    "finalPath": "/m/subs/00c2bccc-a77e-498e-9ac6-9ee503df89d9",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 704,
+      "left": 126,
+      "right": 192,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 14,
+    "scrolls": true,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 29,
+    "structuralClearance": 14,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "crew",
+    "width": 360,
+    "route": "/m/team/[memberId]/edit",
+    "url": "/m/team/18a105e7-2ff9-4546-a17b-87524a45e978/edit",
+    "status": 200,
+    "finalPath": "/m/team/18a105e7-2ff9-4546-a17b-87524a45e978?denied=team-edit",
+    "redirected": true,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 704,
+      "left": 126,
+      "right": 192,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 391,
+    "scrolls": false,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 29,
+    "structuralClearance": 14,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "crew",
+    "width": 360,
+    "route": "/m/team/[memberId]",
+    "url": "/m/team/18a105e7-2ff9-4546-a17b-87524a45e978",
+    "status": 200,
+    "finalPath": "/m/team/18a105e7-2ff9-4546-a17b-87524a45e978",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 704,
+      "left": 126,
+      "right": 192,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 450,
+    "scrolls": false,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 29,
+    "structuralClearance": 14,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "crew",
+    "width": 360,
+    "route": "/m/team",
+    "url": "/m/team",
+    "status": 200,
+    "finalPath": "/m/team",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 704,
+      "left": 126,
+      "right": 192,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 4,
+    "scrolls": true,
+    "rows": {
+      "li": 585,
+      "shared58": 585,
+      "own": 0
+    },
+    "trailing": 29,
+    "structuralClearance": 14,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "crew",
+    "width": 360,
+    "route": "/m/timeclock",
+    "url": "/m/timeclock",
+    "status": 200,
+    "finalPath": "/m/timeclock",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 704,
+      "left": 126,
+      "right": 192,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 312,
+    "scrolls": false,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 18,
+    "structuralClearance": 3,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "crew",
+    "width": 360,
+    "route": "/m/timeclock/switch",
+    "url": "/m/timeclock/switch",
+    "status": 200,
+    "finalPath": "/m/timeclock/switch",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 704,
+      "left": 126,
+      "right": 192,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 475,
+    "scrolls": false,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 18,
+    "structuralClearance": 3,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "crew",
+    "width": 360,
+    "route": "#chat (overlay from /m/projects)",
+    "fab": {
+      "top": 704
+    },
+    "obscured": []
+  },
+  {
+    "role": "owner",
+    "width": 390,
+    "route": "/m/account",
+    "url": "/m/account",
+    "status": 200,
+    "finalPath": "/m/account",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 748,
+      "left": 137,
+      "right": 203,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 20,
+    "scrolls": true,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 35,
+    "structuralClearance": 20,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "owner",
+    "width": 390,
+    "route": "/m/capture",
+    "url": "/m/capture",
+    "status": 200,
+    "finalPath": "/m/capture",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 748,
+      "left": 137,
+      "right": 203,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 468,
+    "scrolls": false,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 18,
+    "structuralClearance": 3,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "owner",
+    "width": 390,
+    "route": "/m/contacts/[contactId]/edit",
+    "url": "/m/contacts/8c7c9a6d-287d-4b0e-9a0b-2769adfed704/edit",
+    "status": 200,
+    "finalPath": "/m/contacts/8c7c9a6d-287d-4b0e-9a0b-2769adfed704/edit",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 748,
+      "left": 137,
+      "right": 203,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 3,
+    "scrolls": true,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 18,
+    "structuralClearance": 3,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "owner",
+    "width": 390,
+    "route": "/m/contacts/[contactId]",
+    "url": "/m/contacts/8c7c9a6d-287d-4b0e-9a0b-2769adfed704",
+    "status": 200,
+    "finalPath": "/m/contacts/8c7c9a6d-287d-4b0e-9a0b-2769adfed704",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 748,
+      "left": 137,
+      "right": 203,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 202,
+    "scrolls": false,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 29,
+    "structuralClearance": 14,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "owner",
+    "width": 390,
+    "route": "/m/contacts",
+    "url": "/m/contacts",
+    "status": 200,
+    "finalPath": "/m/contacts",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 748,
+      "left": 137,
+      "right": 203,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 142,
+    "scrolls": false,
+    "rows": {
+      "li": 7,
+      "shared58": 7,
+      "own": 0
+    },
+    "trailing": 29,
+    "structuralClearance": 14,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "owner",
+    "width": 390,
+    "route": "/m/expenses",
+    "url": "/m/expenses",
+    "status": 200,
+    "finalPath": "/m/expenses",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 748,
+      "left": 137,
+      "right": 203,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 4,
+    "scrolls": true,
+    "rows": {
+      "li": 21,
+      "shared58": 21,
+      "own": 0
+    },
+    "trailing": 29,
+    "structuralClearance": 14,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "owner",
+    "width": 390,
+    "route": "/m/field",
+    "url": "/m/field",
+    "status": 200,
+    "finalPath": "/m/field",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 748,
+      "left": 137,
+      "right": 203,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 376,
+    "scrolls": false,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 18,
+    "structuralClearance": 3,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "owner",
+    "width": 390,
+    "route": "/m/logs/[logId]",
+    "url": "/m/logs/88536d73-254a-4db3-afd2-e24da46411a1",
+    "status": 200,
+    "finalPath": "/m/logs/88536d73-254a-4db3-afd2-e24da46411a1",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 748,
+      "left": 137,
+      "right": 203,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 320,
+    "scrolls": false,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 18,
+    "structuralClearance": 3,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "owner",
+    "width": 390,
+    "route": "/m/logs/new",
+    "url": "/m/logs/new",
+    "status": 200,
+    "finalPath": "/m/logs/new",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 748,
+      "left": 137,
+      "right": 203,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 3,
+    "scrolls": true,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 18,
+    "structuralClearance": 3,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "owner",
+    "width": 390,
+    "route": "/m/logs",
+    "url": "/m/logs",
+    "status": 200,
+    "finalPath": "/m/logs",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 748,
+      "left": 137,
+      "right": 203,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 3,
+    "scrolls": true,
+    "rows": {
+      "li": 12,
+      "shared58": 12,
+      "own": 0
+    },
+    "trailing": 18,
+    "structuralClearance": 3,
+    "bareButtons": [
+      "show original",
+      "show original",
+      "show original",
+      "show original",
+      "show original",
+      "show original"
+    ],
+    "bareButtonCount": 10
+  },
+  {
+    "role": "owner",
+    "width": 390,
+    "route": "/m/notifications",
+    "url": "/m/notifications",
+    "status": 200,
+    "finalPath": "/m/notifications",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 748,
+      "left": 137,
+      "right": 203,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 3,
+    "scrolls": true,
+    "rows": {
+      "li": 100,
+      "shared58": 0,
+      "own": 100
+    },
+    "trailing": 18,
+    "structuralClearance": 3,
+    "bareButtons": [
+      "Mark all as read",
+      "Casey Crew assigned you a punc",
+      "Mark read",
+      "Dismiss",
+      "Casey Crew assigned you a punc",
+      "Mark read"
+    ],
+    "bareButtonCount": 262
+  },
+  {
+    "role": "owner",
+    "width": 390,
+    "route": "/m/offline",
+    "url": "/m/offline",
+    "status": 200,
+    "finalPath": "/m/offline",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 748,
+      "left": 137,
+      "right": 203,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 165,
+    "scrolls": false,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 26,
+    "structuralClearance": 11,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "owner",
+    "width": 390,
+    "route": "/m",
+    "url": "/m",
+    "status": 200,
+    "finalPath": "/m/timeclock",
+    "redirected": true,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 748,
+      "left": 137,
+      "right": 203,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 356,
+    "scrolls": false,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 18,
+    "structuralClearance": 3,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "owner",
+    "width": 390,
+    "route": "/m/p/[projectId]/changes/[coId]",
+    "url": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/changes/194cea12-2cae-4878-b3e2-edb4633fc090",
+    "status": 200,
+    "finalPath": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/changes/194cea12-2cae-4878-b3e2-edb4633fc090",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 748,
+      "left": 137,
+      "right": 203,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 3,
+    "scrolls": true,
+    "rows": {
+      "li": 2,
+      "shared58": 0,
+      "own": 2
+    },
+    "trailing": 18,
+    "structuralClearance": 3,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "owner",
+    "width": 390,
+    "route": "/m/p/[projectId]/changes/new",
+    "url": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/changes/new",
+    "status": 200,
+    "finalPath": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/changes/new",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 748,
+      "left": 137,
+      "right": 203,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 3,
+    "scrolls": true,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 18,
+    "structuralClearance": 3,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "owner",
+    "width": 390,
+    "route": "/m/p/[projectId]/changes",
+    "url": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/changes",
+    "status": 200,
+    "finalPath": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/changes",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 748,
+      "left": 137,
+      "right": 203,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 401,
+    "scrolls": false,
+    "rows": {
+      "li": 2,
+      "shared58": 2,
+      "own": 0
+    },
+    "trailing": 29,
+    "structuralClearance": 14,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "owner",
+    "width": 390,
+    "route": "/m/p/[projectId]/contacts",
+    "url": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/contacts",
+    "status": 200,
+    "finalPath": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/contacts",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 748,
+      "left": 137,
+      "right": 203,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 546,
+    "scrolls": false,
+    "rows": {
+      "li": 2,
+      "shared58": 2,
+      "own": 0
+    },
+    "trailing": 29,
+    "structuralClearance": 14,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "owner",
+    "width": 390,
+    "route": "/m/p/[projectId]/deliveries/check-in",
+    "url": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/deliveries/check-in",
+    "status": 200,
+    "finalPath": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/deliveries/check-in",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 748,
+      "left": 137,
+      "right": 203,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 271,
+    "scrolls": false,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 18,
+    "structuralClearance": 3,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "owner",
+    "width": 390,
+    "route": "/m/p/[projectId]/deliveries",
+    "url": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/deliveries",
+    "status": 200,
+    "finalPath": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/deliveries",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 748,
+      "left": 137,
+      "right": 203,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 468,
+    "scrolls": false,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 18,
+    "structuralClearance": 3,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "owner",
+    "width": 390,
+    "route": "/m/p/[projectId]/files",
+    "url": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/files",
+    "status": 200,
+    "finalPath": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/files",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 748,
+      "left": 137,
+      "right": 203,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 608,
+    "scrolls": false,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 18,
+    "structuralClearance": 3,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "owner",
+    "width": 390,
+    "route": "/m/p/[projectId]/overview",
+    "url": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/overview",
+    "status": 200,
+    "finalPath": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/overview",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 748,
+      "left": 137,
+      "right": 203,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 301,
+    "scrolls": false,
+    "rows": {
+      "li": 5,
+      "shared58": 0,
+      "own": 5
+    },
+    "trailing": 33,
+    "structuralClearance": 18,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "owner",
+    "width": 390,
+    "route": "/m/p/[projectId]",
+    "url": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4",
+    "status": 200,
+    "finalPath": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 748,
+      "left": 137,
+      "right": 203,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 3,
+    "scrolls": true,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 18,
+    "structuralClearance": 3,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "owner",
+    "width": 390,
+    "route": "/m/p/[projectId]/photos/[fileId]/markup",
+    "url": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/photos/0f1773b5-7662-429e-9001-64e84a3594b1/markup",
+    "status": 200,
+    "finalPath": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/photos/0f1773b5-7662-429e-9001-64e84a3594b1/markup",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": null,
+    "obscured": [],
+    "clearance": null,
+    "scrolls": false,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 14,
+    "structuralClearance": null,
+    "bareButtons": [
+      "Cancel",
+      "Save"
+    ],
+    "bareButtonCount": 2
+  },
+  {
+    "role": "owner",
+    "width": 390,
+    "route": "/m/p/[projectId]/photos/[fileId]",
+    "url": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/photos/0f1773b5-7662-429e-9001-64e84a3594b1",
+    "status": 200,
+    "finalPath": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/photos/0f1773b5-7662-429e-9001-64e84a3594b1",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": null,
+    "obscured": [],
+    "clearance": null,
+    "scrolls": false,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 18,
+    "structuralClearance": null,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "owner",
+    "width": 390,
+    "route": "/m/p/[projectId]/photos",
+    "url": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/photos",
+    "status": 200,
+    "finalPath": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/photos",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 748,
+      "left": 137,
+      "right": 203,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 88,
+    "scrolls": false,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 36,
+    "structuralClearance": 21,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "owner",
+    "width": 390,
+    "route": "/m/p/[projectId]/punch/[itemId]",
+    "url": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/punch/8a44e1c5-291a-43ad-860f-40675bc1f295",
+    "status": 200,
+    "finalPath": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/punch/8a44e1c5-291a-43ad-860f-40675bc1f295",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 748,
+      "left": 137,
+      "right": 203,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 57,
+    "scrolls": false,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 18,
+    "structuralClearance": 3,
+    "bareButtons": [
+      "show original"
+    ],
+    "bareButtonCount": 1
+  },
+  {
+    "role": "owner",
+    "width": 390,
+    "route": "/m/p/[projectId]/punch/lists/new",
+    "url": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/punch/lists/new",
+    "status": 200,
+    "finalPath": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/punch/lists/new",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 748,
+      "left": 137,
+      "right": 203,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 468,
+    "scrolls": false,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 18,
+    "structuralClearance": 3,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "owner",
+    "width": 390,
+    "route": "/m/p/[projectId]/punch/new",
+    "url": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/punch/new",
+    "status": 200,
+    "finalPath": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/punch/new",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 748,
+      "left": 137,
+      "right": 203,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 3,
+    "scrolls": true,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 18,
+    "structuralClearance": 3,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "owner",
+    "width": 390,
+    "route": "/m/p/[projectId]/punch",
+    "url": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/punch",
+    "status": 200,
+    "finalPath": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/punch",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 748,
+      "left": 137,
+      "right": 203,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 464,
+    "scrolls": false,
+    "rows": {
+      "li": 1,
+      "shared58": 1,
+      "own": 0
+    },
+    "trailing": 29,
+    "structuralClearance": 14,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "owner",
+    "width": 390,
+    "route": "/m/p/[projectId]/safety/new",
+    "url": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/safety/new",
+    "status": 200,
+    "finalPath": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/safety/new",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 748,
+      "left": 137,
+      "right": 203,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 4,
+    "scrolls": true,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 18,
+    "structuralClearance": 3,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "owner",
+    "width": 390,
+    "route": "/m/p/[projectId]/safety",
+    "url": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/safety",
+    "status": 200,
+    "finalPath": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/safety",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 748,
+      "left": 137,
+      "right": 203,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 608,
+    "scrolls": false,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 18,
+    "structuralClearance": 3,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "owner",
+    "width": 390,
+    "route": "/m/p/[projectId]/schedule",
+    "url": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/schedule",
+    "status": 200,
+    "finalPath": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/schedule",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 748,
+      "left": 137,
+      "right": 203,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 314,
+    "scrolls": false,
+    "rows": {
+      "li": 3,
+      "shared58": 3,
+      "own": 0
+    },
+    "trailing": 29,
+    "structuralClearance": 14,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "owner",
+    "width": 390,
+    "route": "/m/p/[projectId]/selections",
+    "url": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/selections",
+    "status": 200,
+    "finalPath": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/selections",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 748,
+      "left": 137,
+      "right": 203,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 622,
+    "scrolls": false,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 24,
+    "structuralClearance": 9,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "owner",
+    "width": 390,
+    "route": "/m/p/[projectId]/team",
+    "url": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/team",
+    "status": 200,
+    "finalPath": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/team",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 748,
+      "left": 137,
+      "right": 203,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 351,
+    "scrolls": false,
+    "rows": {
+      "li": 5,
+      "shared58": 5,
+      "own": 0
+    },
+    "trailing": 29,
+    "structuralClearance": 14,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "owner",
+    "width": 390,
+    "route": "/m/projects",
+    "url": "/m/projects",
+    "status": 200,
+    "finalPath": "/m/projects",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 748,
+      "left": 137,
+      "right": 203,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 3,
+    "scrolls": true,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 18,
+    "structuralClearance": 3,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "owner",
+    "width": 390,
+    "route": "/m/schedule",
+    "url": "/m/schedule",
+    "status": 200,
+    "finalPath": "/m/schedule",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 748,
+      "left": 137,
+      "right": 203,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 3,
+    "scrolls": true,
+    "rows": {
+      "li": 17,
+      "shared58": 17,
+      "own": 0
+    },
+    "trailing": 18,
+    "structuralClearance": 3,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "owner",
+    "width": 390,
+    "route": "/m/settings",
+    "url": "/m/settings",
+    "status": 200,
+    "finalPath": "/m/settings",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 748,
+      "left": 137,
+      "right": 203,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 329,
+    "scrolls": false,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 18,
+    "structuralClearance": 3,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "owner",
+    "width": 390,
+    "route": "/m/site-visits/[id]",
+    "url": "/m/site-visits/a9aaeffa-5241-4d03-995f-f0e64f6d51c3",
+    "status": 200,
+    "finalPath": "/m/site-visits/a9aaeffa-5241-4d03-995f-f0e64f6d51c3",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 748,
+      "left": 137,
+      "right": 203,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 3,
+    "scrolls": true,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 18,
+    "structuralClearance": 3,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "owner",
+    "width": 390,
+    "route": "/m/site-visits/new",
+    "url": "/m/site-visits/new",
+    "status": 200,
+    "finalPath": "/m/site-visits/new",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 748,
+      "left": 137,
+      "right": 203,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 4,
+    "scrolls": true,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 18,
+    "structuralClearance": 3,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "owner",
+    "width": 390,
+    "route": "/m/site-visits",
+    "url": "/m/site-visits",
+    "status": 200,
+    "finalPath": "/m/site-visits",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 748,
+      "left": 137,
+      "right": 203,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 514,
+    "scrolls": false,
+    "rows": {
+      "li": 1,
+      "shared58": 1,
+      "own": 0
+    },
+    "trailing": 28,
+    "structuralClearance": 13,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "owner",
+    "width": 390,
+    "route": "/m/subs",
+    "url": "/m/subs",
+    "status": 200,
+    "finalPath": "/m/subs",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 748,
+      "left": 137,
+      "right": 203,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 308,
+    "scrolls": false,
+    "rows": {
+      "li": 4,
+      "shared58": 4,
+      "own": 0
+    },
+    "trailing": 29,
+    "structuralClearance": 14,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "owner",
+    "width": 390,
+    "route": "/m/subs/[subId]/edit",
+    "url": "/m/subs/00c2bccc-a77e-498e-9ac6-9ee503df89d9/edit",
+    "status": 200,
+    "finalPath": "/m/subs/00c2bccc-a77e-498e-9ac6-9ee503df89d9/edit",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 748,
+      "left": 137,
+      "right": 203,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 3,
+    "scrolls": true,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 18,
+    "structuralClearance": 3,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "owner",
+    "width": 390,
+    "route": "/m/subs/[subId]",
+    "url": "/m/subs/00c2bccc-a77e-498e-9ac6-9ee503df89d9",
+    "status": 200,
+    "finalPath": "/m/subs/00c2bccc-a77e-498e-9ac6-9ee503df89d9",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 748,
+      "left": 137,
+      "right": 203,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 14,
+    "scrolls": true,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 29,
+    "structuralClearance": 14,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "owner",
+    "width": 390,
+    "route": "/m/team/[memberId]/edit",
+    "url": "/m/team/18a105e7-2ff9-4546-a17b-87524a45e978/edit",
+    "status": 200,
+    "finalPath": "/m/team/18a105e7-2ff9-4546-a17b-87524a45e978/edit",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 748,
+      "left": 137,
+      "right": 203,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 3,
+    "scrolls": true,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 18,
+    "structuralClearance": 3,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "owner",
+    "width": 390,
+    "route": "/m/team/[memberId]",
+    "url": "/m/team/18a105e7-2ff9-4546-a17b-87524a45e978",
+    "status": 200,
+    "finalPath": "/m/team/18a105e7-2ff9-4546-a17b-87524a45e978",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 748,
+      "left": 137,
+      "right": 203,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 428,
+    "scrolls": false,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 29,
+    "structuralClearance": 14,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "owner",
+    "width": 390,
+    "route": "/m/team",
+    "url": "/m/team",
+    "status": 200,
+    "finalPath": "/m/team",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 748,
+      "left": 137,
+      "right": 203,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 4,
+    "scrolls": true,
+    "rows": {
+      "li": 585,
+      "shared58": 585,
+      "own": 0
+    },
+    "trailing": 29,
+    "structuralClearance": 14,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "owner",
+    "width": 390,
+    "route": "/m/timeclock",
+    "url": "/m/timeclock",
+    "status": 200,
+    "finalPath": "/m/timeclock",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 748,
+      "left": 137,
+      "right": 203,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 356,
+    "scrolls": false,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 18,
+    "structuralClearance": 3,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "owner",
+    "width": 390,
+    "route": "/m/timeclock/switch",
+    "url": "/m/timeclock/switch",
+    "status": 200,
+    "finalPath": "/m/timeclock/switch",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 748,
+      "left": 137,
+      "right": 203,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 542,
+    "scrolls": false,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 18,
+    "structuralClearance": 3,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "owner",
+    "width": 390,
+    "route": "#chat (overlay from /m/projects)",
+    "fab": {
+      "top": 748
+    },
+    "obscured": [
+      {
+        "el": "button \"S97REMIND — reminders\"",
+        "px": 17
+      }
+    ]
+  },
+  {
+    "role": "owner",
+    "width": 360,
+    "route": "/m/account",
+    "url": "/m/account",
+    "status": 200,
+    "finalPath": "/m/account",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 704,
+      "left": 126,
+      "right": 192,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 20,
+    "scrolls": true,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 35,
+    "structuralClearance": 20,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "owner",
+    "width": 360,
+    "route": "/m/capture",
+    "url": "/m/capture",
+    "status": 200,
+    "finalPath": "/m/capture",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 704,
+      "left": 126,
+      "right": 192,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 424,
+    "scrolls": false,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 18,
+    "structuralClearance": 3,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "owner",
+    "width": 360,
+    "route": "/m/contacts/[contactId]/edit",
+    "url": "/m/contacts/8c7c9a6d-287d-4b0e-9a0b-2769adfed704/edit",
+    "status": 200,
+    "finalPath": "/m/contacts/8c7c9a6d-287d-4b0e-9a0b-2769adfed704/edit",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 704,
+      "left": 126,
+      "right": 192,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 3,
+    "scrolls": true,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 18,
+    "structuralClearance": 3,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "owner",
+    "width": 360,
+    "route": "/m/contacts/[contactId]",
+    "url": "/m/contacts/8c7c9a6d-287d-4b0e-9a0b-2769adfed704",
+    "status": 200,
+    "finalPath": "/m/contacts/8c7c9a6d-287d-4b0e-9a0b-2769adfed704",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 704,
+      "left": 126,
+      "right": 192,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 158,
+    "scrolls": false,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 29,
+    "structuralClearance": 14,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "owner",
+    "width": 360,
+    "route": "/m/contacts",
+    "url": "/m/contacts",
+    "status": 200,
+    "finalPath": "/m/contacts",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 704,
+      "left": 126,
+      "right": 192,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 98,
+    "scrolls": false,
+    "rows": {
+      "li": 7,
+      "shared58": 7,
+      "own": 0
+    },
+    "trailing": 29,
+    "structuralClearance": 14,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "owner",
+    "width": 360,
+    "route": "/m/expenses",
+    "url": "/m/expenses",
+    "status": 200,
+    "finalPath": "/m/expenses",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 704,
+      "left": 126,
+      "right": 192,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 5,
+    "scrolls": true,
+    "rows": {
+      "li": 21,
+      "shared58": 21,
+      "own": 0
+    },
+    "trailing": 29,
+    "structuralClearance": 14,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "owner",
+    "width": 360,
+    "route": "/m/field",
+    "url": "/m/field",
+    "status": 200,
+    "finalPath": "/m/field",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 704,
+      "left": 126,
+      "right": 192,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 332,
+    "scrolls": false,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 18,
+    "structuralClearance": 3,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "owner",
+    "width": 360,
+    "route": "/m/logs/[logId]",
+    "url": "/m/logs/88536d73-254a-4db3-afd2-e24da46411a1",
+    "status": 200,
+    "finalPath": "/m/logs/88536d73-254a-4db3-afd2-e24da46411a1",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 704,
+      "left": 126,
+      "right": 192,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 276,
+    "scrolls": false,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 18,
+    "structuralClearance": 3,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "owner",
+    "width": 360,
+    "route": "/m/logs/new",
+    "url": "/m/logs/new",
+    "status": 200,
+    "finalPath": "/m/logs/new",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 704,
+      "left": 126,
+      "right": 192,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 3,
+    "scrolls": true,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 18,
+    "structuralClearance": 3,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "owner",
+    "width": 360,
+    "route": "/m/logs",
+    "url": "/m/logs",
+    "status": 200,
+    "finalPath": "/m/logs",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 704,
+      "left": 126,
+      "right": 192,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 3,
+    "scrolls": true,
+    "rows": {
+      "li": 12,
+      "shared58": 12,
+      "own": 0
+    },
+    "trailing": 18,
+    "structuralClearance": 3,
+    "bareButtons": [
+      "show original",
+      "show original",
+      "show original",
+      "show original",
+      "show original",
+      "show original"
+    ],
+    "bareButtonCount": 10
+  },
+  {
+    "role": "owner",
+    "width": 360,
+    "route": "/m/notifications",
+    "url": "/m/notifications",
+    "status": 200,
+    "finalPath": "/m/notifications",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 704,
+      "left": 126,
+      "right": 192,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 3,
+    "scrolls": true,
+    "rows": {
+      "li": 100,
+      "shared58": 0,
+      "own": 100
+    },
+    "trailing": 18,
+    "structuralClearance": 3,
+    "bareButtons": [
+      "Mark all as read",
+      "Casey Crew assigned you a punc",
+      "Mark read",
+      "Dismiss",
+      "Casey Crew assigned you a punc",
+      "Mark read"
+    ],
+    "bareButtonCount": 262
+  },
+  {
+    "role": "owner",
+    "width": 360,
+    "route": "/m/offline",
+    "url": "/m/offline",
+    "status": 200,
+    "finalPath": "/m/offline",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 704,
+      "left": 126,
+      "right": 192,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 121,
+    "scrolls": false,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 26,
+    "structuralClearance": 11,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "owner",
+    "width": 360,
+    "route": "/m",
+    "url": "/m",
+    "status": 200,
+    "finalPath": "/m/timeclock",
+    "redirected": true,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 704,
+      "left": 126,
+      "right": 192,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 312,
+    "scrolls": false,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 18,
+    "structuralClearance": 3,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "owner",
+    "width": 360,
+    "route": "/m/p/[projectId]/changes/[coId]",
+    "url": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/changes/194cea12-2cae-4878-b3e2-edb4633fc090",
+    "status": 200,
+    "finalPath": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/changes/194cea12-2cae-4878-b3e2-edb4633fc090",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 704,
+      "left": 126,
+      "right": 192,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 3,
+    "scrolls": true,
+    "rows": {
+      "li": 2,
+      "shared58": 0,
+      "own": 2
+    },
+    "trailing": 18,
+    "structuralClearance": 3,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "owner",
+    "width": 360,
+    "route": "/m/p/[projectId]/changes/new",
+    "url": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/changes/new",
+    "status": 200,
+    "finalPath": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/changes/new",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 704,
+      "left": 126,
+      "right": 192,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 3,
+    "scrolls": true,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 18,
+    "structuralClearance": 3,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "owner",
+    "width": 360,
+    "route": "/m/p/[projectId]/changes",
+    "url": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/changes",
+    "status": 200,
+    "finalPath": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/changes",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 704,
+      "left": 126,
+      "right": 192,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 357,
+    "scrolls": false,
+    "rows": {
+      "li": 2,
+      "shared58": 2,
+      "own": 0
+    },
+    "trailing": 29,
+    "structuralClearance": 14,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "owner",
+    "width": 360,
+    "route": "/m/p/[projectId]/contacts",
+    "url": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/contacts",
+    "status": 200,
+    "finalPath": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/contacts",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 704,
+      "left": 126,
+      "right": 192,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 502,
+    "scrolls": false,
+    "rows": {
+      "li": 2,
+      "shared58": 2,
+      "own": 0
+    },
+    "trailing": 29,
+    "structuralClearance": 14,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "owner",
+    "width": 360,
+    "route": "/m/p/[projectId]/deliveries/check-in",
+    "url": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/deliveries/check-in",
+    "status": 200,
+    "finalPath": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/deliveries/check-in",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 704,
+      "left": 126,
+      "right": 192,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 227,
+    "scrolls": false,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 18,
+    "structuralClearance": 3,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "owner",
+    "width": 360,
+    "route": "/m/p/[projectId]/deliveries",
+    "url": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/deliveries",
+    "status": 200,
+    "finalPath": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/deliveries",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 704,
+      "left": 126,
+      "right": 192,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 424,
+    "scrolls": false,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 18,
+    "structuralClearance": 3,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "owner",
+    "width": 360,
+    "route": "/m/p/[projectId]/files",
+    "url": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/files",
+    "status": 200,
+    "finalPath": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/files",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 704,
+      "left": 126,
+      "right": 192,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 564,
+    "scrolls": false,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 18,
+    "structuralClearance": 3,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "owner",
+    "width": 360,
+    "route": "/m/p/[projectId]/overview",
+    "url": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/overview",
+    "status": 200,
+    "finalPath": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/overview",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 704,
+      "left": 126,
+      "right": 192,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 257,
+    "scrolls": false,
+    "rows": {
+      "li": 5,
+      "shared58": 0,
+      "own": 5
+    },
+    "trailing": 33,
+    "structuralClearance": 18,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "owner",
+    "width": 360,
+    "route": "/m/p/[projectId]",
+    "url": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4",
+    "status": 200,
+    "finalPath": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 704,
+      "left": 126,
+      "right": 192,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 3,
+    "scrolls": true,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 18,
+    "structuralClearance": 3,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "owner",
+    "width": 360,
+    "route": "/m/p/[projectId]/photos/[fileId]/markup",
+    "url": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/photos/0f1773b5-7662-429e-9001-64e84a3594b1/markup",
+    "status": 200,
+    "finalPath": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/photos/0f1773b5-7662-429e-9001-64e84a3594b1/markup",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": null,
+    "obscured": [],
+    "clearance": null,
+    "scrolls": false,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 14,
+    "structuralClearance": null,
+    "bareButtons": [
+      "Cancel",
+      "Save"
+    ],
+    "bareButtonCount": 2
+  },
+  {
+    "role": "owner",
+    "width": 360,
+    "route": "/m/p/[projectId]/photos/[fileId]",
+    "url": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/photos/0f1773b5-7662-429e-9001-64e84a3594b1",
+    "status": 200,
+    "finalPath": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/photos/0f1773b5-7662-429e-9001-64e84a3594b1",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": null,
+    "obscured": [],
+    "clearance": null,
+    "scrolls": false,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 18,
+    "structuralClearance": null,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "owner",
+    "width": 360,
+    "route": "/m/p/[projectId]/photos",
+    "url": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/photos",
+    "status": 200,
+    "finalPath": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/photos",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 704,
+      "left": 126,
+      "right": 192,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 74,
+    "scrolls": false,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 36,
+    "structuralClearance": 21,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "owner",
+    "width": 360,
+    "route": "/m/p/[projectId]/punch/[itemId]",
+    "url": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/punch/8a44e1c5-291a-43ad-860f-40675bc1f295",
+    "status": 200,
+    "finalPath": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/punch/8a44e1c5-291a-43ad-860f-40675bc1f295",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 704,
+      "left": 126,
+      "right": 192,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 13,
+    "scrolls": false,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 18,
+    "structuralClearance": 3,
+    "bareButtons": [
+      "show original"
+    ],
+    "bareButtonCount": 1
+  },
+  {
+    "role": "owner",
+    "width": 360,
+    "route": "/m/p/[projectId]/punch/lists/new",
+    "url": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/punch/lists/new",
+    "status": 200,
+    "finalPath": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/punch/lists/new",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 704,
+      "left": 126,
+      "right": 192,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 424,
+    "scrolls": false,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 18,
+    "structuralClearance": 3,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "owner",
+    "width": 360,
+    "route": "/m/p/[projectId]/punch/new",
+    "url": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/punch/new",
+    "status": 200,
+    "finalPath": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/punch/new",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 704,
+      "left": 126,
+      "right": 192,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 3,
+    "scrolls": true,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 18,
+    "structuralClearance": 3,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "owner",
+    "width": 360,
+    "route": "/m/p/[projectId]/punch",
+    "url": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/punch",
+    "status": 200,
+    "finalPath": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/punch",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 704,
+      "left": 126,
+      "right": 192,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 420,
+    "scrolls": false,
+    "rows": {
+      "li": 1,
+      "shared58": 1,
+      "own": 0
+    },
+    "trailing": 29,
+    "structuralClearance": 14,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "owner",
+    "width": 360,
+    "route": "/m/p/[projectId]/safety/new",
+    "url": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/safety/new",
+    "status": 200,
+    "finalPath": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/safety/new",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 704,
+      "left": 126,
+      "right": 192,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 4,
+    "scrolls": true,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 18,
+    "structuralClearance": 3,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "owner",
+    "width": 360,
+    "route": "/m/p/[projectId]/safety",
+    "url": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/safety",
+    "status": 200,
+    "finalPath": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/safety",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 704,
+      "left": 126,
+      "right": 192,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 564,
+    "scrolls": false,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 18,
+    "structuralClearance": 3,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "owner",
+    "width": 360,
+    "route": "/m/p/[projectId]/schedule",
+    "url": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/schedule",
+    "status": 200,
+    "finalPath": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/schedule",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 704,
+      "left": 126,
+      "right": 192,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 270,
+    "scrolls": false,
+    "rows": {
+      "li": 3,
+      "shared58": 3,
+      "own": 0
+    },
+    "trailing": 29,
+    "structuralClearance": 14,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "owner",
+    "width": 360,
+    "route": "/m/p/[projectId]/selections",
+    "url": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/selections",
+    "status": 200,
+    "finalPath": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/selections",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 704,
+      "left": 126,
+      "right": 192,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 578,
+    "scrolls": false,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 24,
+    "structuralClearance": 9,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "owner",
+    "width": 360,
+    "route": "/m/p/[projectId]/team",
+    "url": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/team",
+    "status": 200,
+    "finalPath": "/m/p/eaf0e25b-d60e-49c0-89b2-5612118d94b4/team",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 704,
+      "left": 126,
+      "right": 192,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 307,
+    "scrolls": false,
+    "rows": {
+      "li": 5,
+      "shared58": 5,
+      "own": 0
+    },
+    "trailing": 29,
+    "structuralClearance": 14,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "owner",
+    "width": 360,
+    "route": "/m/projects",
+    "url": "/m/projects",
+    "status": 200,
+    "finalPath": "/m/projects",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 704,
+      "left": 126,
+      "right": 192,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 3,
+    "scrolls": true,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 18,
+    "structuralClearance": 3,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "owner",
+    "width": 360,
+    "route": "/m/schedule",
+    "url": "/m/schedule",
+    "status": 200,
+    "finalPath": "/m/schedule",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 704,
+      "left": 126,
+      "right": 192,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 3,
+    "scrolls": true,
+    "rows": {
+      "li": 17,
+      "shared58": 17,
+      "own": 0
+    },
+    "trailing": 18,
+    "structuralClearance": 3,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "owner",
+    "width": 360,
+    "route": "/m/settings",
+    "url": "/m/settings",
+    "status": 200,
+    "finalPath": "/m/settings",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 704,
+      "left": 126,
+      "right": 192,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 285,
+    "scrolls": false,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 18,
+    "structuralClearance": 3,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "owner",
+    "width": 360,
+    "route": "/m/site-visits/[id]",
+    "url": "/m/site-visits/a9aaeffa-5241-4d03-995f-f0e64f6d51c3",
+    "status": 200,
+    "finalPath": "/m/site-visits/a9aaeffa-5241-4d03-995f-f0e64f6d51c3",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 30,
+    "worst": {
+      "px": 30,
+      "el": "input[sv-m-width].h-[48px].rounded-[12px].border"
+    },
+    "fab": {
+      "top": 704,
+      "left": 126,
+      "right": 192,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 3,
+    "scrolls": true,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 18,
+    "structuralClearance": 3,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "owner",
+    "width": 360,
+    "route": "/m/site-visits/new",
+    "url": "/m/site-visits/new",
+    "status": 200,
+    "finalPath": "/m/site-visits/new",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 704,
+      "left": 126,
+      "right": 192,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 4,
+    "scrolls": true,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 18,
+    "structuralClearance": 3,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "owner",
+    "width": 360,
+    "route": "/m/site-visits",
+    "url": "/m/site-visits",
+    "status": 200,
+    "finalPath": "/m/site-visits",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 704,
+      "left": 126,
+      "right": 192,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 470,
+    "scrolls": false,
+    "rows": {
+      "li": 1,
+      "shared58": 1,
+      "own": 0
+    },
+    "trailing": 28,
+    "structuralClearance": 13,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "owner",
+    "width": 360,
+    "route": "/m/subs",
+    "url": "/m/subs",
+    "status": 200,
+    "finalPath": "/m/subs",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 704,
+      "left": 126,
+      "right": 192,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 264,
+    "scrolls": false,
+    "rows": {
+      "li": 4,
+      "shared58": 4,
+      "own": 0
+    },
+    "trailing": 29,
+    "structuralClearance": 14,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "owner",
+    "width": 360,
+    "route": "/m/subs/[subId]/edit",
+    "url": "/m/subs/00c2bccc-a77e-498e-9ac6-9ee503df89d9/edit",
+    "status": 200,
+    "finalPath": "/m/subs/00c2bccc-a77e-498e-9ac6-9ee503df89d9/edit",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 704,
+      "left": 126,
+      "right": 192,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 3,
+    "scrolls": true,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 18,
+    "structuralClearance": 3,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "owner",
+    "width": 360,
+    "route": "/m/subs/[subId]",
+    "url": "/m/subs/00c2bccc-a77e-498e-9ac6-9ee503df89d9",
+    "status": 200,
+    "finalPath": "/m/subs/00c2bccc-a77e-498e-9ac6-9ee503df89d9",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 704,
+      "left": 126,
+      "right": 192,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 14,
+    "scrolls": true,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 29,
+    "structuralClearance": 14,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "owner",
+    "width": 360,
+    "route": "/m/team/[memberId]/edit",
+    "url": "/m/team/18a105e7-2ff9-4546-a17b-87524a45e978/edit",
+    "status": 200,
+    "finalPath": "/m/team/18a105e7-2ff9-4546-a17b-87524a45e978/edit",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 704,
+      "left": 126,
+      "right": 192,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 3,
+    "scrolls": true,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 18,
+    "structuralClearance": 3,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "owner",
+    "width": 360,
+    "route": "/m/team/[memberId]",
+    "url": "/m/team/18a105e7-2ff9-4546-a17b-87524a45e978",
+    "status": 200,
+    "finalPath": "/m/team/18a105e7-2ff9-4546-a17b-87524a45e978",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 704,
+      "left": 126,
+      "right": 192,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 384,
+    "scrolls": false,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 29,
+    "structuralClearance": 14,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "owner",
+    "width": 360,
+    "route": "/m/team",
+    "url": "/m/team",
+    "status": 200,
+    "finalPath": "/m/team",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 704,
+      "left": 126,
+      "right": 192,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 4,
+    "scrolls": true,
+    "rows": {
+      "li": 585,
+      "shared58": 585,
+      "own": 0
+    },
+    "trailing": 29,
+    "structuralClearance": 14,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "owner",
+    "width": 360,
+    "route": "/m/timeclock",
+    "url": "/m/timeclock",
+    "status": 200,
+    "finalPath": "/m/timeclock",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 704,
+      "left": 126,
+      "right": 192,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 312,
+    "scrolls": false,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 18,
+    "structuralClearance": 3,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "owner",
+    "width": 360,
+    "route": "/m/timeclock/switch",
+    "url": "/m/timeclock/switch",
+    "status": 200,
+    "finalPath": "/m/timeclock/switch",
+    "redirected": false,
+    "docOver": 0,
+    "mainOver": 0,
+    "worst": null,
+    "fab": {
+      "top": 704,
+      "left": 126,
+      "right": 192,
+      "overhang": 15
+    },
+    "obscured": [],
+    "clearance": 475,
+    "scrolls": false,
+    "rows": {
+      "li": 0,
+      "shared58": 0,
+      "own": 0
+    },
+    "trailing": 18,
+    "structuralClearance": 3,
+    "bareButtons": [],
+    "bareButtonCount": 0
+  },
+  {
+    "role": "owner",
+    "width": 360,
+    "route": "#chat (overlay from /m/projects)",
+    "fab": {
+      "top": 704
+    },
+    "obscured": [
+      {
+        "el": "button \"S97PARTIAL — partial billing\"",
+        "px": 18
+      },
+      {
+        "el": "button \"S97REMIND — reminders\"",
+        "px": 61
+      }
+    ]
+  }
+]

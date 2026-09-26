@@ -1,4 +1,4 @@
-import { notFound } from 'next/navigation';
+import { notFound, redirect } from 'next/navigation';
 import {
   getChangeOrder,
   getCoSigningSessions,
@@ -97,7 +97,23 @@ export default async function ChangeOrderDetailPage({
     getCoSupersession(params.coId),
     getMobileT(),
   ]);
-  if (!co) notFound();
+  if (!co) {
+    // [/m visual sweep, 2026-09-24] A null here is USUALLY a refusal, not a
+    // missing row. change_orders_select_visible (S121 read floor,
+    // 20260830000000) admits owner/admin and the PM who authored the CO, so
+    // foreman and crew read NO change orders and a non-author PM reads none of
+    // this one. Send them to the list with a reason (A-66), as every other /m
+    // guard does. Only owner/admin can see every CO, so for them — alone — a
+    // null genuinely means "no such CO", and app/m/not-found.tsx renders it
+    // inside the shell.
+    //
+    // ⚠️ This supersedes part of the header above, which predates the S121
+    // floor: foreman and crew no longer "legitimately reach this screen" — the
+    // database stopped handing them the row. The header's money-gate
+    // reasoning still holds for a PM author.
+    if (profile?.role === 'owner' || profile?.role === 'admin') notFound();
+    redirect(`${backTo}?denied=co-read`);
+  }
 
   const showMoney = MONEY_ROLES.includes(profile?.role ?? '');
 

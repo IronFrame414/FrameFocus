@@ -39,6 +39,12 @@ export const en = {
   'shell.denied.subEdit': 'Only an owner, admin or project manager can edit subs and vendors.',
   'shell.denied.contactEdit': 'Only an owner, admin or project manager can edit contacts.',
   'shell.denied.teamEdit': 'Only an owner or admin can edit team members.',
+  'shell.denied.coRead':
+    'A change order opens only for an owner, an admin, or the project manager who wrote it.',
+  'shell.notFound.title': 'Not found',
+  'shell.notFound.body':
+    "This page doesn't exist, or it isn't one you can open. It may have been removed.",
+  'shell.notFound.home': 'Back to home',
   'shell.needsConnection':
     '{what} needs a connection — it is not saved offline. Reconnect and try again.',
   'shell.required': 'Required',
@@ -127,6 +133,7 @@ export const en = {
   'shell.push.unsupported':
     "This browser can't receive push notifications. You'll still see everything in your notifications list.",
   'shell.push.turningOn': 'Turning on…',
+  'shell.push.heading': 'Push notifications',
   'shell.push.turnOn': 'Turn on notifications',
   'shell.push.onForDevice': 'Notifications are on for this device.',
   'shell.push.turningOff': 'Turning off…',
@@ -220,6 +227,12 @@ export const es: Record<keyof typeof en, string> = {
   'shell.denied.contactEdit':
     'Solo un dueño, administrador o gerente de proyecto puede editar contactos.',
   'shell.denied.teamEdit': 'Solo un dueño o administrador puede editar miembros del equipo.',
+  'shell.denied.coRead':
+    'Una orden de cambio solo la abre un dueño, un administrador o el gerente de proyecto que la escribió.',
+  'shell.notFound.title': 'No encontrado',
+  'shell.notFound.body':
+    'Esta página no existe, o no es una que puedas abrir. Puede que la hayan eliminado.',
+  'shell.notFound.home': 'Volver al inicio',
   'shell.needsConnection':
     '{what} necesita conexión — no se guarda sin conexión. Vuelve a conectarte e inténtalo de nuevo.',
   'shell.required': 'Obligatorio',
@@ -308,6 +321,7 @@ export const es: Record<keyof typeof en, string> = {
   'shell.push.unsupported':
     'Este navegador no puede recibir notificaciones push. Igual verás todo en tu lista de notificaciones.',
   'shell.push.turningOn': 'Activando…',
+  'shell.push.heading': 'Notificaciones push',
   'shell.push.turnOn': 'Activar notificaciones',
   'shell.push.onForDevice': 'Las notificaciones están activadas en este dispositivo.',
   'shell.push.turningOff': 'Desactivando…',

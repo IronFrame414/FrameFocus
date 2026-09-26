@@ -13,6 +13,20 @@
 
 ## Closed Tech Debt
 
+- **#151 ✅ CLOSED [/m visual sweep, `feature/m-visual-sweep`, 2026-09-24]** — the push enrolment
+  control did not read as tappable: zero `className`s, so under Preflight its `<button>` rendered
+  as body text. **Styled in the shared component, both surfaces** (parity rule): a titled panel,
+  `bg-m6m-blue` primary button for Turn on, bordered secondary for Turn off, `min-h-[44px]` (A-5).
+  **All three recorded constraints honoured:** (1) 44px floor; (2) `m6m.*` tokens only — `blue`
+  chosen as the primary button per §2, amber stays the field CTA; (3) **the iOS install, denied and
+  unsupported branches render NO control** — the panel around them carries no hover, cursor,
+  shadow or active state. **And the missing safety net was written FIRST, as the entry asked:**
+  `test/push-enrolment-view.test.tsx` pins A-N26 (no `<button>`, no `role="button"` in those three
+  branches) plus constraint 3 on the panel itself, with a control case; a mutant adding a button to
+  the iOS branch was run and caught. `PushEnrolmentView` was split out so each state renders in a
+  test; `framed={false}` stops Settings nesting a card in its own titled card. **Not verified on a
+  real device** — the one-shot iOS prompt is exactly what a headless browser cannot exercise.
+
 - **#1-deliv ✅ CLOSED [S110, RULED Josh Q11]** — a live test that drives a hook, trigger or
   webhook handler BY HAND cannot reproduce one called mid-transaction. Filed as a CLASS
   [2026-09-11] after `s160-auth-email.live.ts` A1/A2 stayed green for eleven sessions over P3, which

@@ -47,7 +47,7 @@ export default async function ProjectTeamPage({
   return (
     <div className="px-[18px] pb-[18px] pt-[14px]">
       <SectionHeader projectId={params.projectId} title={t('project.tile.team')} />
-      <DeniedNotice kind={searchParams.denied} />
+      <DeniedNotice kind={searchParams.denied} t={t} />
 
       {rows.length === 0 ? (
         <EmptyState>{t('project.team.empty')}</EmptyState>

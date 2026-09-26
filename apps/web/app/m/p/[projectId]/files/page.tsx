@@ -48,7 +48,7 @@ export default async function ProjectFilesPage({
   return (
     <div className="px-[18px] pb-[18px] pt-[14px]">
       <SectionHeader projectId={params.projectId} title={t('project.tile.files')} />
-      <DeniedNotice kind={searchParams.denied} />
+      <DeniedNotice kind={searchParams.denied} t={t} />
 
       {docs.length === 0 ? (
         <EmptyState>{t('project.files.empty')}</EmptyState>
