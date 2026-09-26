@@ -560,6 +560,28 @@ top of this file is advanced to `#164` in the same commit, which is what keeps t
   Traps: `test/s109-row-activation.test.tsx` + `e2e/desktop-row-activation-s109.spec.ts`, each
   proven by sabotage — see `S109-report.md` Step 4.
 
+### Branch-scoped, awaiting real numbers — `feature/s112-bid-token-status` [S112]
+
+> Provisional ids per the S136 rule: never allocate a bare `#N` on a branch.
+
+- **#1-bidtok — link an awarded bid's company to project access, so the winner's /bid token can
+  close on an EVENT, not a timer. FILED by ruling [Josh, S112 bid decision 4].** Today the winner's
+  link survives conversion until it expires (≤ 14 days), because "the winner has been granted
+  project access" cannot be observed: nothing links a `subcontractors` directory record (who was
+  bid out to) to any login, member or project assignment — every FK into `subcontractors` comes
+  from estimate, CO, PO, catalog or financials tables. Once a link exists, `bid_token_state()`
+  (20261890000000) gains one clause: closed when the winner's company holds an assignment on the
+  converted project.
+
+- **#2-bidtok — tag bid documents BY LINE, so a sub sees only their own trade's scope. FILED by
+  ruling [Josh, S112 bid decision 3]: "tagging attachments by line is the proper fix and it is not
+  today's work."** The interim that shipped: `/api/bid/[token]/files` serves only files staff
+  explicitly shared ("Share with bidders" → the `bid-scope` tag), estimate-wide. Before it, every
+  staff file on the estimate — Files-tab attachments, site-visit PHOTOS of the client's property
+  and site-visit VOICE NOTES — reached every bidder on any line. A shared file still reaches
+  bidders on every line of the estimate; the fix is a line association on the share (e.g. a
+  `bid-scope:<line_item_id>` tag or a join table) checked against the request's `line_item_id`.
+
 ### Branch-scoped, awaiting real numbers — `feature/m-visual-sweep` [2026-09-24]
 
 > Provisional ids per the S136 rule: never allocate a bare `#N` on a branch.
