@@ -68,3 +68,12 @@ that build, locally, the six CI failures all pass, as does the R2 punch-row guar
 
 **Not changed — this contradicts the ruled mechanism, so it is Josh's call:** keep `loading.tsx` and
 accept 200-with-not-found-UI (and rewrite those specs), or drop it and keep the bar alone.
+
+## RULED [Josh, S112, second ruling]: drop `loading.tsx`, keep the pending bar
+
+"It measured 20/20 within 17 ms on its own, so it already solves the problem, and loading.tsx costs a
+behaviour that was deliberately built and proven: the /m not-found work verified 72 URLs and replaced
+bare 404s across 18 pages. A missing page returning 200 is wrong, and the 6 red tests are the guard
+doing its job. Never trade a proven behaviour for a redundant mechanism."
+
+`app/m/loading.tsx` removed; `nav-pending.tsx` carries the warning not to re-add it.

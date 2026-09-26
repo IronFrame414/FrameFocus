@@ -243,7 +243,6 @@ export function showsBackChevron(pathname: string): boolean {
   );
 }
 
-
 /**
  * §4.9 / §4.10 — M-9 and M-10 RUN ON THE DARK CANVAS AND OWN THEIR OWN CHROME.
  *
@@ -555,7 +554,7 @@ function MobileShellInner({
       {/* CONTENT + SHEET HOST                                                */}
       {/* ------------------------------------------------------------------ */}
       <div className="relative min-h-0 flex-1">
-        {/* S112 R2 — the pending bar for taps app/m/loading.tsx cannot reach.
+        {/* S112 R2 — THE navigation feedback on /m (no loading.tsx: see nav-pending.tsx).
             Suspense: useSearchParams() needs a boundary in Next 14. */}
         <Suspense fallback={null}>
           <NavPending />
@@ -866,9 +865,7 @@ function NavSheet({
                 data-current={current ? 'true' : 'false'}
                 aria-current={current ? 'page' : undefined}
                 className={`relative flex h-[76px] flex-col justify-between rounded-[14px] bg-m6m-card p-[12px] transition-transform duration-150 ease-out active:scale-[.98] ${
-                  current
-                    ? 'border-[1.5px] border-m6m-blue'
-                    : 'border border-m6m-border'
+                  current ? 'border-[1.5px] border-m6m-blue' : 'border border-m6m-border'
                 }`}
               >
                 <Icon size={20} strokeWidth={2} className="text-m6m-blue" aria-hidden />
@@ -988,10 +985,7 @@ function OfflineStrip() {
       // >=44px so A-5 holds — §4.4 gives the strip colours but no height.
       className="flex min-h-[44px] w-full items-center gap-2 border-y border-m6m-strip-border bg-m6m-strip-bg px-[18px] py-[10px]"
     >
-      <span
-        aria-hidden
-        className="h-[8px] w-[8px] shrink-0 rounded-full bg-m6m-amber"
-      />
+      <span aria-hidden className="h-[8px] w-[8px] shrink-0 rounded-full bg-m6m-amber" />
       <span className="flex-1 font-mono text-[11px] font-medium text-m6m-navy">
         {t('shell.offlineLastSynced', { time: lastOnline ? hhmm(lastOnline) : '—' })}
       </span>

@@ -3,11 +3,19 @@
 import { usePathname, useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
-// S112 R2 (audit F1), second half — a pending bar for the taps loading.tsx
-// cannot reach. RULED [Josh, S112]: "If taps are still dead at 800ms, add the
-// pending state and say so."
+// S112 R2 (audit F1) — THE navigation feedback on /m. RULED [Josh, S112,
+// second ruling]: "drop loading.tsx, keep the pending bar. It measured 20/20
+// within 17 ms on its own ... A missing page returning 200 is wrong, and the 6
+// red tests are the guard doing its job. Never trade a proven behaviour for a
+// redundant mechanism."
 //
-// They were. app/m/loading.tsx fires when the first segment under /m changes,
+// ⚠️ DO NOT ADD app/m/loading.tsx. A loading boundary makes every page under
+// it STREAM, so the status is sent before the page runs: notFound() renders
+// inside a 200, a server redirect() turns client-side. CI run 36246627024 went
+// 6 red on exactly that (A-43 /m/dashboard, missing sub/log/chat 404s, the
+// capture redirect, hydration). Bar alone, same harness: 20/20, 13–16 ms.
+//
+// History, as first built: app/m/loading.tsx fires when the first segment under /m changes,
 // and measured with the next screen's RSC payload held 3s it took 16 of 20
 // taps from dead to a skeleton in ~32ms. The other 4 — a punch row opening its
 // item, a navigation that stays inside one project — kept the old screen,
@@ -30,7 +38,7 @@ export function NavPending() {
   const searchParams = useSearchParams();
   const [pending, setPending] = useState(false);
 
-  // The route changed — the new screen (or loading.tsx) is on screen.
+  // The route changed — the new screen is on screen.
   useEffect(() => {
     setPending(false);
   }, [pathname, searchParams]);
@@ -50,7 +58,8 @@ export function NavPending() {
       if (url.origin !== window.location.origin || !url.pathname.startsWith('/m')) return;
       // Same screen (a hash, or a link to where you already are) never lands a
       // route change, so it must never raise the bar.
-      if (url.pathname === window.location.pathname && url.search === window.location.search) return;
+      if (url.pathname === window.location.pathname && url.search === window.location.search)
+        return;
       setPending(true);
     }
     // CAPTURE phase, and defaultPrevented is deliberately NOT consulted: next/link

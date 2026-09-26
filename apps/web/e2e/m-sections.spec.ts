@@ -104,9 +104,9 @@ test.describe('§4.11 common rules', () => {
       // so the "disabled with a plain message" branch has nothing to apply to.
       // The assertion is that no write is offered at all.
       expect(await page.getByTestId('m-content').getByRole('button').count()).toBe(0);
-      expect(
-        await page.getByTestId('m-content').locator('input, select, textarea').count()
-      ).toBe(0);
+      expect(await page.getByTestId('m-content').locator('input, select, textarea').count()).toBe(
+        0
+      );
     });
   }
 
@@ -262,7 +262,9 @@ test.describe('A-33c · no money on M-13 under ANY role', () => {
       // criterion here and reintroduces exactly what D-26 ruled out.
       const body = (await page.getByTestId('m-content').textContent()) ?? '';
       expect(body, `${role} saw currency`).not.toMatch(CURRENCY);
-      expect(body, `${role} saw a money word`).not.toMatch(/net delta|net_delta|amount|subtotal|total/i);
+      expect(body, `${role} saw a money word`).not.toMatch(
+        /net delta|net_delta|amount|subtotal|total/i
+      );
     });
   }
 
@@ -329,6 +331,7 @@ test.describe('A-33c · no money on M-13 under ANY role', () => {
 // ===========================================================================
 test.describe('M-14 · Punch List', () => {
   // [S112 R2] A tap that STAYS inside the project is not reached by
+  // [S112 R2, second ruling: no loading.tsx — the bar is the only mechanism]
   // app/m/loading.tsx (the /m boundary does not remount), so it was a dead tap
   // for the whole 3s the next screen took. The shell's pending bar covers it.
   // Measured before the bar: 0 of 4 punch-row taps changed by 800ms.
