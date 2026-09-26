@@ -100,7 +100,7 @@ export function MyPoLines({ projectId }: { projectId: string }) {
                   value={note}
                   onChange={(e) => setNote(e.target.value)}
                   placeholder={t('shell.po.why')}
-                  className="min-w-0 flex-1 rounded-[8px] border border-[#e0e4ea] px-3 py-2 text-[13px]"
+                  className="min-w-0 flex-1 rounded-[8px] border border-[#e0e4ea] px-3 py-2 text-[16px]"
                 />
                 <button
                   className="rounded-[8px] bg-[#c0362c] px-3 py-2 text-[13px] font-semibold text-white disabled:opacity-60"

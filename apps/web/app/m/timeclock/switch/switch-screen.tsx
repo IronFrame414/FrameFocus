@@ -203,7 +203,7 @@ export function SwitchScreen({
               value={note}
               onChange={(e) => setNote(e.target.value)}
               rows={2}
-              className="w-full rounded-[10px] border border-m6m-border px-[12px] py-[8px] text-[15px] text-m6m-navy"
+              className="w-full rounded-[10px] border border-m6m-border px-[12px] py-[8px] text-[16px] text-m6m-navy"
             />
           </>
         ) : (
@@ -314,7 +314,7 @@ export function SwitchScreen({
                 data-testid="m-next-task"
                 value={taskId ?? ''}
                 onChange={(e) => setTaskId(e.target.value || null)}
-                className="h-[48px] w-full rounded-[12px] border border-m6m-border bg-m6m-card px-[12px] text-[15px] text-m6m-navy"
+                className="h-[48px] w-full rounded-[12px] border border-m6m-border bg-m6m-card px-[12px] text-[16px] text-m6m-navy"
               >
                 <option value="">{t('field.switch.noTask')}</option>
                 {tasks.map((opt) => (

@@ -445,7 +445,7 @@ export function ChatComposer({ projectId, kind, disabled, onSend }: ChatComposer
           borderRadius: '9px',
           border: `1px solid ${color.inputBorder}`,
           fontFamily: font.sans,
-          fontSize: '13px',
+          fontSize: '16px',
           color: color.body,
           outline: 'none',
         }}

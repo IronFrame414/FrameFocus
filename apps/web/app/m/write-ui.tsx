@@ -121,7 +121,7 @@ export function TextField({
         inputMode={inputMode}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className={`h-[48px] w-full rounded-[12px] border border-m6m-border bg-m6m-card px-[14px] text-[15px] text-m6m-navy ${
+        className={`h-[48px] w-full rounded-[12px] border border-m6m-border bg-m6m-card px-[14px] text-[16px] text-m6m-navy ${
           inputMode === 'decimal' || inputMode === 'numeric' ? 'font-mono' : ''
         }`}
       />
@@ -150,7 +150,7 @@ export function TextAreaField({
         value={value}
         rows={rows}
         onChange={(e) => onChange(e.target.value)}
-        className="w-full rounded-[12px] border border-m6m-border bg-m6m-card px-[14px] py-[10px] text-[15px] text-m6m-navy"
+        className="w-full rounded-[12px] border border-m6m-border bg-m6m-card px-[14px] py-[10px] text-[16px] text-m6m-navy"
       />
     </div>
   );

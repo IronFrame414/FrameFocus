@@ -308,7 +308,7 @@ function VoiceRow({
             value={text}
             onChange={(e) => setText(e.target.value)}
             rows={4}
-            className="w-full rounded-[10px] border border-m6m-border px-[10px] py-[8px] text-[15px]"
+            className="w-full rounded-[10px] border border-m6m-border px-[10px] py-[8px] text-[16px]"
           />
           <div className="mt-[6px] flex gap-[8px]">
             <button

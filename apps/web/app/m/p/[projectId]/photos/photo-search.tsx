@@ -91,7 +91,7 @@ export function PhotoSearch({
         placeholder={t('photos.search.label')}
         value={value}
         onChange={(e) => setValue(e.target.value)}
-        className="h-11 flex-1 rounded-[12px] border border-m6m-border bg-m6m-card px-[14px] text-[15px] text-m6m-navy placeholder:text-m6m-muted"
+        className="h-11 flex-1 rounded-[12px] border border-m6m-border bg-m6m-card px-[14px] text-[16px] text-m6m-navy placeholder:text-m6m-muted"
       />
       <button
         type="button"

@@ -229,7 +229,7 @@ export function IncidentForm({
                   value={outsiderName}
                   onChange={(e) => setOutsiderName(e.target.value)}
                   placeholder={t('project.incident.namePlaceholder')}
-                  className="h-11 min-w-0 flex-1 rounded-[10px] border border-m6m-border px-[12px] text-[15px]"
+                  className="h-11 min-w-0 flex-1 rounded-[10px] border border-m6m-border px-[12px] text-[16px]"
                 />
                 <button
                   type="button"
@@ -269,7 +269,7 @@ export function IncidentForm({
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             rows={4}
-            className="w-full rounded-[14px] border border-m6m-border bg-m6m-card px-[14px] py-[10px] text-[15px] text-m6m-navy"
+            className="w-full rounded-[14px] border border-m6m-border bg-m6m-card px-[14px] py-[10px] text-[16px] text-m6m-navy"
           />
         </section>
 
@@ -299,7 +299,7 @@ export function IncidentForm({
                 onChange={(e) => setTreatmentNotes(e.target.value)}
                 rows={2}
                 placeholder={t('project.incident.treatmentPlaceholder')}
-                className="mt-[8px] w-full rounded-[10px] border border-m6m-border px-[12px] py-[8px] text-[15px]"
+                className="mt-[8px] w-full rounded-[10px] border border-m6m-border px-[12px] py-[8px] text-[16px]"
               />
             ) : null}
           </Row>

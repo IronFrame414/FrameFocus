@@ -387,7 +387,7 @@ export function MarkupCanvas({
             value={textValue}
             onChange={(e) => setTextValue(e.target.value)}
             placeholder={t('photos.markup.calloutPlaceholder')}
-            className="h-11 flex-1 rounded-[10px] border border-white/20 bg-[#161d2f] px-[12px] text-[15px] text-white placeholder:text-m6m-muted-navy"
+            className="h-11 flex-1 rounded-[10px] border border-white/20 bg-[#161d2f] px-[12px] text-[16px] text-white placeholder:text-m6m-muted-navy"
           />
           <button
             type="button"

@@ -249,7 +249,7 @@ export function CheckInForm({
                 value={vendor}
                 onChange={(e) => setVendor(e.target.value)}
                 placeholder={t('project.checkIn.vendorPlaceholder')}
-                className="h-[48px] w-full rounded-[12px] border border-m6m-border bg-m6m-card px-[12px] text-[15px] text-m6m-navy"
+                className="h-[48px] w-full rounded-[12px] border border-m6m-border bg-m6m-card px-[12px] text-[16px] text-m6m-navy"
               />
             </section>
           ) : null}
@@ -289,7 +289,7 @@ export function CheckInForm({
                         )
                       }
                       placeholder={t('project.checkIn.descPlaceholder')}
-                      className="h-[44px] w-full rounded-[10px] border border-m6m-border px-[12px] text-[15px] text-m6m-navy"
+                      className="h-[44px] w-full rounded-[10px] border border-m6m-border px-[12px] text-[16px] text-m6m-navy"
                     />
                   )}
 
@@ -421,7 +421,7 @@ export function CheckInForm({
                   value={note}
                   onChange={(e) => setNote(e.target.value)}
                   rows={2}
-                  className="w-full rounded-[10px] border border-m6m-border px-[12px] py-[8px] text-[15px]"
+                  className="w-full rounded-[10px] border border-m6m-border px-[12px] py-[8px] text-[16px]"
                 />
               </div>
             ) : null}

@@ -603,7 +603,7 @@ function OnTheClock({
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
                 rows={2}
-                className="w-full rounded-[10px] border border-m6m-border px-[12px] py-[8px] text-[15px] text-m6m-navy"
+                className="w-full rounded-[10px] border border-m6m-border px-[12px] py-[8px] text-[16px] text-m6m-navy"
               />
             </>
           ) : null}
@@ -777,7 +777,7 @@ function QueuedOnTheClock({
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
                 rows={2}
-                className="w-full rounded-[10px] border border-m6m-border px-[12px] py-[8px] text-[15px] text-m6m-navy"
+                className="w-full rounded-[10px] border border-m6m-border px-[12px] py-[8px] text-[16px] text-m6m-navy"
               />
             </>
           ) : null}

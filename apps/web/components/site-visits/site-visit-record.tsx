@@ -105,7 +105,7 @@ function NoteSection({ kind, ctx }: { kind: SiteVisitNoteKind; ctx: NoteCtx }) {
             onChange={(e) => setDraft(e.target.value)}
             placeholder={t(`visit.kind.${kind}.placeholder` as const)}
             rows={2}
-            className="w-full rounded-[12px] border border-m6m-border bg-m6m-card px-[12px] py-[10px] text-[15px] text-m6m-navy"
+            className="w-full rounded-[12px] border border-m6m-border bg-m6m-card px-[12px] py-[10px] text-[16px] text-m6m-navy"
           />
           <button
             type="button"
@@ -164,7 +164,7 @@ function NoteRow({ note, editable, ctx }: { note: SiteVisitNote; editable: boole
             value={body}
             onChange={(e) => setBody(e.target.value)}
             rows={2}
-            className="min-w-0 flex-1 rounded-[10px] border border-m6m-border px-[10px] py-[8px] text-[15px]"
+            className="min-w-0 flex-1 rounded-[10px] border border-m6m-border px-[10px] py-[8px] text-[16px]"
           />
         ) : (
           <p
@@ -522,7 +522,7 @@ export function SiteVisitRecord({
               value={area}
               onChange={(e) => setArea(e.target.value)}
               placeholder={t('visit.measurements.area')}
-              className="h-[48px] w-full min-w-0 rounded-[12px] border border-m6m-border px-[10px] text-[15px]"
+              className="h-[48px] w-full min-w-0 rounded-[12px] border border-m6m-border px-[10px] text-[16px]"
             />
             <input
               data-testid="sv-m-length"
@@ -530,7 +530,7 @@ export function SiteVisitRecord({
               onChange={(e) => setLen(e.target.value.replace(/[^0-9.]/g, ''))}
               inputMode="decimal"
               placeholder={t('visit.measurements.length')}
-              className="h-[48px] w-full min-w-0 rounded-[12px] border border-m6m-border px-[8px] font-mono text-[15px] placeholder:font-sans"
+              className="h-[48px] w-full min-w-0 rounded-[12px] border border-m6m-border px-[8px] font-mono text-[16px] placeholder:font-sans"
             />
             <input
               data-testid="sv-m-width"
@@ -538,7 +538,7 @@ export function SiteVisitRecord({
               onChange={(e) => setWid(e.target.value.replace(/[^0-9.]/g, ''))}
               inputMode="decimal"
               placeholder={t('visit.measurements.width')}
-              className="h-[48px] w-full min-w-0 rounded-[12px] border border-m6m-border px-[8px] font-mono text-[15px] placeholder:font-sans"
+              className="h-[48px] w-full min-w-0 rounded-[12px] border border-m6m-border px-[8px] font-mono text-[16px] placeholder:font-sans"
             />
             <button
               type="button"

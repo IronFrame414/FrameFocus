@@ -60,7 +60,7 @@ export function ProjectsList({ cards }: { cards: ProjectCard[] }) {
         placeholder={t('field.projects.search')}
         value={query}
         onChange={(e) => setQuery(e.target.value)}
-        className="h-[48px] w-full rounded-[12px] border border-m6m-border bg-m6m-card px-[14px] text-[15px] text-m6m-navy placeholder:text-m6m-muted"
+        className="h-[48px] w-full rounded-[12px] border border-m6m-border bg-m6m-card px-[14px] text-[16px] text-m6m-navy placeholder:text-m6m-muted"
       />
 
       <div className="mt-[12px] flex flex-col gap-[11px]">
