@@ -44,6 +44,30 @@ produced a reported number:
 The bytes above come from `route.fetch()` reading each full body, with navigation fetches
 separated from prefetches by the `next-router-prefetch` header.
 
+### Hold — `feature/s112-staletimes-hold`, what it is and when to revisit it [ruling 2]
+
+**Contents.** One commit on top of this branch, touching one file: `apps/web/next.config.js` gains
+`experimental: { staleTimes: { dynamic: 0 } }`, with a comment block carrying the numbers above.
+It's parked on origin under an empty `[skip ci]` head. It has never run CI, which is deliberate: it
+isn't meant to merge as it stands.
+
+**What it would buy.** Every push/Link navigation to a dynamic page fetches fresh data from the
+server. That closes the "mutate, then navigate to a page the client already holds" class everywhere
+at once, not only on the markup screen the reorder fixed.
+
+**What it would NOT buy.** Back/forward (`router.back()`, the `/m` back arrow, the phone's back
+gesture) goes through `restore-reducer.js`, which never reads `staleTimes`. A mutation followed by
+Back still shows the held page unless the mutating screen calls `router.refresh()`, as the markup
+save now does.
+
+**Why it's held.** A revisit went from ~50 ms and 0 bytes to one RSC fetch: 639 ms on Fast 3G and
+2.1 s on Slow 3G. `/m` shows no loading feedback in that time, so each revisit becomes a dead tap.
+
+**Revisit when:** `/m` has **loading feedback on navigation** (audit F1, which Josh has said is
+ruled and coming). Once a tap is acknowledged at once, a 0.6–2 s fetch is a normal wait rather than
+a dead tap. Re-measure with the same harness (`nav-cost.mjs`, §1), then decide. Until then this
+branch is a measured option, not debt.
+
 ## 2. The reorder — `markup-canvas.tsx`: push first, then refresh
 
 `action-queue.js` discards a pending action when a navigation arrives. The old
