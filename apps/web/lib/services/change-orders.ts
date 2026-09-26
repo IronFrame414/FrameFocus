@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase-server';
 import type { LaborUnitValue } from '@framefocus/shared/validation/estimate-items';
 import type { Database } from '@framefocus/shared/types/database';
+import type { ApprovedCoSummary } from '@/lib/change-orders/summaries';
 
 // 5D — Change Orders (docs/specs/5D-spec.md). A CO is written identically
 // to an estimate: line items → typed rows, same §4.4a tax-then-markup
@@ -48,6 +49,8 @@ export type ChangeOrderWithChildren = ChangeOrderWithAuthor & {
 };
 
 export type CoSigningSession = CoSigningSessionRow;
+
+export type { ApprovedCoSummary } from '@/lib/change-orders/summaries';
 
 // CO_STATUS_LABELS lives in the client-safe sibling so client components can
 // import it without dragging this server module (next/headers) into the client
@@ -183,6 +186,31 @@ export async function getSignedChangeOrders(projectId: string): Promise<ChangeOr
 
   if (error) return [];
   return (data ?? []) as unknown as ChangeOrderWithAuthor[];
+}
+
+/**
+ * APPROVED change orders on a project as a NO-MONEY summary. [S112 R5b]
+ *
+ * Every staff role (owner, admin, PM, foreman, crew) on a project they can
+ * view. The rule lives in the database — `get_approved_change_order_summaries`
+ * (20261840000000) returns six columns and no figure, by construction — so
+ * this is a pass-through, and neither surface can widen it. The S121 row floor
+ * on `change_orders` is untouched: this is not a way round it, it is the only
+ * projection of a CO a foreman or crew member can receive.
+ *
+ * Which rows a caller should SEE alongside their full rows is
+ * `summariesToShow()` in lib/change-orders/summaries.ts, shared by /m and
+ * desktop (PARITY).
+ */
+export async function getApprovedCoSummaries(projectId: string): Promise<ApprovedCoSummary[]> {
+  const supabase = await createClient();
+
+  const { data, error } = await supabase.rpc('get_approved_change_order_summaries', {
+    p_project_id: projectId,
+  });
+
+  if (error) return [];
+  return (data ?? []) as ApprovedCoSummary[];
 }
 
 /**
