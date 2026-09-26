@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
-import { SUB_UPLOAD_TAG, bidderCanSeeFile } from '@/lib/services/sub-bid-files';
+import { BID_SCOPE_TAG, SUB_UPLOAD_TAG, bidderCanSeeFile } from '@/lib/services/sub-bid-files';
 
 // S106 Part C — the SUB upload path. `/bid/[token]` is anonymous; the TOKEN is the
 // credential (same model as get_sub_bid_request / submit_sub_bid_reply). The sub's file
@@ -109,6 +109,9 @@ export async function GET(_req: Request, { params }: { params: { token: string }
     .eq('company_id', company_id)
     .eq('is_deleted', false)
     .not('created_by', 'is', null)
+    // [S112] only files staff explicitly shared with bidders; bidderCanSeeFile
+    // re-checks the same tag below (belt and braces on an anonymous surface).
+    .contains('tags', [BID_SCOPE_TAG])
     .order('created_at', { ascending: false });
 
   if (error) {

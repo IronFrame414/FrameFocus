@@ -104,13 +104,42 @@ export default function EstimateFilesTab({
     }
   }
 
+  // [S112, RULED Josh] Only a file shared here reaches a sub's bid link.
+  async function toggleShared(f: EstimateFile, shared: boolean) {
+    setError(null);
+    const res = await fetch(`/api/estimates/${estimateId}/files/${f.id}/share`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ shared }),
+    });
+    if (!res.ok) {
+      const body = (await res.json().catch(() => ({}))) as { error?: string };
+      setError(body.error ?? 'Could not update the file.');
+      return;
+    }
+    setFiles((prev) =>
+      prev.map((x) => (x.id === f.id ? { ...x, shared_with_bidders: shared } : x))
+    );
+  }
+
+  const shareable = (f: EstimateFile) =>
+    f.mime_type === 'application/pdf' || f.mime_type.startsWith('image/');
+
   const cell: React.CSSProperties = { padding: '0.5rem 0.75rem', fontSize: '0.875rem' };
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: '1rem',
+        }}
+      >
         <div style={{ fontSize: '0.8125rem', color: '#7b8699' }}>
           Attachments carry to the project on conversion. Subs can also upload to their bid link.
+          Bidders see only the files you tick under “Bidders”.
         </div>
         {canEdit && (
           <>
@@ -144,7 +173,16 @@ export default function EstimateFilesTab({
       </div>
 
       {error && (
-        <div style={{ padding: '0.5rem 0.75rem', borderRadius: '0.375rem', backgroundColor: '#fdf1f0', color: '#c0362c', fontSize: '0.8125rem', marginBottom: '0.75rem' }}>
+        <div
+          style={{
+            padding: '0.5rem 0.75rem',
+            borderRadius: '0.375rem',
+            backgroundColor: '#fdf1f0',
+            color: '#c0362c',
+            fontSize: '0.8125rem',
+            marginBottom: '0.75rem',
+          }}
+        >
           {error}
         </div>
       )}
@@ -160,8 +198,13 @@ export default function EstimateFilesTab({
           <thead>
             <tr style={{ borderBottom: '1px solid #e4e8ef', textAlign: 'left' }}>
               <th style={{ ...cell, color: '#7b8699', fontWeight: 600 }}>Name</th>
-              <th style={{ ...cell, color: '#7b8699', fontWeight: 600, textAlign: 'right' }}>Size</th>
+              <th style={{ ...cell, color: '#7b8699', fontWeight: 600, textAlign: 'right' }}>
+                Size
+              </th>
               <th style={{ ...cell, color: '#7b8699', fontWeight: 600 }}>Uploaded</th>
+              <th style={{ ...cell, color: '#7b8699', fontWeight: 600, textAlign: 'center' }}>
+                Bidders
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -174,11 +217,32 @@ export default function EstimateFilesTab({
                 style={{ borderBottom: '1px solid #f1f3f7', cursor: 'pointer' }}
               >
                 <td style={{ ...cell, color: '#2f49d1' }}>{f.file_name}</td>
-                <td style={{ ...cell, textAlign: 'right', fontFamily: 'var(--font-mono, monospace)' }}>
+                <td
+                  style={{ ...cell, textAlign: 'right', fontFamily: 'var(--font-mono, monospace)' }}
+                >
                   {fmtMoney(f.file_size / 1024 / 1024).replace('$', '')} MB
                 </td>
                 <td style={{ ...cell, color: '#7b8699' }}>
                   {f.created_at ? new Date(f.created_at).toLocaleDateString() : '—'}
+                </td>
+                <td
+                  style={{ ...cell, textAlign: 'center' }}
+                  onClick={(e) => e.stopPropagation()}
+                  onKeyDown={(e) => e.stopPropagation()}
+                >
+                  <input
+                    type="checkbox"
+                    data-testid={`estimate-file-share-${f.id}`}
+                    aria-label={`Share ${f.file_name} with bidders`}
+                    title={
+                      shareable(f)
+                        ? 'Share with bidders'
+                        : 'Only PDFs and images can be shared with bidders'
+                    }
+                    checked={f.shared_with_bidders}
+                    disabled={!canEdit || !shareable(f)}
+                    onChange={(e) => void toggleShared(f, e.target.checked)}
+                  />
                 </td>
               </tr>
             ))}

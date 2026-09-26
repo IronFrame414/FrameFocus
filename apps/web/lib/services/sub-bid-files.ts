@@ -37,5 +37,27 @@ export function bidderCanSeeFile(file: {
   tags?: string[] | null;
 }): boolean {
   if (!file.created_by) return false;
-  return !(file.tags ?? []).includes(SUB_UPLOAD_TAG);
+  const tags = file.tags ?? [];
+  if (tags.includes(SUB_UPLOAD_TAG)) return false;
+  // [S112, RULED Josh] 3. — and it must have been SHARED WITH BIDDERS.
+  return tags.includes(BID_SCOPE_TAG);
+}
+
+/**
+ * [S112, RULED Josh] THE INTERIM FOR BID FILES — only what staff explicitly
+ * shared. _Superseded:_ every staff-uploaded file on the estimate was served,
+ * and "every staff file" measured as: every Files-tab attachment, every
+ * SITE-VISIT PHOTO of the client's property, and every site-visit VOICE NOTE
+ * (both routes stamp created_by). Bidders on any line got all of it.
+ *
+ * Staff set this tag with "Share with bidders" on the estimate Files tab; only
+ * PDFs and images can carry it (so never a voice note). Tagging by LINE is the
+ * proper fix and is tech debt #2-bidtok.
+ */
+export const BID_SCOPE_TAG = 'bid-scope';
+
+/** May staff mark this file as shared with bidders? PDFs and images only. */
+export function canShareWithBidders(file: { mime_type: string; tags?: string[] | null }): boolean {
+  if ((file.tags ?? []).includes(SUB_UPLOAD_TAG)) return false;
+  return file.mime_type === 'application/pdf' || file.mime_type.startsWith('image/');
 }

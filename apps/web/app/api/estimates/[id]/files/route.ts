@@ -3,9 +3,11 @@ import { createClient } from '@/lib/supabase-server';
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
 import { resolveEstimateFileAccess } from '@/lib/site-visits/access';
 import { generateThumbnail } from '@/lib/photos/thumbnail-server';
+import { BID_SCOPE_TAG } from '@/lib/services/sub-bid-files';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@framefocus/shared/types/database';
 import type {
+  EstimateFileListItem,
   EstimateFileListResponse,
   EstimateFileUploadResponse,
 } from '@/lib/api-contracts/estimate-files';
@@ -46,6 +48,21 @@ const ALLOWED_MIME = new Set([
 
 // GET — list an estimate's files. VIEW rights: the office arm sees every file; the
 // recorder arm sees only the files THEY uploaded.
+/** [S112] The list row: `tags` stays server-side; the tab gets one boolean. */
+function toListItem(r: {
+  id: string;
+  file_name: string;
+  file_size: number;
+  mime_type: string;
+  category: string;
+  created_at: string | null;
+  site_visit_capture: boolean;
+  tags: string[] | null;
+}): EstimateFileListItem {
+  const { tags, ...rest } = r;
+  return { ...rest, shared_with_bidders: (tags ?? []).includes(BID_SCOPE_TAG) };
+}
+
 export async function GET(_req: Request, { params }: { params: { id: string } }) {
   const estimateId = params.id;
   const supabase = await createClient();
@@ -63,7 +80,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
   const admin = getSupabaseAdmin() as SupabaseClient<Database>;
   let q = admin
     .from('files')
-    .select('id, file_name, file_size, mime_type, category, created_at, site_visit_capture')
+    .select('id, file_name, file_size, mime_type, category, created_at, site_visit_capture, tags')
     .eq('estimate_id', estimateId)
     .eq('company_id', access.companyId)
     .eq('is_deleted', false)
@@ -91,7 +108,9 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
   // `file_path` is not returned either: nothing in the tab needs it.
   // [S110 F] The response is a CONTRACT with named consumers — see
   // lib/api-contracts/registry.ts before changing its shape.
-  return NextResponse.json({ files: files ?? [] } satisfies EstimateFileListResponse);
+  return NextResponse.json({
+    files: (files ?? []).map(toListItem),
+  } satisfies EstimateFileListResponse);
 }
 
 // POST — upload a file to an estimate. An ordinary upload: owner/admin any DRAFT, PM own
@@ -127,7 +146,8 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   }
 
   const file = form.get('file');
-  if (!(file instanceof File)) return NextResponse.json({ error: 'No file provided' }, { status: 400 });
+  if (!(file instanceof File))
+    return NextResponse.json({ error: 'No file provided' }, { status: 400 });
   if (file.size > MAX_SIZE) {
     return NextResponse.json({ error: 'File too large. Max size is 25 MB.' }, { status: 400 });
   }
@@ -147,11 +167,12 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   if (clientId) {
     const { data: already } = await admin
       .from('files')
-      .select('id, file_name, file_size, mime_type, category, created_at, site_visit_capture')
+      .select('id, file_name, file_size, mime_type, category, created_at, site_visit_capture, tags')
       .eq('id', clientId)
       .eq('estimate_id', estimateId)
       .maybeSingle();
-    if (already) return NextResponse.json({ file: already } satisfies EstimateFileUploadResponse);
+    if (already)
+      return NextResponse.json({ file: toListItem(already) } satisfies EstimateFileUploadResponse);
   }
 
   const uniqueId = clientId ?? crypto.randomUUID();
@@ -194,7 +215,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       created_by: user.id,
       updated_by: user.id,
     })
-    .select('id, file_name, file_size, mime_type, category, created_at, site_visit_capture')
+    .select('id, file_name, file_size, mime_type, category, created_at, site_visit_capture, tags')
     .single();
   if (insertError || !row) {
     // Cleanup the orphaned blob so a failed insert leaves nothing behind.
@@ -222,5 +243,5 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       });
     }
   }
-  return NextResponse.json({ file: row } satisfies EstimateFileUploadResponse);
+  return NextResponse.json({ file: toListItem(row) } satisfies EstimateFileUploadResponse);
 }

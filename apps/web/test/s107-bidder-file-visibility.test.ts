@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { SUB_UPLOAD_TAG, bidderCanSeeFile } from '@/lib/services/sub-bid-files';
+import { BID_SCOPE_TAG, SUB_UPLOAD_TAG, bidderCanSeeFile, canShareWithBidders } from '@/lib/services/sub-bid-files';
 
 // S107 Part B — WHO SEES WHAT ON AN ANONYMOUS PAGE.
 //
@@ -10,10 +10,11 @@ import { SUB_UPLOAD_TAG, bidderCanSeeFile } from '@/lib/services/sub-bid-files';
 // link. This is the rule that stops it, and it is tested as a rule rather than
 // only exercised through the route.
 
-const staffScopeDoc = { created_by: 'staff-uuid', tags: ['plans'] };
+// [S112] A scope document is one staff SHARED WITH BIDDERS (the bid-scope tag).
+const staffScopeDoc = { created_by: 'staff-uuid', tags: ['plans', BID_SCOPE_TAG] };
 const subUpload = { created_by: null, tags: [SUB_UPLOAD_TAG] };
 
-describe('bidderCanSeeFile — the anonymous bidder sees scope docs and nothing else', () => {
+describe('bidderCanSeeFile — the anonymous bidder sees SHARED scope docs and nothing else', () => {
   it("shows the estimator's scope document", () => {
     expect(bidderCanSeeFile(staffScopeDoc)).toBe(true);
   });
@@ -32,14 +33,32 @@ describe('bidderCanSeeFile — the anonymous bidder sees scope docs and nothing 
   it('still hides it when created_by IS set — the tag alone catches it', () => {
     // The regression: some future path stamps created_by on a sub upload.
     expect(bidderCanSeeFile({ created_by: 'staff-uuid', tags: [SUB_UPLOAD_TAG] })).toBe(false);
+    expect(bidderCanSeeFile({ created_by: 'staff-uuid', tags: [SUB_UPLOAD_TAG, BID_SCOPE_TAG] })).toBe(false);
   });
 
   it('hides a row that is neither — no created_by and no tags at all', () => {
     expect(bidderCanSeeFile({})).toBe(false);
   });
 
-  it('a staff file carrying OTHER tags is still visible (the tag test is exact, not fuzzy)', () => {
-    expect(bidderCanSeeFile({ created_by: 'staff-uuid', tags: ['sub', 'bid', 'upload'] })).toBe(true);
-    expect(bidderCanSeeFile({ created_by: 'staff-uuid', tags: ['sub-bid-upload-draft'] })).toBe(true);
+  // [S112, RULED Josh] INVERTED, not deleted. _Superseded title, quoted:_ "a
+  // staff file carrying OTHER tags is still visible (the tag test is exact, not
+  // fuzzy)" — that is exactly how every site-visit photo and voice note reached
+  // every bidder. A staff file is now HIDDEN unless staff shared it.
+  it('a staff file NOT shared with bidders is HIDDEN — site-visit photo, voice note, worksheet', () => {
+    expect(bidderCanSeeFile({ created_by: 'staff-uuid', tags: [] })).toBe(false);
+    expect(bidderCanSeeFile({ created_by: 'staff-uuid', tags: null })).toBe(false);
+    expect(bidderCanSeeFile({ created_by: 'staff-uuid', tags: ['sub', 'bid', 'upload'] })).toBe(false);
+  });
+
+  it('the share tag is exact, not fuzzy', () => {
+    expect(bidderCanSeeFile({ created_by: 'staff-uuid', tags: ['bid-scope-draft'] })).toBe(false);
+    expect(bidderCanSeeFile({ created_by: 'staff-uuid', tags: [BID_SCOPE_TAG] })).toBe(true);
+  });
+
+  it('only PDFs and images can be shared — never audio, never a sub upload', () => {
+    expect(canShareWithBidders({ mime_type: 'application/pdf' })).toBe(true);
+    expect(canShareWithBidders({ mime_type: 'image/jpeg' })).toBe(true);
+    expect(canShareWithBidders({ mime_type: 'audio/webm' })).toBe(false);
+    expect(canShareWithBidders({ mime_type: 'application/pdf', tags: [SUB_UPLOAD_TAG] })).toBe(false);
   });
 });

@@ -146,9 +146,35 @@ async function makeEstimate(label: string) {
     file_path: scopePath,
     file_size: 19,
     mime_type: 'application/pdf',
-    created_by: ownerUserId, // a STAFF upload — what a bidder may see
+    created_by: ownerUserId, // a STAFF upload...
+    tags: ['bid-scope'], // ...that staff SHARED WITH BIDDERS [S112] — the only kind served
   });
   expect(ins.error, ins.error?.message).toBeNull();
+  // [S112] Two staff files a bidder must NEVER be served: an unshared worksheet
+  // and a site-visit photo of the client's property. Every "files.length === 1"
+  // below is therefore also the proof that these are excluded.
+  for (const [name, mime, capture] of [
+    [`${MARKER}-internal-worksheet.pdf`, 'application/pdf', false],
+    [`${MARKER}-site-visit-photo.jpg`, 'image/jpeg', true],
+  ] as const) {
+    const p = `${companyId}/estimates/${estimateId}/${crypto.randomUUID()}-${name}`;
+    expect(
+      (await admin.storage.from(BUCKET).upload(p, Buffer.from('x'), { contentType: mime })).error
+    ).toBeNull();
+    const r = await admin.from('files').insert({
+      company_id: companyId,
+      estimate_id: estimateId,
+      project_id: null,
+      category: 'other',
+      file_name: name,
+      file_path: p,
+      file_size: 1,
+      mime_type: mime,
+      site_visit_capture: capture,
+      created_by: ownerUserId,
+    });
+    expect(r.error, r.error?.message).toBeNull();
+  }
   return { estimateId, lineA: out.A, lineB: out.B };
 }
 
@@ -243,6 +269,10 @@ describe("1. status — the bid's current status decides", () => {
       expect(r.status).toBe(200);
       expect(r.files.length).toBe(1);
       expect((await fetch(r.files[0].url!)).status).toBe(200);
+      // [S112] exactly the SHARED document — never the worksheet or the site-visit photo.
+      expect((r.files as unknown as { file_name: string }[]).map((x) => x.file_name)).toEqual([
+        `${MARKER}-scope.pdf`,
+      ]);
     });
   }
   for (const s of ['cancelled', 'declined'] as const) {
@@ -384,6 +414,44 @@ describe('4. the estimate converted, voided or deleted closes every token on it'
   }
 });
 
+describe("4b. RULED [Josh]: the WINNER's link survives conversion; the loser's does not", () => {
+  it('converted with an award on the line → winner 200, loser 403', async () => {
+    const e = await makeEstimate('winner-conv');
+    await newRequest('conv-winner', {
+      estimate: e.estimateId,
+      lineId: e.lineA,
+      sub: 0,
+      status: 'submitted',
+    });
+    await newRequest('conv-loser', {
+      estimate: e.estimateId,
+      lineId: e.lineA,
+      sub: 1,
+      status: 'submitted',
+    });
+    const ins = await admin.from('estimate_sub_bids').insert({
+      company_id: companyId,
+      estimate_id: e.estimateId,
+      line_item_id: e.lineA,
+      subcontractor_id: subs[0],
+      bid_amount: 1000,
+      is_winner: true,
+    });
+    expect(ins.error, ins.error?.message).toBeNull();
+    const u = await admin.from('estimates').update({ status: 'converted' }).eq('id', e.estimateId);
+    expect(u.error, u.error?.message).toBeNull();
+    const w = await listFiles(tokens['conv-winner']);
+    const l = await listFiles(tokens['conv-loser']);
+    console.log(
+      `[S112 bid converted+award] winner ${w.status}/${w.files.length}, loser ${l.status}/${l.files.length}`
+    );
+    expect(w.status).toBe(200);
+    expect(w.files.length).toBe(1);
+    expect(l.status).toBe(403);
+    expect(l.files).toEqual([]);
+  });
+});
+
 describe("5. the token's OTHER endpoints (ruling f)", () => {
   it("POST files: a cancelled bid's token cannot upload", async () => {
     const form = new FormData();
@@ -423,9 +491,10 @@ describe("5. the token's OTHER endpoints (ruling f)", () => {
   });
 
   for (const k of ['cancelled', 'loser'] as const) {
-    it(`get_sub_bid_request (anon, direct): ${k} returns NO scope, message or allowance`, async () => {
-      const anon = createClient(URL_, ANON, { auth: { persistSession: false } });
-      const { data } = await anon.rpc('get_sub_bid_request', { p_token: tokens[k] });
+    // [S112 anon lockdown, 20261870000000] anon can no longer call this at all;
+    // the PAGE calls it with the service role, so that is the payload to check.
+    it(`get_sub_bid_request (as the page calls it): ${k} returns NO scope, message or allowance`, async () => {
+      const { data } = await admin.rpc('get_sub_bid_request', { p_token: tokens[k] });
       const d = (data ?? {}) as Record<string, unknown>;
       console.log(
         `[S112 bid RPC ${k}] status=${String(d.status)} scope=${JSON.stringify(d.scope_text ?? null)} allowance=${JSON.stringify(d.allowance_amount ?? null)}`
@@ -437,9 +506,14 @@ describe("5. the token's OTHER endpoints (ruling f)", () => {
   }
 
   it('get_sub_bid_request CONTROL: a submitted, open bid still returns its scope', async () => {
-    const anon = createClient(URL_, ANON, { auth: { persistSession: false } });
-    const { data } = await anon.rpc('get_sub_bid_request', { p_token: tokens.submitted });
+    const { data } = await admin.rpc('get_sub_bid_request', { p_token: tokens.submitted });
     expect((data as Record<string, unknown>).scope_text).toBe(`${MARKER} scope text`);
+  });
+
+  it('get_sub_bid_request is NOT callable by anon at all (S112 lockdown; the page uses the service role)', async () => {
+    const anon = createClient(URL_, ANON, { auth: { persistSession: false } });
+    const { error } = await anon.rpc('get_sub_bid_request', { p_token: tokens.cancelled });
+    expect(error?.message ?? '').toMatch(/permission denied|42501/i);
   });
 
   it('bid_token_state is NOT callable by anon (it would be a token oracle)', async () => {

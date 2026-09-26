@@ -97,6 +97,18 @@ export const ROUTE_CONTRACTS: RouteContract[] = [
     },
   },
   {
+    // [S112] "Share with bidders" — the only way a file reaches a /bid token.
+    route: 'app/api/estimates/[id]/files/[fileId]/share/route.ts',
+    pattern: new RegExp(
+      String.raw`/api/estimates/${SEG}/files/${SEG}/share|api/estimates/\[id\]/files/\[fileId\]/share/route`
+    ),
+    fieldSource: 'json',
+    fields: ['shared', 'error'],
+    consumers: {
+      'app/dashboard/estimates/[id]/estimate-files-tab.tsx': ['error'],
+    },
+  },
+  {
     route: 'app/api/files/signed-url/route.ts',
     pattern: new RegExp(String.raw`/api/files/signed-url|api/files/signed-url/route`),
     fieldSource: 'json',
