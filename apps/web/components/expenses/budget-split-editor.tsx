@@ -10,6 +10,7 @@
 // roles — line names/cost codes only (§7.1; the floor is UI-gated, §5.4).
 
 import { useEffect, useState } from 'react';
+import { seesProjectMoney } from '@framefocus/shared/constants/roles';
 import {
   createBudgetLineAtCapture,
   getOrCreateMiscBudgetLine,
@@ -51,8 +52,7 @@ export async function resolveSplit(
 
   const drafts = rows.map((r) => ({
     budget_item_id: r.budget_item_id,
-    amount:
-      rows.length === 1 && r.amount.trim() === '' ? totalAmount : Number(r.amount),
+    amount: rows.length === 1 && r.amount.trim() === '' ? totalAmount : Number(r.amount),
     source_selection_id: r.source_selection_id?.trim() ? r.source_selection_id : null,
   }));
 
@@ -195,7 +195,8 @@ export function BudgetSplitEditor({
     };
   }, [projectId]);
 
-  const showBudgeted = callerRole === 'owner' || callerRole === 'admin';
+  // [S111] + a Project Executive (project_budget_amounts PE arm, own projects).
+  const showBudgeted = seesProjectMoney(callerRole);
   const canCreateLine =
     callerRole === 'owner' || callerRole === 'admin' || callerRole === 'project_manager';
 
@@ -254,7 +255,10 @@ export function BudgetSplitEditor({
     <div style={{ marginBottom: '12px' }}>
       <label style={fieldLabelStyle}>Budget line(s) (required)</label>
       {rows.map((row) => (
-        <div key={row.key} style={{ display: 'flex', gap: '8px', marginBottom: '6px', flexWrap: 'wrap' }}>
+        <div
+          key={row.key}
+          style={{ display: 'flex', gap: '8px', marginBottom: '6px', flexWrap: 'wrap' }}
+        >
           <select
             value={row.budget_item_id}
             onChange={(e) =>
@@ -266,7 +270,11 @@ export function BudgetSplitEditor({
             style={{ ...inputStyle, flex: 1 }}
           >
             <option value="">
-              {!projectId ? 'Pick a job first…' : lines === null ? 'Loading lines…' : 'Select a budget line…'}
+              {!projectId
+                ? 'Pick a job first…'
+                : lines === null
+                  ? 'Loading lines…'
+                  : 'Select a budget line…'}
             </option>
             {!hasMiscLine && <option value={MISC_SENTINEL}>Miscellaneous</option>}
             {Array.from(groups.entries()).map(([label, groupLines]) => (

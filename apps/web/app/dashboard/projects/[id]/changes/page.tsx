@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase-server';
+import { seesProjectMoney } from '@framefocus/shared/constants/roles';
 import { redirect } from 'next/navigation';
 import { redactCo } from '@/lib/co-redaction';
 import { getApprovedCoSummaries, getChangeOrders } from '@/lib/services/change-orders';
@@ -62,7 +63,11 @@ export default async function ProjectChangesPage({ params }: { params: { id: str
   // Per-ROW, not per-user, so `canSeeFinancials` is a function now. Owner and
   // Admin see everything; a PM sees what they created; nobody else reaches this
   // list at all, because RLS returns them no rows.
-  const isFinanceRole = ['owner', 'admin'].includes(profile.role);
+  // [S111] + a Project Executive, which reads EVERY author's CO on its own
+  // projects (change_orders_select_project_executive) — so it sees the figures
+  // and the sums as Owner/Admin do. Create/delete stay as they are until its
+  // CO write arms exist.
+  const isFinanceRole = seesProjectMoney(profile.role);
   const canSeeCoMoney = (createdBy: string | null) =>
     isFinanceRole || (profile.role === 'project_manager' && createdBy === user.id);
 

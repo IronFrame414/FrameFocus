@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase-server';
+import { seesProjectMoney } from '@framefocus/shared/constants/roles';
 import { redirect, notFound } from 'next/navigation';
 import Link from 'next/link';
 import { getProject, PROJECT_TYPE_LABELS } from '@/lib/services/projects';
@@ -39,8 +40,9 @@ function date(value: string | null): string {
 
 function initialsOf(name: string): string {
   const parts = name.trim().split(/\s+/);
-  return ((parts[0]?.[0] ?? '') + (parts.length > 1 ? (parts[parts.length - 1][0] ?? '') : ''))
-    .toUpperCase();
+  return (
+    (parts[0]?.[0] ?? '') + (parts.length > 1 ? (parts[parts.length - 1][0] ?? '') : '')
+  ).toUpperCase();
 }
 
 export default async function ProjectOverviewPage({ params }: { params: { id: string } }) {
@@ -90,7 +92,8 @@ export default async function ProjectOverviewPage({ params }: { params: { id: st
   }
 
   const canTransition = ['owner', 'admin', 'project_manager'].includes(profile.role);
-  const canSeeFinancials = profile.role === 'owner' || profile.role === 'admin';
+  // [S111] Owner/Admin, and a Project Executive on its own project (RLS).
+  const canSeeFinancials = seesProjectMoney(profile.role);
 
   // --- KPIs (ui-04 §S3) --------------------------------------------------
   // 7B: revised contract from the single legal derivation (contract-value.ts).
@@ -427,8 +430,7 @@ export default async function ProjectOverviewPage({ params }: { params: { id: st
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        backgroundColor:
-                          memberColor(a.member!.id, a.member!.schedule_color) + '33',
+                        backgroundColor: memberColor(a.member!.id, a.member!.schedule_color) + '33',
                         color: memberColor(a.member!.id, a.member!.schedule_color),
                         fontSize: '12px',
                         fontWeight: 700,

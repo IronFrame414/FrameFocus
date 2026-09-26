@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase-server';
+import { seesProjectMoney } from '@framefocus/shared/constants/roles';
 import { redirect, notFound } from 'next/navigation';
 import { getProfitabilityReport } from '@/lib/services/profitability';
 import { getProject } from '@/lib/services/projects';
@@ -23,11 +24,7 @@ const money = (n: number) =>
  *  as zero would state a number the data does not support (§7H.3). */
 const orDash = (n: number | null) => (n === null ? '—' : money(n));
 
-export default async function ProfitabilityPage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
+export default async function ProfitabilityPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const supabase = await createClient();
 
@@ -42,7 +39,9 @@ export default async function ProfitabilityPage({
     .eq('user_id', user.id)
     .eq('is_deleted', false)
     .single();
-  if (!profile || !['owner', 'admin'].includes(profile.role)) {
+  // [S111] + a Project Executive on its own project (Q10: its own projects'
+  // actual margin; RLS, 20261830000000). The company margin TARGET stays out.
+  if (!profile || !seesProjectMoney(profile.role)) {
     redirect(`/dashboard/projects/${id}`);
   }
 
@@ -98,8 +97,8 @@ export default async function ProfitabilityPage({
             color: color.body,
           }}
         >
-          <strong>No cost has landed on this job yet.</strong> The figures below reflect billing
-          and budget only — profit and margin will move as soon as real cost arrives.
+          <strong>No cost has landed on this job yet.</strong> The figures below reflect billing and
+          budget only — profit and margin will move as soon as real cost arrives.
         </div>
       )}
 
@@ -108,11 +107,7 @@ export default async function ProfitabilityPage({
         <Tile label="Earned" value={orDash(headline.earned)} />
         <Tile label="Billed" value={money(headline.billed)} />
         <Tile label="Actual cost" value={money(headline.actualCost)} />
-        <Tile
-          label="Backlog"
-          value={orDash(headline.backlog)}
-          hint="Earned, not yet invoiced"
-        />
+        <Tile label="Backlog" value={orDash(headline.backlog)} hint="Earned, not yet invoiced" />
         <Tile
           label={basisLabel}
           value={orDash(headline.profit)}
@@ -261,7 +256,13 @@ function CategoryRow({ row }: { row: ProfitCategoryRow }) {
   );
 }
 
-function Th({ children, align = 'right' }: { children: React.ReactNode; align?: 'left' | 'right' }) {
+function Th({
+  children,
+  align = 'right',
+}: {
+  children: React.ReactNode;
+  align?: 'left' | 'right';
+}) {
   return (
     <th
       style={{

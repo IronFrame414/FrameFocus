@@ -1,4 +1,5 @@
 import { notFound, redirect } from 'next/navigation';
+import { seesProjectMoney } from '@framefocus/shared/constants/roles';
 import { createClient } from '@/lib/supabase-server';
 import { getProject } from '@/lib/services/projects';
 import { getMyMember } from '@/lib/services/members';
@@ -43,7 +44,8 @@ export default async function PaymentsPage({ params }: { params: { id: string } 
     .single();
   if (!profile) redirect('/dashboard');
 
-  if (!['owner', 'admin'].includes(profile.role)) {
+  // [S111] + a Project Executive on its own project (RLS: 20261830000000).
+  if (!seesProjectMoney(profile.role)) {
     redirect(`/dashboard/projects/${params.id}`);
   }
 

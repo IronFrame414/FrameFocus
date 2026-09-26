@@ -74,7 +74,9 @@ import { CoActions } from './co-actions';
 // longer reproduces (detail-access.ts header, re-measured at S162). What #117
 // still covers is narrow: a PM AUTHOR sees net_delta on their own CO.
 
-const MONEY_ROLES = ['owner', 'admin', 'project_manager'];
+// [S111] + a Project Executive — the same list desktop reads through
+// seesProjectMoney(), plus the PM (RLS hands a PM only COs it authored).
+const MONEY_ROLES = ['owner', 'admin', 'project_executive', 'project_manager'];
 
 // S110 H — status code → message key; unknown codes fall back to the label table.
 const CO_STATUS_KEY: Record<string, MsgKey> = {
@@ -204,7 +206,10 @@ export default async function ChangeOrderDetailPage({
                   ) : null}
                 </div>
                 {showMoney ? (
-                  <span data-testid="m-co-line-total" className="shrink-0 font-mono text-[13px] text-m6m-navy">
+                  <span
+                    data-testid="m-co-line-total"
+                    className="shrink-0 font-mono text-[13px] text-m6m-navy"
+                  >
                     {formatMoney(li.total_price)}
                   </span>
                 ) : null}

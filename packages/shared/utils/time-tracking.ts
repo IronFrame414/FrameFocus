@@ -28,11 +28,7 @@ export type Completion = 'complete' | 'incomplete';
 export type SessionApprovalStatus = 'pending' | 'approved' | null;
 
 /** Segment types whose hours attribute to a project (job cost, §7.5). */
-export const PROJECT_BEARING_TYPES: readonly SegmentType[] = [
-  'work',
-  'material_run',
-  'warranty',
-];
+export const PROJECT_BEARING_TYPES: readonly SegmentType[] = ['work', 'material_run', 'warranty'];
 
 /**
  * Types excluded from a project's ACTIVE-budget rollup (§7.4). `warranty` hours
@@ -336,6 +332,7 @@ export interface WeeklyHoursSummary {
 export const TIME_ROLE_RANK: Record<string, number> = {
   owner: 5,
   admin: 4,
+  project_executive: 3, // [S111 Q13] with PM — mirrors time_role_rank (20261820000000)
   project_manager: 3,
   foreman: 2,
   crew_member: 1,

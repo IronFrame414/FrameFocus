@@ -27,7 +27,7 @@ const TABS: { slug: string; label: string; roles?: string[] }[] = [
   {
     slug: 'budget',
     label: 'Budget & Cost',
-    roles: ['owner', 'admin', 'project_manager', 'foreman'],
+    roles: ['owner', 'admin', 'project_executive', 'project_manager', 'foreman'],
   },
   // [S171] Allowances & Selections §9.2 — visible to EVERY role including
   // subcontractors (Q10); the page carries no costs, and the amounts side
@@ -40,7 +40,7 @@ const TABS: { slug: string; label: string; roles?: string[] }[] = [
   {
     slug: 'invoices',
     label: 'Invoices',
-    roles: ['owner', 'admin', 'project_manager'],
+    roles: ['owner', 'admin', 'project_executive', 'project_manager'],
   },
   // 7E — money received. OWNER/ADMIN ONLY. [Fix 4] The screen is all AGGREGATES
   // (collected/spent/ahead, AR aging, retainage held, outstanding, payments
@@ -51,7 +51,8 @@ const TABS: { slug: string; label: string; roles?: string[] }[] = [
   {
     slug: 'payments',
     label: 'Payments',
-    roles: ['owner', 'admin'],
+    // [S111] + a Project Executive on its own projects (Q9/Q10). Not a PM.
+    roles: ['owner', 'admin', 'project_executive'],
   },
   // 7H — job profitability. OWNER/ADMIN ONLY (§7H.6), narrower than Invoices
   // and Payments beside it: a PM legitimately sees invoice amounts (the S97
@@ -63,7 +64,8 @@ const TABS: { slug: string; label: string; roles?: string[] }[] = [
   {
     slug: 'profitability',
     label: 'Profitability',
-    roles: ['owner', 'admin'],
+    // [S111] + a Project Executive on its own projects (Q9/Q10). Not a PM.
+    roles: ['owner', 'admin', 'project_executive'],
   },
   // 7F — lien releases and waivers. OWNER/ADMIN ONLY (§8.2).
   //
@@ -75,6 +77,8 @@ const TABS: { slug: string; label: string; roles?: string[] }[] = [
   {
     slug: 'lien-releases',
     label: 'Lien Releases',
+    // [S111] NOT a Project Executive: lien_releases has no PE read arm, and
+    // whether it may bind the company on a release is unruled (§8.2).
     roles: ['owner', 'admin'],
   },
   { slug: 'punch', label: 'Punch List' },
@@ -180,7 +184,9 @@ export function ProjectHeader({ project, canManage, role }: ProjectHeaderProps) 
           Projects
         </Link>
         <span style={{ fontFamily: font.mono, fontSize: '12px', color: color.faint }}> / </span>
-        <span style={{ fontFamily: font.mono, fontSize: '12px', fontWeight: 500, color: color.muted }}>
+        <span
+          style={{ fontFamily: font.mono, fontSize: '12px', fontWeight: 500, color: color.muted }}
+        >
           {project.project_number}
         </span>
       </div>
@@ -196,9 +202,7 @@ export function ProjectHeader({ project, canManage, role }: ProjectHeaderProps) 
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <h2 style={{ ...h2Style, fontSize: '25px' }}>{project.name}</h2>
-          <span
-            style={{ ...badgeStyle, backgroundColor: badge.bg, color: badge.fg }}
-          >
+          <span style={{ ...badgeStyle, backgroundColor: badge.bg, color: badge.fg }}>
             {PROJECT_STATUS_LABELS[project.status]}
           </span>
         </div>

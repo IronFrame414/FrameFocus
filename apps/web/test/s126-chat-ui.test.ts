@@ -144,7 +144,10 @@ describe('A-C27 (ND-35) — the Chat tab is ungated', () => {
     // If TABS had no `roles` anywhere, the test above would pass on a build
     // that deleted the whole gating mechanism.
     const src = read('../app/dashboard/projects/[id]/project-header.tsx');
-    expect(src).toContain("roles: ['owner', 'admin', 'project_manager']");
+    // [S111] Matches the MECHANISM, not one list: the Invoices tab's list gained
+    // 'project_executive', and the control must not break every time a role
+    // joins a tab. _Superseded:_ toContain("roles: ['owner', 'admin', 'project_manager']").
+    expect(src).toMatch(/roles: \['owner', 'admin'[^\]]*\]/);
   });
 });
 
@@ -236,9 +239,7 @@ describe('A-C41 — the transport stays behind lib/chat', () => {
   });
 
   it('the poll comes from lib/chat/poll.ts', () => {
-    expect(read('../components/chat/use-chat-thread.ts')).toContain(
-      "from '@/lib/chat/poll'"
-    );
+    expect(read('../components/chat/use-chat-thread.ts')).toContain("from '@/lib/chat/poll'");
     expect(read('../components/chat/use-chat-thread.ts')).toContain('createChatPoll');
   });
 

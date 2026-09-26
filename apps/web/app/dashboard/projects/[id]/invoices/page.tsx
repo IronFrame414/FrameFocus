@@ -1,4 +1,5 @@
 import { notFound, redirect } from 'next/navigation';
+import { seesProjectMoney } from '@framefocus/shared/constants/roles';
 import { createClient } from '@/lib/supabase-server';
 import { getRevisedContract } from '@/lib/services/contract-value';
 import { getProject } from '@/lib/services/projects';
@@ -91,7 +92,9 @@ export default async function InvoicesPage({ params }: { params: { id: string } 
 
   // §12 — client billing is Owner/Admin/PM. Foreman/Crew are sent back to the
   // project overview rather than shown an empty screen.
-  if (!['owner', 'admin', 'project_manager'].includes(profile.role)) {
+  // [S111] + a Project Executive, which reads every invoice on its own
+  // projects (invoices_select_project_executive), not only ones it authored.
+  if (!['owner', 'admin', 'project_executive', 'project_manager'].includes(profile.role)) {
     redirect(`/dashboard/projects/${params.id}`);
   }
 
@@ -122,13 +125,11 @@ export default async function InvoicesPage({ params }: { params: { id: string } 
   const contractValue = original === null ? null : Number(original);
   // §8.8.3 "Cost you've fronted" — Owner/Admin only, beside the other
   // aggregates; a gated role triggers zero calls.
-  const frontedCost =
-    profile.role === 'owner' || profile.role === 'admin'
-      ? await getFrontedCostTotal(params.id)
-      : 0;
+  const frontedCost = seesProjectMoney(profile.role) ? await getFrontedCostTotal(params.id) : 0;
   // §12a (S97) — the PM carve-out covers amounts ON an invoice, not the job's
   // contract value (CLAUDE.md Financial Visibility Floor keeps that Owner/Admin).
-  const canSeeContractValue = profile.role === 'owner' || profile.role === 'admin';
+  // [S111] + a Project Executive on its own project (project_financials PE arm).
+  const canSeeContractValue = seesProjectMoney(profile.role);
 
   return (
     <div style={{ padding: '20px 0' }}>
@@ -167,8 +168,8 @@ export default async function InvoicesPage({ params }: { params: { id: string } 
             priced under a rate that has since been superseded
           </div>
           <div style={{ fontSize: '12px', color: color.body, marginTop: '4px' }}>
-            {flagged.map((f) => f.invoiceNumber).join(', ')} — a sent invoice keeps the amount it was
-            sent at. Void and reissue to bill at the corrected rate (§10).
+            {flagged.map((f) => f.invoiceNumber).join(', ')} — a sent invoice keeps the amount it
+            was sent at. Void and reissue to bill at the corrected rate (§10).
           </div>
         </div>
       )}
@@ -180,13 +181,20 @@ export default async function InvoicesPage({ params }: { params: { id: string } 
           <span style={microLabelStyle}>Available credits</span>
           <div style={{ marginTop: '6px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
             {credits.map((credit) => (
-              <div key={`${credit.kind}-${credit.label}`} style={{ fontSize: '13px', color: color.body }}>
+              <div
+                key={`${credit.kind}-${credit.label}`}
+                style={{ fontSize: '13px', color: color.body }}
+              >
                 <span style={{ fontFamily: font.mono, fontWeight: 700, color: color.navy }}>
                   {money(credit.amount)}
                 </span>{' '}
                 — {credit.label}{' '}
                 <span style={{ color: color.faint }}>
-                  ({credit.kind === 'deposit' ? 'deposit balance, draws down §3a' : 'signed negative CO, §4a'})
+                  (
+                  {credit.kind === 'deposit'
+                    ? 'deposit balance, draws down §3a'
+                    : 'signed negative CO, §4a'}
+                  )
                 </span>
               </div>
             ))}
@@ -205,7 +213,16 @@ export default async function InvoicesPage({ params }: { params: { id: string } 
           "my slice", not "the job" — an aggregate that reads as the client's
           position. Removed for a PM; a PM sees their own invoice rows below. */}
       {live.length > 0 && canSeeContractValue && (
-        <div style={{ ...cardStyle, padding: '12px 16px', marginBottom: '14px', display: 'flex', gap: '28px', flexWrap: 'wrap' }}>
+        <div
+          style={{
+            ...cardStyle,
+            padding: '12px 16px',
+            marginBottom: '14px',
+            display: 'flex',
+            gap: '28px',
+            flexWrap: 'wrap',
+          }}
+        >
           <Figure label="Billed to date" value={billedToDate} />
           <Figure label="Retainage held" value={retainageHeld} warn />
           <Figure label="Receivable (ages in collections)" value={receivable} bold />
@@ -276,9 +293,7 @@ export default async function InvoicesPage({ params }: { params: { id: string } 
                         <span style={{ fontSize: '11px', color: color.warning }}> deposit</span>
                       )}
                       {flaggedIds.has(invoice.id) && (
-                        <span
-                          style={{ fontSize: '11px', color: color.warning, fontWeight: 700 }}
-                        >
+                        <span style={{ fontSize: '11px', color: color.warning, fontWeight: 700 }}>
                           {' '}
                           · rate superseded
                         </span>

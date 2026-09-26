@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase-server';
+import { seesProjectMoney } from '@framefocus/shared/constants/roles';
 import { notFound, redirect } from 'next/navigation';
 import {
   getChangeOrder,
@@ -54,8 +55,9 @@ export default async function ChangeOrderPage({
   // means RLS returned them the row, which after 20260830000000 means they
   // authored it; the check is restated rather than assumed so the UI does not
   // depend on a policy staying exactly as it is.
+  // [S111] + a Project Executive: every CO on its own projects, rates included.
   const canSeeRates =
-    ['owner', 'admin'].includes(profile.role) ||
+    seesProjectMoney(profile.role) ||
     (profile.role === 'project_manager' && changeOrder.created_by === user.id);
 
   // Company name (printed-name prefill) + whether a saved signature image is on
@@ -93,9 +95,8 @@ export default async function ChangeOrderPage({
   ]);
 
   const pendingSession =
-    sessions.find(
-      (s) => s.status === 'pending' && new Date(s.expires_at).getTime() > Date.now()
-    ) ?? null;
+    sessions.find((s) => s.status === 'pending' && new Date(s.expires_at).getTime() > Date.now()) ??
+    null;
 
   return (
     <CoBuilder

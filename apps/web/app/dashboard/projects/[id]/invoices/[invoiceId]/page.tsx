@@ -56,7 +56,8 @@ export default async function InvoiceDetailPage({
     .eq('is_deleted', false)
     .single();
   if (!profile) redirect('/dashboard');
-  if (!['owner', 'admin', 'project_manager'].includes(profile.role)) {
+  // [S111] + a Project Executive on its own projects (RLS decides which).
+  if (!['owner', 'admin', 'project_executive', 'project_manager'].includes(profile.role)) {
     redirect(`/dashboard/projects/${params.id}`);
   }
 

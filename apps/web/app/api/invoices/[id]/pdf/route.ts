@@ -40,12 +40,13 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
   }
 
-  if (!['owner', 'admin', 'project_manager'].includes(profile.role)) {
+  // [S111] + a Project Executive; RLS limits it to invoices on its projects.
+  if (!['owner', 'admin', 'project_executive', 'project_manager'].includes(profile.role)) {
     console.error(
       `[invoices/pdf] role ${profile.role} may not read client billing for invoice ${params.id}`
     );
     return NextResponse.json(
-      { error: 'Only Owner, Admin or Project Manager can open an invoice' },
+      { error: 'Only Owner, Admin, Project Executive or Project Manager can open an invoice' },
       { status: 403 }
     );
   }
@@ -83,7 +84,8 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
 
   const stem = invoice.invoice_number ?? `draft-${params.id.slice(0, 8)}`;
   const fileName = `invoice-${stem}${isDraft ? '-DRAFT' : ''}.pdf`;
-  const disposition = request.nextUrl.searchParams.get('download') === '1' ? 'attachment' : 'inline';
+  const disposition =
+    request.nextUrl.searchParams.get('download') === '1' ? 'attachment' : 'inline';
 
   return new NextResponse(new Uint8Array(buffer), {
     status: 200,

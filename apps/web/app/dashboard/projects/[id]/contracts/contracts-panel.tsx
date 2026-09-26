@@ -5,12 +5,10 @@
 // derivations come from payables-shared — never re-stated.
 
 import { useEffect, useState } from 'react';
+import { seesProjectMoney } from '@framefocus/shared/constants/roles';
 import { useRouter } from 'next/navigation';
 import { useConfirm } from '@/components/confirm/confirm-provider';
-import type {
-  ClientContract,
-  SubcontractorContract,
-} from '@/lib/services/contracts-client';
+import type { ClientContract, SubcontractorContract } from '@/lib/services/contracts-client';
 import {
   createSubcontractorContract,
   updateClientContract,
@@ -199,8 +197,8 @@ export function ContractsPanel({
       <div style={cardStyle}>
         <div style={titleStyle}>Client Contract</div>
         <p style={{ fontSize: '0.8125rem', color: '#7b8699', marginBottom: '0.75rem' }}>
-          The signed proposal from conversion auto-attaches here. Re-issued or amended contracts
-          are new rows — the most recent signed row is the active contract.
+          The signed proposal from conversion auto-attaches here. Re-issued or amended contracts are
+          new rows — the most recent signed row is the active contract.
         </p>
         {clientContracts.length === 0 ? (
           <p style={{ fontSize: '0.875rem', color: '#7b8699' }}>No client contract on record.</p>
@@ -379,9 +377,7 @@ export function ContractsPanel({
                   {statusBadge(c.status)}
                   <span style={{ fontWeight: 500 }}>{c.member?.display_name ?? 'Unknown sub'}</span>
                   <span style={{ fontWeight: 600 }}>{money(c.contract_value)}</span>
-                  {c.scope_of_work && (
-                    <span style={{ color: '#7b8699' }}>· {c.scope_of_work}</span>
-                  )}
+                  {c.scope_of_work && <span style={{ color: '#7b8699' }}>· {c.scope_of_work}</span>}
                 </div>
                 {canManage && c.status !== 'void' && (
                   <button
@@ -488,6 +484,8 @@ function SubSchedulePanel({
 }) {
   const router = useRouter();
   const confirm = useConfirm();
+  // [S111] AUTHORITY only (approve, pay, revise, void). Seeing the amounts is
+  // seesProjectMoney(role), which also admits a Project Executive.
   const isOwnerAdmin = role === 'owner' || role === 'admin';
   const isOwner = role === 'owner';
 
@@ -498,7 +496,10 @@ function SubSchedulePanel({
   // accrual row's own payments are retainage RELEASES and withhold nothing, so
   // feeding them here would always answer "none".
   const retainageExplanationLabel = retainageHeldLabel(
-    retainageHeldExplanation(contract, stages.flatMap((s) => s.payments ?? []))
+    retainageHeldExplanation(
+      contract,
+      stages.flatMap((s) => s.payments ?? [])
+    )
   );
 
   const [paying, setPaying] = useState<PayableListItem | null>(null);
@@ -524,8 +525,7 @@ function SubSchedulePanel({
   // its save routes to setup_payment_schedule (stages land pending); the
   // revise editor below is unreachable for PM, so the revise RPC is never
   // called with a PM caller (its Owner/Admin check stays the authority).
-  const editingThis =
-    editMode && !frozen && (isOwnerAdmin || (canManage && stages.length === 0));
+  const editingThis = editMode && !frozen && (isOwnerAdmin || (canManage && stages.length === 0));
   // Save feedback (S95 click-test fix — the 200-with-no-feedback finding):
   // a successful save COLLAPSES this contract's editor back to read-only
   // and confirms; the panel stays in edit mode for the other contracts
@@ -594,7 +594,14 @@ function SubSchedulePanel({
   const formalToggle =
     canManage && contract.status !== 'signed' && contract.status !== 'void' ? (
       <label
-        style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', fontSize: '0.75rem', color: '#3f4a60', margin: '0.25rem 0' }}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '0.375rem',
+          fontSize: '0.75rem',
+          color: '#3f4a60',
+          margin: '0.25rem 0',
+        }}
       >
         <input
           type="checkbox"
@@ -602,13 +609,18 @@ function SubSchedulePanel({
           disabled={busy}
           onChange={(e) => void handleToggleFormal(e.target.checked)}
         />
-        Needs formal contract — committed counts on approval but shows as
-        &ldquo;awaiting signature&rdquo; until the sub signs
+        Needs formal contract — committed counts on approval but shows as &ldquo;awaiting
+        signature&rdquo; until the sub signs
       </label>
     ) : null;
 
   async function handleDeletePayment(paymentId: string) {
-    if (!(await confirm('Delete this payment? A recorded payment is immutable — delete and re-enter to correct it.'))) return;
+    if (
+      !(await confirm(
+        'Delete this payment? A recorded payment is immutable — delete and re-enter to correct it.'
+      ))
+    )
+      return;
     setBusy(true);
     const res = await softDeletePayment(paymentId);
     setBusy(false);
@@ -685,7 +697,14 @@ function SubSchedulePanel({
           ) : (
             <>
               {single && single.budgeted_amount !== null && contract.contract_value !== null && (
-                <p style={{ fontSize: '0.75rem', color: single.budgeted_amount === contract.contract_value ? '#7b8699' : '#92400e', margin: '0.25rem 0' }}>
+                <p
+                  style={{
+                    fontSize: '0.75rem',
+                    color:
+                      single.budgeted_amount === contract.contract_value ? '#7b8699' : '#92400e',
+                    margin: '0.25rem 0',
+                  }}
+                >
                   Budget line plan {money(single.budgeted_amount)} · contract{' '}
                   {money(contract.contract_value)}
                   {single.budgeted_amount !== contract.contract_value &&
@@ -700,7 +719,7 @@ function SubSchedulePanel({
               )}
               <ScheduleSetupEditor
                 contract={contract}
-                hideAmounts={!isOwnerAdmin}
+                hideAmounts={!seesProjectMoney(role)}
                 prefillBudgetItemId={single?.budget_item_id ?? null}
                 onDone={(warning) => {
                   if (warning) setNotice(warning);
@@ -772,7 +791,7 @@ function SubSchedulePanel({
           <ScheduleSetupEditor
             key={stageIdsKey}
             contract={contract}
-            hideAmounts={!isOwnerAdmin}
+            hideAmounts={!seesProjectMoney(role)}
             initialStages={editSeed}
             reviseMode
             onDone={(warning) => {
@@ -824,7 +843,9 @@ function SubSchedulePanel({
         </p>
       )}
       {pendingStages.length > 0 && isOwnerAdmin && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.375rem' }}>
+        <div
+          style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.375rem' }}
+        >
           <span style={{ fontSize: '0.75rem', color: '#92400e' }}>
             {pendingStages.length} stage{pendingStages.length === 1 ? '' : 's'} awaiting approval —
             nothing counts against the job until approved.
@@ -842,11 +863,14 @@ function SubSchedulePanel({
         const payments = s.payments.filter((p) => !p.is_deleted);
         return (
           <div key={s.id} style={{ padding: '0.375rem 0', fontSize: '0.8125rem' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', flexWrap: 'wrap' }}>
+            <div
+              style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', flexWrap: 'wrap' }}
+            >
               <span style={{ fontWeight: 600, color: '#3f4a60' }}>{s.stage_label ?? 'Stage'}</span>
               <span>{fmtMoney(s.amount)}</span>
               <span style={{ color: '#7b8699' }}>
-                {fmtMoney(paid)} paid · {closedOut ? 'closed out' : `${fmtMoney(remaining)} remaining`}
+                {fmtMoney(paid)} paid ·{' '}
+                {closedOut ? 'closed out' : `${fmtMoney(remaining)} remaining`}
               </span>
               {s.status === 'pending' && <span style={{ color: '#92400e' }}>pending</span>}
               {s.status === 'rejected' && <span style={{ color: '#991b1b' }}>rejected</span>}
@@ -871,7 +895,16 @@ function SubSchedulePanel({
             {payments.length > 0 && (
               <div style={{ marginTop: '0.25rem', paddingLeft: '0.75rem' }}>
                 {payments.map((p) => (
-                  <div key={p.id} style={{ fontSize: '0.75rem', color: '#7b8699', display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                  <div
+                    key={p.id}
+                    style={{
+                      fontSize: '0.75rem',
+                      color: '#7b8699',
+                      display: 'flex',
+                      gap: '0.5rem',
+                      alignItems: 'center',
+                    }}
+                  >
                     <span>
                       {p.paid_date} · {fmtMoney(p.amount)}
                       {p.retainage_withheld > 0 &&
@@ -882,7 +915,14 @@ function SubSchedulePanel({
                     </span>
                     {isOwnerAdmin && (
                       <button
-                        style={{ border: 'none', background: 'none', color: '#991b1b', fontSize: '0.6875rem', cursor: 'pointer', padding: 0 }}
+                        style={{
+                          border: 'none',
+                          background: 'none',
+                          color: '#991b1b',
+                          fontSize: '0.6875rem',
+                          cursor: 'pointer',
+                          padding: 0,
+                        }}
                         disabled={busy}
                         onClick={() => void handleDeletePayment(p.id)}
                       >
@@ -898,7 +938,15 @@ function SubSchedulePanel({
       })}
 
       {retainageRow && (
-        <div style={{ padding: '0.375rem 0', fontSize: '0.8125rem', display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
+        <div
+          style={{
+            padding: '0.375rem 0',
+            fontSize: '0.8125rem',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.625rem',
+          }}
+        >
           <span style={{ fontWeight: 600, color: '#3f4a60' }}>Retainage held</span>
           <span>{fmtMoney(committedRemaining(retainageRow, retainageRow.payments))}</span>
           {/* B1/Part A [S151] — the line may name a rate ONLY when that rate
@@ -931,9 +979,27 @@ function SubSchedulePanel({
       {/* S-2 [S95]: legacy targetless stages — inline picker at approve;
           Miscellaneous excluded (S94 force-targets). */}
       {needsTarget.length > 0 && isOwnerAdmin && (
-        <div style={{ border: '1px solid #fde68a', borderRadius: '0.375rem', padding: '0.5rem 0.625rem', margin: '0.375rem 0 0', backgroundColor: '#fffbeb' }}>
+        <div
+          style={{
+            border: '1px solid #fde68a',
+            borderRadius: '0.375rem',
+            padding: '0.5rem 0.625rem',
+            margin: '0.375rem 0 0',
+            backgroundColor: '#fffbeb',
+          }}
+        >
           {needsTarget.map((s) => (
-            <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.25rem 0', fontSize: '0.8125rem', flexWrap: 'wrap' }}>
+            <div
+              key={s.id}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+                padding: '0.25rem 0',
+                fontSize: '0.8125rem',
+                flexWrap: 'wrap',
+              }}
+            >
               <span style={{ fontWeight: 600, color: '#3f4a60' }}>{s.stage_label ?? 'Stage'}</span>
               <span>{fmtMoney(s.amount)}</span>
               <BudgetLineSelect
@@ -941,11 +1007,22 @@ function SubSchedulePanel({
                 value={targetPicks[s.id] ?? ''}
                 onChange={(v) => setTargetPicks((prev) => ({ ...prev, [s.id]: v }))}
                 excludeMiscellaneous
-                hideAmounts={!isOwnerAdmin}
+                hideAmounts={!seesProjectMoney(role)}
                 disabled={busy}
-                style={{ padding: '0.25rem 0.375rem', border: '1px solid #d5dae4', borderRadius: '0.375rem', fontSize: '0.75rem', flex: 1, minWidth: '180px' }}
+                style={{
+                  padding: '0.25rem 0.375rem',
+                  border: '1px solid #d5dae4',
+                  borderRadius: '0.375rem',
+                  fontSize: '0.75rem',
+                  flex: 1,
+                  minWidth: '180px',
+                }}
               />
-              <button style={smallButton} disabled={busy} onClick={() => void handleApproveWithTarget(s)}>
+              <button
+                style={smallButton}
+                disabled={busy}
+                onClick={() => void handleApproveWithTarget(s)}
+              >
                 Approve
               </button>
             </div>
@@ -1096,7 +1173,9 @@ function ScheduleSetupEditor({
         ((s.grossPaid ?? 0) > 0 || s.label.trim() || s.amount.trim() || s.budget_item_id)
     );
     if (included.some((s) => !s.budget_item_id)) {
-      setError('Every stage needs a budget line — stages always target a real line (never Miscellaneous).');
+      setError(
+        'Every stage needs a budget line — stages always target a real line (never Miscellaneous).'
+      );
       return;
     }
     // Ruling 2's gross-paid floor, enforced here for the friendly message —
@@ -1133,7 +1212,10 @@ function ScheduleSetupEditor({
       budget_item_id: s.budget_item_id,
     }));
     const retainage = retainageShape
-      ? { shape: retainageShape, percent: retainageShape === 'percent_across' ? Number(retainagePercent) : undefined }
+      ? {
+          shape: retainageShape,
+          percent: retainageShape === 'percent_across' ? Number(retainagePercent) : undefined,
+        }
       : undefined;
     try {
       const res = reviseMode
@@ -1161,12 +1243,35 @@ function ScheduleSetupEditor({
   };
 
   return (
-    <div style={{ border: '1px solid #e4e8ef', borderRadius: '0.5rem', padding: '0.75rem', marginTop: '0.25rem' }}>
-      <div style={{ fontSize: '0.75rem', fontWeight: 600, color: '#7b8699', textTransform: 'uppercase', marginBottom: '0.5rem' }}>
+    <div
+      style={{
+        border: '1px solid #e4e8ef',
+        borderRadius: '0.5rem',
+        padding: '0.75rem',
+        marginTop: '0.25rem',
+      }}
+    >
+      <div
+        style={{
+          fontSize: '0.75rem',
+          fontWeight: 600,
+          color: '#7b8699',
+          textTransform: 'uppercase',
+          marginBottom: '0.5rem',
+        }}
+      >
         {reviseMode ? 'Edit schedule' : 'Payment schedule'}
       </div>
       {reviseMode && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem', flexWrap: 'wrap' }}>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.5rem',
+            marginBottom: '0.5rem',
+            flexWrap: 'wrap',
+          }}
+        >
           <span style={{ fontSize: '0.8125rem', color: '#3f4a60' }}>Contract value:</span>
           <input
             type="number"
@@ -1174,7 +1279,13 @@ function ScheduleSetupEditor({
             step="0.01"
             value={reviseValue}
             onChange={(e) => setReviseValue(e.target.value)}
-            style={{ padding: '0.375rem 0.5rem', border: '1px solid #d5dae4', borderRadius: '0.375rem', fontSize: '0.8125rem', width: '130px' }}
+            style={{
+              padding: '0.375rem 0.5rem',
+              border: '1px solid #d5dae4',
+              borderRadius: '0.375rem',
+              fontSize: '0.8125rem',
+              width: '130px',
+            }}
           />
           <span style={{ fontSize: '0.6875rem', color: '#7b8699' }}>
             Unpaid stages are replaced on save and land pending — re-approve to count them toward
@@ -1224,7 +1335,9 @@ function ScheduleSetupEditor({
                 placeholder={`Stage ${i + 1} label (e.g. Rough-in)`}
                 value={s.label}
                 onChange={(e) =>
-                  setStages((prev) => prev.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)))
+                  setStages((prev) =>
+                    prev.map((x, j) => (j === i ? { ...x, label: e.target.value } : x))
+                  )
                 }
                 style={{ ...input, flex: 1 }}
               />
@@ -1235,7 +1348,9 @@ function ScheduleSetupEditor({
                 step="0.01"
                 value={s.amount}
                 onChange={(e) =>
-                  setStages((prev) => prev.map((x, j) => (j === i ? { ...x, amount: e.target.value } : x)))
+                  setStages((prev) =>
+                    prev.map((x, j) => (j === i ? { ...x, amount: e.target.value } : x))
+                  )
                 }
                 style={{ ...input, width: '110px' }}
               />
@@ -1244,7 +1359,9 @@ function ScheduleSetupEditor({
                 lines={lines}
                 value={s.budget_item_id}
                 onChange={(v) =>
-                  setStages((prev) => prev.map((x, j) => (j === i ? { ...x, budget_item_id: v } : x)))
+                  setStages((prev) =>
+                    prev.map((x, j) => (j === i ? { ...x, budget_item_id: v } : x))
+                  )
                 }
                 excludeMiscellaneous
                 hideAmounts={hideAmounts}
@@ -1291,7 +1408,13 @@ function ScheduleSetupEditor({
 
       {/* Ruling 4 — both directions WARN, never block. The over case gets
           direction-specific wording; under keeps the original. */}
-      <div style={{ fontSize: '0.8125rem', marginBottom: '0.5rem', color: mismatch ? '#92400e' : '#3f4a60' }}>
+      <div
+        style={{
+          fontSize: '0.8125rem',
+          marginBottom: '0.5rem',
+          color: mismatch ? '#92400e' : '#3f4a60',
+        }}
+      >
         Stages total {money(stageTotal)}
         {compareValue !== null &&
           (mismatch && stageTotal > compareValue
@@ -1302,7 +1425,15 @@ function ScheduleSetupEditor({
         {compareValue === null && ' — no contract value on record to check against'}
       </div>
 
-      <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginBottom: '0.625rem', flexWrap: 'wrap' }}>
+      <div
+        style={{
+          display: 'flex',
+          gap: '0.5rem',
+          alignItems: 'center',
+          marginBottom: '0.625rem',
+          flexWrap: 'wrap',
+        }}
+      >
         <span style={{ fontSize: '0.8125rem', color: '#3f4a60' }}>Retainage:</span>
         <select
           value={retainageShape}
@@ -1326,7 +1457,9 @@ function ScheduleSetupEditor({
         )}
       </div>
 
-      {error && <p style={{ fontSize: '0.75rem', color: '#991b1b', margin: '0 0 0.5rem' }}>{error}</p>}
+      {error && (
+        <p style={{ fontSize: '0.75rem', color: '#991b1b', margin: '0 0 0.5rem' }}>{error}</p>
+      )}
 
       {confirmingMismatch && mismatch && compareValue !== null ? (
         // Explicit confirm step (S95 ruling) — direction-specific wording;
@@ -1347,7 +1480,12 @@ function ScheduleSetupEditor({
           </p>
           <div style={{ display: 'flex', gap: '0.5rem' }}>
             <button
-              style={{ ...smallButton, backgroundColor: busy ? '#fcd34d' : '#d97706', color: '#fff', border: 'none' }}
+              style={{
+                ...smallButton,
+                backgroundColor: busy ? '#fcd34d' : '#d97706',
+                color: '#fff',
+                border: 'none',
+              }}
               disabled={busy}
               onClick={() => {
                 setAckedTotalsKey(totalsKey);
@@ -1357,7 +1495,11 @@ function ScheduleSetupEditor({
             >
               {busy ? 'Saving…' : 'Save anyway'}
             </button>
-            <button style={smallButton} disabled={busy} onClick={() => setConfirmingMismatch(false)}>
+            <button
+              style={smallButton}
+              disabled={busy}
+              onClick={() => setConfirmingMismatch(false)}
+            >
               Back
             </button>
           </div>
@@ -1365,7 +1507,12 @@ function ScheduleSetupEditor({
       ) : (
         <div style={{ display: 'flex', gap: '0.5rem' }}>
           <button
-            style={{ ...smallButton, backgroundColor: busy ? '#93c5fd' : '#2563eb', color: '#fff', border: 'none' }}
+            style={{
+              ...smallButton,
+              backgroundColor: busy ? '#93c5fd' : '#2563eb',
+              color: '#fff',
+              border: 'none',
+            }}
             disabled={busy}
             onClick={() => void handleSave()}
           >
