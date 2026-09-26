@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
-import { SUB_UPLOAD_TAG, bidderCanSeeFile } from '@/lib/services/sub-bid-files';
+import { SUB_UPLOAD_TAG, bidTokenIsOpen, bidderCanSeeFile } from '@/lib/services/sub-bid-files';
 
 // S106 Part C — the SUB upload path. `/bid/[token]` is anonymous; the TOKEN is the
 // credential (same model as get_sub_bid_request / submit_sub_bid_reply). The sub's file
@@ -30,7 +30,7 @@ async function resolveToken(
 > {
   const { data: reqRow } = await admin
     .from('estimate_sub_bid_requests')
-    .select('estimate_id, company_id, expires_at, is_deleted')
+    .select('estimate_id, company_id, expires_at, is_deleted, status')
     .eq('token', token)
     .maybeSingle();
   if (!reqRow || reqRow.is_deleted) {
@@ -38,6 +38,20 @@ async function resolveToken(
   }
   if (reqRow.expires_at && new Date(reqRow.expires_at as string) < new Date()) {
     return { ok: false, res: NextResponse.json({ error: 'This link has expired.' }, { status: 410 }) };
+  }
+  // [S112, RULED Josh] The bid's CURRENT status, read on every request — a
+  // cancelled or declined bid's token is refused at once, for GET and POST
+  // alike (one resolver, so they cannot drift). See BID_TOKEN_OPEN_STATUSES.
+  if (!bidTokenIsOpen(reqRow.status as string)) {
+    console.error('[/api/bid/[token]/files] refused: bid request not open', {
+      check: 'estimate_sub_bid_requests.status not in BID_TOKEN_OPEN_STATUSES',
+      status: reqRow.status,
+      estimateId: reqRow.estimate_id,
+    });
+    return {
+      ok: false,
+      res: NextResponse.json({ error: 'This bid request is no longer open.' }, { status: 403 }),
+    };
   }
   return {
     ok: true,
