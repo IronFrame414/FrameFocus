@@ -24,7 +24,17 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { writeFileSync } from 'node:fs';
 import { admin, assertRebuildTest, sessionFor } from './live-session';
+
+// The live config does not print console output from PASSING tests, so every
+// count is also written here (PE_PROOF_OUT) — a number that is not recorded is
+// not a measurement.
+const OUT: Record<string, unknown> = {};
+const record = (k: string, v: unknown) => {
+  OUT[k] = v;
+  if (process.env.PE_PROOF_OUT) writeFileSync(process.env.PE_PROOF_OUT, JSON.stringify(OUT, null, 2));
+};
 
 const OWNER = 'josh+test50@worthprop.com';
 const PE = 'josh+qa-pe@worthprop.com';
@@ -103,7 +113,7 @@ describe('FILL-7.2 — every Floor table: exactly its own projects, zero elsewhe
 
   it('the identity is assigned to at least one project and NOT to at least one other', async () => {
     const { count } = await admin.from('projects').select('id', { count: 'exact', head: true }).eq('company_id', companyId);
-    console.log(`[S111] PE assigned to ${assigned.size} of ${count} company projects`);
+    record('assignment', { assigned: assigned.size, companyProjects: count });
     expect(assigned.size).toBeGreaterThan(0);
     expect(count!).toBeGreaterThan(assigned.size);
   });
@@ -129,7 +139,8 @@ describe('FILL-7.2 — every Floor table: exactly its own projects, zero elsewhe
       expect(peOff, `${d.table}: off-project rows`).toBe(0);
       if (d.money && expected.size === 0) missingMoney.push(d.table);
     }
-    console.table(tally);
+    record('perTable', tally);
+    record('ownerOffTotal', ownerOffTotal);
     // A pass on zero rows is a failure: every money family must be exercised on-project.
     expect(missingMoney, 'money tables with NO row on the PE project — the proof would be vacuous').toEqual([]);
     // The control: the zero off-project is a floor, not an empty company.
@@ -138,46 +149,47 @@ describe('FILL-7.2 — every Floor table: exactly its own projects, zero elsewhe
 });
 
 describe('Q9 — payments, the piece this build is judged on', () => {
-  it('the payment headers it reads are EXACTLY the ones the rule admits', async () => {
-    const pays = await all(admin, 'client_payments', 'id, amount, company_id');
-    const apps = await all(admin, 'client_payment_applications', 'id, payment_id, invoice_id, amount, is_deleted');
-    const live = apps.filter((a) => a.is_deleted === false);
-    const expected = new Set<string>();
-    for (const p of pays.filter((x) => x.company_id === companyId)) {
-      const mine = live.filter((a) => a.payment_id === p.id);
-      const projects = mine.map((a) => resolve.inv(a));
-      const sum = Math.round(mine.reduce((s, a) => s + Number(a.amount), 0) * 100);
-      if (
-        mine.length > 0 &&
-        projects.every((pr) => pr !== null && assigned.has(pr)) &&
-        sum === Math.round(Number(p.amount) * 100)
-      ) expected.add(p.id as string);
-    }
-    const got = new Set((await all(pe, 'client_payments', 'id')).map((r) => r.id as string));
-    const ownerCount = (await all(owner, 'client_payments', 'id')).length;
-    console.log(`[S111 Q9] payment headers — owner reads ${ownerCount}, rule admits ${expected.size}, PE reads ${got.size}`);
-    expect([...got].sort()).toEqual([...expected].sort());
-    expect(ownerCount, 'control: the owner reads payments the PE does not').toBeGreaterThan(got.size);
-  });
-
-  // Recording — exercised for real, then removed. Needs a SENT invoice on a PE
-  // project with receivable remaining; the test says so rather than skipping
-  // silently if there is none.
+  // Every payment row this block creates, removed in afterAll, and the status
+  // each touched invoice had before, restored there.
   const created: string[] = [];
-  let target: { id: string; contact: string; remaining: number; project: string } | null = null;
-  let offTarget: { id: string; contact: string } | null = null;
+  const statusBefore = new Map<string, string>();
+  let target: { id: string; contact: string; remaining: number } | null = null;
+  let offTarget: { id: string; contact: string; remaining: number } | null = null;
+  // The NEGATIVE cases, made by the OWNER: without them "the PE reads exactly
+  // the rule's set" can pass on a company whose only payment is the PE's
+  // (measured: that was the case — 1 payment, on the PE's project).
+  let offProjectPayment = '';
+  let surplusPayment = '';
 
   beforeAll(async () => {
     const invs = await all(admin, 'invoices', 'id, project_id, status, amount_receivable, is_deleted, company_id');
     const apps = await all(admin, 'client_payment_applications', 'invoice_id, amount, is_deleted');
     const projs = map(await all(admin, 'projects', 'id, contact_id'), 'id', 'contact_id');
     for (const i of invs.filter((x) => x.company_id === companyId && x.is_deleted === false && x.status === 'sent')) {
-      const applied = apps.filter((a) => a.invoice_id === i.id && a.is_deleted === false).reduce((s, a) => s + Number(a.amount), 0);
+      const applied = apps.filter((a) => a.invoice_id === i.id && a.is_deleted === false).reduce((s2, a) => s2 + Number(a.amount), 0);
       const remaining = Math.round((Number(i.amount_receivable) - applied) * 100) / 100;
       const contact = projs.get(i.project_id as string);
-      if (remaining < 0.02 || !contact) continue;
-      if (!target && assigned.has(i.project_id as string)) target = { id: i.id as string, contact, remaining, project: i.project_id as string };
-      if (!offTarget && !assigned.has(i.project_id as string)) offTarget = { id: i.id as string, contact };
+      // ≥ 0.05 so the few cents applied below can never settle the invoice.
+      if (remaining < 0.05 || !contact) continue;
+      const t = { id: i.id as string, contact, remaining };
+      if (!target && assigned.has(i.project_id as string)) target = t;
+      if (!offTarget && !assigned.has(i.project_id as string)) offTarget = t;
+    }
+    for (const t of [target, offTarget]) if (t) statusBefore.set(t.id, 'sent');
+
+    if (target && offTarget) {
+      const a = await owner.rpc('record_client_payment', {
+        p_contact_id: offTarget.contact, p_amount: 0.01,
+        p_applications: [{ invoice_id: offTarget.id, amount: 0.01 }], p_method: 'check', p_note: 'S111 Q9 control: off-project',
+      });
+      if (a.error) throw new Error(`owner off-project payment: ${a.error.message}`);
+      offProjectPayment = a.data as string; created.push(offProjectPayment);
+      const b = await owner.rpc('record_client_payment', {
+        p_contact_id: target.contact, p_amount: 0.02,
+        p_applications: [{ invoice_id: target.id, amount: 0.01 }], p_method: 'check', p_note: 'S111 Q9 control: unapplied surplus',
+      });
+      if (b.error) throw new Error(`owner surplus payment: ${b.error.message}`);
+      surplusPayment = b.data as string; created.push(surplusPayment);
     }
   }, 120_000);
 
@@ -185,21 +197,54 @@ describe('Q9 — payments, the piece this build is judged on', () => {
     if (created.length) {
       await admin.from('client_payment_applications').delete().in('payment_id', created);
       await admin.from('client_payments').delete().in('id', created);
-      if (target) await admin.from('invoices').update({ status: 'sent' }).eq('id', target.id).eq('status', 'paid');
     }
+    for (const [id, st] of statusBefore) await admin.from('invoices').update({ status: st }).eq('id', id);
+  });
+
+  it('there is a sent invoice on and off its projects to test against (else the proof is untested)', () => {
+    expect(target, 'no SENT invoice with receivable left on a PE project').not.toBeNull();
+    expect(offTarget, 'no SENT invoice with receivable left OFF the PE projects').not.toBeNull();
+  });
+
+  it('the payment headers it reads are EXACTLY the ones the rule admits — and never the two controls', async () => {
+    const pays = await all(admin, 'client_payments', 'id, amount, company_id');
+    const apps = await all(admin, 'client_payment_applications', 'id, payment_id, invoice_id, amount, is_deleted');
+    const live = apps.filter((a) => a.is_deleted === false);
+    const expected = new Set<string>();
+    for (const p of pays.filter((x) => x.company_id === companyId)) {
+      const mine = live.filter((a) => a.payment_id === p.id);
+      const projects = mine.map((a) => resolve.inv(a));
+      const sum = Math.round(mine.reduce((s2, a) => s2 + Number(a.amount), 0) * 100);
+      if (mine.length > 0 && projects.every((pr) => pr !== null && assigned.has(pr)) && sum === Math.round(Number(p.amount) * 100)) {
+        expected.add(p.id as string);
+      }
+    }
+    const got = new Set((await all(pe, 'client_payments', 'id')).map((r) => r.id as string));
+    const ownerCount = (await all(owner, 'client_payments', 'id')).length;
+    // The surplus payment's OWN application is on its project — visible —
+    // while the header (whose amount includes the unapplied cent) is not.
+    const surplusApps = (await pe.from('client_payment_applications').select('id').eq('payment_id', surplusPayment)).data ?? [];
+    const offApps = (await pe.from('client_payment_applications').select('id').eq('payment_id', offProjectPayment)).data ?? [];
+    record('q9Headers', { ownerReads: ownerCount, ruleAdmits: expected.size, peReads: got.size,
+      offProjectHeaderVisible: got.has(offProjectPayment), surplusHeaderVisible: got.has(surplusPayment),
+      surplusOwnApplicationVisible: surplusApps.length, offProjectApplicationVisible: offApps.length });
+    expect([...got].sort()).toEqual([...expected].sort());
+    expect(got.has(offProjectPayment), 'PE reads a payment applied to ANOTHER project').toBe(false);
+    expect(got.has(surplusPayment), 'PE reads a payment carrying an UNAPPLIED balance').toBe(false);
+    expect(surplusApps.length, 'PE cannot read its own project\'s application').toBe(1);
+    expect(offApps.length, 'PE reads an application to ANOTHER project').toBe(0);
+    expect(ownerCount, 'control: the owner reads payments the PE does not').toBeGreaterThan(got.size);
   });
 
   it('it can record a payment fully applied to its own invoice, and then reads it', async () => {
-    expect(target, 'no SENT invoice with receivable remaining on a PE project — seed one').not.toBeNull();
-    const amount = Math.min(1, target!.remaining);
     const { data, error } = await pe.rpc('record_client_payment', {
-      p_contact_id: target!.contact, p_amount: amount,
-      p_applications: [{ invoice_id: target!.id, amount }], p_method: 'check', p_note: 'S111 Q9 proof',
+      p_contact_id: target!.contact, p_amount: 0.01,
+      p_applications: [{ invoice_id: target!.id, amount: 0.01 }], p_method: 'check', p_note: 'S111 Q9 proof',
     });
     expect(error, error?.message).toBeNull();
     created.push(data as string);
-    const { data: seen } = await pe.from('client_payments').select('id, amount').eq('id', data as string);
-    console.log(`[S111 Q9] PE recorded ${amount} on its own invoice; reads its header: ${seen?.length}`);
+    const { data: seen } = await pe.from('client_payments').select('id').eq('id', data as string);
+    record('q9Record', { recordedOwn: 1, readsItsHeader: seen?.length ?? 0 });
     expect(seen).toHaveLength(1);
   });
 
@@ -210,18 +255,19 @@ describe('Q9 — payments, the piece this build is judged on', () => {
       p_applications: [{ invoice_id: target!.id, amount: 0.01 }], p_method: 'check', p_note: 'S111 Q9 surplus',
     });
     const after = (await admin.from('client_payments').select('id', { count: 'exact', head: true }).eq('company_id', companyId)).count;
+    record('q9RefuseSurplus', { error: error?.message ?? null, rowsBefore: before, rowsAfter: after });
     expect(error?.message ?? '').toMatch(/must apply the whole payment/);
     expect(after).toBe(before);
   });
 
   it('it is REFUSED an application to an invoice off its projects — and no payment row survives', async () => {
-    expect(offTarget, 'no SENT invoice off the PE projects to aim at — the refusal would be untested').not.toBeNull();
     const before = (await admin.from('client_payments').select('id', { count: 'exact', head: true }).eq('company_id', companyId)).count;
     const { error } = await pe.rpc('record_client_payment', {
       p_contact_id: offTarget!.contact, p_amount: 0.01,
       p_applications: [{ invoice_id: offTarget!.id, amount: 0.01 }], p_method: 'check', p_note: 'S111 Q9 off-project',
     });
     const after = (await admin.from('client_payments').select('id', { count: 'exact', head: true }).eq('company_id', companyId)).count;
+    record('q9RefuseOff', { error: error?.message ?? null, rowsBefore: before, rowsAfter: after });
     expect(error?.message ?? '').toMatch(/not on one of your projects/);
     expect(after).toBe(before);
   });
