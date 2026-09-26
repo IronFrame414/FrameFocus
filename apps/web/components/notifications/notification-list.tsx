@@ -319,7 +319,7 @@ export function NotificationList({
                     aria-pressed={item.starred}
                     aria-label={item.starred ? t('shell.notif.unstar') : t('shell.notif.star')}
                     data-testid="notification-star"
-                    className={`inline-flex ${compact ? 'h-11 w-11' : 'h-[34px] w-[34px]'} items-center justify-center rounded-full border border-m6m-border bg-m6m-card text-[18px] leading-none ${item.starred ? 'text-m6m-amber' : 'text-m6m-muted'}`}
+                    className={`inline-flex ${compact ? 'h-11 w-11' : 'h-[34px] w-[34px]'} items-center justify-center rounded-full border border-m6m-border bg-m6m-card text-[18px] leading-none ${item.starred ? 'text-m6m-amber-text' : 'text-m6m-muted'}`}
                   >
                     {item.starred ? '★' : '☆'}
                   </button>

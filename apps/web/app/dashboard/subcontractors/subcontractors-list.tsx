@@ -253,7 +253,7 @@ export function SubcontractorsList({
                         </span>
                       </td>
                       <td style={td}>{s.trade_type || '—'}</td>
-                      <td style={{ ...td, color: color.amber, letterSpacing: '1px' }}>
+                      <td style={{ ...td, color: color.amberText, letterSpacing: '1px' }}>
                         {stars(s.rating)}
                       </td>
                       <td style={td}>{s.phone || '—'}</td>

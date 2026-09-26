@@ -268,7 +268,7 @@ export function SubcontractorDetailSheet({
           <Field label="License #" value={subcontractor.license_number} mono />
           <Field
             label="Rating"
-            value={rating ? <span style={{ color: color.amber }}>{rating}</span> : null}
+            value={rating ? <span style={{ color: color.amberText }}>{rating}</span> : null}
           />
 
           {/* ⚠️ NOT the compliance section itself — see the header. Owner/Admin

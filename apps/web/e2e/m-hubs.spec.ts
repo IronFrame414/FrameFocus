@@ -396,6 +396,8 @@ test.describe('M-3 · Project sections hub', () => {
     const text = (await line.innerText()).trim();
     expect(text.length).toBeGreaterThan(0);
     expect(text).toContain(fx.dates.plus3);
+    // [S112 Q5] Amber text on the white card was 2.15:1; the text shade is 4.89:1.
+    expect(await line.evaluate((el) => getComputedStyle(el).color)).toBe('rgb(157, 101, 6)');
   });
 
   test('A-11j · a crew member\'s "Up next" reflects only the schedule rows RLS grants them', async ({

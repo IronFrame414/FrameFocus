@@ -273,7 +273,7 @@ export default async function MobileProjectHubPage({
                     renders a date, never a blank line. */}
                 <p
                   data-testid="m-up-next-date"
-                  className="mt-[3px] font-mono text-[13px] font-semibold text-m6m-amber"
+                  className="mt-[3px] font-mono text-[13px] font-semibold text-m6m-amber-text"
                 >
                   {upNextDateLine(upNext.start_date, today)}
                 </p>

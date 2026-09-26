@@ -627,7 +627,7 @@ export function AddItemsSheet({
                               type="button"
                               aria-label={item.is_favorite ? 'Unfavorite' : 'Favorite'}
                               onClick={() => void toggleFavorite(item)}
-                              style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: '15px', color: item.is_favorite ? color.amber : color.faintAlt }}
+                              style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: '15px', color: item.is_favorite ? color.amberText : color.faintAlt }}
                             >
                               ★
                             </button>

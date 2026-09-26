@@ -397,7 +397,8 @@ export function SubcontractorForm({
                   background: 'none',
                   border: 'none',
                   cursor: 'pointer',
-                  color: star <= form.rating ? '#f59e0b' : '#d1d5db',
+                  // [S112 Q5] amber text on white is 2.15:1; the same-hue text shade is 4.89:1.
+                  color: star <= form.rating ? '#9d6506' : '#d1d5db',
                   padding: '0 0.125rem',
                 }}
               >
