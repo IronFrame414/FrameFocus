@@ -141,7 +141,11 @@ export default async function MobileProjectHubPage({
 
   // D-16: "Mine first, then the project total" — and when the user has none
   // assigned it renders `0 mine · {total} open`, NOT a bare total.
-  const punchLabel = t('project.hub.punchLabel', { mine: punch.mine, total: punch.total });
+  // [S112 audit F5] Each half agrees with its own number ("1 mío · 2 abiertos").
+  const punchLabel = [
+    t(punch.mine === 1 ? 'project.hub.punchMineOne' : 'project.hub.punchMine', { n: punch.mine }),
+    t(punch.total === 1 ? 'project.hub.punchOpenOne' : 'project.hub.punchOpen', { n: punch.total }),
+  ].join(' · ');
 
   const badgeFor = (key: (typeof TILES)[number]['key']): string | null => {
     switch (key) {

@@ -127,7 +127,10 @@ export default async function MobileProjectsPage({
       daysLeftLabel: daysLeftText(daysLeft(p.target_end_date, companyToday(timeSettings.timezone))),
       // §8a binds `{total} open` for M-2. The em-dash at zero rather than
       // `0 open`, matching §4.2's own `—` example.
-      punchCallout: open > 0 ? t('field.projects.openPunch', { n: open }) : '—',
+      punchCallout:
+        open > 0
+          ? t(open === 1 ? 'field.projects.openPunchOne' : 'field.projects.openPunch', { n: open })
+          : '—',
       onSite: onSiteProjectId !== null && p.id === onSiteProjectId,
     };
   });

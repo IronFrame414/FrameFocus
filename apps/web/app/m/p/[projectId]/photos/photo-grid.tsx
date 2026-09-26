@@ -461,7 +461,7 @@ function SelectionBar({
       className="relative flex flex-wrap items-center gap-[8px] border-b border-m6m-border bg-m6m-card px-[18px] py-[10px]"
     >
       <span data-testid="m-selection-count" className="flex-1 font-mono text-[13px] text-m6m-navy">
-        {t('photos.grid.selected', { n: count })}
+        {t(count === 1 ? 'photos.grid.selectedOne' : 'photos.grid.selected', { n: count })}
       </span>
       <button
         type="button"

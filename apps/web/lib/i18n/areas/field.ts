@@ -181,6 +181,8 @@ export const en = {
   'field.projects.chipActive': 'Active',
   'field.projects.chipOnHold': 'On hold',
   'field.projects.openPunch': '{n} open',
+  // [S112 audit F5] Spanish agrees in number; English does not change.
+  'field.projects.openPunchOne': '{n} open',
   'field.projects.daysLeft': '{n} days left',
   'field.projects.status.active': 'Active',
   'field.projects.status.on_hold': 'On Hold',
@@ -363,6 +365,7 @@ export const es: Record<keyof typeof en, string> = {
   'field.projects.chipActive': 'Activos',
   'field.projects.chipOnHold': 'En pausa',
   'field.projects.openPunch': '{n} abiertos',
+  'field.projects.openPunchOne': '{n} abierto',
   'field.projects.daysLeft': 'Quedan {n} días',
   'field.projects.status.active': 'Activo',
   'field.projects.status.on_hold': 'En pausa',

@@ -30,7 +30,12 @@ export const en = {
   'project.type.time_and_materials': 'Time & Materials',
   'project.type.cost_plus': 'Cost Plus',
   // ── hub ──
-  'project.hub.punchLabel': '{mine} mine · {total} open',
+  // [S112 audit F5] Two counts, so two halves that each agree in number;
+  // joined with ' · '. English reads exactly as before: '{mine} mine · {total} open'.
+  'project.hub.punchMine': '{n} mine',
+  'project.hub.punchMineOne': '{n} mine',
+  'project.hub.punchOpen': '{n} open',
+  'project.hub.punchOpenOne': '{n} open',
   'project.hub.daysLeft': 'Days left',
   'project.hub.punch': 'Punch',
   'project.hub.nothingScheduled': 'Nothing scheduled',
@@ -277,7 +282,10 @@ export const es: Record<keyof typeof en, string> = {
   'project.type.fixed_price': 'Precio fijo',
   'project.type.time_and_materials': 'Tiempo y materiales',
   'project.type.cost_plus': 'Costo más margen',
-  'project.hub.punchLabel': '{mine} míos · {total} abiertos',
+  'project.hub.punchMine': '{n} míos',
+  'project.hub.punchMineOne': '{n} mío',
+  'project.hub.punchOpen': '{n} abiertos',
+  'project.hub.punchOpenOne': '{n} abierto',
   'project.hub.daysLeft': 'Días restantes',
   'project.hub.punch': 'Pendientes',
   'project.hub.nothingScheduled': 'Nada programado',
