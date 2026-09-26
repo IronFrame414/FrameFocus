@@ -560,6 +560,24 @@ top of this file is advanced to `#164` in the same commit, which is what keeps t
   Traps: `test/s109-row-activation.test.tsx` + `e2e/desktop-row-activation-s109.spec.ts`, each
   proven by sabotage — see `S109-report.md` Step 4.
 
+### Branch-scoped, awaiting real numbers — `feature/s112-followup-docs` [S112 follow-up, 2026-09-26]
+
+> Provisional ids per the S136 rule: never allocate a bare `#N` on a branch.
+
+- **#1-s112f — derive the schema-fingerprint baseline from the MIGRATION FILES, not from
+  rebuild-test. RULED [Josh, S112 follow-up, ruling 2]: "the real fix — file it and build it after
+  the merge wave."** `scripts/db-fingerprint.mjs` generates the baseline from rebuild-test and is
+  legitimate only while rebuild-test equals main's migration tree. It routinely doesn't:
+  on 2026-09-26 rebuild-test carried seven migrations from four unmerged branches
+  (20261820, 20261830, 20261840, 20261850, 20261860, 20261890, 20261900), so no correct baseline
+  for main could be generated at all, and the anon lockdown merged with main's baseline still at
+  20261810000000 (functions 311, production 310). **A baseline taken from a shared, mutable
+  database is broken by design; this is the second time it has bitten.** The fix: build the
+  fingerprint from a replay of `supabase/migrations/` into a throwaway Postgres (the same
+  `schema_fingerprint()` run there), so the baseline depends only on the tree being committed.
+  ⚠️ **Never** from production's own fingerprint — refused by ruling: it makes the detector assert
+  production matches production and hides any drift already there.
+
 ### Branch-scoped, awaiting real numbers — `feature/m-visual-sweep` [2026-09-24]
 
 > Provisional ids per the S136 rule: never allocate a bare `#N` on a branch.

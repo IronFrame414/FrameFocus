@@ -1,8 +1,13 @@
 # `PERF_TRACE` — the sign-in latency harness
 
-**Status: unmerged.** Lives on `feature/sign-in-latency` at `239d31f`, which conflicts with `main`
-in `apps/web/app/dashboard/layout.tsx` (2 hunks). `middleware.ts` and `page.tsx` merge clean.
-Recorded here because the only account of it was a commit message on a branch.
+**Status: ABANDONED [Josh, S112 follow-up, 2026-09-26].** _Superseded, quoted:_ "Status: unmerged.
+Lives on `feature/sign-in-latency` at `239d31f`, which conflicts with `main` in
+`apps/web/app/dashboard/layout.tsx` (2 hunks)." By the ruling it was 673 commits behind and
+conflicting, not worth recovering. It was a **measuring instrument, not a fix**. The latency fix it
+measured (`9692038`) is on main and deployed, so no tech debt is filed for the problem. The code
+survives only as commit `239d31f` and this description. The branch's other commit, the
+2026-08-31 incident record, was moved to `docs/incidents/rebuild-test-out-of-band-sql.md` before
+the branch was deleted.
 
 ## What it is
 
