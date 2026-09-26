@@ -33,6 +33,35 @@ killed run: it removed the stopped 8 h run's tenant and login, 0/0/0 left. The 9
 progress; Josh's ruling: support is asked only with that number in hand, and no purge is built
 for an unproven cause.
 
+**⚠️ 90-MINUTE RESULT — the reads OUTLAST the token, so it is the cache** (disposable identity,
+revoked 16:11:03Z, token expiry t+3,599 s, teardown 0/0/0). Both objects the user had fetched
+before revocation were served `200 / cf-cache-status: HIT` at **every** 60 s tick to the end,
+**t+5,390 s — 1,792 s after the token expired**. The object they had never fetched was
+`400 / BYPASS` throughout. Response header: `cache-control: public, max-age=3600`; no `age`
+header. So the edge is serving a cached object to an **expired** bearer token — it is not
+re-checking the JWT, and the entry is living past its own `max-age`.
+
+**Longer run started on that evidence** (your rule: past 90 minutes, a longer run is warranted),
+capped at 6 h. It separates the two explanations the 90-min run could not: **P1 is read every
+60 s, P2 only every 30 min.** If our own polling is what keeps the entry alive, P2 stops first.
+
+**Draft for Supabase support — for Josh to send, not sent:**
+
+> Project ref nmyphyhmfttxkdoposvf (a test project). Private bucket `project-files`, objects
+> read via `GET /storage/v1/object/authenticated/{bucket}/{path}` with a user's JWT. After we
+> revoke that user's access in RLS, objects the user had ALREADY fetched keep returning 200 with
+> `cf-cache-status: HIT` and `cache-control: public, max-age=3600`, using the same JWT — past
+> the JWT's own `exp`: measured 1,792 s after expiry (t+5,390 s after revocation) and still
+> served. An object the same user had not fetched before revocation is refused (400, BYPASS)
+> from the first second, and other users are never served these objects.
+> 1. Does the Smart CDN cache authorisation per object+token, and does it validate the JWT's
+>    `exp` on a cache hit?
+> 2. What bounds how long a cached authenticated object stays servable — is `max-age`
+>    refreshed on each hit?
+> 3. Is there a supported way to make authenticated reads of a private bucket re-check RLS on
+>    every request (disable Smart CDN per bucket, or `cache-control: private, no-store`)?
+> 4. Is there a purge API for a single object path?
+
 **What this means for the policies hardened this week** (20261790000000, 1800, 1810, the R5b
 function): they stop NEW reads at once, but a user who had already fetched an object keeps re-reading
 it through Storage's authenticated endpoint with the token they already hold, for at least 70 minutes
