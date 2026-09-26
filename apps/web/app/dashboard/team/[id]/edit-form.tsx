@@ -20,6 +20,9 @@ type Props = {
 
 const OWNER_ROLE_OPTIONS = [
   { value: 'admin', label: 'Admin' },
+  // [S111 Q11] Owner only — absent from ADMIN_ROLE_OPTIONS below, and refused
+  // by the action and the database if an admin sends it anyway.
+  { value: 'project_executive', label: 'Project Executive' },
   { value: 'project_manager', label: 'Project Manager' },
   { value: 'foreman', label: 'Foreman' },
   { value: 'crew_member', label: 'Crew Member' },

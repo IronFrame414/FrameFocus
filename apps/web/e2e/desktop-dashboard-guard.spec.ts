@@ -106,7 +106,8 @@ test.describe('a client cannot reach the dashboard', () => {
   });
 });
 
-test.describe('the five dashboard roles are unaffected', () => {
+// [S111] Superseded title, quoted: 'the five dashboard roles are unaffected' — six since project_executive.
+test.describe('the dashboard roles are unaffected', () => {
   test('an Owner still reaches /dashboard and its roster pages', async ({ page }) => {
     // The paired positive. Without it a guard that redirected EVERYONE would
     // pass every test above.

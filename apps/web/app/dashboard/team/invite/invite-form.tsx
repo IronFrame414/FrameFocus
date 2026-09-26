@@ -6,7 +6,7 @@ import { useState } from 'react';
 // read below still uses this client, and because deleting a service function is
 // a wider change than this defect warrants.
 import { createClient } from '@/lib/supabase-browser';
-import { INVITABLE_ROLES, ROLE_DESCRIPTIONS, ROLE_LABELS } from '@framefocus/shared';
+import { INVITABLE_ROLES, ROLE_DESCRIPTIONS, ROLE_LABELS, isOwnerOnlyGrant } from '@framefocus/shared';
 
 /**
  * ⚠️ THE LOCAL LIST IS GONE. [#1-s168, S175 item 6]
@@ -260,7 +260,7 @@ export default function InviteForm({ companyId, invitedBy, seatUsage, currentUse
               <label className="block text-sm font-medium text-gray-700 mb-2">Role</label>
               <div className="space-y-2">
                 {INVITE_OPTIONS.filter(
-                  (r) => currentUserRole === 'owner' || r.value !== 'admin'
+                  (r) => currentUserRole === 'owner' || !isOwnerOnlyGrant(r.value)
                 ).map((r) => (
                   <label
                     key={r.value}
