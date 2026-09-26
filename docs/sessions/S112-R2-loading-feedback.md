@@ -49,3 +49,22 @@ Passed locally against the production build (2 passed: setup + test).
 
 Per the ruling, this does **not** unblock `feature/s112-staletimes-hold`. That branch's cost was
 2,129 ms on Slow 3G for a tab revisit; feedback makes a slow revisit visible, not fast.
+
+## ⚠️ CI found a conflict: `app/m/loading.tsx` changes HTTP semantics on every `/m` page
+
+CI run **36246627024** on this branch: **6 failed / 585 passed.** A loading boundary makes every page
+under it STREAM, so the response status is sent before the page runs:
+
+- `notFound()` now renders inside a **200**, not a 404 — A-43 `/m/dashboard`, `/m/subs/<missing>`,
+  `/m/logs/<missing>`, `/m/p/{id}/chat` (four specs asserting a real 404);
+- a server `redirect()` becomes a client-side one — the `/m/capture` control lands on `/m/timeclock`;
+- `m-hydration` aborts on navigation.
+
+**Measured alternative — the pending bar ALONE, no `loading.tsx`** (same harness, same production-build
+conditions): **20 / 20 taps changed by 800 ms, 13–16 ms, the bar on all five navigations.** Against
+that build, locally, the six CI failures all pass, as does the R2 punch-row guard: `m-capture:967`,
+`m-chat-shell:116`, `m-destinations:861`, `m-hydration`, `m-logs:285`, `m-shell:686`, and all of
+`m-sections` — **68 passed, 0 failed** (4 skipped are pre-existing data-conditional skips).
+
+**Not changed — this contradicts the ruled mechanism, so it is Josh's call:** keep `loading.tsx` and
+accept 200-with-not-found-UI (and rewrite those specs), or drop it and keep the bar alone.
