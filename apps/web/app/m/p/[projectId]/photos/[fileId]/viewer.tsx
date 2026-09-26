@@ -6,6 +6,7 @@ import { useCallback, useMemo, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight, X, MoreVertical } from 'lucide-react';
 import { softDeleteFile } from '@/lib/services/files-client';
 import { shareTargetFor } from '@framefocus/shared/utils/markup';
+import { localDerivativeFor } from '@/lib/photos/local-derivative';
 import { shareFailureNote, shareImages } from '@/lib/share-image';
 import { useT } from '@/components/i18n/language-provider';
 
@@ -45,6 +46,8 @@ export type ViewerPhoto = {
   thumbUrl: string | null;
   originalUrl: string | null;
   hasMarkup: boolean;
+  /** [S112] PhotoRecord.markupFingerprint — keys the just-saved local image. */
+  markupFingerprint: string | null;
   derivativeMissing: boolean;
   source: 'log' | 'delivery' | 'safety' | 'punch' | null;
   sourceId: string | null;
@@ -58,6 +61,20 @@ export type ViewerPhoto = {
 const ZOOM_STEP = 1.5;
 const MIN_ZOOM = 1;
 const MAX_ZOOM = 6;
+
+/**
+ * A filmstrip square's image. [S112 3c] Right after a save the new thumbnail
+ * usually does not exist yet (its name carries the new markup fingerprint), so
+ * the server hands back the FULL derivative as `thumbUrl` — the same signed URL
+ * as the stage — and this 52px square would download the whole 2 MB file the
+ * stage just stopped downloading. A real stored thumbnail still wins; only the
+ * full-file fallback yields to the image this tab just built.
+ */
+function filmstripSrc(p: ViewerPhoto): string | null {
+  const isRealThumb = p.thumbUrl !== null && p.thumbUrl !== p.displayUrl;
+  if (isRealThumb) return p.thumbUrl;
+  return localDerivativeFor(p.id, p.markupFingerprint) ?? p.thumbUrl ?? p.displayUrl;
+}
 
 export function PhotoViewer({
   photos,
@@ -98,7 +115,13 @@ export function PhotoViewer({
   // WHICH FILE IS ON SCREEN. `displayUrl` is the derivative for an annotated
   // photo; the toggle swaps to `originalUrl`. One expression, so the two can
   // never disagree.
-  const src = showOriginal ? photo.originalUrl : photo.displayUrl;
+  // [S112 3c] Right after a save, the image this tab just BUILT is shown in
+  // place of the stored derivative — the same bytes, without downloading them
+  // back. Only while the server's markup fingerprint matches what they were
+  // built from (lib/photos/local-derivative.ts); otherwise the stored file.
+  const src = showOriginal
+    ? photo.originalUrl
+    : (localDerivativeFor(photo.id, photo.markupFingerprint) ?? photo.displayUrl);
 
   const goto = useCallback(
     (i: number) => {
@@ -549,10 +572,10 @@ export function PhotoViewer({
                 same flat file the stage and the gallery do (A-23g).
                 [S111 D] …as its stored THUMBNAIL (same pixels, 400px), with the
                 full file as the fallback — never a missing square. */}
-            {(p.thumbUrl ?? p.displayUrl) ? (
+            {filmstripSrc(p) ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
-                src={(p.thumbUrl ?? p.displayUrl)!}
+                src={filmstripSrc(p)!}
                 alt=""
                 data-testid="m-filmstrip-image"
                 className="h-full w-full object-cover"

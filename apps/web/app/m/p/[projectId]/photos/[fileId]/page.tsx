@@ -83,6 +83,7 @@ export default async function PhotoViewerPage({
       thumbUrl: p.thumbUrl,
       originalUrl: p.originalUrl,
       hasMarkup: p.hasMarkup,
+      markupFingerprint: p.markupFingerprint,
       derivativeMissing: p.derivativeMissing,
       source: p.source,
       sourceId: p.sourceId,
