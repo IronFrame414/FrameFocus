@@ -276,7 +276,7 @@ function makeWriter(db, apply) {
 // Args
 // ---------------------------------------------------------------------------
 function parseArgs(argv) {
-  const out = { apply: false, concurrency: 1, limit: Infinity, ref: null, undoFile: null, undo: null, verify: null, onlyIncomplete: false };
+  const out = { apply: false, concurrency: 1, limit: Infinity, ref: null, undoFile: null, undo: null, verify: null, onlyIncomplete: false, onlyIds: null };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     const val = () => {
@@ -292,6 +292,10 @@ function parseArgs(argv) {
     else if (a === '--undo') out.undo = val();
     else if (a === '--verify') out.verify = val();
     else if (a === '--only-incomplete') out.onlyIncomplete = true;
+    // Restrict to these files.id values (comma-separated). For a one-row canary
+    // on production before the full run, and for proving the script on
+    // rebuild-test without touching rows the proof does not own.
+    else if (a === '--only-ids') out.onlyIds = val().split(',').map((x) => x.trim()).filter(Boolean);
     else throw new Error(`unknown argument: ${a}`);
   }
   if (!out.ref) throw new Error('--project-ref is required.');
@@ -385,13 +389,15 @@ async function readSharedPaths(db, paths) {
   return new Set([...count].filter(([, n]) => n > 1).map(([p]) => p));
 }
 
-async function readCandidates(db, { deleted }) {
+async function readCandidates(db, { deleted, onlyIds = null }) {
   const rows = [];
   for (let from = 0; ; from += PAGE) {
-    const { data, error } = await db
+    let q = db
       .from('files')
       .select('id, file_path, file_name, mime_type, file_size, markup_data, site_visit_capture, estimate_id, created_at')
-      .eq('is_deleted', deleted)
+      .eq('is_deleted', deleted);
+    if (onlyIds) q = q.in('id', onlyIds);
+    const { data, error } = await q
       .or(`mime_type.in.(${HEIC_MIMES.join(',')}),file_name.ilike.*.heic,file_name.ilike.*.heif`)
       .order('id', { ascending: true })
       .range(from, from + PAGE - 1);
@@ -458,8 +464,8 @@ async function convertRow(db, writer, fd, row, plan) {
 
 async function runConvert(db, opt) {
   const writer = makeWriter(db, opt.apply);
-  const rows = await readCandidates(db, { deleted: false });
-  const trashed = await readCandidates(db, { deleted: true });
+  const rows = await readCandidates(db, { deleted: false, onlyIds: opt.onlyIds });
+  const trashed = await readCandidates(db, { deleted: true, onlyIds: opt.onlyIds });
   const frozen = await readSiteVisitFreeze(db, rows);
   const shared = await readSharedPaths(db, rows.map((r) => r.file_path));
 
