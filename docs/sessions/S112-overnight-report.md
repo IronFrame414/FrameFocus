@@ -49,8 +49,24 @@ original stays full-res, but unmarked.
 
 **Recommendation: 1, client-side.** One rasteriser (`lib/markup/flatten-shapes.ts`, already shared
 by both surfaces), no new server renderer, and exports keep full resolution. The store and upload
-shrink to display size, so the 47s Fast 3G save drops by the upload share. The 3a number is below,
-so the ruling can be applied without another measurement.
+shrink to display size, so the 47s Fast 3G save drops by the upload share.
+
+**3a, measured, so this can be ruled without another session** (production build, sign-in reads only):
+
+| Surface | Largest drawn area | At its DPR |
+| --- | --- | --- |
+| `/m` viewer stage, 360/390/430 wide | 360–430 × 330 CSS px, `object-cover` | 3× → **1,290×1,720** (portrait) / **1,320×990** (landscape) |
+| Desktop file sheet (Files → View), 1440/1920/2560 wide | **1,024** × 763 / 925 / 1,249 CSS px, `object-contain` | 2× → **2,048** long edge (landscape); portrait at 1440p reaches 2,498 |
+| Desktop click on a photo | opens the markup **editor**, which draws the ORIGINAL — not a derivative consumer | — |
+
+- **Proposed size: 2,048 px long edge**, because it covers every surface above un-zoomed except
+  portrait on a 1440p Retina desktop.
+- **Caveat:** the `/m` viewer zooms up to 6× (`viewer.tsx` `MAX_ZOOM`), so past about 1.2× zoom a
+  2,048 image softens. The "show original" toggle stays full-res.
+- **Bytes on the real 12 MP photo:**
+  - 4,032×3,024: **1,846,387 B**
+  - **2,048×1,536: 557,985 B (−70%)**, with the 4×-CPU draw + encode dropping 2,085 → 1,275 ms
+  - 1,600×1,200: 358,478 B
 
 ## DONE AND PROVEN
 
@@ -82,6 +98,9 @@ _(none yet)_
 
 ## Log
 
+- 03:12Z — 3c built and committed locally on `feature/s112-markup-local-display` (`5ba64596`),
+  stacked on the fix branch; build exit 0, tsc exit 0. 3a measured (in R1). Waiting on main CI to
+  push and to run e2e.
 - 02:58Z — ruling 3b enumeration done: export consumers need full res → R1, resize NOT built.
   Report and audit branches pushed with `[skip ci]`; Actions API shows 0 runs on both.
 - 02:53Z — started. main is `528bc76b`. Fix branch rebased cleanly (`5b4172dd`, `5770e699`).
