@@ -291,6 +291,34 @@ because nothing revisits them. It's moot only if Josh's production count is 0.
 - The query is in OWED TO PRODUCTION. **Not run on production.**
 
 
+### Queue D — cost catalog importer (built, dry-run proven; NOT applied anywhere)
+
+`feature/s112-catalog-importer` → `scripts/import-cost-catalog.mjs`.
+
+- **How it works:** it signs in **as a user of the company**. `company_id` and `created_by` come
+  from the session defaults and RLS admits only Owner/Admin/PM, so the service key is never used.
+- **Dry run by default**; `--apply` writes. It's **idempotent**: names already in that company's
+  live catalog are skipped, and it never updates or deletes.
+- It validates every row against mirrors of the live CHECK sets.
+
+**Dry run on rebuild-test, both companies:**
+
+| Company | Existing items | Valid rows | Invalid | Already present | **Would insert** |
+| --- | --- | --- | --- | --- | --- |
+| Sabal Point Construction (A) | 2 | 282 | 0 | 0 | **282** |
+| Ridgeline Builders (B) | 0 | 282 | 0 | 0 | **282** |
+
+By category: concrete 20, drywall 22, electrical 36, fasteners 21, finishes 35, hardware 15,
+insulation 12, lumber 36, other 9, paint 12, plumbing 46, roofing 18 (= 282).
+
+**Controls that must fire, and did:**
+- A 2-row CSV with a bad category and a bad cost → 2 invalid reported by line, 0 to insert, exit 1.
+- A crew identity → `REFUSED`, exit 1.
+
+**Production counts are not measured** (production is off-limits tonight). They're Josh's dry run;
+see WHAT JOSH MUST CLICK.
+
+
 ## BUILT BUT UNTESTED
 
 - **S111 Part One — `retainage_releases` and `client_refunds` arms.** Both tables hold **0 rows
@@ -354,7 +382,20 @@ Nothing was run on production tonight. Each migration below carries the read-onl
 
 ## WHAT JOSH MUST CLICK
 
-_(none yet)_
+1. **Markup on a real phone, the human path** (`feature/s112-router-staleness`, and
+   `feature/s112-markup-local-display` on top): open a photo → ⋮ → Markup → draw → Save. The
+   viewer should come back **marked immediately** (no reload), and reopening Markup should show your
+   drawing. With 3c, the marked image should appear with no second download.
+2. **Cost catalog, production, one company at a time.** From the branch
+   `feature/s112-catalog-importer`, **dry run first**; it prints the count it would write:
+   ```
+   CATALOG_IMPORT_PASSWORD='<that user's password>' node scripts/import-cost-catalog.mjs \
+     --email <owner-of-company-1> --csv scripts/data/cost-catalog-home-depot-south-florida-2026-09-23.csv
+   ```
+   Then the same with `--apply`, then the same for the second company. It needs `apps/web/.env.local`
+   pointing at **production** (URL + anon key only; no service key).
+3. **Settings / Account / Timeclock in Spanish on a phone** once `feature/s112-audit-fixes` is
+   deployed: the dates (F4), "1 abierto" (F5), and the account form (F17).
 
 ## BRANCHES
 
