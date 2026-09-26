@@ -106,8 +106,7 @@ export async function getCoSupersession(changeOrderId: string): Promise<{
   };
 }
 
-const AUTHOR_JOIN =
-  'author:company_members!change_orders_author_member_id_fkey(id, display_name)';
+const AUTHOR_JOIN = 'author:company_members!change_orders_author_member_id_fkey(id, display_name)';
 
 /**
  * COs for a project, newest sequence first. Soft-deleted rows are
