@@ -25,8 +25,12 @@ Reference: `apps/web/test/s112-cdn-revocation-long.live.ts`.
 
 **Settled since, by the disposable run's smoke pass:** a file the revoked user had NEVER fetched is
 refused from t+0 (`400 BYPASS`) while the ones they had fetched keep being served — so the exposure
-is confined to objects already read. The full-length run (until the old token's reads stop, ≤ 8 h)
-is in progress; Josh's ruling: support is asked only with that number in hand, and no purge is built
+is confined to objects already read. **RULED [Josh]: 90 minutes, not 8 hours** — token and CDN max-age
+are both 3,600 s, so reads stopping near t+3600 means the token is the whole story, and only reads
+surviving past t+5400 would justify a longer run. It runs **in parallel** with CI (it shares
+nothing), and **the anon lockdown outranks it**. A name-based sweep (`S112_CDN_SWEEP=1`) clears a
+killed run: it removed the stopped 8 h run's tenant and login, 0/0/0 left. The 90-min run is in
+progress; Josh's ruling: support is asked only with that number in hand, and no purge is built
 for an unproven cause.
 
 **What this means for the policies hardened this week** (20261790000000, 1800, 1810, the R5b
