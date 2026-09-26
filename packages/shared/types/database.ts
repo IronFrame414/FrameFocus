@@ -10452,6 +10452,22 @@ export type Database = {
       next_project_internal_seq: { Args: never; Returns: number }
       next_project_number: { Args: never; Returns: string }
       owns_open_session: { Args: { p_session_id: string }; Returns: boolean }
+      pe_can_see_payment: { Args: { p_payment_id: string }; Returns: boolean }
+      pe_on_budget_item: {
+        Args: { p_budget_item_id: string }
+        Returns: boolean
+      }
+      pe_on_change_order: {
+        Args: { p_change_order_id: string }
+        Returns: boolean
+      }
+      pe_on_client_contract: {
+        Args: { p_client_contract_id: string }
+        Returns: boolean
+      }
+      pe_on_estimate: { Args: { p_estimate_id: string }; Returns: boolean }
+      pe_on_invoice: { Args: { p_invoice_id: string }; Returns: boolean }
+      pe_on_project: { Args: { p_project_id: string }; Returns: boolean }
       project_has_unsigned_contract: {
         Args: { p_project_id: string }
         Returns: boolean
