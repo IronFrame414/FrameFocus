@@ -5,7 +5,8 @@ import { companyToday } from '@framefocus/shared/utils/dates';
 import { SetMobileHeader } from '../mobile-header';
 import { EmptyState, ListRow, SectionLabel } from '../mobile-ui';
 import { ScrollToToday } from './scroll-to-today';
-import { getMobileT } from '@/lib/i18n/server';
+import { getMobileT, getMyLanguage } from '@/lib/i18n/server';
+import { dateLocale } from '@/lib/i18n/dates';
 import type { MsgKey, T } from '@/lib/i18n/messages';
 
 // M6M §4.13.2 — M-25 · Schedule. The company calendar as a LIST, not a grid:
@@ -35,9 +36,11 @@ const SOURCE_KEY: Record<CalendarEvent['source'], MsgKey> = {
   compliance: 'field.schedule.source.compliance',
 };
 
-function formatDay(iso: string): string {
+// [S112 audit F4] `locale` from dateLocale(): Spanish readers were shown English
+// weekdays and months. The zone stays UTC — these are date-only values.
+function formatDay(iso: string, locale: string): string {
   const [y, m, d] = iso.split('-').map(Number);
-  return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString('en-US', {
+  return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString(locale, {
     weekday: 'short',
     month: 'short',
     day: 'numeric',
@@ -51,11 +54,13 @@ function formatRange(start: string, end: string): string {
 }
 
 export default async function MobileSchedulePage() {
-  const [events, timeSettings, t] = await Promise.all([
+  const [events, timeSettings, t, lang] = await Promise.all([
     getCalendarEvents({}),
     getCompanyTimeSettings(),
     getMobileT(),
+    getMyLanguage(),
   ]);
+  const locale = dateLocale(lang);
 
   const today = companyToday(timeSettings.timezone);
 
@@ -91,7 +96,7 @@ export default async function MobileSchedulePage() {
           {/* Past days sit ABOVE today — "reachable by scrolling up" (§4.13.2),
               asserted by A-44d. They are not dropped. */}
           {past.map((day) => (
-            <DayGroup key={day} day={day} events={byDay.get(day)!} t={t} />
+            <DayGroup key={day} day={day} events={byDay.get(day)!} t={t} locale={locale} />
           ))}
 
           {/* The anchor ScrollToToday targets. It exists whether or not today
@@ -111,6 +116,7 @@ export default async function MobileSchedulePage() {
                 events={byDay.get(day)!}
                 isToday={day === today}
                 t={t}
+                locale={locale}
               />
             ))
           )}
@@ -125,16 +131,18 @@ function DayGroup({
   events,
   isToday = false,
   t,
+  locale,
 }: {
   day: string;
   events: CalendarEvent[];
   isToday?: boolean;
   t: T;
+  locale: string;
 }) {
   return (
     <section data-testid="m-day-group" data-day={day}>
       <SectionLabel>
-        {formatDay(day)}
+        {formatDay(day, locale)}
         {isToday ? ` · ${t('field.schedule.today')}` : ''}
       </SectionLabel>
       <ul className="rounded-[15px] border border-m6m-border bg-m6m-card px-[12px]">

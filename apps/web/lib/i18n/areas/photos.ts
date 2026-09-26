@@ -72,6 +72,11 @@ export const en = {
   'photos.viewer.deleteConfirm': 'Delete this photo?',
   'photos.viewer.deleting': 'Deleting…',
   'photos.viewer.keep': 'Keep',
+  'photos.viewer.preparing': 'Preparing…',
+  'photos.export.displaySize':
+    'The full-resolution version could not be built — this is the display-size marked-up image.',
+  'photos.export.unmarked': 'Markup image unavailable — this is the unmarked original.',
+  'photos.export.failed': 'The photo could not be prepared. Check your connection and try again.',
   'photos.badge.log': 'Log',
   'photos.badge.delivery': 'Delivery',
   'photos.badge.punch': 'Punch',
@@ -82,7 +87,19 @@ export const en = {
   'photos.grid.hasMarkup': 'Has markup',
   'photos.grid.deleteFailed': '{failed} of {total} could not be deleted.',
   'photos.grid.selected': '{n} selected',
+  // [S112 audit F5] Spanish agrees in number; English does not change.
+  'photos.grid.selectedOne': '{n} selected',
   'photos.grid.share': 'Share',
+  'photos.grid.preparing': 'Preparing…',
+  'photos.grid.unavailable': 'Unavailable',
+  // [S112 audit F10] Share outcomes — were English-only in lib/share-image.ts and shared/markup.
+  'photos.share.unsupported':
+    'This browser cannot share images. Save the photo and attach it instead.',
+  'photos.share.noUrl': 'That photo is not available to share right now.',
+  'photos.share.fetchFailed':
+    'The photo could not be loaded to share. Check your connection and try again.',
+  // [S112 R1 × F10, wave-1 merge] R1's outcome, keyed like the other three.
+  'photos.share.notAllowed': 'The photo is ready — tap Share again to send it.',
   'photos.grid.delete': 'Delete',
   'photos.grid.cancel': 'Cancel',
   'photos.grid.confirmDelete': 'Confirm delete',
@@ -276,6 +293,11 @@ export const es: Record<keyof typeof en, string> = {
   'photos.viewer.deleteConfirm': '¿Borrar esta foto?',
   'photos.viewer.deleting': 'Borrando…',
   'photos.viewer.keep': 'Conservar',
+  'photos.viewer.preparing': 'Preparando…',
+  'photos.export.displaySize':
+    'No se pudo crear la versión en resolución completa — esta es la imagen marcada en tamaño de pantalla.',
+  'photos.export.unmarked': 'Imagen marcada no disponible — este es el original sin marcas.',
+  'photos.export.failed': 'No se pudo preparar la foto. Revisa tu conexión e inténtalo de nuevo.',
   'photos.badge.log': 'Bitácora',
   'photos.badge.delivery': 'Entrega',
   'photos.badge.punch': 'Pendiente',
@@ -286,7 +308,16 @@ export const es: Record<keyof typeof en, string> = {
   'photos.grid.hasMarkup': 'Tiene marcas',
   'photos.grid.deleteFailed': 'No se pudieron borrar {failed} de {total}.',
   'photos.grid.selected': '{n} seleccionadas',
+  'photos.grid.selectedOne': '{n} seleccionada',
   'photos.grid.share': 'Compartir',
+  'photos.grid.preparing': 'Preparando…',
+  'photos.grid.unavailable': 'No disponible',
+  'photos.share.unsupported':
+    'Este navegador no puede compartir imágenes. Guarda la foto y adjúntala.',
+  'photos.share.noUrl': 'Esa foto no está disponible para compartir en este momento.',
+  'photos.share.fetchFailed':
+    'No se pudo cargar la foto para compartir. Revisa tu conexión e inténtalo de nuevo.',
+  'photos.share.notAllowed': 'La foto está lista — toca Compartir otra vez para enviarla.',
   'photos.grid.delete': 'Borrar',
   'photos.grid.cancel': 'Cancelar',
   'photos.grid.confirmDelete': 'Confirmar borrado',

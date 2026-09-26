@@ -30,7 +30,12 @@ export const en = {
   'project.type.time_and_materials': 'Time & Materials',
   'project.type.cost_plus': 'Cost Plus',
   // ── hub ──
-  'project.hub.punchLabel': '{mine} mine · {total} open',
+  // [S112 audit F5] Two counts, so two halves that each agree in number;
+  // joined with ' · '. English reads exactly as before: '{mine} mine · {total} open'.
+  'project.hub.punchMine': '{n} mine',
+  'project.hub.punchMineOne': '{n} mine',
+  'project.hub.punchOpen': '{n} open',
+  'project.hub.punchOpenOne': '{n} open',
   'project.hub.daysLeft': 'Days left',
   'project.hub.punch': 'Punch',
   'project.hub.nothingScheduled': 'Nothing scheduled',
@@ -45,6 +50,11 @@ export const en = {
   'project.overview.siteAddress': 'Site address',
   'project.overview.schedule': 'Schedule',
   'project.overview.noPhases': 'No phases yet.',
+  // [S112 audit F9] Phase status rendered as the raw token ('not_started').
+  'project.overview.status.not_started': 'Not started',
+  'project.overview.status.in_progress': 'In progress',
+  'project.overview.status.blocked': 'Blocked',
+  'project.overview.status.complete': 'Complete',
   'project.overview.details': 'Details',
   // ── schedule ──
   'project.schedule.empty': 'Nothing scheduled.',
@@ -108,7 +118,7 @@ export const en = {
   'project.coActions.deleteNote': 'Deleting leaves no record. To keep one, void it instead.',
   // ── change orders: create ──
   'project.coCreate.typeFixed': 'Fixed price',
-  'project.coCreate.typeFixedSub': 'a agreed lump sum',
+  'project.coCreate.typeFixedSub': 'an agreed lump sum',
   'project.coCreate.typeCostPlus': 'Cost plus',
   'project.coCreate.typeCostPlusSub': 'cost with markup applied',
   'project.coCreate.typeTm': 'Time & materials',
@@ -277,7 +287,10 @@ export const es: Record<keyof typeof en, string> = {
   'project.type.fixed_price': 'Precio fijo',
   'project.type.time_and_materials': 'Tiempo y materiales',
   'project.type.cost_plus': 'Costo más margen',
-  'project.hub.punchLabel': '{mine} míos · {total} abiertos',
+  'project.hub.punchMine': '{n} míos',
+  'project.hub.punchMineOne': '{n} mío',
+  'project.hub.punchOpen': '{n} abiertos',
+  'project.hub.punchOpenOne': '{n} abierto',
   'project.hub.daysLeft': 'Días restantes',
   'project.hub.punch': 'Pendientes',
   'project.hub.nothingScheduled': 'Nada programado',
@@ -291,6 +304,10 @@ export const es: Record<keyof typeof en, string> = {
   'project.overview.siteAddress': 'Dirección de la obra',
   'project.overview.schedule': 'Calendario',
   'project.overview.noPhases': 'Todavía no hay fases.',
+  'project.overview.status.not_started': 'Sin empezar',
+  'project.overview.status.in_progress': 'En curso',
+  'project.overview.status.blocked': 'Bloqueada',
+  'project.overview.status.complete': 'Terminada',
   'project.overview.details': 'Detalles',
   'project.schedule.empty': 'Nada programado.',
   'project.schedule.todaySuffix': ' · Hoy',

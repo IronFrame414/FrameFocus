@@ -138,6 +138,14 @@ export function isThumbnailPath(path: string): boolean {
 //
 // Pure, and separated from the share button, so the rule is assertable without
 // a browser or a network.
+//
+// [S112 R1] NO LONGER CALLED BY THE VIEWER. Exports now REBUILD a marked photo
+// at full resolution from the original + markup_data, so a missing derivative
+// no longer forces an unmarked share. The rule this function states — warn
+// exactly when the bytes lack the marks — is carried by exportPhotoBlob
+// (apps/web/lib/markup/export-marked.ts), which falls back to the stored
+// derivative and only then to the original WITH a warning. Kept as the
+// URL-level statement of A-23t and for its tests.
 // ---------------------------------------------------------------------------
 export interface ShareTarget {
   url: string | null;

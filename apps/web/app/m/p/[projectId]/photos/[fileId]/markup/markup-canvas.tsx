@@ -9,7 +9,6 @@ import { saveMarkup, type MarkupSaveResult } from '@/lib/services/photos-client'
 // Moved out of this route folder for #129 [S122] — the desktop editor now
 // writes the SAME derivative from the SAME rasteriser. A flattener living under
 // /m implied mobile owned the format; it does not.
-import { drawShapes } from '@/lib/markup/flatten-shapes';
 import { useT } from '@/components/i18n/language-provider';
 import type { MsgKey } from '@/lib/i18n/messages';
 
@@ -280,8 +279,7 @@ export function MarkupCanvas({
       filePath,
       originalUrl,
       shapes,
-      imageDims,
-      drawShapes
+      imageDims
     );
 
     setSaving(false);
@@ -289,11 +287,18 @@ export function MarkupCanvas({
     if (result.status === 'saved') {
       setDirty(false);
       // A-23i / A-23k — all three surfaces flip to the (re)generated derivative
-      // WITHOUT A RELOAD. router.refresh() re-runs the server components, which
-      // re-sign the derivative URL; push then lands on a viewer already showing
-      // the new bytes.
-      router.refresh();
+      // WITHOUT A RELOAD.
+      //
+      // ⚠️ PUSH FIRST, THEN REFRESH [S112]. This was `refresh(); push()`, and
+      // Next 14.2's action queue DISCARDS a pending action when a navigation
+      // arrives (action-queue.js — "the state is never applied"), so the
+      // refresh was thrown away and push landed on the viewer the client
+      // already held: the pre-save page, unmarked, and a reopened editor with
+      // no shapes. A refresh dispatched AFTER the push is queued behind it, so
+      // it runs on the viewer and drops every cached page, including this
+      // editor's, which Back would otherwise restore.
       router.push(returnHref);
+      router.refresh();
       return;
     }
 

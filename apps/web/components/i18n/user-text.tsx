@@ -136,11 +136,23 @@ export function UserText({
           <button
             type="button"
             data-testid="usertext-toggle"
-            onClick={() => setShowOriginal((v) => !v)}
+            // [S112 audit F7] Stop here. On /m/logs this sits INSIDE a row
+            // <Link>, and Next's Link navigates on any click that bubbles up
+            // un-prevented — so tapping "show original" opened the log instead.
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setShowOriginal((v) => !v);
+            }}
+            // …and a 44px-tall target (M6M §2) around the unchanged 11px text;
+            // the negative margin keeps the line where it was. Was 74x14.
+            // 16px, not 15: the 11px text's line box is 13.75px, so 15px
+            // measured 43.75 — under the floor by a quarter pixel.
             style={{
               background: 'none',
               border: 'none',
-              padding: 0,
+              padding: '16px 0',
+              margin: '-16px 0',
               color: '#2f49d1',
               cursor: 'pointer',
               fontSize: '11px',

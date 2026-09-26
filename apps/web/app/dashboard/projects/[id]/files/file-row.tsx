@@ -9,6 +9,7 @@ import AiTagEditor from './ai-tag-editor';
 import type { TagOption } from '@/lib/services/tag-options';
 import { rowActivation } from '@/components/list-screen/row-activation';
 import { useFileSheet } from '@/components/files/file-sheet';
+import { sheetExportFromPath } from '@/lib/markup/export-marked';
 
 export default function FileRow({
   file,
@@ -46,6 +47,16 @@ export default function FileRow({
         const { url } = (await res.json()) as { url?: string };
         return url ?? null;
       },
+      // [S112 R1] The sheet SHOWS the display-size derivative; its Download
+      // rebuilds full resolution from the original + markup_data, signing
+      // both at click time (never per row at list load).
+      exportBlob: annotated
+        ? sheetExportFromPath({
+            filePath: file.file_path,
+            markup: file.markup_data,
+            fileName: file.file_name,
+          })
+        : undefined,
     });
   }
 
@@ -129,6 +140,7 @@ export default function FileRow({
           fileName={file.file_name}
           mimeType={file.mime_type}
           annotated={annotated}
+          markup={file.markup_data}
           projectId={projectId}
         />
       </td>

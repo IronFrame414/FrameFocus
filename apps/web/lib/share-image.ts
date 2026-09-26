@@ -1,4 +1,5 @@
 'use client';
+import type { T } from '@/lib/i18n/messages';
 
 // SHARING A PHOTO — THE BYTES, NOT A CAPTION. [S121]
 //
@@ -43,11 +44,21 @@
 // so `fetch` on the same URL is normally served from cache. On a cold cache it
 // is one request the user explicitly asked for by tapping Share.
 
-export type ShareImage = { url: string | null; fileName: string };
+// [S112 R1] A share item is a URL to fetch OR bytes already built. A marked-up
+// photo is shared as a full-resolution rebuild made in the browser
+// (lib/markup/export-marked.ts) — there is no URL for it, so a URL-only
+// signature could only ever send the display-size stored derivative.
+// A `blob: null` means the caller could not produce bytes (fetch-failed).
+export type ShareImage =
+  | { url: string | null; fileName: string }
+  | { blob: Blob | null; fileName: string };
 
 export type ShareOutcome =
   | { ok: true }
-  | { ok: false; reason: 'unsupported' | 'no-url' | 'fetch-failed' | 'cancelled' };
+  | {
+      ok: false;
+      reason: 'unsupported' | 'no-url' | 'fetch-failed' | 'cancelled' | 'not-allowed';
+    };
 
 type ShareCapableNavigator = Navigator & {
   share?: (data: ShareData) => Promise<void>;
@@ -73,6 +84,17 @@ async function fileFromUrl(url: string, fileName: string): Promise<File | null> 
 }
 
 /**
+ * [S112 R1] Cheap pre-check, so a surface does not spend seconds rebuilding a
+ * full-resolution image for a browser that has no share sheet at all.
+ */
+export function shareSupported(): boolean {
+  return (
+    typeof navigator !== 'undefined' &&
+    typeof (navigator as ShareCapableNavigator).share === 'function'
+  );
+}
+
+/**
  * Share one or more images as FILES.
  *
  * Returns an outcome rather than throwing, so the caller can put the right
@@ -83,11 +105,21 @@ export async function shareImages(images: ShareImage[]): Promise<ShareOutcome> {
   const nav = navigator as ShareCapableNavigator;
   if (!nav.share) return { ok: false, reason: 'unsupported' };
 
-  const withUrls = images.filter((i): i is ShareImage & { url: string } => Boolean(i.url));
-  if (withUrls.length === 0) return { ok: false, reason: 'no-url' };
+  // A blob item counts as a source even when null — its bytes were attempted,
+  // so an all-null set is `fetch-failed`, not `no-url`.
+  const sources = images.filter((i) => ('blob' in i ? true : Boolean(i.url)));
+  if (sources.length === 0) return { ok: false, reason: 'no-url' };
 
   const files = (
-    await Promise.all(withUrls.map((i) => fileFromUrl(i.url, i.fileName)))
+    await Promise.all(
+      sources.map((i) =>
+        'blob' in i
+          ? i.blob
+            ? new File([i.blob], i.fileName, { type: i.blob.type || 'image/jpeg' })
+            : null
+          : fileFromUrl(i.url as string, i.fileName)
+      )
+    )
   ).filter((f): f is File => f !== null);
 
   if (files.length === 0) return { ok: false, reason: 'fetch-failed' };
@@ -100,22 +132,39 @@ export async function shareImages(images: ShareImage[]): Promise<ShareOutcome> {
   try {
     await nav.share({ files });
     return { ok: true };
-  } catch {
+  } catch (err) {
+    // [S112 R1] NotAllowedError = the browser no longer counts this as a
+    // response to the tap. `share()` needs transient user activation (~5 s),
+    // and a full-resolution rebuild of a 12 MP photo can take most of that on
+    // a phone. It is NOT a cancel and must not be silent — the caller keeps
+    // the bytes it built, so a second tap shares at once.
+    if ((err as { name?: unknown } | null)?.name === 'NotAllowedError') {
+      return { ok: false, reason: 'not-allowed' };
+    }
     // A dismissed sheet is a cancel, not an error — the distinction the old
     // code drew correctly and which is preserved here.
     return { ok: false, reason: 'cancelled' };
   }
 }
 
-/** The sentence for each non-cancel outcome. `cancelled` says nothing. */
-export function shareFailureNote(reason: Exclude<ShareOutcome, { ok: true }>['reason']): string | null {
+/**
+ * The sentence for each non-cancel outcome. `cancelled` says nothing.
+ * [S112 audit F10] Takes the caller's `t` — this was English-only, and the /m
+ * viewer showed it visibly to Spanish users.
+ */
+export function shareFailureNote(
+  reason: Exclude<ShareOutcome, { ok: true }>['reason'],
+  t: T
+): string | null {
   switch (reason) {
     case 'unsupported':
-      return 'This browser cannot share images. Save the photo and attach it instead.';
+      return t('photos.share.unsupported');
     case 'no-url':
-      return 'That photo is not available to share right now.';
+      return t('photos.share.noUrl');
     case 'fetch-failed':
-      return 'The photo could not be loaded to share. Check your connection and try again.';
+      return t('photos.share.fetchFailed');
+    case 'not-allowed':
+      return t('photos.share.notAllowed');
     case 'cancelled':
       return null;
   }

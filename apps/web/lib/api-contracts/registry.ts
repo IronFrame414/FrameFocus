@@ -106,6 +106,9 @@ export const ROUTE_CONTRACTS: RouteContract[] = [
       'app/dashboard/projects/[id]/files/file-row.tsx': ['url'],
       // /m open-file distinguishes 403 from 500 by STATUS; reads only `url`.
       'app/m/p/[projectId]/files/open-file.tsx': ['url'],
+      // [S112 R1] signs original + derivative at Download time for the
+      // full-res export (signExportUrls); reads only `url`.
+      'lib/markup/export-marked.ts': ['url'],
       'e2e/m-details.spec.ts': [],
       // TECH_DEBT #142 — the error contract.
       'test/signed-url-error-contract.test.ts': ['error'],

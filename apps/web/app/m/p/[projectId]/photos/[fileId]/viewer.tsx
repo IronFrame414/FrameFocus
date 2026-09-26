@@ -5,9 +5,19 @@ import { useRouter } from 'next/navigation';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight, X, MoreVertical } from 'lucide-react';
 import { softDeleteFile } from '@/lib/services/files-client';
-import { shareTargetFor } from '@framefocus/shared/utils/markup';
-import { shareFailureNote, shareImages } from '@/lib/share-image';
-import { useT } from '@/components/i18n/language-provider';
+import type { MarkupData } from '@framefocus/shared/types/markup';
+import { localDerivativeFor } from '@/lib/photos/local-derivative';
+import { shareFailureNote, shareImages, shareSupported } from '@/lib/share-image';
+import {
+  exportFileName,
+  exportPhotoBlob,
+  storedDerivativeResolver,
+  exportWarningKind,
+  saveBlobAs,
+  type ExportedPhoto,
+} from '@/lib/markup/export-marked';
+import { useT, useUiLang } from '@/components/i18n/language-provider';
+import { dateLocale } from '@/lib/i18n/dates';
 
 // M6M §4.9 — M-9 · Photo viewer. Dark canvas #0d1220.
 //
@@ -45,6 +55,16 @@ export type ViewerPhoto = {
   thumbUrl: string | null;
   originalUrl: string | null;
   hasMarkup: boolean;
+  /**
+   * [S112 R1] PhotoRecord.markup — the mark list. Save and Share REBUILD the
+   * image at full resolution from `originalUrl` + this; the stored derivative
+   * (`displayUrl`) is display-size and is only the fallback.
+   */
+  markup: MarkupData | null;
+  /** [S112 R1 (a)] files.file_path — see exportPhotoBlob's lost-mark-list branch. */
+  filePath: string;
+  /** [S112] PhotoRecord.markupFingerprint — keys the just-saved local image. */
+  markupFingerprint: string | null;
   derivativeMissing: boolean;
   source: 'log' | 'delivery' | 'safety' | 'punch' | null;
   sourceId: string | null;
@@ -58,6 +78,20 @@ export type ViewerPhoto = {
 const ZOOM_STEP = 1.5;
 const MIN_ZOOM = 1;
 const MAX_ZOOM = 6;
+
+/**
+ * A filmstrip square's image. [S112 3c] Right after a save the new thumbnail
+ * usually does not exist yet (its name carries the new markup fingerprint), so
+ * the server hands back the FULL derivative as `thumbUrl` — the same signed URL
+ * as the stage — and this 52px square would download the whole 2 MB file the
+ * stage just stopped downloading. A real stored thumbnail still wins; only the
+ * full-file fallback yields to the image this tab just built.
+ */
+function filmstripSrc(p: ViewerPhoto): string | null {
+  const isRealThumb = p.thumbUrl !== null && p.thumbUrl !== p.displayUrl;
+  if (isRealThumb) return p.thumbUrl;
+  return localDerivativeFor(p.id, p.markupFingerprint) ?? p.thumbUrl ?? p.displayUrl;
+}
 
 export function PhotoViewer({
   photos,
@@ -84,6 +118,7 @@ export function PhotoViewer({
 }) {
   const router = useRouter();
   const t = useT();
+  const uiLang = useUiLang();
   const photo = photos[index];
 
   const [showOriginal, setShowOriginal] = useState(false);
@@ -93,12 +128,25 @@ export function PhotoViewer({
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
+  // [S112 R1] Save / Share build their bytes first (a full-res rebuild takes
+  // 1.5–3 s on a phone), so each tile shows a busy state while it does.
+  const [exporting, setExporting] = useState<'save' | 'share' | null>(null);
+  // The last export, kept for this photo + markup. A second tap is instant —
+  // which is what makes a Share whose activation expired during the rebuild
+  // (share-image 'not-allowed') recoverable with one more tap.
+  const lastExport = useRef<{ key: string; result: ExportedPhoto } | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
 
   // WHICH FILE IS ON SCREEN. `displayUrl` is the derivative for an annotated
   // photo; the toggle swaps to `originalUrl`. One expression, so the two can
   // never disagree.
-  const src = showOriginal ? photo.originalUrl : photo.displayUrl;
+  // [S112 3c] Right after a save, the image this tab just BUILT is shown in
+  // place of the stored derivative — the same bytes, without downloading them
+  // back. Only while the server's markup fingerprint matches what they were
+  // built from (lib/photos/local-derivative.ts); otherwise the stored file.
+  const src = showOriginal
+    ? photo.originalUrl
+    : (localDerivativeFor(photo.id, photo.markupFingerprint) ?? photo.displayUrl);
 
   const goto = useCallback(
     (i: number) => {
@@ -179,7 +227,10 @@ export function PhotoViewer({
       if (!d) return;
       // Clamped to the SAME bounds the buttons use, so the two routes to zoom
       // cannot disagree about how far in is too far.
-      const next = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, pinch.current.zoom * (d / pinch.current.distance)));
+      const next = Math.min(
+        MAX_ZOOM,
+        Math.max(MIN_ZOOM, pinch.current.zoom * (d / pinch.current.distance))
+      );
       setZoom(next);
       // Pinching back out to 1 re-centres, matching what the fit button does —
       // otherwise the photo settles off-centre with no way to tell why.
@@ -228,22 +279,82 @@ export function PhotoViewer({
     router.push(`/m/p/${projectId}/photos`);
   }, [projectId, router]);
 
-  async function share() {
-    // A-23t — a marked-up photo whose derivative is missing degrades to the
-    // ORIGINAL and SAYS SO. It never silently shares an unmarked photo as if it
-    // were marked: the sub receiving it would have no way to know the circle
-    // showing which stud was meant never made it.
-    const target = shareTargetFor(photo);
-    if (target.warning) setNote(target.warning);
+  /**
+   * [S112 R1] THE BYTES THAT LEAVE THE APP — lib/markup/export-marked.ts.
+   *
+   * A marked photo is rebuilt at FULL resolution from the original + its mark
+   * list, through the same rasteriser the save uses. If that fails, the stored
+   * display-size derivative goes instead; if THAT is missing too, the original
+   * goes WITH A-23t's warning — never silently unmarked. (_Superseded, quoted:_
+   * Save was `href={photo.displayUrl} download`, and Share sent
+   * `shareTargetFor(photo).url` — both the stored derivative, which is now
+   * display-size.)
+   */
+  async function buildExport(): Promise<ExportedPhoto | null> {
+    const key = `${photo.id}:${photo.markupFingerprint ?? ''}`;
+    if (lastExport.current?.key === key) return lastExport.current.result;
+    const result = await exportPhotoBlob({
+      originalUrl: photo.originalUrl,
+      markup: photo.markup,
+      // The STORED derivative, or null when there is none — never the
+      // original (displayUrl IS the original when the derivative is missing).
+      fallbackUrl:
+        photo.hasMarkup && !photo.derivativeMissing
+          ? (localDerivativeFor(photo.id, photo.markupFingerprint) ?? photo.displayUrl)
+          : null,
+      // [S112 R1 (a)] No mark list on the row: look for a stored derivative at
+      // export time (lost markup_data), rather than exporting unmarked.
+      resolveStoredDerivative: photo.hasMarkup
+        ? undefined
+        : storedDerivativeResolver(photo.filePath),
+    });
+    if (result) lastExport.current = { key, result };
+    return result;
+  }
 
-    // ⚠️ THE BYTES, NOT A CAPTION [S121]. `target.url` was computed here and
-    // then DISCARDED — the sheet opened and transmitted the filename, so
-    // A-23t's whole marked-vs-original decision could not matter. See
-    // lib/share-image.ts, including why there is deliberately no fall back to
-    // sharing the signed URL.
-    const outcome = await shareImages([{ url: target.url, fileName: photo.file_name }]);
+  function noteExportWarning(result: ExportedPhoto) {
+    const kind = exportWarningKind(result);
+    if (kind === 'display-size') setNote(t('photos.export.displaySize'));
+    if (kind === 'unmarked') setNote(t('photos.export.unmarked'));
+  }
+
+  async function save() {
+    if (exporting) return;
+    setExporting('save');
+    const result = await buildExport();
+    setExporting(null);
+    if (!result) {
+      setNote(t('photos.export.failed'));
+      return;
+    }
+    noteExportWarning(result);
+    saveBlobAs(result.blob, exportFileName(photo.file_name, result.source));
+  }
+
+  async function share() {
+    if (exporting) return;
+    // Before the rebuild, not after: a browser with no share sheet should not
+    // spend seconds building an image it can never send.
+    if (!shareSupported()) {
+      setNote(shareFailureNote('unsupported', t));
+      return;
+    }
+    setExporting('share');
+    const result = await buildExport();
+    setExporting(null);
+    // A-23t — a marked photo that could only be exported unmarked SAYS SO.
+    if (result) noteExportWarning(result);
+
+    // ⚠️ THE BYTES, NOT A CAPTION [S121] — and never the signed URL. See
+    // lib/share-image.ts.
+    const outcome = await shareImages([
+      {
+        blob: result?.blob ?? null,
+        fileName: result ? exportFileName(photo.file_name, result.source) : photo.file_name,
+      },
+    ]);
     if (!outcome.ok) {
-      const note = shareFailureNote(outcome.reason);
+      const note = shareFailureNote(outcome.reason, t);
       // A degrade warning already on screen outranks nothing; only overwrite it
       // when there is something to say.
       if (note) setNote(note);
@@ -263,17 +374,19 @@ export function PhotoViewer({
     router.refresh();
   }
 
-  // Date formatting, not copy — stays as is (the locale is the shared date rule).
+  // [S112 audit F4] Superseded note, quoted: "Date formatting, not copy — stays
+  // as is (the locale is the shared date rule)." No ruling kept dates English;
+  // Spanish readers saw "Aug 25, 2026, 9:06 PM". The words follow the reader.
   const takenText = useMemo(() => {
     if (!photo.takenAt) return '—';
-    return new Date(photo.takenAt).toLocaleString('en-US', {
+    return new Date(photo.takenAt).toLocaleString(dateLocale(uiLang), {
       year: 'numeric',
       month: 'short',
       day: 'numeric',
       hour: 'numeric',
       minute: '2-digit',
     });
-  }, [photo.takenAt]);
+  }, [photo.takenAt, uiLang]);
 
   return (
     <div className="flex min-h-full flex-col bg-m6m-canvas text-white">
@@ -527,10 +640,7 @@ export function PhotoViewer({
       {/* ---------------------------------------------------------------- */}
       {/* §4.9 FILMSTRIP — 52px squares, current ringed amber               */}
       {/* ---------------------------------------------------------------- */}
-      <div
-        data-testid="m-filmstrip"
-        className="mt-[12px] flex gap-[7px] overflow-x-auto px-[18px]"
-      >
+      <div data-testid="m-filmstrip" className="mt-[12px] flex gap-[7px] overflow-x-auto px-[18px]">
         {photos.map((p, i) => (
           <Link
             key={p.id}
@@ -539,20 +649,16 @@ export function PhotoViewer({
             data-current={i === index ? 'true' : 'false'}
             aria-current={i === index ? 'true' : undefined}
             className="relative block h-[52px] w-[52px] shrink-0 overflow-hidden rounded-[8px] bg-[#161d2f]"
-            style={
-              i === index
-                ? { boxShadow: '0 0 0 2px #f59e0b' }
-                : { opacity: 0.45 }
-            }
+            style={i === index ? { boxShadow: '0 0 0 2px #f59e0b' } : { opacity: 0.45 }}
           >
             {/* The filmstrip is the THIRD surface D-31 governs — it shows the
                 same flat file the stage and the gallery do (A-23g).
                 [S111 D] …as its stored THUMBNAIL (same pixels, 400px), with the
                 full file as the fallback — never a missing square. */}
-            {(p.thumbUrl ?? p.displayUrl) ? (
+            {filmstripSrc(p) ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
-                src={(p.thumbUrl ?? p.displayUrl)!}
+                src={filmstripSrc(p)!}
                 alt=""
                 data-testid="m-filmstrip-image"
                 className="h-full w-full object-cover"
@@ -593,12 +699,17 @@ export function PhotoViewer({
           </button>
         </div>
 
-        <dl className="mt-[14px] border-t pt-[12px]" style={{ borderColor: 'rgba(255,255,255,.08)' }}>
+        <dl
+          className="mt-[14px] border-t pt-[12px]"
+          style={{ borderColor: 'rgba(255,255,255,.08)' }}
+        >
           <Row label={t('photos.viewer.taken')} value={takenText} mono />
           <Row label={t('photos.viewer.by')} value={photo.by ?? '—'} />
           {photo.sourceHref ? (
             <div className="flex items-center gap-[10px] py-[8px]">
-              <dt className="w-[70px] shrink-0 text-[13px] text-m6m-muted-navy">{t('photos.viewer.source')}</dt>
+              <dt className="w-[70px] shrink-0 text-[13px] text-m6m-muted-navy">
+                {t('photos.viewer.source')}
+              </dt>
               {/* A-25c — tapping Source navigates to the record it came from. */}
               <dd className="min-w-0 flex-1">
                 <Link
@@ -617,7 +728,11 @@ export function PhotoViewer({
       </div>
 
       {note ? (
-        <p data-testid="m-viewer-note" role="status" className="px-[18px] pt-[8px] text-[13px] text-[#f0908a]">
+        <p
+          data-testid="m-viewer-note"
+          role="status"
+          className="px-[18px] pt-[8px] text-[13px] text-[#f0908a]"
+        >
           {note}
         </p>
       ) : null}
@@ -631,13 +746,22 @@ export function PhotoViewer({
         className="mt-auto grid grid-cols-4 gap-[8px] px-[18px] pb-[18px] pt-[18px]"
         style={{ paddingBottom: 'calc(18px + env(safe-area-inset-bottom))' }}
       >
+        {/* [S112 R1] A BUTTON, not `<a href={displayUrl} download>`: the
+            stored derivative is display-size, so the full-res file has to be
+            built first. (The old anchor's `download` was also ignored — the
+            signed URL is cross-origin — so it opened the image, not saved it.) */}
         <ActionTile
           testId="m-action-save"
-          label={t('photos.viewer.save')}
-          href={photo.displayUrl ?? undefined}
-          download={photo.file_name}
+          label={exporting === 'save' ? t('photos.viewer.preparing') : t('photos.viewer.save')}
+          onClick={save}
+          busy={exporting !== null}
         />
-        <ActionTile testId="m-action-share" label={t('photos.viewer.share')} onClick={share} />
+        <ActionTile
+          testId="m-action-share"
+          label={exporting === 'share' ? t('photos.viewer.preparing') : t('photos.viewer.share')}
+          onClick={share}
+          busy={exporting !== null}
+        />
         <ActionTile testId="m-action-comment" label={t('photos.viewer.comment')} disabled />
         {/* A-25d — absent entirely for a role files_delete_owner_admin refuses. */}
         {canDelete ? (
@@ -701,18 +825,17 @@ function ActionTile({
   testId,
   label,
   onClick,
-  href,
-  download,
   danger,
   disabled,
+  busy,
 }: {
   testId: string;
   label: string;
   onClick?: () => void;
-  href?: string;
-  download?: string;
   danger?: boolean;
   disabled?: boolean;
+  /** [S112 R1] An export is being built — not tappable, but not greyed out. */
+  busy?: boolean;
 }) {
   const cls = `flex h-[56px] flex-col items-center justify-center rounded-[12px] text-[12px] font-semibold ${
     danger ? 'text-[#f0908a]' : 'text-white'
@@ -721,15 +844,16 @@ function ActionTile({
     ? { backgroundColor: 'rgba(192,54,44,.16)' }
     : { backgroundColor: 'rgba(255,255,255,.08)' };
 
-  if (href && !disabled) {
-    return (
-      <a href={href} download={download} data-testid={testId} className={cls} style={style}>
-        {label}
-      </a>
-    );
-  }
   return (
-    <button type="button" data-testid={testId} onClick={onClick} disabled={disabled} className={cls} style={style}>
+    <button
+      type="button"
+      data-testid={testId}
+      onClick={onClick}
+      disabled={disabled || busy}
+      aria-busy={busy || undefined}
+      className={cls}
+      style={style}
+    >
       {label}
     </button>
   );

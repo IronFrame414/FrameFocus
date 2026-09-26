@@ -5,6 +5,8 @@ import { useCallback, useEffect, useRef, useState, useMemo } from 'react';
 import { RotateCw } from 'lucide-react';
 import { color, font } from '@/lib/theme';
 import type { ChatMessageWithPhotos } from '@/lib/chat/photos';
+import { hasMarkup } from '@framefocus/shared/utils/markup';
+import { sheetExportFromUrls } from '@/lib/markup/export-marked';
 import type { ThreadKind } from '@/lib/chat/threads';
 import { useChatThread } from './use-chat-thread';
 import { ChatComposer } from './chat-composer';
@@ -196,7 +198,8 @@ export function ChatThreadView({
             : t('shell.chat.someone');
           const prev = all[i - 1];
           const newDay =
-            !prev || new Date(prev.created_at).toDateString() !== new Date(m.created_at).toDateString();
+            !prev ||
+            new Date(prev.created_at).toDateString() !== new Date(m.created_at).toDateString();
 
           return (
             <div key={m.id}>
@@ -288,10 +291,30 @@ export function ChatThreadView({
                           // it). The href stays: a modified click (Cmd/Ctrl, middle)
                           // still opens a new tab, and the D-31 signed-URL test reads it.
                           onClick={(e) => {
-                            if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+                            if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey)
+                              return;
                             e.preventDefault();
                             const url = photo.displayUrl!;
-                            openFile({ fileName: photo.fileName, mimeType: 'image/jpeg', resolveUrl: async () => url });
+                            openFile({
+                              fileName: photo.fileName,
+                              mimeType: 'image/jpeg',
+                              resolveUrl: async () => url,
+                              // [S112 R1] The sheet shows the display-size
+                              // derivative; Download rebuilds full resolution
+                              // from the original + marks (built at click).
+                              // [S112 R1 (a), Josh Q4] ALSO for an unmarked row:
+                              // one that lost its mark list still has a stored
+                              // derivative. Resolved by FILE ID — chat never
+                              // holds a path (D-31).
+                              exportBlob: sheetExportFromUrls({
+                                originalUrl: photo.originalUrl,
+                                markup: photo.markup,
+                                fallbackUrl:
+                                  hasMarkup(photo.markup) && !photo.derivativeMissing ? url : null,
+                                fileName: photo.fileName,
+                                fileId: photo.fileId,
+                              }),
+                            });
                           }}
                           title={photo.fileName}
                           style={{
@@ -328,7 +351,12 @@ export function ChatThreadView({
           <div
             key={p.tempId}
             data-testid={p.state === 'failed' ? 'chat-message-failed' : 'chat-message-sending'}
-            style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', marginBottom: '10px' }}
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'flex-end',
+              marginBottom: '10px',
+            }}
           >
             <div
               style={{
