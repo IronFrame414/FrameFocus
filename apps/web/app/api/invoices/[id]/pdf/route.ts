@@ -84,8 +84,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
 
   const stem = invoice.invoice_number ?? `draft-${params.id.slice(0, 8)}`;
   const fileName = `invoice-${stem}${isDraft ? '-DRAFT' : ''}.pdf`;
-  const disposition =
-    request.nextUrl.searchParams.get('download') === '1' ? 'attachment' : 'inline';
+  const disposition = request.nextUrl.searchParams.get('download') === '1' ? 'attachment' : 'inline';
 
   return new NextResponse(new Uint8Array(buffer), {
     status: 200,

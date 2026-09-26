@@ -153,7 +153,9 @@ export function isDerivedContract(contractType: ContractType): boolean {
  * is legal and the PER-LINE split keeps T&M money out of the base.
  */
 export function anyRetainableInstrument(types: InstrumentTypes): boolean {
-  return [...Object.values(types.byKey), types.fallback].some((t) => t !== 'time_and_materials');
+  return [...Object.values(types.byKey), types.fallback].some(
+    (t) => t !== 'time_and_materials'
+  );
 }
 
 export interface PickableCost {
@@ -314,7 +316,9 @@ export interface VoidContext {
   status: InvoiceStatus;
 }
 
-export type VoidDecision = { allowed: true; warning?: string } | { allowed: false; reason: string };
+export type VoidDecision =
+  | { allowed: true; warning?: string }
+  | { allowed: false; reason: string };
 
 /**
  * §9's actor matrix, as a pure decision so it can be proven:

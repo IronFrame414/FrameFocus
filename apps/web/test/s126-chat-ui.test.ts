@@ -239,7 +239,9 @@ describe('A-C41 — the transport stays behind lib/chat', () => {
   });
 
   it('the poll comes from lib/chat/poll.ts', () => {
-    expect(read('../components/chat/use-chat-thread.ts')).toContain("from '@/lib/chat/poll'");
+    expect(read('../components/chat/use-chat-thread.ts')).toContain(
+      "from '@/lib/chat/poll'"
+    );
     expect(read('../components/chat/use-chat-thread.ts')).toContain('createChatPoll');
   });
 

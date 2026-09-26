@@ -48,14 +48,7 @@ describe('§9-A — payment arrives and is applied', () => {
   it('the invoice stays OPEN and keeps ageing on the $6,200', () => {
     expect(isSettled(RECEIVABLE, [live(10000)])).toBe(false);
     const summary = ageReceivables(
-      [
-        invoice({
-          id: 'i1',
-          amount_receivable: RECEIVABLE,
-          retainage_withheld: 1800,
-          applications: [live(10000)],
-        }),
-      ],
+      [invoice({ id: 'i1', amount_receivable: RECEIVABLE, retainage_withheld: 1800, applications: [live(10000)] })],
       '2026-06-15'
     );
     expect(summary.totalOutstanding).toBe(6200);
@@ -64,14 +57,7 @@ describe('§9-A — payment arrives and is applied', () => {
 
   it('THE LOAD-BEARING RULE: the $1,800 retainage does NOT age', () => {
     const summary = ageReceivables(
-      [
-        invoice({
-          id: 'i1',
-          amount_receivable: RECEIVABLE,
-          retainage_withheld: 1800,
-          applications: [live(10000)],
-        }),
-      ],
+      [invoice({ id: 'i1', amount_receivable: RECEIVABLE, retainage_withheld: 1800, applications: [live(10000)] })],
       '2026-06-15'
     );
     // Shown separately...
@@ -156,7 +142,9 @@ describe('§9-C — overpayment, mid-job then final', () => {
 
   it('the credit is never auto-applied — it sits until a user places it (§3)', () => {
     // Nothing in this module applies a credit; it only reports what is available.
-    const balance = clientCreditBalance([{ id: 'p1', amount: 6500, applications: [live(6200)] }]);
+    const balance = clientCreditBalance([
+      { id: 'p1', amount: 6500, applications: [live(6200)] },
+    ]);
     expect(balance).toBe(300);
   });
 
@@ -403,13 +391,7 @@ describe('§6 payment terms — aging runs from the DUE date (P-1 CONFIRMED, S97
   it('retainage still sits outside every bucket when terms are set', () => {
     const summary = ageReceivables(
       [
-        {
-          ...base,
-          issue_date: '2026-01-01',
-          due_date: '2026-06-01',
-          amount_receivable: 16200,
-          retainage_withheld: 1800,
-        },
+        { ...base, issue_date: '2026-01-01', due_date: '2026-06-01', amount_receivable: 16200, retainage_withheld: 1800 },
       ],
       '2026-08-31'
     );
@@ -418,10 +400,7 @@ describe('§6 payment terms — aging runs from the DUE date (P-1 CONFIRMED, S97
     expect(summary.retainageHeld).toBe(1800);
     // the withheld figure is in NO bucket
     const bucketSum =
-      summary.buckets.current +
-      summary.buckets.d31_60 +
-      summary.buckets.d61_90 +
-      summary.buckets.d90_plus;
+      summary.buckets.current + summary.buckets.d31_60 + summary.buckets.d61_90 + summary.buckets.d90_plus;
     expect(bucketSum).toBe(16200);
   });
 

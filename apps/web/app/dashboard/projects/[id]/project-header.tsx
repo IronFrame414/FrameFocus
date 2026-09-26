@@ -184,9 +184,7 @@ export function ProjectHeader({ project, canManage, role }: ProjectHeaderProps) 
           Projects
         </Link>
         <span style={{ fontFamily: font.mono, fontSize: '12px', color: color.faint }}> / </span>
-        <span
-          style={{ fontFamily: font.mono, fontSize: '12px', fontWeight: 500, color: color.muted }}
-        >
+        <span style={{ fontFamily: font.mono, fontSize: '12px', fontWeight: 500, color: color.muted }}>
           {project.project_number}
         </span>
       </div>
@@ -202,7 +200,9 @@ export function ProjectHeader({ project, canManage, role }: ProjectHeaderProps) 
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <h2 style={{ ...h2Style, fontSize: '25px' }}>{project.name}</h2>
-          <span style={{ ...badgeStyle, backgroundColor: badge.bg, color: badge.fg }}>
+          <span
+            style={{ ...badgeStyle, backgroundColor: badge.bg, color: badge.fg }}
+          >
             {PROJECT_STATUS_LABELS[project.status]}
           </span>
         </div>

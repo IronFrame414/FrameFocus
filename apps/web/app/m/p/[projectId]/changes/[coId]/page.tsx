@@ -206,10 +206,7 @@ export default async function ChangeOrderDetailPage({
                   ) : null}
                 </div>
                 {showMoney ? (
-                  <span
-                    data-testid="m-co-line-total"
-                    className="shrink-0 font-mono text-[13px] text-m6m-navy"
-                  >
+                  <span data-testid="m-co-line-total" className="shrink-0 font-mono text-[13px] text-m6m-navy">
                     {formatMoney(li.total_price)}
                   </span>
                 ) : null}

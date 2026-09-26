@@ -98,8 +98,9 @@ export default async function ChangeOrderPage({
   ]);
 
   const pendingSession =
-    sessions.find((s) => s.status === 'pending' && new Date(s.expires_at).getTime() > Date.now()) ??
-    null;
+    sessions.find(
+      (s) => s.status === 'pending' && new Date(s.expires_at).getTime() > Date.now()
+    ) ?? null;
 
   return (
     <CoBuilder

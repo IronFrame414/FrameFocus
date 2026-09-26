@@ -29,7 +29,10 @@ import { DISCARDED, applied } from '@/lib/services/mutation-result';
 // defect class behind #117, the S97 financial-floor failures, and #1-s146.
 // The checks below produce good sentences; the trigger produces the guarantee.
 
-export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
   const supabase = await createClient();
 
   const {
@@ -81,7 +84,10 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
   // The one lifecycle refusal left: a voided CO is frozen forever
   // (`enforce_change_order_immutability`). Draft, sent and signed all void.
   if (co.status === 'voided') {
-    return NextResponse.json({ error: 'This change order is already voided.' }, { status: 409 });
+    return NextResponse.json(
+      { error: 'This change order is already voided.' },
+      { status: 409 }
+    );
   }
 
   // ⚠️ `.select('id')` + `applied()` — mutation-result.ts, no exceptions. A

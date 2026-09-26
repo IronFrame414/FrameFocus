@@ -38,7 +38,10 @@ type CoInsert = Database['public']['Tables']['change_orders']['Insert'];
 type ItemInsert = Database['public']['Tables']['change_order_line_items']['Insert'];
 type RowInsert = Database['public']['Tables']['change_order_line_rows']['Insert'];
 
-export async function POST(_request: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(
+  _request: NextRequest,
+  { params }: { params: { id: string } }
+) {
   const supabase = await createClient();
 
   const {

@@ -45,11 +45,7 @@ export async function POST(_request: NextRequest, { params }: { params: { id: st
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) {
-    console.error('CO RECALCULATE 401', {
-      route: 'change-orders/[id]/recalculate',
-      changeOrderId: params.id,
-      check: 'auth.getUser',
-    });
+    console.error('CO RECALCULATE 401', { route: 'change-orders/[id]/recalculate', changeOrderId: params.id, check: 'auth.getUser' });
     return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
   }
 

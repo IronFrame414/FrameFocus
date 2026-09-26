@@ -1,8 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import {
-  checkClientFacingEnglish,
-  nonEnglishResponseBody,
-} from '@/lib/language-check/english-check';
+import { checkClientFacingEnglish, nonEnglishResponseBody } from '@/lib/language-check/english-check';
 import { invoiceFieldsForCheck } from '@/lib/language-check/document-fields';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@framefocus/shared/types/database';
@@ -79,7 +76,8 @@ function fmtDate(value: string): string {
   });
 }
 
-const money = (n: number) => n.toLocaleString('en-US', { style: 'currency', currency: 'USD' });
+const money = (n: number) =>
+  n.toLocaleString('en-US', { style: 'currency', currency: 'USD' });
 
 export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
   const supabase = await createClient();
@@ -201,9 +199,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
   }
   if (!recipientEmail) {
     return NextResponse.json(
-      {
-        error: 'No recipient email. Set a primary contact on the project, or pass recipient_email.',
-      },
+      { error: 'No recipient email. Set a primary contact on the project, or pass recipient_email.' },
       { status: 422 }
     );
   }

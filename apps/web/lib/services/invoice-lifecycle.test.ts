@@ -89,9 +89,7 @@ describe('§9 — who may void, and when', () => {
 
   it('a draft is DELETED, not voided (§9)', () => {
     expect(canVoidInvoice({ ...base, status: 'draft', role: 'owner' }).allowed).toBe(false);
-    expect(canVoidInvoice({ ...base, status: 'pending_approval', role: 'owner' }).allowed).toBe(
-      false
-    );
+    expect(canVoidInvoice({ ...base, status: 'pending_approval', role: 'owner' }).allowed).toBe(false);
   });
 });
 
@@ -110,45 +108,15 @@ describe('§6.1 — rate-type mapping and rate-row resolution (A-9)', () => {
   });
 
   const rows: RateRow[] = [
-    {
-      id: 'r1',
-      rate_type: 'cost_plus_material_percent',
-      rate: 15,
-      effective_from: '2026-05-01',
-      superseded_at: null,
-    },
-    {
-      id: 'r2',
-      rate_type: 'cost_plus_material_percent',
-      rate: 20,
-      effective_from: '2026-06-01',
-      superseded_at: null,
-    },
-    {
-      id: 'r3',
-      rate_type: 'cost_plus_material_percent',
-      rate: 99,
-      effective_from: '2026-05-15',
-      superseded_at: '2026-06-02T00:00:00Z',
-    },
-    {
-      id: 'r4',
-      rate_type: 'cost_plus_material_percent',
-      rate: 25,
-      effective_from: '2026-09-01',
-      superseded_at: null,
-    },
+    { id: 'r1', rate_type: 'cost_plus_material_percent', rate: 15, effective_from: '2026-05-01', superseded_at: null },
+    { id: 'r2', rate_type: 'cost_plus_material_percent', rate: 20, effective_from: '2026-06-01', superseded_at: null },
+    { id: 'r3', rate_type: 'cost_plus_material_percent', rate: 99, effective_from: '2026-05-15', superseded_at: '2026-06-02T00:00:00Z' },
+    { id: 'r4', rate_type: 'cost_plus_material_percent', rate: 25, effective_from: '2026-09-01', superseded_at: null },
   ];
 
   it('returns the rate in force ON THE COST’S OWN DATE, with its row identity', () => {
-    expect(rateRowInForce(rows, 'cost_plus_material_percent', '2026-05-20')).toEqual({
-      id: 'r1',
-      rate: 15,
-    });
-    expect(rateRowInForce(rows, 'cost_plus_material_percent', '2026-06-15')).toEqual({
-      id: 'r2',
-      rate: 20,
-    });
+    expect(rateRowInForce(rows, 'cost_plus_material_percent', '2026-05-20')).toEqual({ id: 'r1', rate: 15 });
+    expect(rateRowInForce(rows, 'cost_plus_material_percent', '2026-06-15')).toEqual({ id: 'r2', rate: 20 });
   });
 
   it('a SUPERSEDED row never wins, and a FUTURE row is dormant (P5)', () => {
@@ -178,7 +146,9 @@ describe('§S K6 — an hour belongs to its COMPANY-tz calendar day [S97]', () =
   it('REGRESSION: it must not fall back to the UTC day', () => {
     // The pre-[S97] implementation returned the toISOString() slice.
     expect(new Date(eveningEdt).toISOString().slice(0, 10)).toBe('2026-06-03');
-    expect(companyDay(eveningEdt, NY)).not.toBe(new Date(eveningEdt).toISOString().slice(0, 10));
+    expect(companyDay(eveningEdt, NY)).not.toBe(
+      new Date(eveningEdt).toISOString().slice(0, 10)
+    );
   });
 
   it('holds in winter too — 19:00 EST is still the same local day (DST)', () => {
@@ -265,45 +235,16 @@ describe('§9 — issue_date is a COMPANY-tz calendar date [S97]', () => {
 
 describe('§7.2 — split-day warning (PROVISIONAL P-4)', () => {
   const available = [
-    {
-      segmentId: 's1',
-      memberId: 'm1',
-      memberName: 'A',
-      workDate: '2026-06-02',
-      rawHours: 3,
-      segmentType: 'work',
-      taskTitle: null,
-      ageDays: 1,
-    },
-    {
-      segmentId: 's2',
-      memberId: 'm1',
-      memberName: 'A',
-      workDate: '2026-06-02',
-      rawHours: 4,
-      segmentType: 'work',
-      taskTitle: null,
-      ageDays: 1,
-    },
-    {
-      segmentId: 's3',
-      memberId: 'm2',
-      memberName: 'B',
-      workDate: '2026-06-02',
-      rawHours: 5,
-      segmentType: 'work',
-      taskTitle: null,
-      ageDays: 1,
-    },
+    { segmentId: 's1', memberId: 'm1', memberName: 'A', workDate: '2026-06-02', rawHours: 3, segmentType: 'work', taskTitle: null, ageDays: 1 },
+    { segmentId: 's2', memberId: 'm1', memberName: 'A', workDate: '2026-06-02', rawHours: 4, segmentType: 'work', taskTitle: null, ageDays: 1 },
+    { segmentId: 's3', memberId: 'm2', memberName: 'B', workDate: '2026-06-02', rawHours: 5, segmentType: 'work', taskTitle: null, ageDays: 1 },
   ];
 
   it('warns when only PART of a person-day is selected', () => {
     const selected: SelectedSegment[] = [
       { segmentId: 's1', memberId: 'm1', workDate: '2026-06-02', rawHours: 3 },
     ];
-    expect(findSplitDays(selected, available)).toEqual([
-      { memberId: 'm1', workDate: '2026-06-02' },
-    ]);
+    expect(findSplitDays(selected, available)).toEqual([{ memberId: 'm1', workDate: '2026-06-02' }]);
   });
 
   it('does not warn when a whole person-day is selected', () => {

@@ -119,9 +119,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
   // against the same rates and double-claim its costs, so it is rejected rather
   // than silently merged.
   const keys = rawSelections.map((s) =>
-    s.instrument?.change_order_id
-      ? `co:${s.instrument.change_order_id}`
-      : `est:${s.instrument?.estimate_id}`
+    s.instrument?.change_order_id ? `co:${s.instrument.change_order_id}` : `est:${s.instrument?.estimate_id}`
   );
   if (new Set(keys).size !== keys.length) {
     return NextResponse.json(

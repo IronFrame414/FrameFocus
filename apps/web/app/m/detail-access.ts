@@ -97,7 +97,10 @@ export type GatedSurface = 'co' | 'member' | 'contact' | 'file' | 'co-write';
  * requires: the destination must explain itself rather than bounce silently.
  * The user lands on the LIST they came from — still usable — not on the hub.
  */
-export async function requireDetailAccess(surface: GatedSurface, backTo: string): Promise<void> {
+export async function requireDetailAccess(
+  surface: GatedSurface,
+  backTo: string
+): Promise<void> {
   const profile = await getMyProfile();
 
   // No profile is not this guard's problem — app/m/layout.tsx owns the auth
@@ -312,7 +315,10 @@ export function canEdit(surface: EditSurface, role: string | null | undefined): 
  * no permission at all — which is the same sentence the CO write surface
  * carries, and it is not a coincidence.
  */
-export async function requireEditAccess(surface: EditSurface, backTo: string): Promise<void> {
+export async function requireEditAccess(
+  surface: EditSurface,
+  backTo: string
+): Promise<void> {
   const profile = await getMyProfile();
 
   // As with the guards above: app/m/layout.tsx owns the auth gate. Refusing a

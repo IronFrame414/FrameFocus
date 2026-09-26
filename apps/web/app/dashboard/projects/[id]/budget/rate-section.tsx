@@ -189,14 +189,7 @@ export async function RateSection({ project, canSupersede, canRenegotiate }: Rat
                 padding: '12px 20px 4px',
               }}
             >
-              <span
-                style={{
-                  fontFamily: font.sans,
-                  fontSize: '13px',
-                  fontWeight: 700,
-                  color: color.navy,
-                }}
-              >
+              <span style={{ fontFamily: font.sans, fontSize: '13px', fontWeight: 700, color: color.navy }}>
                 {group.label}
               </span>
               <span style={{ fontSize: '11px', color: color.faint }}>{group.caption}</span>
@@ -212,34 +205,27 @@ export async function RateSection({ project, canSupersede, canRenegotiate }: Rat
             {/* Stage 3 — renegotiate per rate type. Floor = latest live rate
                 + 1 day (client mirrors it; the DB guard is the authority). */}
             {canRenegotiate && (
-              <div
-                style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '4px',
-                  padding: '2px 20px 6px',
-                }}
-              >
-                {EXPECTED_TYPES[group.contractType].map((rateType) => (
-                  <div
-                    key={rateType}
-                    style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '12px' }}
-                  >
-                    <span style={{ color: color.mutedAlt, minWidth: '190px' }}>
-                      {RATE_TYPE_META[rateType].label}
-                    </span>
-                    <RenegotiateRate
-                      estimateId={group.estimateId}
-                      changeOrderId={group.changeOrderId}
-                      rateType={rateType}
-                      label={RATE_TYPE_META[rateType].label}
-                      percent={RATE_TYPE_META[rateType].percent}
-                      floor={latestLiveDate(group.rates, rateType)}
-                      recomputeDraftCoId={group.draftCoId}
-                    />
-                  </div>
-                ))}
-              </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', padding: '2px 20px 6px' }}>
+              {EXPECTED_TYPES[group.contractType].map((rateType) => (
+                <div
+                  key={rateType}
+                  style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '12px' }}
+                >
+                  <span style={{ color: color.mutedAlt, minWidth: '190px' }}>
+                    {RATE_TYPE_META[rateType].label}
+                  </span>
+                  <RenegotiateRate
+                    estimateId={group.estimateId}
+                    changeOrderId={group.changeOrderId}
+                    rateType={rateType}
+                    label={RATE_TYPE_META[rateType].label}
+                    percent={RATE_TYPE_META[rateType].percent}
+                    floor={latestLiveDate(group.rates, rateType)}
+                    recomputeDraftCoId={group.draftCoId}
+                  />
+                </div>
+              ))}
+            </div>
             )}
 
             {group.rates.length > 0 && (
@@ -272,10 +258,11 @@ export async function RateSection({ project, canSupersede, canRenegotiate }: Rat
       })}
 
       <p style={{ fontSize: '11px', color: color.faint, margin: 0, padding: '8px 20px 12px' }}>
-        Cost and hours price at the rate in force when incurred. Renegotiated rates apply forward
-        from their effective date and never before the latest existing rate; a future-dated rate
-        sits pending until its date arrives. &ldquo;Correct rates&rdquo; (Owner only) edits any live
-        rate&rsquo;s amount or date — the original stays listed, struck through with its reason.
+        Cost and hours price at the rate in force when incurred. Renegotiated rates apply
+        forward from their effective date and never before the latest existing rate; a
+        future-dated rate sits pending until its date arrives. &ldquo;Correct rates&rdquo;
+        (Owner only) edits any live rate&rsquo;s amount or date — the original stays listed,
+        struck through with its reason.
       </p>
     </div>
   );

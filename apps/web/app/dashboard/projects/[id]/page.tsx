@@ -40,9 +40,8 @@ function date(value: string | null): string {
 
 function initialsOf(name: string): string {
   const parts = name.trim().split(/\s+/);
-  return (
-    (parts[0]?.[0] ?? '') + (parts.length > 1 ? (parts[parts.length - 1][0] ?? '') : '')
-  ).toUpperCase();
+  return ((parts[0]?.[0] ?? '') + (parts.length > 1 ? (parts[parts.length - 1][0] ?? '') : ''))
+    .toUpperCase();
 }
 
 export default async function ProjectOverviewPage({ params }: { params: { id: string } }) {
@@ -430,7 +429,8 @@ export default async function ProjectOverviewPage({ params }: { params: { id: st
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        backgroundColor: memberColor(a.member!.id, a.member!.schedule_color) + '33',
+                        backgroundColor:
+                          memberColor(a.member!.id, a.member!.schedule_color) + '33',
                         color: memberColor(a.member!.id, a.member!.schedule_color),
                         fontSize: '12px',
                         fontWeight: 700,

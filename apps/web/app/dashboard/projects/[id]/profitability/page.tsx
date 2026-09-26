@@ -24,7 +24,11 @@ const money = (n: number) =>
  *  as zero would state a number the data does not support (§7H.3). */
 const orDash = (n: number | null) => (n === null ? '—' : money(n));
 
-export default async function ProfitabilityPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function ProfitabilityPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
   const { id } = await params;
   const supabase = await createClient();
 
@@ -97,8 +101,8 @@ export default async function ProfitabilityPage({ params }: { params: Promise<{ 
             color: color.body,
           }}
         >
-          <strong>No cost has landed on this job yet.</strong> The figures below reflect billing and
-          budget only — profit and margin will move as soon as real cost arrives.
+          <strong>No cost has landed on this job yet.</strong> The figures below reflect billing
+          and budget only — profit and margin will move as soon as real cost arrives.
         </div>
       )}
 
@@ -107,7 +111,11 @@ export default async function ProfitabilityPage({ params }: { params: Promise<{ 
         <Tile label="Earned" value={orDash(headline.earned)} />
         <Tile label="Billed" value={money(headline.billed)} />
         <Tile label="Actual cost" value={money(headline.actualCost)} />
-        <Tile label="Backlog" value={orDash(headline.backlog)} hint="Earned, not yet invoiced" />
+        <Tile
+          label="Backlog"
+          value={orDash(headline.backlog)}
+          hint="Earned, not yet invoiced"
+        />
         <Tile
           label={basisLabel}
           value={orDash(headline.profit)}
@@ -256,13 +264,7 @@ function CategoryRow({ row }: { row: ProfitCategoryRow }) {
   );
 }
 
-function Th({
-  children,
-  align = 'right',
-}: {
-  children: React.ReactNode;
-  align?: 'left' | 'right';
-}) {
+function Th({ children, align = 'right' }: { children: React.ReactNode; align?: 'left' | 'right' }) {
   return (
     <th
       style={{

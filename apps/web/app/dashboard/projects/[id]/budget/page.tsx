@@ -1,7 +1,7 @@
 import Link from 'next/link';
+import { seesProjectMoney } from '@framefocus/shared/constants/roles';
 import { createClient } from '@/lib/supabase-server';
 import { notFound, redirect } from 'next/navigation';
-import { seesProjectMoney } from '@framefocus/shared/constants/roles';
 import { getProject } from '@/lib/services/projects';
 import { effectiveBudget, getBudgetRollup, type InstrumentGroup } from '@/lib/services/budget';
 import { getProjectIncome } from '@/lib/services/project-income';
@@ -164,8 +164,9 @@ export default async function BudgetAndCostPage({ params }: { params: { id: stri
   const selBilling = seesMoney ? await getSelectionBilling(params.id) : null;
 
   const depositCredits = seesMoney ? await getDepositCredits(params.id) : [];
-  const undrawnDeposit =
-    Math.round(depositCredits.reduce((sum, d) => sum + d.remaining, 0) * 100) / 100;
+  const undrawnDeposit = Math.round(
+    depositCredits.reduce((sum, d) => sum + d.remaining, 0) * 100
+  ) / 100;
   const members = seesMoney ? await getMembers() : [];
   const memberNames: Record<string, string> = Object.fromEntries(
     members.map((m) => [m.id, m.display_name])
@@ -211,211 +212,207 @@ export default async function BudgetAndCostPage({ params }: { params: { id: stri
   };
   const dashCell: React.CSSProperties = { ...moneyCell, color: color.faint };
 
-  const summaryCards: {
-    label: string;
-    value: string;
-    valueColor: string;
-    inverted?: boolean;
-    caption?: string;
-  }[] = seesMoney
-    ? [
-        {
-          label: isFixed ? 'Original' : 'Projected value (non-binding)',
-          value: contract?.original != null ? money(contract.original) : '—',
-          valueColor: contract?.original != null ? color.navy : color.faint,
-          caption: isFixed ? undefined : 'a projection, not an obligation',
-        },
-        {
-          label: 'Signed COs',
-          value:
-            contract && contract.signedDelta !== 0
-              ? `${contract.signedDelta > 0 ? '+' : ''}${money(contract.signedDelta)}`
-              : '—',
-          valueColor: contract && contract.signedDelta !== 0 ? color.warning : color.faint,
-        },
-        // [S175 stage 5, Q3.2] The selection term. On a fixed-price job it is
-        // IN Revised. On cost-plus / T&M it is EXCLUDED — contract_value is
-        // the P11 projection there and the selection bills as incurred — and
-        // the exclusion is RENDERED, not omitted: Josh ruled a silent absence
-        // is the `final_hold` shape, accepted by the schema and visible
-        // nowhere. The card appears whenever there is something to say.
-        ...(contract && (contract.selectionDelta !== 0 || contract.selectionDeltaExcluded)
-          ? [
-              contract.selectionDeltaExcluded
-                ? {
-                    label: 'Approved selections — excluded',
-                    value: selBilling
-                      ? money(selBilling.selections.reduce((n, s) => n + s.signedVariance, 0))
-                      : '—',
-                    valueColor: color.faint,
-                    caption:
-                      'not in the projection: on a cost-plus / T&M contract a selection bills as incurred, so its signed variance is not added here',
-                  }
-                : {
-                    label: 'Approved selections',
-                    value: `${contract.selectionDelta > 0 ? '+' : ''}${money(contract.selectionDelta)}`,
-                    valueColor: contract.selectionDelta < 0 ? color.danger : color.warning,
-                    caption: 'signed by the client — in Revised',
-                  },
-            ]
-          : []),
-        ...(isFixed
-          ? [
-              {
-                label: 'Revised',
-                value: revised !== null ? money(revised) : '—',
-                valueColor: '#fff',
-                inverted: true,
-              },
-            ]
-          : []),
-        ...(contractBilling && contractBilling.remainingToBill !== null
-          ? [
-              {
-                // [S97] SCOPED. It read as the JOB's remaining while showing
-                // only the ORIGINAL CONTRACT's — on a job with $298,897.26 of
-                // signed COs that understated by exactly the CO book.
-                label: 'Remaining on original contract',
-                value: money(contractBilling.remainingToBill),
-                valueColor: contractBilling.remainingToBill < 0 ? color.warning : color.navy,
-                caption:
-                  contractBilling.depositRefunded > 0
-                    ? `original less ${money(contractBilling.issuedAgainstContract)} billed, plus ${money(contractBilling.depositRefunded)} refunded`
-                    : contractBilling.issuedAgainstContract > 0
-                      ? `original less ${money(contractBilling.issuedAgainstContract)} already invoiced`
-                      : 'nothing invoiced against the contract yet',
-              },
-            ]
-          : []),
-        // §4 [S97] — the CO figure that was missing beside "Remaining on
-        // original contract". The VALUE covers fixed-price positive COs only,
-        // and the caption names every kind NOT in it, so the reader never has
-        // to guess the scope. An em-dash rather than $0 when there is nothing
-        // countable but COs exist — a zero would read as "all billed".
-        ...(coBilling && coBilling.orders.length > 0
-          ? [
-              {
-                label: 'Remaining on change orders',
-                value: coBilling.fixedCount > 0 ? money(coBilling.fixedRemaining) : '—',
-                valueColor:
-                  coBilling.fixedCount === 0
-                    ? color.faint
-                    : coBilling.fixedRemaining < 0
-                      ? color.warning
-                      : color.navy,
-                caption: [
-                  coBilling.fixedCount > 0
-                    ? `${coBilling.fixedCount} fixed-price CO${coBilling.fixedCount === 1 ? '' : 's'}`
-                    : 'no fixed-price COs',
-                  coBilling.asIncurredCount > 0
-                    ? `${coBilling.asIncurredCount} billed as incurred (no fixed amount)`
-                    : null,
-                  coBilling.creditCount > 0
-                    ? `${coBilling.creditCount} credit CO${coBilling.creditCount === 1 ? '' : 's'} excluded`
-                    : null,
-                ]
-                  .filter(Boolean)
-                  .join(' · '),
-              },
-            ]
-          : []),
-        // [S175 stage 5] Remaining on SELECTIONS, beside the CO figure and in
-        // its shape: the value covers fixed selections only, and the caption
-        // names every kind not in it. Credits are §7.2's to give, not scope
-        // to bill; as-incurred selections bill through their instrument's
-        // rates and have no fixed amount.
-        ...(selBilling && selBilling.selections.length > 0
-          ? [
-              {
-                label: 'Remaining on selections',
-                value: selBilling.fixedCount > 0 ? money(selBilling.fixedRemaining) : '—',
-                valueColor:
-                  selBilling.fixedCount === 0
-                    ? color.faint
-                    : selBilling.fixedRemaining < 0
-                      ? color.warning
-                      : color.navy,
-                caption: [
-                  selBilling.fixedCount > 0
-                    ? `${selBilling.fixedCount} fixed selection${selBilling.fixedCount === 1 ? '' : 's'}`
-                    : 'no fixed selections',
-                  selBilling.asIncurredCount > 0
-                    ? `${selBilling.asIncurredCount} billed as incurred (no fixed amount)`
-                    : null,
-                  selBilling.creditCount > 0
-                    ? `${selBilling.creditCount} credit${selBilling.creditCount === 1 ? '' : 's'} excluded`
-                    : null,
-                ]
-                  .filter(Boolean)
-                  .join(' · '),
-              },
-            ]
-          : []),
-        ...(undrawnDeposit > 0
-          ? [
-              {
-                label: 'Deposit credit (undrawn)',
-                value: money(undrawnDeposit),
-                valueColor: color.navy,
-                caption:
-                  depositCredits.length === 1
-                    ? 'held on the job; applied to invoices until exhausted (§3a)'
-                    : `${depositCredits.filter((d) => d.remaining > 0).length} deposits, applied to invoices until exhausted (§3a)`,
-              },
-            ]
-          : []),
-        {
-          label: 'Cost to Date',
-          value: costToDate ? money(costToDate) : '—',
-          valueColor: costToDate ? color.navy : color.faint,
-          caption: showLabor
-            ? 'actual + remaining committed + labor'
-            : 'actual + remaining committed',
-        },
-        // §8.8.1 — the mockup's card, Owner/Admin only (needs budgeted).
-        ...(budgetRemaining !== null
-          ? [
-              {
-                label: 'Cost to complete',
-                value: money(budgetRemaining),
-                valueColor: budgetRemaining >= 0 ? color.navy : color.warning,
-                caption: 'budget − actual − committed',
-              },
-            ]
-          : []),
-        // P11: no margin figure on cost-plus/T&M — the projection must not
-        // feed variance or over/under.
-        ...(isFixed
-          ? [
-              {
-                label: 'Projected Margin',
-                value: projectedMargin !== null ? money(projectedMargin) : '—',
-                valueColor:
-                  projectedMargin === null
-                    ? color.faint
-                    : projectedMargin >= 0
-                      ? color.success
-                      : color.danger,
-              },
-            ]
-          : []),
-      ]
-    : seesCommitted
+  const summaryCards: { label: string; value: string; valueColor: string; inverted?: boolean; caption?: string }[] =
+    seesMoney
       ? [
           {
-            label: 'Cost to Date',
-            value: rollup.costToDate ? money(rollup.costToDate) : '—',
-            valueColor: rollup.costToDate ? color.navy : color.faint,
-            caption: 'actual + remaining committed',
+            label: isFixed ? 'Original' : 'Projected value (non-binding)',
+            value: contract?.original != null ? money(contract.original) : '—',
+            valueColor: contract?.original != null ? color.navy : color.faint,
+            caption: isFixed ? undefined : 'a projection, not an obligation',
           },
-        ]
-      : [
+          {
+            label: 'Signed COs',
+            value:
+              contract && contract.signedDelta !== 0
+                ? `${contract.signedDelta > 0 ? '+' : ''}${money(contract.signedDelta)}`
+                : '—',
+            valueColor: contract && contract.signedDelta !== 0 ? color.warning : color.faint,
+          },
+          // [S175 stage 5, Q3.2] The selection term. On a fixed-price job it is
+          // IN Revised. On cost-plus / T&M it is EXCLUDED — contract_value is
+          // the P11 projection there and the selection bills as incurred — and
+          // the exclusion is RENDERED, not omitted: Josh ruled a silent absence
+          // is the `final_hold` shape, accepted by the schema and visible
+          // nowhere. The card appears whenever there is something to say.
+          ...(contract && (contract.selectionDelta !== 0 || contract.selectionDeltaExcluded)
+            ? [
+                contract.selectionDeltaExcluded
+                  ? {
+                      label: 'Approved selections — excluded',
+                      value: selBilling
+                        ? money(
+                            selBilling.selections.reduce((n, s) => n + s.signedVariance, 0)
+                          )
+                        : '—',
+                      valueColor: color.faint,
+                      caption:
+                        'not in the projection: on a cost-plus / T&M contract a selection bills as incurred, so its signed variance is not added here',
+                    }
+                  : {
+                      label: 'Approved selections',
+                      value: `${contract.selectionDelta > 0 ? '+' : ''}${money(contract.selectionDelta)}`,
+                      valueColor: contract.selectionDelta < 0 ? color.danger : color.warning,
+                      caption: 'signed by the client — in Revised',
+                    },
+              ]
+            : []),
+          ...(isFixed
+            ? [
+                {
+                  label: 'Revised',
+                  value: revised !== null ? money(revised) : '—',
+                  valueColor: '#fff',
+                  inverted: true,
+                },
+              ]
+            : []),
+          ...(contractBilling && contractBilling.remainingToBill !== null
+            ? [
+                {
+                  // [S97] SCOPED. It read as the JOB's remaining while showing
+                  // only the ORIGINAL CONTRACT's — on a job with $298,897.26 of
+                  // signed COs that understated by exactly the CO book.
+                  label: 'Remaining on original contract',
+                  value: money(contractBilling.remainingToBill),
+                  valueColor:
+                    contractBilling.remainingToBill < 0 ? color.warning : color.navy,
+                  caption:
+                    contractBilling.depositRefunded > 0
+                      ? `original less ${money(contractBilling.issuedAgainstContract)} billed, plus ${money(contractBilling.depositRefunded)} refunded`
+                      : contractBilling.issuedAgainstContract > 0
+                        ? `original less ${money(contractBilling.issuedAgainstContract)} already invoiced`
+                        : 'nothing invoiced against the contract yet',
+                },
+              ]
+            : []),
+          // §4 [S97] — the CO figure that was missing beside "Remaining on
+          // original contract". The VALUE covers fixed-price positive COs only,
+          // and the caption names every kind NOT in it, so the reader never has
+          // to guess the scope. An em-dash rather than $0 when there is nothing
+          // countable but COs exist — a zero would read as "all billed".
+          ...(coBilling && coBilling.orders.length > 0
+            ? [
+                {
+                  label: 'Remaining on change orders',
+                  value: coBilling.fixedCount > 0 ? money(coBilling.fixedRemaining) : '—',
+                  valueColor:
+                    coBilling.fixedCount === 0
+                      ? color.faint
+                      : coBilling.fixedRemaining < 0
+                        ? color.warning
+                        : color.navy,
+                  caption: [
+                    coBilling.fixedCount > 0
+                      ? `${coBilling.fixedCount} fixed-price CO${coBilling.fixedCount === 1 ? '' : 's'}`
+                      : 'no fixed-price COs',
+                    coBilling.asIncurredCount > 0
+                      ? `${coBilling.asIncurredCount} billed as incurred (no fixed amount)`
+                      : null,
+                    coBilling.creditCount > 0
+                      ? `${coBilling.creditCount} credit CO${coBilling.creditCount === 1 ? '' : 's'} excluded`
+                      : null,
+                  ]
+                    .filter(Boolean)
+                    .join(' · '),
+                },
+              ]
+            : []),
+          // [S175 stage 5] Remaining on SELECTIONS, beside the CO figure and in
+          // its shape: the value covers fixed selections only, and the caption
+          // names every kind not in it. Credits are §7.2's to give, not scope
+          // to bill; as-incurred selections bill through their instrument's
+          // rates and have no fixed amount.
+          ...(selBilling && selBilling.selections.length > 0
+            ? [
+                {
+                  label: 'Remaining on selections',
+                  value: selBilling.fixedCount > 0 ? money(selBilling.fixedRemaining) : '—',
+                  valueColor:
+                    selBilling.fixedCount === 0
+                      ? color.faint
+                      : selBilling.fixedRemaining < 0
+                        ? color.warning
+                        : color.navy,
+                  caption: [
+                    selBilling.fixedCount > 0
+                      ? `${selBilling.fixedCount} fixed selection${selBilling.fixedCount === 1 ? '' : 's'}`
+                      : 'no fixed selections',
+                    selBilling.asIncurredCount > 0
+                      ? `${selBilling.asIncurredCount} billed as incurred (no fixed amount)`
+                      : null,
+                    selBilling.creditCount > 0
+                      ? `${selBilling.creditCount} credit${selBilling.creditCount === 1 ? '' : 's'} excluded`
+                      : null,
+                  ]
+                    .filter(Boolean)
+                    .join(' · '),
+                },
+              ]
+            : []),
+          ...(undrawnDeposit > 0
+            ? [
+                {
+                  label: 'Deposit credit (undrawn)',
+                  value: money(undrawnDeposit),
+                  valueColor: color.navy,
+                  caption:
+                    depositCredits.length === 1
+                      ? 'held on the job; applied to invoices until exhausted (§3a)'
+                      : `${depositCredits.filter((d) => d.remaining > 0).length} deposits, applied to invoices until exhausted (§3a)`,
+                },
+              ]
+            : []),
           {
             label: 'Cost to Date',
-            value: rollup.totalActual ? money(rollup.totalActual) : '—',
-            valueColor: rollup.totalActual ? color.navy : color.faint,
+            value: costToDate ? money(costToDate) : '—',
+            valueColor: costToDate ? color.navy : color.faint,
+            caption: showLabor ? 'actual + remaining committed + labor' : 'actual + remaining committed',
           },
-        ];
+          // §8.8.1 — the mockup's card, Owner/Admin only (needs budgeted).
+          ...(budgetRemaining !== null
+            ? [
+                {
+                  label: 'Cost to complete',
+                  value: money(budgetRemaining),
+                  valueColor: budgetRemaining >= 0 ? color.navy : color.warning,
+                  caption: 'budget − actual − committed',
+                },
+              ]
+            : []),
+          // P11: no margin figure on cost-plus/T&M — the projection must not
+          // feed variance or over/under.
+          ...(isFixed
+            ? [
+                {
+                  label: 'Projected Margin',
+                  value: projectedMargin !== null ? money(projectedMargin) : '—',
+                  valueColor:
+                    projectedMargin === null
+                      ? color.faint
+                      : projectedMargin >= 0
+                        ? color.success
+                        : color.danger,
+                },
+              ]
+            : []),
+        ]
+      : seesCommitted
+        ? [
+            {
+              label: 'Cost to Date',
+              value: rollup.costToDate ? money(rollup.costToDate) : '—',
+              valueColor: rollup.costToDate ? color.navy : color.faint,
+              caption: 'actual + remaining committed',
+            },
+          ]
+        : [
+            {
+              label: 'Cost to Date',
+              value: rollup.totalActual ? money(rollup.totalActual) : '—',
+              valueColor: rollup.totalActual ? color.navy : color.faint,
+            },
+          ];
 
   const lineCost = (actual: number | null, remaining: number) => (actual ?? 0) + remaining;
 
@@ -480,13 +477,7 @@ export default async function BudgetAndCostPage({ params }: { params: { id: stri
               {card.value}
             </div>
             {card.caption && (
-              <div
-                style={{
-                  fontSize: '10.5px',
-                  color: card.inverted ? color.navySecondary : color.faint,
-                  marginTop: '3px',
-                }}
-              >
+              <div style={{ fontSize: '10.5px', color: card.inverted ? color.navySecondary : color.faint, marginTop: '3px' }}>
                 {card.caption}
               </div>
             )}
@@ -494,23 +485,12 @@ export default async function BudgetAndCostPage({ params }: { params: { id: stri
         ))}
         {showLabor && (
           <div style={{ ...cardStyle, padding: '14px 15px', minWidth: '170px' }}>
-            <div style={{ ...microLabelStyle, fontSize: '10.5px', color: color.mutedAlt }}>
-              Labor to date
-            </div>
-            <div
-              style={{
-                fontFamily: font.mono,
-                fontSize: '20px',
-                fontWeight: 600,
-                color: color.navy,
-                marginTop: '4px',
-              }}
-            >
+            <div style={{ ...microLabelStyle, fontSize: '10.5px', color: color.mutedAlt }}>Labor to date</div>
+            <div style={{ fontFamily: font.mono, fontSize: '20px', fontWeight: 600, color: color.navy, marginTop: '4px' }}>
               {fmtMoney(jobCost.labor.totalCost)}
             </div>
             <div style={{ fontSize: '10.5px', color: color.faint, marginTop: '3px' }}>
-              {jobCost.labor.totalHours.toFixed(1)} hrs · frozen burdened rates · never on budget
-              lines
+              {jobCost.labor.totalHours.toFixed(1)} hrs · frozen burdened rates · never on budget lines
             </div>
           </div>
         )}
@@ -542,7 +522,12 @@ export default async function BudgetAndCostPage({ params }: { params: { id: stri
                 ) {
                   unsignedHot.push(label);
                 }
-                if (item.row_type === 'allowance' && budget !== null && budget > 0 && spend === 0) {
+                if (
+                  item.row_type === 'allowance' &&
+                  budget !== null &&
+                  budget > 0 &&
+                  spend === 0
+                ) {
                   unspentAllowances.push(label);
                 }
                 if (
@@ -564,7 +549,8 @@ export default async function BudgetAndCostPage({ params }: { params: { id: stri
             })),
             ...unspentAllowances.map((l) => ({
               text: `${l} — allowance unspent`,
-              detail: 'an approved selection binds by its signature — no change order is generated',
+              detail:
+                'an approved selection binds by its signature — no change order is generated',
             })),
             ...laborUnlogged.map((l) => ({
               text: `${l} — no labour logged against a labour budget`,
@@ -635,17 +621,9 @@ export default async function BudgetAndCostPage({ params }: { params: { id: stri
 
       {/* Budget table, grouped by instrument */}
       {rollup.instruments.length === 0 ? (
-        <div
-          style={{
-            ...cardStyle,
-            padding: '48px',
-            textAlign: 'center',
-            color: color.muted,
-            marginBottom: '18px',
-          }}
-        >
-          No budget lines yet. The baseline is created when an estimate is converted, a change order
-          is signed, or the first expense lands on Miscellaneous.
+        <div style={{ ...cardStyle, padding: '48px', textAlign: 'center', color: color.muted, marginBottom: '18px' }}>
+          No budget lines yet. The baseline is created when an estimate is converted, a change
+          order is signed, or the first expense lands on Miscellaneous.
         </div>
       ) : (
         <div style={{ ...cardStyle, overflow: 'hidden', marginBottom: '18px' }}>
@@ -691,14 +669,7 @@ export default async function BudgetAndCostPage({ params }: { params: { id: stri
                     borderBottom: `1px solid ${color.rowDivider}`,
                   }}
                 >
-                  <span
-                    style={{
-                      fontFamily: font.sans,
-                      fontSize: '13px',
-                      fontWeight: 700,
-                      color: color.navy,
-                    }}
-                  >
+                  <span style={{ fontFamily: font.sans, fontSize: '13px', fontWeight: 700, color: color.navy }}>
                     {instrumentLabel(instrument)}
                   </span>
                   {isCo && (
@@ -755,33 +726,12 @@ export default async function BudgetAndCostPage({ params }: { params: { id: stri
                                 backgroundColor: color.blueTint,
                               }}
                             >
-                              <span
-                                style={{
-                                  fontFamily: font.mono,
-                                  fontSize: '12px',
-                                  color: color.faint,
-                                }}
-                              >
-                                ↳
-                              </span>
-                              <span
-                                style={{
-                                  fontFamily: font.sans,
-                                  fontSize: '12.5px',
-                                  color: color.body,
-                                }}
-                              >
+                              <span style={{ fontFamily: font.mono, fontSize: '12px', color: color.faint }}>↳</span>
+                              <span style={{ fontFamily: font.sans, fontSize: '12.5px', color: color.body }}>
                                 Selection — {s.name}
-                                <span style={{ color: color.faint, fontSize: '11.5px' }}>
-                                  {' '}
-                                  · approved, at chosen cost
-                                </span>
+                                <span style={{ color: color.faint, fontSize: '11.5px' }}> · approved, at chosen cost</span>
                               </span>
-                              {seesMoney && (
-                                <span style={{ ...moneyCell, fontSize: '12.5px' }}>
-                                  {money(s.cost)}
-                                </span>
-                              )}
+                              {seesMoney && <span style={{ ...moneyCell, fontSize: '12.5px' }}>{money(s.cost)}</span>}
                               {seesCommitted && <span style={dashCell}>—</span>}
                               <span style={dashCell}>—</span>
                               {seesCommitted && <span style={dashCell}>—</span>}
@@ -800,37 +750,17 @@ export default async function BudgetAndCostPage({ params }: { params: { id: stri
                               backgroundColor: color.blueTint,
                             }}
                           >
-                            <span
-                              style={{
-                                fontFamily: font.mono,
-                                fontSize: '12px',
-                                color: color.faint,
-                              }}
-                            >
-                              =
-                            </span>
-                            <span
-                              style={{
-                                fontFamily: font.sans,
-                                fontSize: '12.5px',
-                                fontWeight: 600,
-                                color: color.navy,
-                              }}
-                            >
+                            <span style={{ fontFamily: font.mono, fontSize: '12px', color: color.faint }}>=</span>
+                            <span style={{ fontFamily: font.sans, fontSize: '12.5px', fontWeight: 600, color: color.navy }}>
                               Resulting allowance budget
-                              <span
-                                style={{ color: color.faint, fontWeight: 400, fontSize: '11.5px' }}
-                              >
+                              <span style={{ color: color.faint, fontWeight: 400, fontSize: '11.5px' }}>
                                 {' '}
                                 · {sub.variance >= 0 ? '+' : '−'}
-                                {money(Math.abs(sub.variance))} vs the original — this is what the
-                                totals count
+                                {money(Math.abs(sub.variance))} vs the original — this is what the totals count
                               </span>
                             </span>
                             {seesMoney && (
-                              <span style={{ ...moneyCell, fontWeight: 600, fontSize: '12.5px' }}>
-                                {money(sub.resulting)}
-                              </span>
+                              <span style={{ ...moneyCell, fontWeight: 600, fontSize: '12.5px' }}>{money(sub.resulting)}</span>
                             )}
                             {seesCommitted && <span style={dashCell}>—</span>}
                             <span style={dashCell}>—</span>
@@ -851,19 +781,10 @@ export default async function BudgetAndCostPage({ params }: { params: { id: stri
                           borderBottom: `1px solid ${color.rowDivider}`,
                         }}
                       >
-                        <span
-                          style={{ fontFamily: font.mono, fontSize: '13px', color: color.faint }}
-                        >
+                        <span style={{ fontFamily: font.mono, fontSize: '13px', color: color.faint }}>
                           {item.cost_code ?? '—'}
                         </span>
-                        <span
-                          style={{
-                            fontFamily: font.sans,
-                            fontSize: '13px',
-                            fontWeight: 600,
-                            color: color.navy,
-                          }}
-                        >
+                        <span style={{ fontFamily: font.sans, fontSize: '13px', fontWeight: 600, color: color.navy }}>
                           {item.description}
                           {item.row_type && (
                             <span style={{ color: color.faint, fontWeight: 400, fontSize: '12px' }}>
@@ -963,11 +884,7 @@ export default async function BudgetAndCostPage({ params }: { params: { id: stri
                     </span>
                   )}
                   {seesCommitted && (
-                    <span
-                      style={
-                        instrument.committedRemaining ? { ...moneyCell, fontWeight: 600 } : dashCell
-                      }
-                    >
+                    <span style={instrument.committedRemaining ? { ...moneyCell, fontWeight: 600 } : dashCell}>
                       {moneyOrDash(instrument.committedRemaining)}
                     </span>
                   )}
@@ -1006,15 +923,7 @@ export default async function BudgetAndCostPage({ params }: { params: { id: stri
               backgroundColor: color.tableHeadBg,
             }}
           >
-            <span
-              style={{
-                gridColumn: '1 / span 2',
-                fontFamily: font.sans,
-                fontSize: '14px',
-                fontWeight: 700,
-                color: color.navy,
-              }}
-            >
+            <span style={{ gridColumn: '1 / span 2', fontFamily: font.sans, fontSize: '14px', fontWeight: 700, color: color.navy }}>
               Total
             </span>
             {seesMoney && (
@@ -1023,33 +932,15 @@ export default async function BudgetAndCostPage({ params }: { params: { id: stri
               </span>
             )}
             {seesCommitted && (
-              <span
-                style={{
-                  ...(rollup.totalCommittedRemaining ? moneyCell : dashCell),
-                  fontSize: '14px',
-                  fontWeight: 700,
-                }}
-              >
+              <span style={{ ...(rollup.totalCommittedRemaining ? moneyCell : dashCell), fontSize: '14px', fontWeight: 700 }}>
                 {moneyOrDash(rollup.totalCommittedRemaining)}
               </span>
             )}
-            <span
-              style={{
-                ...(rollup.totalActual ? moneyCell : dashCell),
-                fontSize: '14px',
-                fontWeight: 700,
-              }}
-            >
+            <span style={{ ...(rollup.totalActual ? moneyCell : dashCell), fontSize: '14px', fontWeight: 700 }}>
               {moneyOrDash(rollup.totalActual)}
             </span>
             {seesCommitted && (
-              <span
-                style={{
-                  ...(rollup.costToDate ? moneyCell : dashCell),
-                  fontSize: '14px',
-                  fontWeight: 700,
-                }}
-              >
+              <span style={{ ...(rollup.costToDate ? moneyCell : dashCell), fontSize: '14px', fontWeight: 700 }}>
                 {moneyOrDash(rollup.costToDate)}
               </span>
             )}
@@ -1092,14 +983,7 @@ export default async function BudgetAndCostPage({ params }: { params: { id: stri
               borderBottom: `1px solid ${color.rowDivider}`,
             }}
           >
-            <span
-              style={{
-                fontFamily: font.sans,
-                fontSize: '13px',
-                fontWeight: 700,
-                color: color.navy,
-              }}
-            >
+            <span style={{ fontFamily: font.sans, fontSize: '13px', fontWeight: 700, color: color.navy }}>
               Standalone invoice income
             </span>
             <span
@@ -1165,14 +1049,7 @@ export default async function BudgetAndCostPage({ params }: { params: { id: stri
                   borderBottom: `1px solid ${color.rowDivider}`,
                 }}
               >
-                <span
-                  style={{
-                    gridColumn: '1 / span 2',
-                    fontSize: '13px',
-                    fontWeight: 600,
-                    color: color.body,
-                  }}
-                >
+                <span style={{ gridColumn: '1 / span 2', fontSize: '13px', fontWeight: 600, color: color.body }}>
                   {group.label} subtotal
                 </span>
                 <span style={{ ...moneyCell, fontWeight: 600 }}>{money(group.amount)}</span>
@@ -1190,25 +1067,10 @@ export default async function BudgetAndCostPage({ params }: { params: { id: stri
               backgroundColor: color.tableHeadBg,
             }}
           >
-            <span
-              style={{
-                gridColumn: '1 / span 2',
-                fontFamily: font.sans,
-                fontSize: '14px',
-                fontWeight: 700,
-                color: color.navy,
-              }}
-            >
+            <span style={{ gridColumn: '1 / span 2', fontFamily: font.sans, fontSize: '14px', fontWeight: 700, color: color.navy }}>
               Total standalone income
               {income.draftTotal > 0 && (
-                <span
-                  style={{
-                    fontSize: '11px',
-                    fontWeight: 400,
-                    color: color.faint,
-                    marginLeft: '8px',
-                  }}
-                >
+                <span style={{ fontSize: '11px', fontWeight: 400, color: color.faint, marginLeft: '8px' }}>
                   incl. {money(income.draftTotal)} not yet sent
                 </span>
               )}
@@ -1223,36 +1085,18 @@ export default async function BudgetAndCostPage({ params }: { params: { id: stri
       {/* 7C §4.5 — Payables (Owner/Admin + PM): retainage + awaiting-paper
           live HERE, not on budget lines (Q3). */}
       {payables && (
-        <div
-          style={{ ...cardStyle, padding: '16px 20px', marginBottom: '18px', maxWidth: '560px' }}
-        >
+        <div style={{ ...cardStyle, padding: '16px 20px', marginBottom: '18px', maxWidth: '560px' }}>
           <p style={{ ...microLabelStyle, marginBottom: '10px' }}>Payables</p>
           <div style={{ display: 'flex', gap: '26px', flexWrap: 'wrap', marginBottom: '10px' }}>
             <div>
               <p style={{ fontSize: '11px', color: color.faint, margin: 0 }}>Still owed</p>
-              <p
-                style={{
-                  fontFamily: font.mono,
-                  fontSize: '20px',
-                  fontWeight: 600,
-                  color: color.navy,
-                  margin: '2px 0 0',
-                }}
-              >
+              <p style={{ fontFamily: font.mono, fontSize: '20px', fontWeight: 600, color: color.navy, margin: '2px 0 0' }}>
                 {fmtMoney(payables.stillOwed)}
               </p>
             </div>
             <div>
               <p style={{ fontSize: '11px', color: color.faint, margin: 0 }}>Retainage held</p>
-              <p
-                style={{
-                  fontFamily: font.mono,
-                  fontSize: '20px',
-                  fontWeight: 600,
-                  color: color.navy,
-                  margin: '2px 0 0',
-                }}
-              >
+              <p style={{ fontFamily: font.mono, fontSize: '20px', fontWeight: 600, color: color.navy, margin: '2px 0 0' }}>
                 {fmtMoney(payables.retainageHeld)}
               </p>
             </div>
@@ -1263,19 +1107,9 @@ export default async function BudgetAndCostPage({ params }: { params: { id: stri
                 Bill expected — committed with no document yet
               </p>
               {payables.awaitingPaper.map((a) => (
-                <div
-                  key={a.id}
-                  style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    fontSize: '13px',
-                    padding: '2px 0',
-                  }}
-                >
+                <div key={a.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', padding: '2px 0' }}>
                   <span style={{ color: color.body }}>{a.supplier}</span>
-                  <span style={{ fontFamily: font.mono, color: color.navy }}>
-                    {fmtMoney(a.amount)}
-                  </span>
+                  <span style={{ fontFamily: font.mono, color: color.navy }}>{fmtMoney(a.amount)}</span>
                 </div>
               ))}
             </div>
@@ -1295,29 +1129,13 @@ export default async function BudgetAndCostPage({ params }: { params: { id: stri
       <div style={{ ...cardStyle, padding: '16px 20px', marginBottom: '18px', maxWidth: '420px' }}>
         <p style={{ ...microLabelStyle, marginBottom: '8px' }}>Approved expenses by category</p>
         {(Object.entries(jobCost.expenses.byCategory) as [string, number][]).map(([cat, total]) => (
-          <div
-            key={cat}
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              padding: '4px 0',
-              fontSize: '13px',
-            }}
-          >
+          <div key={cat} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', fontSize: '13px' }}>
             <span style={{ color: color.body }}>{EXPENSE_CATEGORY_LABELS[cat] ?? cat}</span>
             <span style={{ fontFamily: font.mono, color: color.navy }}>{fmtMoney(total)}</span>
           </div>
         ))}
         {seesMoney && (
-          <div
-            style={{
-              borderTop: `1px solid ${color.rowDivider}`,
-              marginTop: '6px',
-              paddingTop: '6px',
-              fontSize: '12px',
-              color: color.muted,
-            }}
-          >
+          <div style={{ borderTop: `1px solid ${color.rowDivider}`, marginTop: '6px', paddingTop: '6px', fontSize: '12px', color: color.muted }}>
             Allocated to budget lines: {fmtMoney(jobCost.expenses.allocated)} · unallocated:{' '}
             {fmtMoney(jobCost.expenses.unallocated)}
           </div>
@@ -1381,9 +1199,7 @@ export default async function BudgetAndCostPage({ params }: { params: { id: stri
                         <div style={{ fontSize: '12px', color: color.muted }}>{e.description}</div>
                       )}
                     </td>
-                    <td style={tdStyle}>
-                      {EXPENSE_CATEGORY_LABELS[e.cost_category] ?? e.cost_category}
-                    </td>
+                    <td style={tdStyle}>{EXPENSE_CATEGORY_LABELS[e.cost_category] ?? e.cost_category}</td>
                     <td style={tdStyle}>{e.author?.display_name ?? '—'}</td>
                     <td style={moneyTd}>{fmtMoney(e.amount)}</td>
                     <td style={tdStyle}>

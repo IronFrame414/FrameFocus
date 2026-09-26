@@ -172,7 +172,7 @@ export function InvoiceBuilder(props: InvoiceBuilderProps) {
     () => derivedInstruments[0]?.key ?? instruments[0]?.key ?? null
   );
   const active = instruments.find((i) => i.key === activeKey) ?? null;
-  const activeCosts = active ? (pickableCostsByInstrument[active.key] ?? []) : [];
+  const activeCosts = active ? pickableCostsByInstrument[active.key] ?? [] : [];
 
   const [selectedCosts, setSelectedCosts] = useState<Set<string>>(new Set());
   const [selectedHours, setSelectedHours] = useState<Set<string>>(new Set());
@@ -192,9 +192,7 @@ export function InvoiceBuilder(props: InvoiceBuilderProps) {
   // It applies to COSTS only. §7.2 rounds each person-day UP to the half hour,
   // so a partial hour claim over-bills — hours stay all-or-nothing per
   // person-day and this control never touches them.
-  const [billPercentByInstrument, setBillPercentByInstrument] = useState<Record<string, string>>(
-    {}
-  );
+  const [billPercentByInstrument, setBillPercentByInstrument] = useState<Record<string, string>>({});
   const percentFor = (key: string): number => {
     const raw = billPercentByInstrument[key];
     if (raw === undefined || raw.trim() === '') return 100;
@@ -310,15 +308,7 @@ export function InvoiceBuilder(props: InvoiceBuilderProps) {
         }))
         .filter((s) => s.selectedCosts.length > 0 || s.selectedHours.length > 0),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [
-      derivedInstruments,
-      pickableCostsByInstrument,
-      selectedCosts,
-      selectedSegments,
-      hourDayInstrument,
-      defaultInstrumentKey,
-      billPercentByInstrument,
-    ]
+    [derivedInstruments, pickableCostsByInstrument, selectedCosts, selectedSegments, hourDayInstrument, defaultInstrumentKey, billPercentByInstrument]
   );
 
   /**
@@ -337,8 +327,7 @@ export function InvoiceBuilder(props: InvoiceBuilderProps) {
       if (seen.has(key)) continue;
       seen.add(key);
       const assigned = instrumentForDay(s.memberId, s.workDate);
-      if (!assigned || !derivedKeys.has(assigned))
-        bad.push({ memberId: s.memberId, workDate: s.workDate });
+      if (!assigned || !derivedKeys.has(assigned)) bad.push({ memberId: s.memberId, workDate: s.workDate });
     }
     return bad;
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -418,15 +407,7 @@ export function InvoiceBuilder(props: InvoiceBuilderProps) {
   return (
     <div style={{ padding: '20px 0', display: 'flex', flexDirection: 'column', gap: '16px' }}>
       {/* Header */}
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'baseline',
-          flexWrap: 'wrap',
-          gap: '8px',
-        }}
-      >
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', flexWrap: 'wrap', gap: '8px' }}>
         <div>
           {/* §10 (S97) — the number is allocated at SEND, so a draft has none
               and must not pretend otherwise. */}
@@ -472,7 +453,9 @@ export function InvoiceBuilder(props: InvoiceBuilderProps) {
             /* 7F §5.1 — Owner/Admin only, matching the release role gate
                (§8.2). A PM sees no prompt because a PM cannot generate one;
                offering a link that refuses is worse than offering nothing. */
-            lienReleasePrompt={role === 'owner' || role === 'admin' ? { projectId } : null}
+            lienReleasePrompt={
+              role === 'owner' || role === 'admin' ? { projectId } : null
+            }
             /* 7G §5.4 — stored at push time (S103 Q4), null until the sync
                completes or forever if the QuickBooks company has no Payments.
                Not Floor-gated: it is a URL, not a figure, and it inherits
@@ -483,28 +466,12 @@ export function InvoiceBuilder(props: InvoiceBuilderProps) {
       )}
 
       {error && (
-        <div
-          style={{
-            ...cardStyle,
-            padding: '10px 14px',
-            backgroundColor: '#fef2f2',
-            color: '#991b1b',
-            fontSize: '13px',
-          }}
-        >
+        <div style={{ ...cardStyle, padding: '10px 14px', backgroundColor: '#fef2f2', color: '#991b1b', fontSize: '13px' }}>
           {error}
         </div>
       )}
       {notice && (
-        <div
-          style={{
-            ...cardStyle,
-            padding: '10px 14px',
-            backgroundColor: '#f0fdf4',
-            color: '#166534',
-            fontSize: '13px',
-          }}
-        >
+        <div style={{ ...cardStyle, padding: '10px 14px', backgroundColor: '#f0fdf4', color: '#166534', fontSize: '13px' }}>
           {notice}
         </div>
       )}
@@ -529,7 +496,8 @@ export function InvoiceBuilder(props: InvoiceBuilderProps) {
             <strong style={{ color: color.body }}>
               {billedInstrumentLabels.join(' + ') || 'the selected instruments'}
             </strong>{' '}
-            — {derivedLineCount === 1 ? '1 derived line' : `${derivedLineCount} derived lines`}.
+            —{' '}
+            {derivedLineCount === 1 ? '1 derived line' : `${derivedLineCount} derived lines`}.
             Anything you left unticked is still unbilled and comes back next time (§6.2).
           </span>
           <button type="button" style={secondaryButtonStyle} onClick={() => setPickerOpen(true)}>
@@ -610,15 +578,7 @@ export function InvoiceBuilder(props: InvoiceBuilderProps) {
       {isDraft && isDerived && pickerOpen && (
         <div style={{ ...cardStyle, overflow: 'hidden' }}>
           <div style={{ padding: '12px 16px', borderBottom: `1px solid ${color.cardBorder}` }}>
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'baseline',
-                justifyContent: 'space-between',
-                gap: '12px',
-                flexWrap: 'wrap',
-              }}
-            >
+            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
               <div>
                 <span style={microLabelStyle}>
                   Unbilled approved costs{active ? ` — ${active.label}` : ''}
@@ -630,24 +590,12 @@ export function InvoiceBuilder(props: InvoiceBuilderProps) {
               </div>
               {/* §6.2 PARTIAL BILLING — per instrument tab (Josh's ruling). */}
               {active && (
-                <label
-                  style={{
-                    fontSize: '12px',
-                    color: color.body,
-                    display: 'inline-flex',
-                    gap: '6px',
-                    alignItems: 'center',
-                    whiteSpace: 'nowrap',
-                  }}
-                >
+                <label style={{ fontSize: '12px', color: color.body, display: 'inline-flex', gap: '6px', alignItems: 'center', whiteSpace: 'nowrap' }}>
                   Bill
                   <input
                     value={billPercentByInstrument[active.key] ?? ''}
                     onChange={(e) =>
-                      setBillPercentByInstrument((prev) => ({
-                        ...prev,
-                        [active.key]: e.target.value,
-                      }))
+                      setBillPercentByInstrument((prev) => ({ ...prev, [active.key]: e.target.value }))
                     }
                     placeholder="100"
                     inputMode="decimal"
@@ -660,8 +608,8 @@ export function InvoiceBuilder(props: InvoiceBuilderProps) {
             </div>
             {active && percentFor(active.key) < 100 && (
               <p style={{ fontSize: '11px', color: color.faint, margin: '6px 0 0' }}>
-                Each ticked cost bills {percentFor(active.key)}% of what is still unbilled on it;
-                the rest stays available for a later invoice. This is not a discount — §8&rsquo;s
+                Each ticked cost bills {percentFor(active.key)}% of what is still unbilled on it; the
+                rest stays available for a later invoice. This is not a discount — §8&rsquo;s
                 discount line is still the way to give money up.
               </p>
             )}
@@ -685,10 +633,7 @@ export function InvoiceBuilder(props: InvoiceBuilderProps) {
               </thead>
               <tbody>
                 {activeCosts.map((cost) => (
-                  <tr
-                    key={cost.allocationId}
-                    style={cost.blockedReason ? { opacity: 0.6 } : undefined}
-                  >
+                  <tr key={cost.allocationId} style={cost.blockedReason ? { opacity: 0.6 } : undefined}>
                     <td style={tdStyle}>
                       <input
                         type="checkbox"
@@ -712,13 +657,7 @@ export function InvoiceBuilder(props: InvoiceBuilderProps) {
                     </td>
                     <td style={{ ...tdStyle, color: color.mutedAlt }}>{cost.category}</td>
                     <td style={{ ...tdStyle, color: color.mutedAlt }}>{cost.expenseDate}</td>
-                    <td
-                      style={{
-                        ...tdStyle,
-                        textAlign: 'right',
-                        color: cost.ageDays > 30 ? color.warning : color.faint,
-                      }}
-                    >
+                    <td style={{ ...tdStyle, textAlign: 'right', color: cost.ageDays > 30 ? color.warning : color.faint }}>
                       {cost.ageDays}d
                     </td>
                     <td style={{ ...tdStyle, textAlign: 'right', fontFamily: font.mono }}>
@@ -730,18 +669,9 @@ export function InvoiceBuilder(props: InvoiceBuilderProps) {
                         </div>
                       )}
                     </td>
-                    <td
-                      style={{
-                        ...tdStyle,
-                        textAlign: 'right',
-                        fontFamily: font.mono,
-                        color: selectedCosts.has(cost.allocationId) ? color.body : color.faint,
-                      }}
-                    >
+                    <td style={{ ...tdStyle, textAlign: 'right', fontFamily: font.mono, color: selectedCosts.has(cost.allocationId) ? color.body : color.faint }}>
                       {selectedCosts.has(cost.allocationId) && !cost.blockedReason
-                        ? money(
-                            partialClaimAmount(cost.amount, active ? percentFor(active.key) : 100)
-                          )
+                        ? money(partialClaimAmount(cost.amount, active ? percentFor(active.key) : 100))
                         : '—'}
                     </td>
                   </tr>
@@ -795,77 +725,69 @@ export function InvoiceBuilder(props: InvoiceBuilderProps) {
                         (h) => dayKeyOf(h.memberId, h.workDate) === dayKey
                       ) === pickableHours.indexOf(hour);
                     return (
-                      <tr key={hour.segmentId}>
-                        <td style={tdStyle}>
-                          <input
-                            type="checkbox"
-                            disabled={busy}
-                            checked={selectedHours.has(hour.segmentId)}
-                            onChange={(e) => {
-                              const next = new Set(selectedHours);
-                              if (e.target.checked) next.add(hour.segmentId);
-                              else next.delete(hour.segmentId);
-                              setSelectedHours(next);
-                            }}
-                          />
-                        </td>
-                        <td style={tdStyle}>{hour.memberName}</td>
-                        <td style={{ ...tdStyle, color: color.mutedAlt }}>{hour.workDate}</td>
-                        <td
-                          style={{ ...tdStyle, color: hour.taskTitle ? color.body : color.faint }}
-                        >
-                          {hour.taskTitle ?? 'no task'}
-                        </td>
-                        <td style={{ ...tdStyle, color: color.mutedAlt }}>{hour.segmentType}</td>
-                        <td style={{ ...tdStyle, textAlign: 'right', fontFamily: font.mono }}>
-                          {hour.rawHours.toFixed(2)}
-                        </td>
-                        <td style={tdStyle}>
-                          {firstOfDay ? (
-                            <>
-                              <select
-                                disabled={busy}
-                                value={assigned ?? ''}
-                                onChange={(e) =>
-                                  setHourDayInstrument((prev) => ({
-                                    ...prev,
-                                    [dayKey]: e.target.value,
-                                  }))
-                                }
-                                style={{ ...inputStyle, padding: '3px 6px', maxWidth: '180px' }}
-                              >
-                                {instruments.map((i) => (
-                                  <option key={i.key} value={i.key}>
-                                    {i.label}
-                                    {isDerivedContract(i.contractType) ? '' : ' (no labor rate)'}
-                                  </option>
-                                ))}
-                              </select>
-                              {!assignedOk && selectedHours.has(hour.segmentId) && (
-                                <div style={{ fontSize: '11px', color: color.warning }}>
-                                  Fixed-price instruments have no labor rate — reassign this day.
-                                </div>
-                              )}
-                            </>
-                          ) : (
-                            <span style={{ fontSize: '11px', color: color.faint }}>
-                              same day &rarr;
-                            </span>
-                          )}
-                        </td>
-                      </tr>
+                    <tr key={hour.segmentId}>
+                      <td style={tdStyle}>
+                        <input
+                          type="checkbox"
+                          disabled={busy}
+                          checked={selectedHours.has(hour.segmentId)}
+                          onChange={(e) => {
+                            const next = new Set(selectedHours);
+                            if (e.target.checked) next.add(hour.segmentId);
+                            else next.delete(hour.segmentId);
+                            setSelectedHours(next);
+                          }}
+                        />
+                      </td>
+                      <td style={tdStyle}>{hour.memberName}</td>
+                      <td style={{ ...tdStyle, color: color.mutedAlt }}>{hour.workDate}</td>
+                      <td style={{ ...tdStyle, color: hour.taskTitle ? color.body : color.faint }}>
+                        {hour.taskTitle ?? 'no task'}
+                      </td>
+                      <td style={{ ...tdStyle, color: color.mutedAlt }}>{hour.segmentType}</td>
+                      <td style={{ ...tdStyle, textAlign: 'right', fontFamily: font.mono }}>
+                        {hour.rawHours.toFixed(2)}
+                      </td>
+                      <td style={tdStyle}>
+                        {firstOfDay ? (
+                          <>
+                            <select
+                              disabled={busy}
+                              value={assigned ?? ''}
+                              onChange={(e) =>
+                                setHourDayInstrument((prev) => ({
+                                  ...prev,
+                                  [dayKey]: e.target.value,
+                                }))
+                              }
+                              style={{ ...inputStyle, padding: '3px 6px', maxWidth: '180px' }}
+                            >
+                              {instruments.map((i) => (
+                                <option key={i.key} value={i.key}>
+                                  {i.label}
+                                  {isDerivedContract(i.contractType) ? '' : ' (no labor rate)'}
+                                </option>
+                              ))}
+                            </select>
+                            {!assignedOk && selectedHours.has(hour.segmentId) && (
+                              <div style={{ fontSize: '11px', color: color.warning }}>
+                                Fixed-price instruments have no labor rate — reassign this day.
+                              </div>
+                            )}
+                          </>
+                        ) : (
+                          <span style={{ fontSize: '11px', color: color.faint }}>
+                            same day &rarr;
+                          </span>
+                        )}
+                      </td>
+                    </tr>
                     );
                   })}
                 </tbody>
               </table>
               {hourGroups.length > 0 && (
-                <div
-                  style={{
-                    padding: '10px 16px',
-                    borderTop: `1px solid ${color.cardBorder}`,
-                    fontSize: '12px',
-                  }}
-                >
+                <div style={{ padding: '10px 16px', borderTop: `1px solid ${color.cardBorder}`, fontSize: '12px' }}>
                   <strong>{totalBillableHours}</strong> billable hours from{' '}
                   {hourGroups.length === 1 ? '1 person-day' : `${hourGroups.length} person-days`} —
                   each day is summed first, then rounded UP to the half hour (§7.2).
@@ -877,19 +799,12 @@ export function InvoiceBuilder(props: InvoiceBuilderProps) {
                 </div>
               )}
               {splitDays.length > 0 && (
-                <div
-                  style={{
-                    padding: '10px 16px',
-                    backgroundColor: '#fffbeb',
-                    color: color.warning,
-                    fontSize: '12px',
-                  }}
-                >
+                <div style={{ padding: '10px 16px', backgroundColor: '#fffbeb', color: color.warning, fontSize: '12px' }}>
                   You are splitting {splitDays.length === 1 ? 'a person-day' : 'person-days'} across
                   invoices. Rounding applies per person per day, so billing the parts separately can
                   total more than the whole day would. Bill a day in one piece unless you mean to.
-                  (A day can never be split across INSTRUMENTS — &quot;Bills to&quot; is set per
-                  person-day for exactly this reason.)
+                  (A day can never be split across INSTRUMENTS — &quot;Bills to&quot; is set per person-day
+                  for exactly this reason.)
                 </div>
               )}
             </>
@@ -900,11 +815,7 @@ export function InvoiceBuilder(props: InvoiceBuilderProps) {
       {isDraft && isDerived && pickerOpen && (
         <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
           <button type="button" onClick={derive} disabled={busy} style={primaryButtonStyle}>
-            {busy
-              ? 'Generating…'
-              : derivedLineCount > 0
-                ? 'Regenerate invoice'
-                : 'Generate invoice'}
+            {busy ? 'Generating…' : derivedLineCount > 0 ? 'Regenerate invoice' : 'Generate invoice'}
           </button>
           {derivedLineCount > 0 && (
             <button
@@ -1027,39 +938,21 @@ function EstimateLinePanel({
   const total = chosen.reduce((s, l) => s + amountFor(l.remaining), 0);
   // The whole-estimate discount goes across ONCE, with the first billing, so
   // the invoice closes at the contract value rather than the subtotal.
-  const discount =
-    billing.undiscounted > 0 && pct >= 100 && selected.size === billing.lines.length
-      ? billing.undiscounted
-      : 0;
+  const discount = billing.undiscounted > 0 && pct >= 100 && selected.size === billing.lines.length
+    ? billing.undiscounted
+    : 0;
 
   return (
     <div style={{ ...cardStyle, overflow: 'hidden' }}>
       <div style={{ padding: '12px 16px', borderBottom: `1px solid ${color.cardBorder}` }}>
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'baseline',
-            justifyContent: 'space-between',
-            gap: '12px',
-            flexWrap: 'wrap',
-          }}
-        >
+        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
           <div>
             <span style={microLabelStyle}>Contract line items</span>
             <span style={{ fontSize: '11px', color: color.faint, marginLeft: '8px' }}>
               all selected — untick what this invoice should not carry (§2)
             </span>
           </div>
-          <label
-            style={{
-              fontSize: '12px',
-              color: color.body,
-              display: 'inline-flex',
-              gap: '6px',
-              alignItems: 'center',
-              whiteSpace: 'nowrap',
-            }}
-          >
+          <label style={{ fontSize: '12px', color: color.body, display: 'inline-flex', gap: '6px', alignItems: 'center', whiteSpace: 'nowrap' }}>
             Bill
             <input
               value={percent}
@@ -1132,14 +1025,7 @@ function EstimateLinePanel({
                   </div>
                 )}
               </td>
-              <td
-                style={{
-                  ...tdStyle,
-                  textAlign: 'right',
-                  fontFamily: font.mono,
-                  color: selected.has(l.lineItemId) ? color.body : color.faint,
-                }}
-              >
+              <td style={{ ...tdStyle, textAlign: 'right', fontFamily: font.mono, color: selected.has(l.lineItemId) ? color.body : color.faint }}>
                 {selected.has(l.lineItemId) ? money(amountFor(l.remaining)) : '—'}
               </td>
             </tr>
@@ -1147,16 +1033,7 @@ function EstimateLinePanel({
         </tbody>
       </table>
 
-      <div
-        style={{
-          padding: '10px 16px',
-          borderTop: `1px solid ${color.cardBorder}`,
-          display: 'flex',
-          gap: '10px',
-          alignItems: 'center',
-          flexWrap: 'wrap',
-        }}
-      >
+      <div style={{ padding: '10px 16px', borderTop: `1px solid ${color.cardBorder}`, display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
         <button
           type="button"
           disabled={busy || chosen.length === 0}
@@ -1191,14 +1068,7 @@ function EstimateLinePanel({
       </div>
 
       {billing.undiscounted > 0 && discount === 0 && (
-        <div
-          style={{
-            padding: '10px 16px',
-            backgroundColor: '#fffbeb',
-            color: color.warning,
-            fontSize: '12px',
-          }}
-        >
+        <div style={{ padding: '10px 16px', backgroundColor: '#fffbeb', color: color.warning, fontSize: '12px' }}>
           This estimate carries a {money(billing.undiscounted)} whole-contract discount. The line
           prices above are the pre-discount subtotal, so billing all of them at 100% is what brings
           the discount across and lands exactly on the contract value. Billing a subset now leaves
@@ -1245,17 +1115,12 @@ function DrawPanel({
       <span style={microLabelStyle}>Add a draw</span>
       <div style={{ fontSize: '12px', color: color.faint, margin: '4px 0 8px' }}>
         Percentages apply to the ORIGINAL contract value
-        {originalContractValue !== null ? ` ${money(originalContractValue)}` : ''} — a signed change
-        order never re-prices a draw (§2 rule a). The FINAL draw bills the remainder
+        {originalContractValue !== null ? ` ${money(originalContractValue)}` : ''} — a signed
+        change order never re-prices a draw (§2 rule a). The FINAL draw bills the remainder
         {remaining !== null ? ` (${money(remaining)})` : ''}, not a fresh percentage (rule b).
       </div>
       <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
-        <input
-          value={label}
-          onChange={(e) => setLabel(e.target.value)}
-          placeholder="Label (e.g. Rough-in)"
-          style={inputStyle}
-        />
+        <input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Label (e.g. Rough-in)" style={inputStyle} />
         <input
           value={percent}
           onChange={(e) => {
@@ -1294,12 +1159,14 @@ function DrawPanel({
             // to be `?? 0`, which would price a percentage draw at ZERO — a
             // silent, wrong bill. Refuse loudly instead.
             if (originalContractValue === null) {
-              await run(async () => ({
-                success: false,
-                error:
-                  'This invoice cannot price a draw: the contract value is not available to you. ' +
-                  'Ask an Owner or Admin to add the draw, or bill a fixed amount instead.',
-              }));
+              await run(
+                async () => ({
+                  success: false,
+                  error:
+                    'This invoice cannot price a draw: the contract value is not available to you. ' +
+                    'Ask an Owner or Admin to add the draw, or bill a fixed amount instead.',
+                }),
+              );
               return;
             }
             const ok = await run(
@@ -1367,9 +1234,8 @@ function LinesPanel({
   // §11 — the category was never captured, which is what made a manual line
   // vanish from the by-section presentation. It is also §2's "categories post
   // into project finances" half. Defaults to 'other', never null.
-  const [manualCategory, setManualCategory] = useState<
-    'labor' | 'material' | 'subcontractor' | 'other' | 'allowance'
-  >('other');
+  const [manualCategory, setManualCategory] =
+    useState<'labor' | 'material' | 'subcontractor' | 'other' | 'allowance'>('other');
   // §2 [S97] — STANDALONE vs a lump-sum billing OF an instrument. Two different
   // things were conflated here: only the STANDALONE kind is new income that
   // posts to project finances, and only an instrument-attributed line is
@@ -1386,7 +1252,9 @@ function LinesPanel({
       </div>
 
       {invoice.lines.length === 0 ? (
-        <div style={{ padding: '18px', fontSize: '13px', color: color.faint }}>No lines yet.</div>
+        <div style={{ padding: '18px', fontSize: '13px', color: color.faint }}>
+          No lines yet.
+        </div>
       ) : (
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
@@ -1413,29 +1281,13 @@ function LinesPanel({
                   ) : null}
                 </td>
                 <td style={{ ...tdStyle, color: color.mutedAlt }}>{line.category ?? '—'}</td>
-                <td
-                  style={{
-                    ...tdStyle,
-                    textAlign: 'right',
-                    fontFamily: font.mono,
-                    color: color.mutedAlt,
-                  }}
-                >
+                <td style={{ ...tdStyle, textAlign: 'right', fontFamily: font.mono, color: color.mutedAlt }}>
                   {line.cost_basis === null ? '—' : money(Number(line.cost_basis))}
                 </td>
-                <td
-                  style={{
-                    ...tdStyle,
-                    textAlign: 'right',
-                    fontFamily: font.mono,
-                    color: color.mutedAlt,
-                  }}
-                >
+                <td style={{ ...tdStyle, textAlign: 'right', fontFamily: font.mono, color: color.mutedAlt }}>
                   {line.derived_amount === null ? '—' : money(Number(line.derived_amount))}
                 </td>
-                <td
-                  style={{ ...tdStyle, textAlign: 'right', fontFamily: font.mono, fontWeight: 700 }}
-                >
+                <td style={{ ...tdStyle, textAlign: 'right', fontFamily: font.mono, fontWeight: 700 }}>
                   {money(Number(line.billed_amount))}
                 </td>
                 {isDraft && (
@@ -1447,19 +1299,12 @@ function LinesPanel({
                         run(
                           () =>
                             deleteInvoiceLine(line.id).then(async (r) =>
-                              r.success
-                                ? recalculateInvoiceTotals(invoice.id, { instrumentTypes })
-                                : r
+                              r.success ? recalculateInvoiceTotals(invoice.id, { instrumentTypes }) : r
                             ),
                           'Line removed.'
                         )
                       }
-                      style={{
-                        ...secondaryButtonStyle,
-                        padding: '2px 8px',
-                        fontSize: '11px',
-                        color: color.danger,
-                      }}
+                      style={{ ...secondaryButtonStyle, padding: '2px 8px', fontSize: '11px', color: color.danger }}
                     >
                       ✕
                     </button>
@@ -1473,32 +1318,18 @@ function LinesPanel({
 
       {/* §11 layout A — labor outside the block; Subtotal/Markup cover non-labor only */}
       {invoice.presentation_level === 'full_detail' && invoice.lines.length > 0 && (
-        <div
-          style={{
-            padding: '12px 16px',
-            borderTop: `1px solid ${color.cardBorder}`,
-            fontSize: '13px',
-          }}
-        >
+        <div style={{ padding: '12px 16px', borderTop: `1px solid ${color.cardBorder}`, fontSize: '13px' }}>
           <span style={microLabelStyle}>Client sees (full detail — layout A)</span>
           <div style={{ marginTop: '6px', fontFamily: font.mono, fontSize: '12px' }}>
             {/* §11 [S97] — one block PER INSTRUMENT, matching the PDF exactly.
                 A single-instrument invoice shows no heading, as before. */}
             {presented.groups.map((group, gi) => (
-              <div
-                key={group.key || gi}
-                style={{ marginBottom: gi < presented.groups.length - 1 ? '8px' : 0 }}
-              >
+              <div key={group.key || gi} style={{ marginBottom: gi < presented.groups.length - 1 ? '8px' : 0 }}>
                 {presented.groups.length > 1 && group.label !== '' && (
-                  <div style={{ fontWeight: 700, marginTop: gi > 0 ? '6px' : 0 }}>
-                    {group.label}
-                  </div>
+                  <div style={{ fontWeight: 700, marginTop: gi > 0 ? '6px' : 0 }}>{group.label}</div>
                 )}
                 {group.laborLines.map((l, i) => (
-                  <div
-                    key={`labor-${i}`}
-                    style={{ display: 'flex', justifyContent: 'space-between' }}
-                  >
+                  <div key={`labor-${i}`} style={{ display: 'flex', justifyContent: 'space-between' }}>
                     <span>{l.description}</span>
                     <span>{money(l.amount)}</span>
                   </div>
@@ -1518,15 +1349,7 @@ function LinesPanel({
                 ))}
                 {group.nonLaborLines.length > 0 && (
                   <>
-                    <div
-                      style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        borderTop: `1px solid ${color.rowDivider}`,
-                        marginTop: '4px',
-                        paddingTop: '4px',
-                      }}
-                    >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: `1px solid ${color.rowDivider}`, marginTop: '4px', paddingTop: '4px' }}>
                       <span>Subtotal (non-labor)</span>
                       <span>{money(group.nonLaborSubtotal)}</span>
                     </div>
@@ -1539,24 +1362,12 @@ function LinesPanel({
               </div>
             ))}
             {presented.adjustmentLines.map((l, i) => (
-              <div
-                key={`adj-${i}`}
-                style={{ display: 'flex', justifyContent: 'space-between', color: color.warning }}
-              >
+              <div key={`adj-${i}`} style={{ display: 'flex', justifyContent: 'space-between', color: color.warning }}>
                 <span>{l.description}</span>
                 <span>{money(l.amount)}</span>
               </div>
             ))}
-            <div
-              style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                fontWeight: 700,
-                borderTop: `1px solid ${color.cardBorder}`,
-                marginTop: '4px',
-                paddingTop: '4px',
-              }}
-            >
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, borderTop: `1px solid ${color.cardBorder}`, marginTop: '4px', paddingTop: '4px' }}>
               <span>TOTAL</span>
               <span>{money(presented.total)}</span>
             </div>
@@ -1571,14 +1382,7 @@ function LinesPanel({
       )}
 
       {invoice.presentation_level === 'by_section' && presented.sections.length > 0 && (
-        <div
-          style={{
-            padding: '12px 16px',
-            borderTop: `1px solid ${color.cardBorder}`,
-            fontFamily: font.mono,
-            fontSize: '12px',
-          }}
-        >
+        <div style={{ padding: '12px 16px', borderTop: `1px solid ${color.cardBorder}`, fontFamily: font.mono, fontSize: '12px' }}>
           {presented.sections.map((s) => (
             <div key={s.label} style={{ display: 'flex', justifyContent: 'space-between' }}>
               <span>{s.label}</span>
@@ -1589,13 +1393,7 @@ function LinesPanel({
       )}
 
       {/* Totals — §5/§8 */}
-      <div
-        style={{
-          padding: '12px 16px',
-          borderTop: `1px solid ${color.cardBorder}`,
-          backgroundColor: color.tableHeadBg,
-        }}
-      >
+      <div style={{ padding: '12px 16px', borderTop: `1px solid ${color.cardBorder}`, backgroundColor: color.tableHeadBg }}>
         <TotalRow label="Calculated total" value={Number(invoice.derived_total)} muted />
         <TotalRow label="Billed total" value={Number(invoice.billed_total)} />
         {Number(invoice.retainage_withheld) > 0 && (
@@ -1611,12 +1409,7 @@ function LinesPanel({
       {isDraft && (
         <div style={{ padding: '10px 16px', borderTop: `1px solid ${color.cardBorder}` }}>
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
-            <input
-              value={manualLabel}
-              onChange={(e) => setManualLabel(e.target.value)}
-              placeholder="Manual line"
-              style={inputStyle}
-            />
+            <input value={manualLabel} onChange={(e) => setManualLabel(e.target.value)} placeholder="Manual line" style={inputStyle} />
             <select
               value={manualCategory}
               onChange={(e) => setManualCategory(e.target.value as typeof manualCategory)}
@@ -1642,13 +1435,7 @@ function LinesPanel({
                 </option>
               ))}
             </select>
-            <input
-              value={manualAmount}
-              onChange={(e) => setManualAmount(e.target.value)}
-              placeholder="$"
-              inputMode="decimal"
-              style={{ ...inputStyle, width: '110px' }}
-            />
+            <input value={manualAmount} onChange={(e) => setManualAmount(e.target.value)} placeholder="$" inputMode="decimal" style={{ ...inputStyle, width: '110px' }} />
             <button
               type="button"
               disabled={busy || !manualLabel.trim() || !manualAmount}
@@ -1664,9 +1451,7 @@ function LinesPanel({
                       category: manualCategory,
                       sourceEstimateId: chosen?.ref.estimate_id ?? null,
                       sourceChangeOrderId: chosen?.ref.change_order_id ?? null,
-                    }).then(async (r) =>
-                      r.success ? recalculateInvoiceTotals(invoice.id, { instrumentTypes }) : r
-                    ),
+                    }).then(async (r) => (r.success ? recalculateInvoiceTotals(invoice.id, { instrumentTypes }) : r)),
                   'Line added.'
                 );
                 if (ok) {
@@ -1691,43 +1476,13 @@ function LinesPanel({
   );
 }
 
-function TotalRow({
-  label,
-  value,
-  bold,
-  muted,
-  warn,
-}: {
-  label: string;
-  value: number;
-  bold?: boolean;
-  muted?: boolean;
-  warn?: boolean;
-}) {
+function TotalRow({ label, value, bold, muted, warn }: { label: string; value: number; bold?: boolean; muted?: boolean; warn?: boolean }) {
   return (
-    <div
-      style={{
-        display: 'flex',
-        justifyContent: 'space-between',
-        fontSize: bold ? '14px' : '13px',
-        padding: '2px 0',
-      }}
-    >
-      <span
-        style={{
-          color: muted ? color.faint : warn ? color.warning : color.body,
-          fontWeight: bold ? 700 : 400,
-        }}
-      >
+    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: bold ? '14px' : '13px', padding: '2px 0' }}>
+      <span style={{ color: muted ? color.faint : warn ? color.warning : color.body, fontWeight: bold ? 700 : 400 }}>
         {label}
       </span>
-      <span
-        style={{
-          fontFamily: font.mono,
-          fontWeight: bold ? 700 : 400,
-          color: muted ? color.faint : warn ? color.warning : color.navy,
-        }}
-      >
+      <span style={{ fontFamily: font.mono, fontWeight: bold ? 700 : 400, color: muted ? color.faint : warn ? color.warning : color.navy }}>
         {money(value)}
       </span>
     </div>
@@ -1760,29 +1515,18 @@ function SelectionsPanel({
   const [amounts, setAmounts] = useState<Record<string, string>>({});
   const fixed = billing.selections.filter((s) => s.kind === 'fixed_remaining');
   return (
-    <div
-      style={{
-        ...cardStyle,
-        padding: '16px 18px',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '10px',
-      }}
-    >
+    <div style={{ ...cardStyle, padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
       <p style={{ ...h2Style, margin: 0 }}>Selections</p>
       <p style={{ fontSize: '12px', color: color.muted, margin: 0 }}>
-        The client signed each of these; the added price bills against the selection itself, not the
-        original contract, and cannot exceed what was signed.
+        The client signed each of these; the added price bills against the selection itself, not
+        the original contract, and cannot exceed what was signed.
       </p>
       {fixed.map((s) => {
         const remaining = s.remaining ?? 0;
         const raw = amounts[s.selectionId];
         const amount = raw === undefined || raw.trim() === '' ? remaining : Number(raw);
         return (
-          <div
-            key={s.selectionId}
-            style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}
-          >
+          <div key={s.selectionId} style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
             <span style={{ fontSize: '13px', color: color.body, minWidth: '220px' }}>
               {s.name} — signed {money(s.signedVariance)}, {money(s.billed)} billed,{' '}
               <strong>{money(remaining)}</strong> remaining
@@ -1808,9 +1552,7 @@ function SelectionsPanel({
                       amount,
                       category: 'allowance',
                       sourceSelectionId: s.selectionId,
-                    }).then(async (r) =>
-                      r.success ? recalculateInvoiceTotals(invoiceId, { instrumentTypes }) : r
-                    ),
+                    }).then(async (r) => (r.success ? recalculateInvoiceTotals(invoiceId, { instrumentTypes }) : r)),
                   'Selection billed.'
                 );
                 if (ok) setAmounts((prev) => ({ ...prev, [s.selectionId]: '' }));
@@ -1847,32 +1589,13 @@ function AdjustmentsPanel({
   const totalBeforeCredit = Number(invoice.billed_total);
 
   return (
-    <div
-      style={{
-        ...cardStyle,
-        padding: '12px 16px',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '10px',
-      }}
-    >
+    <div style={{ ...cardStyle, padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
       <span style={microLabelStyle}>Adjustments</span>
 
       {/* §8 R1 — a reduction is an explicit, client-visible discount LINE */}
       <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
-        <input
-          value={discountLabel}
-          onChange={(e) => setDiscountLabel(e.target.value)}
-          placeholder="Discount description"
-          style={inputStyle}
-        />
-        <input
-          value={discountAmount}
-          onChange={(e) => setDiscountAmount(e.target.value)}
-          placeholder="$"
-          inputMode="decimal"
-          style={{ ...inputStyle, width: '100px' }}
-        />
+        <input value={discountLabel} onChange={(e) => setDiscountLabel(e.target.value)} placeholder="Discount description" style={inputStyle} />
+        <input value={discountAmount} onChange={(e) => setDiscountAmount(e.target.value)} placeholder="$" inputMode="decimal" style={{ ...inputStyle, width: '100px' }} />
         <button
           type="button"
           disabled={busy || !discountLabel.trim() || !discountAmount}
@@ -1881,8 +1604,7 @@ function AdjustmentsPanel({
             const ok = await run(
               () =>
                 addDiscountLine(invoice.id, discountLabel.trim(), Number(discountAmount)).then(
-                  async (r) =>
-                    r.success ? recalculateInvoiceTotals(invoice.id, { instrumentTypes }) : r
+                  async (r) => (r.success ? recalculateInvoiceTotals(invoice.id, { instrumentTypes }) : r)
                 ),
               'Discount line added.'
             );
@@ -1901,10 +1623,7 @@ function AdjustmentsPanel({
 
       {/* §4a / §3a — place an available credit on THIS invoice (user-chosen) */}
       {credits.map((credit) => (
-        <div
-          key={`${credit.kind}-${credit.label}`}
-          style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}
-        >
+        <div key={`${credit.kind}-${credit.label}`} style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
           <span style={{ fontSize: '13px', color: color.body }}>
             {credit.label} — {money(credit.amount)} available
           </span>
@@ -1924,22 +1643,15 @@ function AdjustmentsPanel({
                       )
                     : credit.kind === 'selection'
                       ? // §7.2 — sourced, so is_final is lifted; any invoice the user chooses.
-                        addAllowanceCredit(
-                          invoice.id,
-                          credit.label,
-                          credit.amount,
-                          credit.selectionId as string
-                        )
+                        addAllowanceCredit(invoice.id, credit.label, credit.amount, credit.selectionId as string)
                       : applyDepositCredit(
-                          invoice.id,
-                          credit.depositInvoiceId as string,
-                          credit.amount,
-                          totalBeforeCredit,
-                          credit.label
-                        )
-                  ).then(async (r) =>
-                    r.success ? recalculateInvoiceTotals(invoice.id, { instrumentTypes }) : r
-                  ),
+                        invoice.id,
+                        credit.depositInvoiceId as string,
+                        credit.amount,
+                        totalBeforeCredit,
+                        credit.label
+                      )
+                  ).then(async (r) => (r.success ? recalculateInvoiceTotals(invoice.id, { instrumentTypes }) : r)),
                 'Credit placed on this invoice.'
               )
             }
@@ -1952,13 +1664,7 @@ function AdjustmentsPanel({
       {/* §4b — under-allowance credit: Owner/Admin, FINAL invoice only */}
       {invoice.is_final && canApprove && (
         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
-          <input
-            value={allowanceAmount}
-            onChange={(e) => setAllowanceAmount(e.target.value)}
-            placeholder="Under-allowance $"
-            inputMode="decimal"
-            style={{ ...inputStyle, width: '140px' }}
-          />
+          <input value={allowanceAmount} onChange={(e) => setAllowanceAmount(e.target.value)} placeholder="Under-allowance $" inputMode="decimal" style={{ ...inputStyle, width: '140px' }} />
           <button
             type="button"
             disabled={busy || !allowanceAmount}
@@ -1966,12 +1672,8 @@ function AdjustmentsPanel({
             onClick={async () => {
               const ok = await run(
                 () =>
-                  addAllowanceCredit(
-                    invoice.id,
-                    'Allowance under-run credit',
-                    Number(allowanceAmount)
-                  ).then(async (r) =>
-                    r.success ? recalculateInvoiceTotals(invoice.id, { instrumentTypes }) : r
+                  addAllowanceCredit(invoice.id, 'Allowance under-run credit', Number(allowanceAmount)).then(
+                    async (r) => (r.success ? recalculateInvoiceTotals(invoice.id, { instrumentTypes }) : r)
                   ),
                 'Allowance credit applied.'
               );
@@ -2016,16 +1718,7 @@ function SettingsPanel({
   const [dueDate, setDueDate] = useState(invoice.due_date ?? '');
 
   return (
-    <div
-      style={{
-        ...cardStyle,
-        padding: '12px 16px',
-        display: 'flex',
-        gap: '18px',
-        flexWrap: 'wrap',
-        alignItems: 'flex-end',
-      }}
-    >
+    <div style={{ ...cardStyle, padding: '12px 16px', display: 'flex', gap: '18px', flexWrap: 'wrap', alignItems: 'flex-end' }}>
       <div>
         <span style={microLabelStyle}>Presentation detail</span>
         <div style={{ marginTop: '4px' }}>
@@ -2125,31 +1818,20 @@ function SettingsPanel({
         )}
       </div>
 
-      <label
-        style={{
-          fontSize: '13px',
-          color: color.body,
-          display: 'inline-flex',
-          gap: '6px',
-          alignItems: 'center',
-        }}
-      >
+      <label style={{ fontSize: '13px', color: color.body, display: 'inline-flex', gap: '6px', alignItems: 'center' }}>
         <input
           type="checkbox"
           checked={invoice.is_final}
           disabled={busy}
           onChange={(e) =>
             run(
-              () =>
-                updateInvoiceSettings(invoice.id, { is_final: e.target.checked }, instrumentTypes),
+              () => updateInvoiceSettings(invoice.id, { is_final: e.target.checked }, instrumentTypes),
               'Updated.'
             )
           }
         />
         Final invoice
-        <span style={{ fontSize: '11px', color: color.faint }}>
-          (unlocks the §4b allowance credit)
-        </span>
+        <span style={{ fontSize: '11px', color: color.faint }}>(unlocks the §4b allowance credit)</span>
       </label>
 
       {mixedRetainage && (
@@ -2218,22 +1900,12 @@ function LifecycleActions({
 
       {/* §12 — a PM submits; Owner/Admin approve and send. */}
       {isDraft && !canApprove && (
-        <button
-          type="button"
-          disabled={busy}
-          style={secondaryButtonStyle}
-          onClick={() => run(() => submitForApproval(invoice.id), 'Submitted for approval.')}
-        >
+        <button type="button" disabled={busy} style={secondaryButtonStyle} onClick={() => run(() => submitForApproval(invoice.id), 'Submitted for approval.')}>
           Submit for approval
         </button>
       )}
       {isPending && canApprove && memberId && (
-        <button
-          type="button"
-          disabled={busy}
-          style={secondaryButtonStyle}
-          onClick={() => run(() => approveInvoice(invoice.id, memberId), 'Approved.')}
-        >
+        <button type="button" disabled={busy} style={secondaryButtonStyle} onClick={() => run(() => approveInvoice(invoice.id, memberId), 'Approved.')}>
           Approve
         </button>
       )}
@@ -2243,16 +1915,8 @@ function LifecycleActions({
           disabled={busy || invoice.lines.length === 0}
           style={primaryButtonStyle}
           onClick={async () => {
-            if (
-              !(await confirm(
-                'Issue this invoice WITHOUT emailing it? It will be numbered and frozen — corrections go through void and reissue. Use "Send to client" if you want it emailed.'
-              ))
-            )
-              return;
-            run(
-              () => markInvoiceSent(invoice.id, timeZone),
-              'Invoice issued. Nothing was emailed — print or download it to deliver.'
-            );
+            if (!(await confirm('Issue this invoice WITHOUT emailing it? It will be numbered and frozen — corrections go through void and reissue. Use "Send to client" if you want it emailed.'))) return;
+            run(() => markInvoiceSent(invoice.id, timeZone), 'Invoice issued. Nothing was emailed — print or download it to deliver.');
           }}
         >
           {/* §16 #18 — the PRINT path: issue without email. "Send to client" in
@@ -2264,26 +1928,13 @@ function LifecycleActions({
 
       {/* §9 — void requires a reason; actor narrows once money is applied. */}
       {isSent && canApprove && !voidOpen && (
-        <button
-          type="button"
-          disabled={busy}
-          style={{ ...secondaryButtonStyle, color: color.danger }}
-          onClick={() => setVoidOpen(true)}
-        >
+        <button type="button" disabled={busy} style={{ ...secondaryButtonStyle, color: color.danger }} onClick={() => setVoidOpen(true)}>
           Void
         </button>
       )}
       {voidOpen && (
-        <span
-          style={{ display: 'inline-flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}
-        >
-          <input
-            value={reason}
-            onChange={(e) => setReason(e.target.value)}
-            placeholder="Reason (required)"
-            autoFocus
-            style={inputStyle}
-          />
+        <span style={{ display: 'inline-flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
+          <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Reason (required)" autoFocus style={inputStyle} />
           <button
             type="button"
             disabled={busy || !reason.trim() || !memberId}
