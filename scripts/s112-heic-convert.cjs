@@ -25,10 +25,20 @@
 // PER ROW (live rows only: is_deleted = false):
 //   1. new path = `${file_path}.jpg` — unique by construction; the row is
 //      SKIPPED if that name, or any side-object target name, already exists.
-//   2. JPEG bytes from Storage image transformation of the ORIGINAL
-//      (/render/image/, service-role signed, `{ quality: 85 }` — NO width or
-//      height, so nothing is resized), fetched with Accept: image/jpeg. The row
-//      FAILS unless the response is `image/jpeg` AND the bytes start FF D8 FF.
+//   2. JPEG bytes from the ORIGINAL, converted LOCALLY by ImageMagick
+//      (`magick - -quality 90 jpg:-`), which keeps the EXIF block. The row
+//      FAILS unless the bytes start FF D8 FF, the pixel size equals the
+//      source's, AND every evidence field the source carries (capture time,
+//      GPS latitude/longitude) is present and identical in the JPEG.
+//
+//      ⚠️ NOT /render/image/ — RULED OUT [S112, Josh Q3: "A jobsite photo's
+//      capture time and GPS are evidence ... If neither is possible, STOP"].
+//      Measured on three real iPhone HEICs: Storage's transform returned a
+//      JPEG with NO DateTimeOriginal and NO GPS, AND resized 3024x4032 to
+//      3000x4000. _Superseded step 2, quoted:_ "JPEG bytes from Storage image
+//      transformation of the ORIGINAL (/render/image/, service-role signed,
+//      `{ quality: 85 }` — NO width or height, so nothing is resized)". It
+//      did resize, and it dropped the evidence.
 //   3. upload to the new path (image/jpeg, upsert: false).
 //   4. storage `copy` (server-side) of every existing thumbnail and the
 //      `.markup.jpg` derivative to the new names. The markup fingerprint is a
@@ -54,10 +64,10 @@
 
 'use strict';
 const fs = require('fs');
+const { spawnSync } = require('child_process');
 
 const BUCKET = 'project-files';
 const PAGE = 500;
-const RENDER_TRANSFORM = Object.freeze({ quality: 85 });
 const HEIC_MIMES = Object.freeze(['image/heic', 'image/heif', 'image/heic-sequence', 'image/heif-sequence']);
 const HEIC_NAME_RE = /\.(heic|heif)$/i;
 const OWN_THUMB_SUFFIX = /^(\.m[0-9a-f]{8})?\.thumb\.webp$/;
@@ -347,18 +357,60 @@ async function listFolderMatching(db, oldPath) {
   return out;
 }
 
-async function renderJpeg(db, path) {
-  return withRetry(async () => {
-    const signed = await db.storage.from(BUCKET).createSignedUrl(path, 60, { transform: { ...RENDER_TRANSFORM } });
-    if (signed.error || !signed.data?.signedUrl) throw new Error(`sign: ${signed.error?.message ?? 'no url'}`);
-    const res = await fetch(signed.data.signedUrl, { headers: { Accept: 'image/jpeg' } });
-    const type = res.headers.get('content-type') ?? '';
-    if (!res.ok) throw new Error(`render ${res.status} ${type}: ${(await res.text().catch(() => '')).slice(0, 160)}`);
-    const bytes = new Uint8Array(await res.arrayBuffer());
-    if (!type.startsWith('image/jpeg')) throw new Error(`render returned ${type || 'no content-type'}, not image/jpeg`);
-    if (!isJpegMagic(bytes)) throw new Error('render bytes do not start FF D8 FF');
-    return bytes;
+/** The evidence fields that must survive conversion, as ImageMagick reads them. */
+const EVIDENCE_FIELDS = Object.freeze(['DateTimeOriginal', 'GPSLatitude', 'GPSLatitudeRef', 'GPSLongitude', 'GPSLongitudeRef']);
+const JPEG_QUALITY = 90;
+
+function magick(args, input) {
+  const r = spawnSync('magick', args, { input, maxBuffer: 256 * 1024 * 1024 });
+  if (r.error) throw new Error(`magick: ${r.error.message}`);
+  if (r.status !== 0) throw new Error(`magick ${args[0]} exit ${r.status}: ${String(r.stderr).slice(0, 200)}`);
+  return r.stdout;
+}
+
+/** Pixel size and evidence fields of an image, via ImageMagick. */
+function inspect(bytes) {
+  const fmt = ['%w', '%h', ...EVIDENCE_FIELDS.map((k) => `%[EXIF:${k}]`)].join('\\t');
+  const [w, h, ...vals] = String(magick(['identify', '-format', fmt, '-'], bytes)).split('\t');
+  const evidence = {};
+  EVIDENCE_FIELDS.forEach((k, i) => {
+    if (vals[i]) evidence[k] = vals[i];
   });
+  return { w: Number(w), h: Number(h), evidence };
+}
+
+/**
+ * The first difference that would make a conversion lossy, or null. Pure, so
+ * the rule is unit-tested without ImageMagick.
+ */
+function conversionDefect(src, out) {
+  if (src.w !== out.w || src.h !== out.h) return `resized ${src.w}x${src.h} -> ${out.w}x${out.h}`;
+  for (const [k, v] of Object.entries(src.evidence)) {
+    if (out.evidence[k] !== v) return `EXIF ${k} lost (${v} -> ${out.evidence[k] ?? 'absent'})`;
+  }
+  return null;
+}
+
+/** Refuse to start without a HEIC-capable ImageMagick, rather than fail per row. */
+function assertConverter() {
+  const list = String(magick(['-list', 'format']));
+  if (!/^\s*HEIC\*?\s+\S+\s+r/m.test(list)) {
+    throw new Error('ImageMagick cannot READ HEIC here (magick -list format has no readable HEIC). Refusing.');
+  }
+}
+
+async function convertJpeg(db, path) {
+  const dl = await withRetry(async () => {
+    const r = await db.storage.from(BUCKET).download(path);
+    if (r.error || !r.data) throw new Error(`download ${path}: ${r.error?.message ?? 'no data'}`);
+    return r.data;
+  });
+  const src = Buffer.from(await dl.arrayBuffer());
+  const bytes = new Uint8Array(magick(['-', '-quality', String(JPEG_QUALITY), 'jpg:-'], src));
+  if (!isJpegMagic(bytes)) throw new Error('converted bytes do not start FF D8 FF');
+  const defect = conversionDefect(inspect(src), inspect(Buffer.from(bytes)));
+  if (defect) throw new Error(`conversion is lossy — ${defect}`);
+  return bytes;
 }
 
 async function readSiteVisitFreeze(db, rows) {
@@ -412,11 +464,13 @@ async function readCandidates(db, { deleted, onlyIds = null }) {
 // ---------------------------------------------------------------------------
 // CONVERT (dry run / apply)
 // ---------------------------------------------------------------------------
-async function convertRow(db, writer, fd, row, plan) {
+// `convert` is injectable so the unit suite can run where ImageMagick 7 is not
+// installed (CI); the live proof runs the real one.
+async function convertRow(db, writer, fd, row, plan, convert = convertJpeg) {
   appendLine(fd, undoRecord('pending', row, plan));
   const created = [];
   try {
-    const bytes = await renderJpeg(db, row.file_path);
+    const bytes = await convert(db, row.file_path);
     await withRetry(async (n) => {
       const up = await writer.upload(plan.new_path, bytes, 'image/jpeg');
       // Duplicate on a RETRY is our own earlier attempt landing: the name was
@@ -463,6 +517,9 @@ async function convertRow(db, writer, fd, row, plan) {
 }
 
 async function runConvert(db, opt) {
+  // Before anything, dry run included: a dry run on a box that cannot convert
+  // would otherwise report a plan that --apply then fails row by row.
+  assertConverter();
   const writer = makeWriter(db, opt.apply);
   const rows = await readCandidates(db, { deleted: false, onlyIds: opt.onlyIds });
   const trashed = await readCandidates(db, { deleted: true, onlyIds: opt.onlyIds });
@@ -633,7 +690,8 @@ async function main() {
 
 module.exports = {
   BUCKET,
-  RENDER_TRANSFORM,
+  EVIDENCE_FIELDS,
+  conversionDefect,
   hasMarkup,
   markupFingerprint,
   thumbPathFor,

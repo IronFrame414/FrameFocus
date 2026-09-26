@@ -242,15 +242,19 @@ describe('S112 convertRow against fakes — order, magic check, rollback', () =>
     vi.unstubAllGlobals();
     if (dir) fs.rmSync(dir, { recursive: true, force: true });
   });
-  const stubFetch = (type: string, bytes: Uint8Array) =>
-    vi.stubGlobal('fetch', vi.fn(async () => new Response(bytes.slice().buffer as ArrayBuffer, { status: 200, headers: { 'content-type': type } })));
+  // [S112 Q3] The converter is ImageMagick now, not /render/image/ — which
+  // measured to drop capture time and GPS. Injected here; the real one runs in
+  // s112-heic-convert.live.ts. _Superseded:_ a stubbed fetch of the render URL.
+  const ok = (bytes: Uint8Array) => async () => bytes;
+  const fails = (message: string) => async () => {
+    throw new Error(message);
+  };
 
-  it('JPEG render → upload, copy each side object, then UPDATE; undo file reads pending, done', async () => {
-    stubFetch('image/jpeg', jpegBytes(3000, 4000));
+  it('JPEG conversion → upload, copy each side object, then UPDATE; undo file reads pending, done', async () => {
     const f = fakeDb();
     const p = undoPath();
     const fd = fs.openSync(p, 'a');
-    const r = await heic.convertRow(f.db, heic.makeWriter(f.db, true), fd, row, plan);
+    const r = await heic.convertRow(f.db, heic.makeWriter(f.db, true), fd, row, plan, ok(jpegBytes(3000, 4000)));
     fs.closeSync(fd);
     expect(r.dims).toEqual({ width: 3000, height: 4000 });
     expect(f.calls).toEqual(['upload', 'copy', 'copy', 'update']);
@@ -259,34 +263,66 @@ describe('S112 convertRow against fakes — order, magic check, rollback', () =>
     expect(events).toEqual(['pending', 'done']);
   });
 
-  it('CONTROL: a render that is not JPEG fails the row BEFORE any write, and is recorded rolled_back', async () => {
-    stubFetch('image/webp', new Uint8Array([0x52, 0x49, 0x46, 0x46]));
+  it('CONTROL: a LOSSY conversion (evidence dropped) fails the row BEFORE any write, recorded rolled_back', async () => {
     const f = fakeDb();
     const p = undoPath();
     const fd = fs.openSync(p, 'a');
-    await expect(heic.convertRow(f.db, heic.makeWriter(f.db, true), fd, row, plan)).rejects.toThrow(/not image\/jpeg/);
+    await expect(
+      heic.convertRow(f.db, heic.makeWriter(f.db, true), fd, row, plan, fails('conversion is lossy — EXIF GPSLatitude lost'))
+    ).rejects.toThrow(/lossy/);
     fs.closeSync(fd);
     expect(f.calls).toEqual([]);
     expect(fs.readFileSync(p, 'utf8').trim().split('\n').map((l) => JSON.parse(l).event)).toEqual(['pending', 'rolled_back']);
   });
 
-  it('CONTROL: image/jpeg header over non-JPEG bytes also fails (magic check, not just the header)', async () => {
-    stubFetch('image/jpeg', new Uint8Array([0x89, 0x50, 0x4e, 0x47]));
+  it('CONTROL: a converter failure of any kind (e.g. not a JPEG) never reaches a write', async () => {
     const f = fakeDb();
     const fd = fs.openSync(undoPath(), 'a');
-    await expect(heic.convertRow(f.db, heic.makeWriter(f.db, true), fd, row, plan)).rejects.toThrow(/FF D8 FF/);
+    await expect(
+      heic.convertRow(f.db, heic.makeWriter(f.db, true), fd, row, plan, fails('converted bytes do not start FF D8 FF'))
+    ).rejects.toThrow(/FF D8 FF/);
     fs.closeSync(fd);
     expect(f.calls).toEqual([]);
   });
 
   it('a failed copy removes what this row created and never UPDATEs the row', async () => {
-    stubFetch('image/jpeg', jpegBytes(10, 10));
     const f = fakeDb();
     f.bucket.copy.mockImplementationOnce(async () => ({ error: { message: 'boom' } }) as never);
     const fd = fs.openSync(undoPath(), 'a');
-    await expect(heic.convertRow(f.db, heic.makeWriter(f.db, true), fd, row, plan)).rejects.toThrow(/boom/);
+    await expect(heic.convertRow(f.db, heic.makeWriter(f.db, true), fd, row, plan, ok(jpegBytes(10, 10)))).rejects.toThrow(/boom/);
     fs.closeSync(fd);
     expect(f.calls).not.toContain('update');
     expect(f.bucket.remove).toHaveBeenCalledWith([NEW]);
+  });
+});
+
+describe('S112 Q3 — conversionDefect: capture time and GPS are evidence and must survive', () => {
+  const src = {
+    w: 3024,
+    h: 4032,
+    evidence: {
+      DateTimeOriginal: '2019:07:29 12:18:34',
+      GPSLatitude: '26/1,27/1,2270/100',
+      GPSLatitudeRef: 'N',
+      GPSLongitude: '80/1,7/1,4590/100',
+      GPSLongitudeRef: 'W',
+    },
+  };
+  it('identical size and every evidence field → no defect', () => {
+    expect(heic.conversionDefect(src, { ...src, evidence: { ...src.evidence } })).toBeNull();
+  });
+  it('CONTROL — what /render/image/ measured: resized AND no EXIF → a defect', () => {
+    expect(heic.conversionDefect(src, { w: 3000, h: 4000, evidence: {} })).toMatch(/resized/);
+    expect(heic.conversionDefect(src, { w: 3024, h: 4032, evidence: {} })).toMatch(/DateTimeOriginal lost/);
+  });
+  it('GPS alone dropped → a defect', () => {
+    const { GPSLatitude: _lat, ...rest } = src.evidence;
+    expect(heic.conversionDefect(src, { ...src, evidence: rest })).toMatch(/GPSLatitude lost/);
+  });
+  it('a source WITHOUT evidence converts fine (nothing to lose)', () => {
+    expect(heic.conversionDefect({ w: 10, h: 10, evidence: {} }, { w: 10, h: 10, evidence: {} })).toBeNull();
+  });
+  it('the evidence field list names capture time and both GPS coordinates', () => {
+    expect(heic.EVIDENCE_FIELDS).toEqual(expect.arrayContaining(['DateTimeOriginal', 'GPSLatitude', 'GPSLongitude']));
   });
 });

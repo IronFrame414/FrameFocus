@@ -1,6 +1,10 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { spawnSync } from 'node:child_process';
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const heicScript = require('../../../scripts/s112-heic-convert.cjs') as {
+  EVIDENCE_FIELDS: readonly string[];
+};
 import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -249,6 +253,14 @@ describe('S112 R7 · 3. apply — repointed, AND every side object still readabl
       console.log(`[S112 R7 3b-${k}] ${bytes.length} B JPEG, stored size ${d.file_size}, HEIC was ${heic.length} B`);
       expect([...bytes.subarray(0, 3)]).toEqual([0xff, 0xd8, 0xff]);
       expect(d.file_size).toBe(bytes.length);
+      // [S112 Q3, RULED Josh] Capture time and GPS are EVIDENCE. The converted
+      // JPEG must carry every field the HEIC carried, unchanged, at full size.
+      const fmt = ['%w', '%h', ...heicScript.EVIDENCE_FIELDS.map((k) => `%[EXIF:${k}]`)].join('|');
+      const read = (b: Buffer) => String(spawnSync('magick', ['identify', '-format', fmt, '-'], { input: b }).stdout);
+      const src = read(heic);
+      console.log(`[S112 R7 3b-${k}] evidence HEIC: ${src}\n                  JPEG: ${read(bytes)}`);
+      expect(src.split('|').slice(2).every(Boolean), 'the source HEIC carries no evidence — vacuous').toBe(true);
+      expect(read(bytes)).toBe(src);
       // The whole point: the served type is one a browser renders.
       const { data: signed } = await admin.storage.from(BUCKET).createSignedUrl(d.file_path, 60);
       const head = await fetch(signed!.signedUrl, { method: 'HEAD' });

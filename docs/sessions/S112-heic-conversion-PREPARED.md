@@ -16,6 +16,58 @@ Script: `scripts/s112-heic-convert.cjs`. Project refs: **production = `jwkcknyuy
 
 ---
 
+## 0. ⚠️ THE CONVERTER CHANGED [S112 Q3] — capture time and GPS are evidence
+
+**RULED [Josh, S112 Q3]:** _"A jobsite photo's capture time and GPS are evidence ... carry at least
+capture time and GPS onto the converted JPEG. If /render/image/ strips EXIF and cannot preserve it,
+convert with a tool that can. If neither is possible, STOP and report."_
+
+**Measured, three real iPhone HEICs on rebuild-test, read with ImageMagick `identify -verbose`:**
+
+| | DateTimeOriginal | GPS lat / long | Make / Model | Size |
+| --- | --- | --- | --- | --- |
+| Source HEIC | 2019:07:29 12:18:34 | 26°27′22.70″ N / 80°7′45.90″ W | Apple / iPhone XR | 3024×4032 |
+| Storage `/render/image/` JPEG (the first build) | **absent** | **absent** | absent | **3000×4000 — resized** |
+| ImageMagick `magick - -quality 90 jpg:-` | 2019:07:29 12:18:34 | identical | identical | 3024×4032 |
+
+The first build's step-2 claim "no width or height, so nothing is resized" was also false: the
+transform capped the photo at 3000×4000. Orientation checked: all three read `TopLeft` and the
+ImageMagick JPEG matches the render's pixels (RMSE 0.8%; the same image rotated 90° scores 25%), so
+nothing is rotated twice.
+
+**So the script now converts with ImageMagick and FAILS a row** unless the JPEG has the source's
+exact pixel size and every evidence field the source carries (`DateTimeOriginal`, `GPSLatitude`,
+`GPSLatitudeRef`, `GPSLongitude`, `GPSLongitudeRef`). Pure rule `conversionDefect()`, unit-tested
+with a control reproducing what `/render/image/` did.
+
+**It needs ImageMagick 7 with HEIC read support** on the machine that runs it. This Codespace has it
+(`ImageMagick 7.1.1-43`, HEIC `r--` via libheif 1.19.8). The script refuses to start — dry run
+included — if `magick -list format` shows no readable HEIC. A rebuilt Codespace may not have it; if
+the preflight refuses, stop and report rather than installing something different.
+
+### Frozen site-visit HEIC photos — SKIPPED, never converted [RULED Josh, S112 Q2]
+
+No exception to the freeze. Count them on production so Josh can rule on the number:
+
+```sql
+-- Read-only. Mirrors enforce_site_visit_file_freeze(): captured on site, the estimate's site visit
+-- is frozen, and the photo predates the freeze. (A photo whose estimate became a project has
+-- estimate_id NULL and is no longer frozen — the trigger looks the freeze up by OLD.estimate_id.)
+SELECT count(*) AS frozen_heic,
+       coalesce(pg_size_pretty(sum(f.file_size)::bigint), '0') AS size,
+       count(DISTINCT f.estimate_id) AS estimates
+FROM files f
+JOIN site_visits sv ON sv.estimate_id = f.estimate_id
+WHERE NOT f.is_deleted AND f.site_visit_capture
+  AND sv.frozen_at IS NOT NULL AND f.created_at <= sv.frozen_at
+  AND (f.mime_type IN ('image/heic','image/heif') OR f.file_name ~* '\.(heic|heif)$');
+```
+
+On rebuild-test this returns 0 — and so does its control without the HEIC filter, because
+rebuild-test holds **no site visits at all**. So the query is checked against the trigger's text,
+not against a positive row. If material, the ruled direction is a sibling derivative (served bytes
+change, `file_path` and the frozen original do not), not a hole in the freeze.
+
 ## 1. How many — read-only count (SQL editor)
 
 Every query here is a `SELECT`. None changes anything.
