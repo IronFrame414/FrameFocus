@@ -364,7 +364,36 @@ inside the row `<Link>` without `preventDefault`. Fixed.
 
 ## BLOCKED
 
-_(none yet)_
+### S111 Part One — what's left (not started tonight; the queue came next, then STOP)
+
+**Done:** the role exists, only the Owner can grant it (enforced in the database), and every Floor
+READ and Q9 (payments, read and record) is proven with row counts and a sabotage run.
+
+**⚠️ Not usable yet, and NOT mergeable.** A Project Executive can read its projects' money through
+the API, but **the UI still hides it**. `budgetColumnsFor()` and the ~25 inline TS money gates don't
+know the role, so they fail closed (FILL-3.2).
+
+**What remains, in order** (each needs the CI slot for its migration, per the rules above):
+
+1. **Write arms**, each `project_executive AND <project scope>`: invoices INSERT/UPDATE (already
+   scoped by `can_view_project`, so the role can join that list); change orders plus line
+   items/rows (their current writes carry NO project scope, so they need their own arms);
+   `project_financials`, `project_budget_amounts`, `client_contract_amounts`, `instrument_rates`.
+   Extend the live proof with "writes on its project, refused off it".
+2. **The ~25 guard functions** that name `project_manager` or only owner/admin (FILL-3.1's list in
+   `docs/sessions/S111-report.md` appendix A). Decide each, e.g. `enforce_invoice_void_authority`
+   (ruled: may void on its projects), estimate conversion (ruled: may NOT create projects, Q6).
+3. **TS gates:** one central predicate (FILL-6.1's recommendation, e.g. `lib/auth/role-caps.ts`)
+   that `budgetColumnsFor()` and the money gates call, instead of adding the role to 25 inline
+   arrays. Also the nav/tab `roles` lists, and seat counting (Q12: it takes a seat; `seats.ts`
+   already counts it).
+4. **The enumerating tests** FILL-7.1 lists, each inverted in place.
+
+**No blocker needs a ruling:** Q1–Q20 cover all of it. It needs sessions and CI slots.
+
+### Queue D — production cost catalog
+
+Blocked on production access, by design tonight. Josh runs the dry run (WHAT JOSH MUST CLICK #2).
 
 ## OWED TO PRODUCTION
 
