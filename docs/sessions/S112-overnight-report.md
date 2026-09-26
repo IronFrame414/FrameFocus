@@ -70,7 +70,25 @@ shrink to display size, so the 47s Fast 3G save drops by the upload share.
 
 ## DONE AND PROVEN
 
-_(none yet)_
+### Ruling 1 — fix branch rebased and pushed; the staleTimes cost measurement owed
+
+- `feature/s112-router-staleness` rebased onto main `528bc76b` with no conflicts (`5b4172dd`,
+  `5770e699`) and pushed at 03:19Z after main's run 36212856885 went green. CI run
+  **36214441654** is live.
+- **The back-navigation cost of `staleTimes.dynamic: 0`, as owed.** This was measured before the
+  rebase on production builds, and it's also in `docs/sessions/S112-router-staleness.md` §1.
+  Return to a page visited under 30s ago, median of 3:
+
+  | Profile | Tab revisit, main → dynamic 0 | Tile then tab | Back arrow (`router.back`) |
+  | --- | --- | --- | --- |
+  | unthrottled | 52 → 369 ms | 51 → 399 ms | 62 → 78 ms |
+  | LTE, 150 ms RTT | 48 → 392 ms | 51 → 349 ms | 70 → 86 ms |
+  | Fast 3G | 51 → **639 ms** | 50 → **633 ms** | 66 → 47 ms |
+  | Slow 3G | 51 → **2,129 ms** | 54 → **2,121 ms** | 54 → 55 ms |
+  | RSC bytes | 0 → 4,575 B | 0 → 7,986 B | 0 → 0 |
+
+  That's why `dynamic: 0` is **not** on this branch: the reorder alone fixes the markup defect
+  (m-photos 43/43; the new human-path test is red on main's build and green on the fix).
 
 ## BUILT BUT UNTESTED
 
@@ -98,7 +116,13 @@ _(none yet)_
 
 ## Log
 
-- 03:12Z — 3c built and committed locally on `feature/s112-markup-local-display` (`5ba64596`),
+- 03:21Z — main CI green → fix branch pushed (run 36214441654). The 3c and audit-fix branches are
+  **parked** on origin under an empty `[skip ci]` head commit. GitHub reads `[skip ci]` from the
+  head commit only, so the work survives a restart and uses no CI slot. The next real commit on
+  either branch runs CI for the whole branch. Audit fixes committed so far: F16, F20, F15, F10,
+  F18, F14, F5, F4, F9, F6, F7. **F12 withdrawn:** M6M §2 names 34px colour swatches "the only
+  permitted sub-44px target", so it was never a defect.
+- 03:05Z (logged as 03:12 in error) — 3c built and committed locally on `feature/s112-markup-local-display` (`5ba64596`),
   stacked on the fix branch; build exit 0, tsc exit 0. 3a measured (in R1). Waiting on main CI to
   push and to run e2e.
 - 02:58Z — ruling 3b enumeration done: export consumers need full res → R1, resize NOT built.
