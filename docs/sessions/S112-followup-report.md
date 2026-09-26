@@ -321,25 +321,118 @@ its own write arms: contacts, team assignment (Q8), POs and deliveries, schedule
 status transitions, translate. So do the sub-contract and payables money above. **Josh, one
 question:** is lien-release authority in or out for this role?
 
-### ⚠️ My formatting noise, found and removed
+### ⚠️ INCIDENT: reformatting buried the change, and the cleanup granted refund authority
 
-I ran `prettier --write` over whole files that main has never formatted. That buried about 40 lines
-of real change in about 1,300 lines of reflow (budget/page 739, invoice-builder 676, payments-view
-355).
+_Superseded heading, quoted:_ _"My formatting noise, found and removed"_. **That understated it.**
+It is recorded properly here, and as a standing rule in `CLAUDE.md` → "Never reformat a file the repo
+does not already format" [Josh, S112 follow-up].
 
-- **The fix, on `s111-project-role` (`bd7982a2`):** every touched file was rebuilt from its
-  pre-edit version with only the S111 edits.
-- **The verification:** each file, formatted on both sides, is identical to the committed intent
-  (26/26).
-- **What the verification caught.** The hunk filter I first used for the rebuild misplaced two
-  zero-context patches:
-  - `canRecordPayment`'s body landed in `canIssueRefund`, which **would have opened refunds to the
-    role**;
-  - `budget-columns`' expected counts were dropped.
+**1. The noise.** I ran `prettier --write` over whole files that main has never formatted. About 40
+real lines of change on `feature/s111-project-role` sat inside about 1,300 lines of reflow:
+`budget/page.tsx` 739, `invoice-builder.tsx` 676, `payments-view.tsx` 355. It was unreviewable.
 
-  Both were rebuilt against anchors and re-verified.
-- **Already on main from the wave-1 conflict resolution, and left there:** 2 long i18n strings
-  wrapped per language, and one `return` wrapped in parentheses in `photos/page.tsx`. Semantically
-  identical and CI-tested. Not worth another change to main, but it is formatting nobody asked for.
-- **On the guard branch:** `schema-drift.ts` has two reflowed signature lines besides the real
-  change.
+**2. The cleanup that made it worse.** My first rebuild kept only the diff hunks that mentioned the
+change, and applied them with zero-context patches (`git apply --unidiff-zero`). One landed in the
+wrong function. In `lib/services/payments-shared.ts`, `canRecordPayment`'s new body
+(`return seesProjectMoney(role);`) went into **`canIssueRefund`**, and `canRecordPayment` went back to
+Owner/Admin.
+
+**That would have granted the Project Executive refund authority** (money out to a client) which the
+role is deliberately not given. **It is a Financial Visibility Floor breach, and it survived into a
+second attempt.** It compiled, and nothing in the unit suite caught it, because no test asserts a
+Project Executive may NOT issue a refund. (Verified: `payments-shared.test.ts:141-143` checks
+owner, admin and project_manager only.) A second hunk dropped `budget-columns`' expected counts.
+
+**3. Why it did not land.** Every file was then compared against the intended change, with both sides
+formatted and byte-compared. That found the swap and the dropped line. Both were rebuilt against
+exact anchors and re-verified: 26 of 26 files equal, tsc 0, eslint 0, unit 123 files / 1,710.
+Pushed as `bd7982a2`.
+
+**4. Owed, first thing when item 5 resumes:** add the negative to `payments-shared.test.ts`:
+`canIssueRefund('project_executive')` is `false`. Do the same for every other authority the role
+was deliberately NOT given (apply credit, refund approval, lien release, rate supersede, CO delete).
+Not done now, because item 5 is deferred by ruling.
+
+**5. Left on main, from the wave-1 conflict resolution:** two wrapped i18n strings per language and
+one parenthesised `return` in `photos/page.tsx`. They are semantically identical and CI-tested, and
+are recorded rather than reverted. On the guard branch, `schema-drift.ts` has two reflowed
+signature lines besides the real change.
+
+## 9. The change-order money-in-text query: production, read-only [blocks s112-co-summary]
+
+**What it gates.** `20261840000000` (R5b) shows every staff role the title, description and date of
+**signed** change orders, and never a money column. But `title` and `description` are free text, and
+the database cannot keep typed money out of prose. So before it ships, production says how often
+money has actually been typed there. That one answer unblocks a chain:
+`s112-co-summary` → `s112-audit-rulings` (contained in it) → `s112-amber-sweep` (built on it).
+
+**Why this version.** The earlier query (`S112-rulings-report.md:253-258`) checked descriptions for
+both "$" amounts and thousands-separated numbers, but titles for "$" only. That would miss a title
+like "Upgrade to 12,500 sq ft — 18,400". This version applies the same three patterns to **both**
+fields, and **counts them separately**. The split matters for the decision: if money sits in
+**titles**, the fallback (title + date) leaks as well.
+
+**Patterns**, each tested with a control on rebuild-test:
+
+| Pattern | Catches | Example |
+| --- | --- | --- |
+| `\$\s?\d` | a dollar sign before a number | `$2,400`, `$ 75` |
+| `\d{1,3}(,\d{3})+(\.\d\d)?` | thousands-separated amounts | `1,850.00` |
+| `\m\d[\d,.]*\s*(dollars?\|usd\|bucks)\M` (case-insensitive) | a number followed by the word | `300 dollars` |
+
+**Stays quiet on:** `Move 2 outlets, 3 ft left`, `Replace 36" door with 42"`, `Room 2400 north wall`.
+
+**Known false positive, in the safe direction:** `Install 1,200 sq ft`. Query B lists every flagged
+row so a false positive can be read and dismissed.
+
+**Measured on rebuild-test:** 11 signed, **0** title, **0** description (27 across all statuses, 0 / 0).
+
+### Query A: the counts
+
+```sql
+WITH co AS (
+  SELECT id, co_number, status, title, coalesce(description, '') AS description
+  FROM change_orders WHERE is_deleted = false
+), flagged AS (
+  SELECT co.*,
+    (title ~ '\$\s?\d' OR title ~ '\d{1,3}(,\d{3})+(\.\d\d)?' OR title ~* '\m\d[\d,.]*\s*(dollars?|usd|bucks)\M') AS title_money,
+    (description ~ '\$\s?\d' OR description ~ '\d{1,3}(,\d{3})+(\.\d\d)?' OR description ~* '\m\d[\d,.]*\s*(dollars?|usd|bucks)\M') AS desc_money
+  FROM co
+)
+SELECT
+  count(*) FILTER (WHERE status = 'signed')                 AS signed_total,
+  count(*) FILTER (WHERE status = 'signed' AND title_money) AS signed_title_money,
+  count(*) FILTER (WHERE status = 'signed' AND desc_money)  AS signed_description_money,
+  count(*)                                                  AS all_statuses_total,
+  count(*) FILTER (WHERE title_money)                       AS all_title_money,
+  count(*) FILTER (WHERE desc_money)                        AS all_description_money
+FROM flagged;
+```
+
+### Query B: only if A shows any non-zero money count; lists the flagged rows to judge false positives
+
+```sql
+SELECT co_number, status,
+  (title ~ '\$\s?\d' OR title ~ '\d{1,3}(,\d{3})+(\.\d\d)?' OR title ~* '\m\d[\d,.]*\s*(dollars?|usd|bucks)\M') AS title_money,
+  (coalesce(description,'') ~ '\$\s?\d' OR coalesce(description,'') ~ '\d{1,3}(,\d{3})+(\.\d\d)?' OR coalesce(description,'') ~* '\m\d[\d,.]*\s*(dollars?|usd|bucks)\M') AS desc_money,
+  title, left(description, 200) AS description_start
+FROM change_orders
+WHERE is_deleted = false
+  AND (title ~ '\$\s?\d' OR title ~ '\d{1,3}(,\d{3})+(\.\d\d)?' OR title ~* '\m\d[\d,.]*\s*(dollars?|usd|bucks)\M'
+    OR coalesce(description,'') ~ '\$\s?\d' OR coalesce(description,'') ~ '\d{1,3}(,\d{3})+(\.\d\d)?' OR coalesce(description,'') ~* '\m\d[\d,.]*\s*(dollars?|usd|bucks)\M')
+ORDER BY status = 'signed' DESC, co_number;
+```
+
+### The decision rule
+
+Read the **signed** columns first. They are exactly what the function returns.
+
+| `signed_title_money` | `signed_description_money` | Ship |
+| --- | --- | --- |
+| **0** | **0** | **Title + description + date**, as built. |
+| **0** | **1 or more** (real, per Query B) | **Fall back to title + date.** Drop `description` from the function's SELECT and the UI. |
+| **1 or more** (real, per Query B) | any | **Neither is safe as built.** Title + date leaks too. Stop and rule, e.g. CO number + date only, or clean those titles first. |
+
+**Treat the all-status columns as a warning, not a gate.** Drafts and sent COs become signed later,
+so a non-zero there means the habit exists even if no signed CO shows it yet. Worth a word to whoever
+writes COs.

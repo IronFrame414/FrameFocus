@@ -377,6 +377,60 @@ with worse consequences. When sweeping, read `app/` and `lib/` too, not just `te
 fixtures. Comment lines that merely _mention_ `.limit(1)` are not call sites — judge the query, not
 the grep hit.
 
+### Never reformat a file the repo does not already format — **MANDATORY [Josh, S112 follow-up]**
+
+**Run a formatter only on files that were already formatted before you touched them, and only on the
+lines you changed. Never `prettier --write` a whole file that main does not keep formatted.** Check
+first: `npx prettier --check <file>` on the file **as it is on main**. If that fails, the file is not
+formatted, and your edit must match its existing style by hand.
+
+**The rule is the lesson: an unreviewable diff is where authority errors hide.**
+
+**What happened [S112 follow-up, `feature/s111-project-role`].** A session finishing the Project
+Executive's money UI ran `prettier --write` over every file it edited. Most of them had never been
+formatted on main. About **40 real lines of change** landed inside about **1,300 lines of reflow**:
+`budget/page.tsx` 739 changed lines, `invoice-builder.tsx` 676, `payments-view.tsx` 355. No
+reviewer could have found the forty.
+
+**Then the cleanup made it worse.** The first attempt rebuilt the files by keeping only the diff
+hunks that mentioned the change, and applied them with zero-context patches
+(`git apply --unidiff-zero`). A zero-context patch has no surrounding text to anchor it, so it lands
+wherever its line number points. In `lib/services/payments-shared.ts`, **`canRecordPayment`'s new
+body landed inside `canIssueRefund`**:
+
+```ts
+export function canIssueRefund(role: string): boolean {
+  return seesProjectMoney(role);   // ← meant for canRecordPayment
+```
+
+**That would have granted the Project Executive refund authority**: money going out to a client,
+which the ruling withholds from the role. Meanwhile `canRecordPayment` quietly went back to
+Owner/Admin. **It was a Financial Visibility Floor breach, and it survived into a second attempt.** It
+compiled. It would have passed a skim, because it sat among hundreds of formatting lines. The unit
+suite did not catch it either: no test asserted that a Project Executive may NOT issue a refund.
+
+**The only reason it did not land:** every file was then checked against the intended change.
+Both sides were formatted with Prettier and compared: the committed intent, and the rebuilt file.
+Anything not byte-identical was a real difference. That check found the swap, plus a dropped test
+expectation. Both were rebuilt against exact anchors and re-verified (26 of 26 files equal).
+
+**In practice:**
+
+- **Before formatting**, `prettier --check` the file as it is on main. If it fails, do not run
+  `--write` on it.
+- **Before committing**, read `git diff --stat`. **If a file's changed-line count is far larger than
+  the edit you made, stop.** That number is the alarm: 676 changed lines for a two-line gate change.
+- **Never apply zero-context patches (`--unidiff-zero`) to code.** To rebuild a file, start from the
+  pre-edit version and re-apply each edit against an anchor that must match **exactly once**, and
+  fail if it doesn't.
+- **An authority change needs its negative asserted.** If a role gains "record a payment", a test
+  must also say it does **not** gain "issue a refund". The swap above survived because only the
+  positive was tested.
+- **Already on main from the same session, left in place:** two wrapped i18n strings per language
+  and one parenthesised `return` in `photos/page.tsx`. They came from the wave-1 conflict
+  resolution, are semantically identical, and were CI-tested. They're recorded here so the next
+  reader knows they were not a design choice.
+
 ## Generated Types Workflow
 
 `packages/shared/types/database.ts` is auto-generated from the live Supabase schema. All service files import from this — never hand-write database type shapes. After every migration that adds, removes, or renames a column or table, run:
