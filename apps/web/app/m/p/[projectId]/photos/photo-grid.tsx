@@ -288,7 +288,18 @@ function Tile({
             loaded ? 'opacity-100' : 'opacity-0'
           }`}
         />
-      ) : null}
+      ) : (
+        // [S112 audit F14] NO URL AT ALL — the file could not be signed (its
+        // storage object is gone: an orphaned row or a failed upload). There is
+        // no <img>, so onError can never fire and the placeholder above used to
+        // read as "still loading" forever. Say so instead.
+        <div
+          data-testid="m-tile-unavailable"
+          className="absolute inset-0 flex items-center justify-center px-[6px] text-center text-[12px] font-semibold text-m6m-navy"
+        >
+          {t('photos.grid.unavailable')}
+        </div>
+      )}
 
       {/* -------------------------------------------------------------------
           §4.7a.3 — THE MARKUP INDICATOR. TOP-RIGHT, CIRCULAR, ICON-ONLY (A-23q).
