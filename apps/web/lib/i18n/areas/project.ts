@@ -108,7 +108,7 @@ export const en = {
   'project.coActions.deleteNote': 'Deleting leaves no record. To keep one, void it instead.',
   // ── change orders: create ──
   'project.coCreate.typeFixed': 'Fixed price',
-  'project.coCreate.typeFixedSub': 'a agreed lump sum',
+  'project.coCreate.typeFixedSub': 'an agreed lump sum',
   'project.coCreate.typeCostPlus': 'Cost plus',
   'project.coCreate.typeCostPlusSub': 'cost with markup applied',
   'project.coCreate.typeTm': 'Time & materials',
