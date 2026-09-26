@@ -66,7 +66,7 @@ export function PasswordForm({
   return (
     <form onSubmit={handleSubmit} className="space-y-4" data-testid="password-form">
       <div>
-        <label htmlFor="currentPassword" className={cls.label}>
+        <label htmlFor="currentPassword" className={cls.labelClass}>
           {t('shell.account.currentPassword')}
         </label>
         <input
@@ -80,7 +80,7 @@ export function PasswordForm({
         />
       </div>
       <div>
-        <label htmlFor="newPassword" className={cls.label}>
+        <label htmlFor="newPassword" className={cls.labelClass}>
           {t('shell.account.newPassword')}
         </label>
         <input
@@ -95,7 +95,7 @@ export function PasswordForm({
         />
       </div>
       <div>
-        <label htmlFor="confirmPassword" className={cls.label}>
+        <label htmlFor="confirmPassword" className={cls.labelClass}>
           {t('shell.account.confirmNewPassword')}
         </label>
         <input

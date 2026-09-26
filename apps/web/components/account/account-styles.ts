@@ -9,7 +9,10 @@
 // unchanged, so desktop renders exactly as it did.
 
 export type AccountClasses = {
-  label: string;
+  /** Class names for a field label. Named `labelClass`, not `label`: the /m
+   *  i18n guard (test/support/m-i18n-scan.ts LABEL_PROPS) reads a `label:`
+   *  property as user-facing copy, and these are classes. */
+  labelClass: string;
   input: string;
   error: string;
   success: string;
@@ -17,7 +20,7 @@ export type AccountClasses = {
 };
 
 const DESKTOP: AccountClasses = {
-  label: 'block text-sm font-medium text-gray-700 mb-1',
+  labelClass: 'block text-sm font-medium text-gray-700 mb-1',
   input:
     'w-full rounded-lg border border-gray-300 px-3 py-2 text-gray-900 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500',
   error: 'rounded-lg bg-red-50 p-3 text-sm text-red-700',
@@ -27,7 +30,7 @@ const DESKTOP: AccountClasses = {
 };
 
 const MOBILE: AccountClasses = {
-  label: 'mb-[6px] block font-mono text-[11px] font-medium uppercase tracking-wide text-m6m-navy',
+  labelClass: 'mb-[6px] block font-mono text-[11px] font-medium uppercase tracking-wide text-m6m-navy',
   // 16px text: under 16 iOS zooms the page on focus (audit F2).
   input:
     'h-[48px] w-full rounded-[12px] border border-m6m-border bg-m6m-card px-[14px] text-[16px] text-m6m-navy focus:border-m6m-blue focus:outline-none',

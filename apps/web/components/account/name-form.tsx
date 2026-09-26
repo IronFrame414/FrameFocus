@@ -44,7 +44,7 @@ export function NameForm({
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div>
-        <label htmlFor="firstName" className={cls.label}>
+        <label htmlFor="firstName" className={cls.labelClass}>
           {t('shell.account.firstName')}
         </label>
         <input
@@ -60,7 +60,7 @@ export function NameForm({
         />
       </div>
       <div>
-        <label htmlFor="lastName" className={cls.label}>
+        <label htmlFor="lastName" className={cls.labelClass}>
           {t('shell.account.lastName')}
         </label>
         <input
