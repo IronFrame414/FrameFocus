@@ -234,7 +234,8 @@ export function PhotoViewer({
     // were marked: the sub receiving it would have no way to know the circle
     // showing which stud was meant never made it.
     const target = shareTargetFor(photo);
-    if (target.warning) setNote(target.warning);
+    // [S112 audit F10] Keyed on the flag; the util's own string is English-only.
+    if (target.warning) setNote(t('photos.share.degraded'));
 
     // ⚠️ THE BYTES, NOT A CAPTION [S121]. `target.url` was computed here and
     // then DISCARDED — the sheet opened and transmitted the filename, so
@@ -243,7 +244,7 @@ export function PhotoViewer({
     // sharing the signed URL.
     const outcome = await shareImages([{ url: target.url, fileName: photo.file_name }]);
     if (!outcome.ok) {
-      const note = shareFailureNote(outcome.reason);
+      const note = shareFailureNote(outcome.reason, t);
       // A degrade warning already on screen outranks nothing; only overwrite it
       // when there is something to say.
       if (note) setNote(note);

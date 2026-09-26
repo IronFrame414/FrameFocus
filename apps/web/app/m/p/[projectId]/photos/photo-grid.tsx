@@ -438,7 +438,7 @@ function SelectionBar({
       chosen.map((p) => ({ url: p.displayUrl, fileName: p.file_name }))
     );
     if (!outcome.ok) {
-      const note = shareFailureNote(outcome.reason);
+      const note = shareFailureNote(outcome.reason, t);
       if (note) setNote(note);
     }
     setBusy(false);
@@ -447,7 +447,7 @@ function SelectionBar({
   return (
     <div
       data-testid="m-selection-bar"
-      className="relative flex items-center gap-[8px] border-b border-m6m-border bg-m6m-card px-[18px] py-[10px]"
+      className="relative flex flex-wrap items-center gap-[8px] border-b border-m6m-border bg-m6m-card px-[18px] py-[10px]"
     >
       <span data-testid="m-selection-count" className="flex-1 font-mono text-[13px] text-m6m-navy">
         {t('photos.grid.selected', { n: count })}
@@ -518,7 +518,14 @@ function SelectionBar({
       ) : null}
 
       {note ? (
-        <p data-testid="m-selection-note" role="status" className="sr-only">
+        // [S112 audit F10] VISIBLE. This was `sr-only` from the M-8 build on, so
+        // a failed Share ("This browser cannot share images…") or a partial
+        // Delete ("2 of 3 failed") changed nothing on screen for anyone sighted.
+        <p
+          data-testid="m-selection-note"
+          role="status"
+          className="basis-full pt-[6px] text-[13px] font-semibold text-m6m-danger"
+        >
           {note}
         </p>
       ) : null}

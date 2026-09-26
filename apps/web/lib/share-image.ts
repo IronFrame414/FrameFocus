@@ -1,4 +1,5 @@
 'use client';
+import type { T } from '@/lib/i18n/messages';
 
 // SHARING A PHOTO — THE BYTES, NOT A CAPTION. [S121]
 //
@@ -107,15 +108,22 @@ export async function shareImages(images: ShareImage[]): Promise<ShareOutcome> {
   }
 }
 
-/** The sentence for each non-cancel outcome. `cancelled` says nothing. */
-export function shareFailureNote(reason: Exclude<ShareOutcome, { ok: true }>['reason']): string | null {
+/**
+ * The sentence for each non-cancel outcome. `cancelled` says nothing.
+ * [S112 audit F10] Takes the caller's `t` — this was English-only, and the /m
+ * viewer showed it visibly to Spanish users.
+ */
+export function shareFailureNote(
+  reason: Exclude<ShareOutcome, { ok: true }>['reason'],
+  t: T
+): string | null {
   switch (reason) {
     case 'unsupported':
-      return 'This browser cannot share images. Save the photo and attach it instead.';
+      return t('photos.share.unsupported');
     case 'no-url':
-      return 'That photo is not available to share right now.';
+      return t('photos.share.noUrl');
     case 'fetch-failed':
-      return 'The photo could not be loaded to share. Check your connection and try again.';
+      return t('photos.share.fetchFailed');
     case 'cancelled':
       return null;
   }
