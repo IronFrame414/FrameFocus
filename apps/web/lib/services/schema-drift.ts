@@ -207,6 +207,9 @@ export async function runSchemaDrift(admin: SupabaseClient<Database>): Promise<D
 
   // [S112] The anon guard runs FIRST and on its own, so a fingerprint failure
   // below cannot hide it, and a stale fingerprint baseline cannot either.
+  // `as never` until database.ts is regenerated: rebuild-test currently carries
+  // six unmerged branch migrations, so `npm run db:types` would import their
+  // types onto this branch. Regenerate when rebuild-test equals main again.
   const { data: exposure, error: exposureError } = await admin.rpc(
     'anon_execute_exposure' as never
   );
