@@ -101,7 +101,11 @@ export const INVITABLE_ROLES: InvitableRole[] = [
  * (`profiles_update_admin`, `invitations_{insert,update}_owner_admin`,
  * 20261820000000) — this constant is the UI/route mirror of it, not the floor.
  */
-export const OWNER_ONLY_GRANT_ROLES: readonly CompanyRole[] = ['owner', 'admin', 'project_executive'];
+export const OWNER_ONLY_GRANT_ROLES: readonly CompanyRole[] = [
+  'owner',
+  'admin',
+  'project_executive',
+];
 
 export function isOwnerOnlyGrant(role: string | null | undefined): boolean {
   return !!role && (OWNER_ONLY_GRANT_ROLES as readonly string[]).includes(role);
@@ -154,3 +158,34 @@ export const DASHBOARD_ROLES: CompanyRole[] = [
  * Roles that can manage team members (invite, remove, change roles).
  */
 export const TEAM_MANAGEMENT_ROLES: CompanyRole[] = ['owner', 'admin'];
+
+/**
+ * [S111 Part One] WHO SEES A PROJECT'S MONEY — contract value, budgeted/sell,
+ * variance and margin, change-order dollars and rates, invoices and their
+ * totals, client payments and retainage on THAT project.
+ *
+ * ⚠️ THIS IS VISIBILITY OF WHAT THE DATABASE ALREADY RETURNS, NOT A FLOOR.
+ * `project_executive` reads money only on its assigned projects because the
+ * RLS arms say so (20261830000000); a project it is not on never reaches a
+ * page that asks this question. A renderer omitting a column is not a floor
+ * (#136) — and equally, a renderer hiding what the database permits makes the
+ * role Josh ruled ("full access to the projects it is on, money included",
+ * S111 RULED 2) not exist from a user's point of view.
+ *
+ * ⚠️ PROJECT, NOT COMPANY. Portfolio totals, company dashboards, the company
+ * margin target and cross-project labor cost use `seesCompanyMoney()`, which
+ * is Owner/Admin only (RULED 3a: no company-level money).
+ *
+ * One list, read by desktop and /m alike (PARITY). Add a role here, never to
+ * an inline `['owner', 'admin']` at a call site.
+ */
+export const PROJECT_MONEY_ROLES: readonly CompanyRole[] = ['owner', 'admin', 'project_executive'];
+
+export function seesProjectMoney(role: string | null | undefined): boolean {
+  return !!role && (PROJECT_MONEY_ROLES as readonly string[]).includes(role);
+}
+
+/** Company-level money: portfolio totals, margin target, cross-project cost. Owner/Admin only. */
+export function seesCompanyMoney(role: string | null | undefined): boolean {
+  return role === 'owner' || role === 'admin';
+}

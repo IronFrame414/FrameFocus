@@ -116,9 +116,14 @@ interface RateSectionProps {
    *  Owner/Admin visibility): shows the "Correct rates" edit-mode control.
    *  The RPC re-checks Owner inside — this prop is display, not security. */
   canSupersede: boolean;
+  /** [S111] Stage-3 "Renegotiate rate". Separate from seeing the section: a
+   *  Project Executive sees its projects' rates (RLS, 20261830000000) but has
+   *  no instrument_rates WRITE arm yet, so the action stays Owner/Admin until
+   *  it does. Display, not security — the DB refuses the write regardless. */
+  canRenegotiate: boolean;
 }
 
-export async function RateSection({ project, canSupersede }: RateSectionProps) {
+export async function RateSection({ project, canSupersede, canRenegotiate }: RateSectionProps) {
   const groups: InstrumentGroup[] = [];
 
   if (project.project_type !== 'fixed_price' && project.source_estimate_id) {
@@ -184,7 +189,14 @@ export async function RateSection({ project, canSupersede }: RateSectionProps) {
                 padding: '12px 20px 4px',
               }}
             >
-              <span style={{ fontFamily: font.sans, fontSize: '13px', fontWeight: 700, color: color.navy }}>
+              <span
+                style={{
+                  fontFamily: font.sans,
+                  fontSize: '13px',
+                  fontWeight: 700,
+                  color: color.navy,
+                }}
+              >
                 {group.label}
               </span>
               <span style={{ fontSize: '11px', color: color.faint }}>{group.caption}</span>
@@ -199,27 +211,36 @@ export async function RateSection({ project, canSupersede }: RateSectionProps) {
 
             {/* Stage 3 — renegotiate per rate type. Floor = latest live rate
                 + 1 day (client mirrors it; the DB guard is the authority). */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', padding: '2px 20px 6px' }}>
-              {EXPECTED_TYPES[group.contractType].map((rateType) => (
-                <div
-                  key={rateType}
-                  style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '12px' }}
-                >
-                  <span style={{ color: color.mutedAlt, minWidth: '190px' }}>
-                    {RATE_TYPE_META[rateType].label}
-                  </span>
-                  <RenegotiateRate
-                    estimateId={group.estimateId}
-                    changeOrderId={group.changeOrderId}
-                    rateType={rateType}
-                    label={RATE_TYPE_META[rateType].label}
-                    percent={RATE_TYPE_META[rateType].percent}
-                    floor={latestLiveDate(group.rates, rateType)}
-                    recomputeDraftCoId={group.draftCoId}
-                  />
-                </div>
-              ))}
-            </div>
+            {canRenegotiate && (
+              <div
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '4px',
+                  padding: '2px 20px 6px',
+                }}
+              >
+                {EXPECTED_TYPES[group.contractType].map((rateType) => (
+                  <div
+                    key={rateType}
+                    style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '12px' }}
+                  >
+                    <span style={{ color: color.mutedAlt, minWidth: '190px' }}>
+                      {RATE_TYPE_META[rateType].label}
+                    </span>
+                    <RenegotiateRate
+                      estimateId={group.estimateId}
+                      changeOrderId={group.changeOrderId}
+                      rateType={rateType}
+                      label={RATE_TYPE_META[rateType].label}
+                      percent={RATE_TYPE_META[rateType].percent}
+                      floor={latestLiveDate(group.rates, rateType)}
+                      recomputeDraftCoId={group.draftCoId}
+                    />
+                  </div>
+                ))}
+              </div>
+            )}
 
             {group.rates.length > 0 && (
               // History + the Owner-only "Correct rates" edit mode. Rows are
@@ -251,11 +272,10 @@ export async function RateSection({ project, canSupersede }: RateSectionProps) {
       })}
 
       <p style={{ fontSize: '11px', color: color.faint, margin: 0, padding: '8px 20px 12px' }}>
-        Cost and hours price at the rate in force when incurred. Renegotiated rates apply
-        forward from their effective date and never before the latest existing rate; a
-        future-dated rate sits pending until its date arrives. &ldquo;Correct rates&rdquo;
-        (Owner only) edits any live rate&rsquo;s amount or date — the original stays listed,
-        struck through with its reason.
+        Cost and hours price at the rate in force when incurred. Renegotiated rates apply forward
+        from their effective date and never before the latest existing rate; a future-dated rate
+        sits pending until its date arrives. &ldquo;Correct rates&rdquo; (Owner only) edits any live
+        rate&rsquo;s amount or date — the original stays listed, struck through with its reason.
       </p>
     </div>
   );

@@ -1,6 +1,11 @@
 import type { Database } from '@framefocus/shared/types/database';
 import { rateInForce, type InstrumentRateType } from '@/lib/services/instrument-rates-shared';
-import type { CostCategory, PresentationLevel, SelectedSegment } from '@framefocus/shared/utils/invoice-derivation';
+import { seesProjectMoney } from '@framefocus/shared/constants/roles';
+import type {
+  CostCategory,
+  PresentationLevel,
+  SelectedSegment,
+} from '@framefocus/shared/utils/invoice-derivation';
 
 // Module 7D1 — shared invoice types and pure logic. THE definitions.
 //
@@ -148,9 +153,7 @@ export function isDerivedContract(contractType: ContractType): boolean {
  * is legal and the PER-LINE split keeps T&M money out of the base.
  */
 export function anyRetainableInstrument(types: InstrumentTypes): boolean {
-  return [...Object.values(types.byKey), types.fallback].some(
-    (t) => t !== 'time_and_materials'
-  );
+  return [...Object.values(types.byKey), types.fallback].some((t) => t !== 'time_and_materials');
 }
 
 export interface PickableCost {
@@ -311,9 +314,7 @@ export interface VoidContext {
   status: InvoiceStatus;
 }
 
-export type VoidDecision =
-  | { allowed: true; warning?: string }
-  | { allowed: false; reason: string };
+export type VoidDecision = { allowed: true; warning?: string } | { allowed: false; reason: string };
 
 /**
  * §9's actor matrix, as a pure decision so it can be proven:
@@ -470,7 +471,9 @@ export interface BudgetColumnPlan {
 }
 
 export function budgetColumnsFor(role: string): BudgetColumnPlan {
-  if (role === 'owner' || role === 'admin') {
+  // [S111] Owner/Admin, and a Project Executive on its own projects (the only
+  // projects whose budget page it can reach — RLS, 20261830000000).
+  if (seesProjectMoney(role)) {
     return { set: 'full', columns: 7, seesBudgeted: true, seesCommitted: true };
   }
   if (role === 'project_manager') {
