@@ -1,6 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { isThumbnailPath, markupFingerprint, thumbPathFor } from '@framefocus/shared/utils/markup';
+import {
+  derivativePathFor,
+  hasMarkup,
+  isThumbnailPath,
+  markupFingerprint,
+  thumbPathFor,
+} from '@framefocus/shared/utils/markup';
 import * as backfill from '../../../scripts/s111-thumbnail-backfill.cjs';
+// [S112 R7] the HEIC conversion script is a THIRD copy — it copies side objects
+// to the names these functions compute, so it is held to the same parity.
+import * as heic from '../../../scripts/s112-heic-convert.cjs';
 
 // [S111 D] The stored-thumbnail path. The backfill script re-implements it (a
 // .mjs cannot import TS); if the two ever disagree, the backfill writes
@@ -41,5 +50,23 @@ describe('S111 thumbnail path', () => {
     [{ shapes: [{ text: 'ünïcødé ✓', kind: 'text' }] }],
   ])('the backfill script computes the SAME path for %j', (m) => {
     expect(backfill.thumbPathFor(P, m)).toBe(thumbPathFor(P, m));
+  });
+
+  it.each([
+    [null],
+    [{ version: 1, shapes: [] }],
+    [M1],
+    [M2],
+    [{ shapes: [{ text: 'ünïcødé ✓', kind: 'text' }] }],
+  ])('[S112] the HEIC conversion script computes the SAME thumbnail, fingerprint and markup flag for %j', (m) => {
+    expect(heic.thumbPathFor(P, m)).toBe(thumbPathFor(P, m));
+    expect(heic.hasMarkup(m)).toBe(hasMarkup(m));
+    if (m) expect(heic.markupFingerprint(m)).toBe(markupFingerprint(m));
+  });
+
+  it('[S112] the HEIC conversion script computes the SAME derivative path', () => {
+    expect(heic.derivativePathFor(P)).toBe(derivativePathFor(P));
+    // CONTROL: the parity check can fail — a different path gives a different name
+    expect(heic.derivativePathFor(`${P}.jpg`)).not.toBe(derivativePathFor(P));
   });
 });
