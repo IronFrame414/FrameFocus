@@ -1554,6 +1554,19 @@ test.describe('M-40 · team edit writes both tables', () => {
   test('an OWNER edits both halves, and both land', async ({ page }) => {
     test.setTimeout(120_000);
     const db = adminClient();
+    // [S112] NOT THE SIGNED-IN OWNER'S OWN ROW. Ordering alone made the pick
+    // stable AND wrong: the oldest member of Company A is the Owner, and your
+    // OWN profile takes name and language only ("You can change your own name
+    // and language only"), so the phone half was correctly refused and the form
+    // stayed put — CI run 36254759334, 3/3 attempts. The test needs an owner
+    // editing SOMEONE ELSE; that is the property the query now names.
+    const { data: self } = await db
+      .from('profiles')
+      .select('id')
+      .eq('email', OWNER)
+      .eq('is_deleted', false)
+      .single();
+    expect(self, 'the OWNER identity has no profile').toBeTruthy();
     const { data: target } = await db
       .from('company_members')
       .select('id, display_name, profile_id')
@@ -1562,6 +1575,7 @@ test.describe('M-40 · team edit writes both tables', () => {
       // CI run 36243095129 and the owner correctly got "not found".
       .eq('company_id', COMPANY_A)
       .not('profile_id', 'is', null)
+      .neq('profile_id', (self as { id: string }).id)
       .eq('is_deleted', false)
       .order('created_at')
       .order('id')
