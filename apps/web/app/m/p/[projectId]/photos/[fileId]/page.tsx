@@ -83,6 +83,8 @@ export default async function PhotoViewerPage({
       thumbUrl: p.thumbUrl,
       originalUrl: p.originalUrl,
       hasMarkup: p.hasMarkup,
+      // [S112 R1] Save / Share rebuild full resolution from original + this.
+      markup: p.markup,
       markupFingerprint: p.markupFingerprint,
       derivativeMissing: p.derivativeMissing,
       source: p.source,

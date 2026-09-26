@@ -105,6 +105,12 @@ export default async function ProjectPhotosPage({
       file_name: p.file_name,
       displayUrl: p.displayUrl,
       thumbUrl: p.thumbUrl,
+      // [S112 R1] Share rebuilds full resolution from these. Already signed in
+      // getProjectPhotos()' one batch call — no extra Storage round trip; the
+      // mark list is small JSON.
+      originalUrl: p.originalUrl,
+      markup: p.markup,
+      derivativeMissing: p.derivativeMissing,
       hasMarkup: p.hasMarkup,
       source: p.source,
       day,

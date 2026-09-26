@@ -83,6 +83,17 @@ async function fileFromUrl(url: string, fileName: string): Promise<File | null> 
 }
 
 /**
+ * [S112 R1] Cheap pre-check, so a surface does not spend seconds rebuilding a
+ * full-resolution image for a browser that has no share sheet at all.
+ */
+export function shareSupported(): boolean {
+  return (
+    typeof navigator !== 'undefined' &&
+    typeof (navigator as ShareCapableNavigator).share === 'function'
+  );
+}
+
+/**
  * Share one or more images as FILES.
  *
  * Returns an outcome rather than throwing, so the caller can put the right

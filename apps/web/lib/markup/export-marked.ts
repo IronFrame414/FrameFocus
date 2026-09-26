@@ -50,6 +50,17 @@ export const EXPORT_WARNING_DISPLAY_SIZE =
 export const EXPORT_WARNING_UNMARKED =
   'Markup image unavailable — this is the unmarked original.';
 
+/**
+ * Which warning an export carries, as a kind a surface can translate (the /m
+ * screens render system text in the reader's language; the constants above
+ * are the English wording).
+ */
+export function exportWarningKind(r: ExportedPhoto): 'display-size' | 'unmarked' | null {
+  if (r.warning === EXPORT_WARNING_DISPLAY_SIZE) return 'display-size';
+  if (r.warning === EXPORT_WARNING_UNMARKED) return 'unmarked';
+  return null;
+}
+
 async function fetchBlob(url: string | null | undefined): Promise<Blob | null> {
   if (!url) return null;
   try {
@@ -181,4 +192,52 @@ export async function signExportUrls(
     }
   }
   return { originalUrl, derivativeUrl };
+}
+
+type SheetExport = () => Promise<{ blob: Blob; fileName: string } | null>;
+
+/**
+ * The file sheet's `exportBlob` for a surface holding URLs it has already
+ * signed (chat — the gallery resolution it renders from).
+ */
+export function sheetExportFromUrls({
+  originalUrl,
+  markup,
+  fallbackUrl,
+  fileName,
+}: {
+  originalUrl: string | null;
+  markup: MarkupData | null | undefined;
+  fallbackUrl: string | null;
+  fileName: string;
+}): SheetExport {
+  return async () => {
+    const r = await exportPhotoBlob({ originalUrl, markup, fallbackUrl });
+    return r ? { blob: r.blob, fileName: exportFileName(fileName, r.source) } : null;
+  };
+}
+
+/**
+ * The file sheet's `exportBlob` for a surface holding only `file_path` and the
+ * row's `markup_data` (desktop Files) — signs both files at CLICK time.
+ */
+export function sheetExportFromPath({
+  filePath,
+  markup,
+  fileName,
+}: {
+  filePath: string;
+  /** `files.markup_data` as read — validated by hasMarkup() before use. */
+  markup: unknown;
+  fileName: string;
+}): SheetExport {
+  return async () => {
+    const { originalUrl, derivativeUrl } = await signExportUrls(filePath);
+    const r = await exportPhotoBlob({
+      originalUrl,
+      markup: hasMarkup(markup) ? (markup as MarkupData) : null,
+      fallbackUrl: derivativeUrl,
+    });
+    return r ? { blob: r.blob, fileName: exportFileName(fileName, r.source) } : null;
+  };
 }

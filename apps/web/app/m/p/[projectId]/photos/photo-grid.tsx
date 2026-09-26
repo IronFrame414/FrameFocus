@@ -5,7 +5,14 @@ import { useRouter } from 'next/navigation';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { useLazySrc } from '@/lib/photos/use-lazy-src';
 import { softDeleteFile } from '@/lib/services/files-client';
-import { shareFailureNote, shareImages } from '@/lib/share-image';
+import { shareFailureNote, shareImages, shareSupported } from '@/lib/share-image';
+import type { MarkupData } from '@framefocus/shared/types/markup';
+import {
+  exportFileName,
+  exportPhotoBlob,
+  exportWarningKind,
+  type ExportedPhoto,
+} from '@/lib/markup/export-marked';
 import { useT } from '@/components/i18n/language-provider';
 import type { MsgKey } from '@/lib/i18n/messages';
 
@@ -21,14 +28,29 @@ import type { MsgKey } from '@/lib/i18n/messages';
 // one first (A-23f, A-23s).
 //
 // [S111 D] The tile renders `thumbUrl` — a 400x400 thumbnail of that same file
-// — lazily, ahead of the scroll (lib/photos). `displayUrl` stays the FULL file
-// and is used only by Share; the grid never loads an original.
+// — lazily, ahead of the scroll (lib/photos). The grid never loads an original
+// for DISPLAY.
+//
+// [S112 R1] Share no longer sends `displayUrl`: the stored derivative is
+// display-size now, so a marked photo is rebuilt at full resolution from
+// `originalUrl` + `markup` (lib/markup/export-marked.ts) — the same helper the
+// viewer uses. The original is fetched only at Share time, never at load, and
+// its URL costs nothing extra: getProjectPhotos() already signs every original
+// in the one batch call it makes for the page.
 
 export type GridPhoto = {
   id: string;
   file_name: string;
-  /** The FULL file — used by Share, never by the tile (S111 D). */
+  /**
+   * The stored display file — the display-size derivative when annotated.
+   * [S112 R1] Share's FALLBACK only; never by the tile (S111 D).
+   */
   displayUrl: string | null;
+  /** [S112 R1] Share rebuilds a marked photo from this + `markup`. */
+  originalUrl: string | null;
+  markup: MarkupData | null;
+  /** Annotated, but the stored derivative could not be signed. */
+  derivativeMissing: boolean;
   /**
    * [S111 D] The tile's image: a 400x400 thumbnail of the same file, loaded
    * ahead of the viewport (lib/photos). The grid never loads an original.
@@ -400,6 +422,10 @@ function SelectionBar({
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
+  // [S112 R1] Built exports, kept for the life of this bar. A share whose
+  // activation expired during the rebuilds ('not-allowed') succeeds on the
+  // next tap without rebuilding anything.
+  const built = useRef(new Map<string, ExportedPhoto | null>());
 
   const chosen = photos.filter((p) => selection.has(p.id));
 
@@ -420,23 +446,57 @@ function SelectionBar({
   }
 
   async function share() {
-    setBusy(true);
     // The Web Share API is the only share surface a PWA has. Where it is
-    // absent the action says so rather than failing silently.
-    // ⚠️ THE BYTES, NOT A LIST OF NAMES [S121]. This sent
-    // `text: names.join(', ')` — the sheet opened, the send succeeded, and what
-    // arrived was a comma-separated list of filenames. See lib/share-image.ts.
+    // absent the action says so rather than failing silently — and says so
+    // BEFORE rebuilding any image it could never send.
+    if (!shareSupported()) {
+      setNote(shareFailureNote('unsupported'));
+      return;
+    }
+    setBusy(true);
+    setNote(null);
+    // ⚠️ THE BYTES, NOT A LIST OF NAMES [S121]. See lib/share-image.ts.
     //
-    // `displayUrl` is already the right file per this file's own header: the
-    // annotated derivative where one exists, the original otherwise. The
-    // viewer's `shareTargetFor` degrade WARNING has no equivalent here because
-    // the grid has no per-photo place to put it; a multi-select share of a
-    // photo whose derivative is missing sends the original silently, which is
-    // the one thing A-23t forbids on the VIEWER. Flagged rather than
-    // half-solved — the honest fix is a per-photo notice this bar cannot host.
-    const outcome = await shareImages(
-      chosen.map((p) => ({ url: p.displayUrl, fileName: p.file_name }))
-    );
+    // [S112 R1] Each photo's bytes come from exportPhotoBlob — a full-res
+    // rebuild for a marked photo, the stored derivative if that fails, the
+    // original otherwise. ONE AT A TIME, deliberately: a 12 MP canvas is ~48 MB
+    // of pixels, and a phone asked for five at once is a phone that kills the
+    // tab.
+    //
+    // A-23t, previously flagged here as unsolvable — _superseded, quoted:_
+    // "a multi-select share of a photo whose derivative is missing sends the
+    // original silently". The rebuild no longer NEEDS the derivative, and when
+    // a marked photo truly can only go unmarked the bar now says so (one note
+    // for the set — it still has no per-photo place for one).
+    const items: Array<{ blob: Blob | null; fileName: string }> = [];
+    let unmarked = false;
+    let displaySize = false;
+    for (const p of chosen) {
+      if (!built.current.has(p.id)) {
+        built.current.set(
+          p.id,
+          await exportPhotoBlob({
+            originalUrl: p.originalUrl,
+            markup: p.markup,
+            fallbackUrl: p.hasMarkup && !p.derivativeMissing ? p.displayUrl : null,
+          })
+        );
+      }
+      const result = built.current.get(p.id) ?? null;
+      if (result) {
+        const kind = exportWarningKind(result);
+        if (kind === 'unmarked') unmarked = true;
+        if (kind === 'display-size') displaySize = true;
+      }
+      items.push({
+        blob: result?.blob ?? null,
+        fileName: result ? exportFileName(p.file_name, result.source) : p.file_name,
+      });
+    }
+    if (unmarked) setNote(t('photos.export.unmarked'));
+    else if (displaySize) setNote(t('photos.export.displaySize'));
+
+    const outcome = await shareImages(items);
     if (!outcome.ok) {
       const note = shareFailureNote(outcome.reason);
       if (note) setNote(note);
@@ -457,9 +517,10 @@ function SelectionBar({
         data-testid="m-bulk-share"
         disabled={busy || count === 0}
         onClick={share}
+        aria-busy={busy || undefined}
         className="flex min-h-[44px] items-center rounded-full border border-m6m-border px-[14px] text-[14px] font-semibold text-m6m-navy disabled:opacity-40"
       >
-        {t('photos.grid.share')}
+        {busy && !confirming ? t('photos.grid.preparing') : t('photos.grid.share')}
       </button>
       {/* Absent entirely for a role the DB would refuse (A-25d). */}
       {canDelete ? (
