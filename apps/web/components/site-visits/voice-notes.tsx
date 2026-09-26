@@ -94,7 +94,16 @@ export function VoiceNotes({
     []
   );
 
-  const supported = typeof window !== 'undefined' && typeof MediaRecorder !== 'undefined';
+  // [S112 audit F16] Known only AFTER mount. Computed during render, this was
+  // false on the server and true in the browser, so every load of
+  // /m/site-visits/[id] failed hydration (React #418 ×9 + #423: the server
+  // HTML was thrown away and the page re-rendered) and briefly said "This
+  // browser cannot record audio" on phones that can. `null` = not yet known,
+  // rendered as a same-height blank so neither message flashes.
+  const [supported, setSupported] = useState<boolean | null>(null);
+  useEffect(() => {
+    setSupported(typeof MediaRecorder !== 'undefined');
+  }, []);
 
   async function start() {
     setMessage(null);
@@ -207,7 +216,9 @@ export function VoiceNotes({
           />
         ))}
       </ul>
-      {canWrite ? (
+      {canWrite && supported === null ? (
+        <div className="mt-[10px] h-[56px]" aria-hidden data-testid="sv-voice-pending" />
+      ) : canWrite ? (
         supported ? (
           <button
             type="button"
