@@ -1,5 +1,39 @@
 # S112 — rulings R1–R7, attended session (2026-09-26)
 
+## ⚠️ Q6 — REVOKING ACCESS DOES NOT REVOKE REPEAT READS WITH THE OLD TOKEN (measured, rebuild-test)
+
+Harness: `apps/web/test/s112-cdn-revocation.live.ts` + `s112-cdn-probe.live.ts` on
+`feature/s112-cdn-investigation`. A subcontractor, 4 fixture objects on 2 fixture projects, primed
+(fetched until `cf-cache-status: HIT`), then revoked at t0 two ways — **A** assignment soft-deleted,
+**B** the file's row deleted while still assigned — and polled every ~7 s for the 70-minute run limit
+(569 ticks). Controls every tick: a same-company crew member never assigned, and another company's owner.
+
+| | Result |
+| --- | --- |
+| **(a) Layer** | **Cloudflare — Supabase's (Smart) CDN.** `cf-cache-status` MISS→HIT, `cache-control: public, max-age=3600`. Not the browser (Node has no HTTP cache). |
+| **(b) Keying** | Object bytes are cached **per object**: a different authorised user and a brand-new token both HIT an object another user primed. But the *allow* decision behaves as if cached **per token**: after revocation the user's OLD token keeps getting 200/HIT, while a token minted after revocation is refused. (The R7 observation was `download()` on the authenticated endpoint, not a signed URL, so "a fresh signature" was never in play.) |
+| **(c) How long** | **Longer than 4,195 s** — the run's limit, not the cache's. The old token was still served at the last tick, **~10 minutes after that JWT's own expiry** (3,600 s lifetime, minted just before t0). The real ceiling is unmeasured. |
+| **(d) Exposure** | **4 of 4** previously-fetched objects stayed readable with the pre-revocation token for the whole 70 min, under BOTH revocations. Everything else closed: a NEW signature refused at **0 s**; a token minted after revocation refused by **14 s**; a 20 s signed URL refused **6 s** after it expired (Supabase's docs say an expired token's cached response may keep being served — measured, it was not). A 7,200 s signed URL issued before revocation still works, by design, until it expires. |
+| **(e) Third parties** | **None.** Across 569 ticks × 4 objects the unassigned crew member and the other company's owner were served **0** times. Only the holder of the previously-authorised token — a bearer credential, so exactly as exposed as that session itself. |
+
+**What this means for the policies hardened this week** (20261790000000, 1800, 1810, the R5b
+function): they stop NEW reads at once, but a user who had already fetched an object keeps re-reading
+it through Storage's authenticated endpoint with the token they already hold, for at least 70 minutes
+and past that token's expiry. It needs deliberate use: the app renders via signed URLs, and a user
+refreshing normally gets a new token, which is refused.
+
+**Not measured:** an object the revoked user never fetched before revocation (expected refused — no
+cached decision — but not tested); the cache's true lifetime; whether rewriting or purging the object
+ends it (Supabase documents cache invalidation on update/delete and a purge API on Pro).
+
+**Options — not built (read-only, as ruled):** (1) purge the CDN cache for a project's objects when
+someone is unassigned (Supabase `purgeCache`, Pro plan); (2) ask Supabase whether authenticated-endpoint
+authorisation is cached and for how long; (3) serve private files only through short signed URLs,
+which measured as refused promptly after expiry. **To measure (c) to its end** needs a run of several
+hours holding a fixture, and every spare identity is used by CI — it needs a throwaway identity.
+
+---
+
 **Nothing touched production.** No migration, backfill or write to production; nothing merged. All
 database work was on rebuild-test, with CI idle.
 
