@@ -7,6 +7,7 @@ import { getActiveSessionByToken } from '@/lib/services/signing-service';
 import { getProposalData } from '@/lib/proposal/proposal-data';
 import { recordProposalView } from '@/lib/proposal/record-view';
 import { SigningClient } from './signing-client';
+import { trimProposalForClient } from '@/lib/proposal/client-proposal';
 
 // Spec 2 (4F F1) — public signing page. No authentication: the
 // token IS the access credential. Lives outside /dashboard.
@@ -103,7 +104,9 @@ export default async function SigningPage({ params }: PageProps) {
   return (
     <SigningClient
       token={params.token}
-      proposal={proposal}
+      // [S112, RULED Josh] props are the client's payload: exactly what the
+      // format shows. See lib/proposal/client-proposal.ts.
+      proposal={trimProposalForClient(proposal)}
       recipientName={session.recipient_name}
     />
   );

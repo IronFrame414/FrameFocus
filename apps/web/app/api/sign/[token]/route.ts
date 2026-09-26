@@ -4,15 +4,13 @@ import type { Database } from '@framefocus/shared/types/database';
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
 import { getActiveSessionByToken } from '@/lib/services/signing-service';
 import { getProposalData } from '@/lib/proposal/proposal-data';
+import { trimProposalForClient } from '@/lib/proposal/client-proposal';
 
 // Spec 2 (4F F1) — public, no auth: the token IS the credential.
 // Returns the proposal payload for the signing page renderer; 404
 // when the token is invalid, expired, or already used.
 
-export async function GET(
-  _request: NextRequest,
-  { params }: { params: { token: string } }
-) {
+export async function GET(_request: NextRequest, { params }: { params: { token: string } }) {
   const admin = getSupabaseAdmin() as SupabaseClient<Database>;
 
   const session = await getActiveSessionByToken(admin, params.token);
@@ -31,8 +29,10 @@ export async function GET(
     );
   }
 
+  // [S112, RULED Josh] exactly what the chosen format shows — never the full
+  // tree the renderer used to hide (#136 / S164). See client-proposal.ts.
   return NextResponse.json({
-    proposal,
+    proposal: trimProposalForClient(proposal),
     recipientName: session.recipient_name,
     expiresAt: session.expires_at,
   });

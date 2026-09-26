@@ -1,12 +1,19 @@
 import type { ProposalData } from './proposal-data';
-import { resolveProposalFormat, proposalRenderPlan } from '@framefocus/shared/utils/proposal-format';
+import type { ClientProposalCategory, ClientProposalData } from './client-proposal';
+import {
+  resolveProposalFormat,
+  proposalRenderPlan,
+} from '@framefocus/shared/utils/proposal-format';
 
 // Spec 2 (4F F5) — HTML rendering of the proposal for the public
 // signing page: same data as the PDF, responsive for mobile. Plain
 // JSX + inline styles (no dashboard styling dependencies — this
 // renders outside /dashboard).
 
-function fmtMoney(value: number): string {
+// [S112] A null figure is one the client-trimmed data withheld; it is only
+// null where the format draws nothing, so the dash is never shown (tested).
+function fmtMoney(value: number | null): string {
+  if (value == null) return '—';
   return `$${value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
@@ -19,8 +26,12 @@ function fmtDate(iso: string | null): string {
   });
 }
 
-export function ProposalHtml({ data }: { data: ProposalData }) {
-  const { company, estimate, client, jobSite, categories, allowances } = data;
+// [S112] Renders the FULL data (staff) or the client-trimmed data (the signing
+// page). Trimmed figures are null only where this renderer draws nothing, which
+// test/s112-client-proposal.test.tsx proves by rendering both and comparing.
+export function ProposalHtml({ data }: { data: ProposalData | ClientProposalData }) {
+  const { company, estimate, client, jobSite, allowances } = data;
+  const categories: ClientProposalCategory[] = data.categories;
   const accent = company.brandColor;
 
   const sectionTitle: React.CSSProperties = {
@@ -183,7 +194,14 @@ export function ProposalHtml({ data }: { data: ProposalData }) {
           const showPrices = estimate.pricingLevel === 'detail_with_price_qty';
           return categories.map((cat, i) => (
             <div key={i} style={{ marginBottom: '0.75rem' }}>
-              <div style={{ ...row, fontWeight: 700, fontSize: '0.9375rem', margin: '0.5rem 0 0.25rem' }}>
+              <div
+                style={{
+                  ...row,
+                  fontWeight: 700,
+                  fontSize: '0.9375rem',
+                  margin: '0.5rem 0 0.25rem',
+                }}
+              >
                 <span>{cat.name}</span>
                 {showPrices && <span>{fmtMoney(cat.subtotal)}</span>}
               </div>
@@ -234,7 +252,7 @@ export function ProposalHtml({ data }: { data: ProposalData }) {
                         <span style={{ flex: 1, textAlign: 'right' }}>
                           Discount ({line.discountLabel}):
                         </span>
-                        <span>−{fmtMoney(line.originalTotal - line.total)}</span>
+                        <span>−{fmtMoney(line.originalTotal - (line.total ?? 0))}</span>
                       </div>
                       <div style={{ ...row, fontWeight: 700 }}>
                         <span style={{ flex: 1, textAlign: 'right' }}>Line total:</span>
@@ -414,8 +432,8 @@ export function ProposalHtml({ data }: { data: ProposalData }) {
         >
           <div style={{ fontWeight: 700, marginBottom: '0.25rem' }}>Allowances</div>
           <div style={{ fontSize: '0.75rem', color: '#92400e', marginBottom: '0.5rem' }}>
-            The following amounts are allowances for client-selected items. Final pricing
-            depends on the selections made.
+            The following amounts are allowances for client-selected items. Final pricing depends on
+            the selections made.
           </div>
           {allowances.map((a, i) => (
             <div key={i} style={{ ...row, borderBottom: 'none', padding: '0.125rem 0' }}>
