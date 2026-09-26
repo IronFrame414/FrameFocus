@@ -319,14 +319,48 @@ insulation 12, lumber 36, other 9, paint 12, plumbing 46, roofing 18 (= 282).
 see WHAT JOSH MUST CLICK.
 
 
+### S112 audit fixes — MEASURED after the fix (`feature/s112-audit-fixes`)
+
+The same harness as the audit, on a production build of the branch, crew and owner, English and
+Spanish, 360 wide: 19 routes plus the chat and photo-select states. That's 38 route records per
+role, 0 errors, languages restored. The Spanish text diff covered all 49 routes plus the menu
+sheet, both roles.
+
+| Fix | Before (audit) | After (measured) |
+| --- | --- | --- |
+| F16 site-visit hydration: page errors | 120 | **0** (0 page errors on any route) |
+| F6 chat controls < 44px | 24 | **0** |
+| F7 "show original" target | 74×14 | **74×45.75**. The first fix measured 43.75, a quarter pixel short; caught by this re-run and fixed. |
+| F17 `/m/account` targets < 44px | 28 | **0** |
+| F18 photo-select overflow (owner, es, 360) | 23 px | **0**; no overflow on any measured route |
+| F14 dead tiles | grey "loading" forever | **"Unavailable"/"No disponible" on all 4** |
+| F13 Clock-in hint | none | **shown**, all 4 role/language combos |
+| F4 English dates in Spanish | 16 strings | **0**; now "sáb, 26 de sept", "25 ago 2026, 9:06 p.m." |
+| F5 wrong Spanish singulars | 3 | **0**; now "1 mío · 1 abierto" |
+| F15 English screen-reader labels in Spanish | 6 | **0** |
+| F9 raw tokens (`crew_member`, `not_started`) | 5 | **0** (`rough`/`finish` remain: user-typed phase NAMES) |
+| F20 "a agreed" | present | **"an agreed"** |
+
+F10 (visible share/delete note), F19 (site-visit date zone) and F21 (no-projects state) can't be
+triggered by this harness, so they rest on code review and the unit suite. They're listed under
+BUILT BUT UNTESTED.
+
+**Found by this re-run and fixed:** F7's first version measured 43.75 px. **Found while fixing
+F7:** tapping "show original" on the `/m/logs` list NAVIGATED to the log, because the button sits
+inside the row `<Link>` without `preventDefault`. Fixed.
+
+
 ## BUILT BUT UNTESTED
 
 - **S111 Part One — `retainage_releases` and `client_refunds` arms.** Both tables hold **0 rows
   company-wide** on rebuild-test, so their arms were never exercised. Unblock: a fixture with a
   retainage release and a refund on one PE project and one other project, then rerun the proof.
-- **Audit fixes (`feature/s112-audit-fixes`):** covered by the unit suite (121 files / 1,673 tests)
-  and the build. The measured `/m` re-run is pending a free CI slot, because it flips a shared
-  user's language. Status is in the Log.
+- **Audit F10** (share/delete failure note now visible), **F19** (site-visit date in the company
+  zone) and **F21** (no-projects Clock-in state): built, unit suite green, not triggerable by the
+  harness. F10 needs a browser whose Web Share refuses files; F19 an evening visit; F21 a crew
+  member on no project.
+- **Audit F24** (notification row 44px): the fix applies the component's existing compact floor.
+  The original finding was at 390/430 and the re-run measured 360 only.
 
 ## BLOCKED
 
@@ -407,7 +441,19 @@ Nothing was run on production tonight. Each migration below carries the read-onl
 
 ## Log
 
-- 04:35Z — 3c pushed; CI run 36217531323 live. Queue A, B, C measured (read-only; the 4 HEIC
+- 05:24Z — **INCIDENT, mine, contained.** 3c's first CI run (36217531323) failed two ways:
+  1. **Unit step:** `m6m-markup-save.test.ts` mocked the save's UPDATE without the new
+     `.select`. I hadn't run the full unit suite on that branch. Fixed, with a new unit test and a
+     control (red when the feature is removed). Full suite 120/1,672.
+  2. **E2E `desktop-chat-mentions`:** it found 5 postable people where 4 are pinned. The fifth was
+     the **Project Executive identity I seeded**: its fixture-project assignment put it in QA A's
+     crew thread. **That was shared rebuild-test state, so it would have failed every branch
+     including main.** I soft-deleted both of its assignments (rebuild-test is back to its
+     pre-session assignments) and the test passes locally (6/6). The seeder now never assigns it;
+     the proof harness assigns it for its own run and removes it (rerun 7/7, 0 assignments left).
+  3c rerun: 36220665117.
+- 05:10Z — audit fixes re-measured (table in DONE AND PROVEN).
+- 04:35Z (really ~04:22) — 3c pushed; CI run 36217531323 live. Queue A, B, C measured (read-only; the 4 HEIC
   transform calls ran sequentially to spare the connection pool while CI was live).
 - 04:10Z — Part One migrations applied (CI idle); FILL-7.2/7.3 proven; 3d measured; hold branch
   parked and documented.
