@@ -61,6 +61,8 @@ export function ThreadSegments({
               alignItems: 'center',
               gap: '6px',
               padding: '5px 12px',
+              // [S112 audit F6] measured 31px tall; M6M §2 floors targets at 44.
+              minHeight: '44px',
               borderRadius: '20px',
               border: `1px solid ${selected ? color.primary : color.inputBorder}`,
               backgroundColor: selected ? color.blueTint : '#fff',

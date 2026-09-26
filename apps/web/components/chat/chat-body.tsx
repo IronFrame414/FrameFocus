@@ -167,8 +167,15 @@ export function ChatBackButton({ onClick }: { onClick: () => void }) {
       data-testid="chat-back"
       aria-label={t('shell.chat.backToProjects')}
       onClick={onClick}
+      // [S112 audit F6] A 44x44 target (M6M §2's floor) around the unchanged
+      // 17px arrow; the negative margin keeps the header's layout where it was.
       style={{
         display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        width: '44px',
+        height: '44px',
+        margin: '-13.5px',
         border: 'none',
         background: 'none',
         padding: 0,
