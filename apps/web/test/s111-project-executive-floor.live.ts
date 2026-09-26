@@ -19,6 +19,12 @@
  * the set the rule admits (every live application on its projects, and summing
  * to the whole payment), and recording is exercised for real and cleaned up.
  *
+ * ⚠️ IT ASSIGNS THE PE FOR THE DURATION OF THE RUN, AND REMOVES IT AFTER. A
+ * standing assignment on company A's fixture project made the PE a 5th postable
+ * person in QA A's crew thread and turned desktop-chat-mentions red on every
+ * branch (they all run against this database). So: RUN ONLY WHILE NO CI IS LIVE
+ * — check the Actions API first — exactly like the other shared-state harnesses.
+ *
  * rebuild-test only (live-session guards). Run:
  *   npx vitest run --config test/live.vitest.config.ts test/s111-project-executive-floor.live.ts
  */
@@ -59,6 +65,9 @@ let companyId: string;
 let assigned: Set<string>;
 let resolve: Record<string, (r: Row) => string | null>;
 
+let peMemberId = '';
+let runAssignmentId = '';
+
 type Dim = { table: string; key: string; cols: string; project: (r: Row) => string | null; money: boolean };
 let dims: Dim[];
 
@@ -73,6 +82,23 @@ beforeAll(async () => {
   expect(peProfile.role).toBe('project_executive');
   companyId = peProfile.company_id as string;
   const { data: member } = await admin.from('company_members').select('id').eq('profile_id', peProfile.id).single();
+  peMemberId = member!.id as string;
+  // Assign for this run only (see header): company A's fixture project, the one
+  // with a row in every money family.
+  const { data: fixture } = await admin
+    .from('projects').select('id').eq('company_id', companyId).eq('name', 'QA A — isolation fixture').single();
+  const { data: row } = await admin
+    .from('project_assignments').select('id, is_deleted').eq('project_id', fixture!.id).eq('member_id', peMemberId).maybeSingle();
+  if (row) {
+    await admin.from('project_assignments').update({ is_deleted: false, deleted_at: null }).eq('id', row.id);
+    runAssignmentId = row.id as string;
+  } else {
+    const { data: ins, error: insErr } = await admin.from('project_assignments')
+      .insert({ company_id: companyId, project_id: fixture!.id, member_id: peMemberId, role_on_project: 'project_executive' })
+      .select('id').single();
+    if (insErr) throw new Error(`assign PE for the run: ${insErr.message}`);
+    runAssignmentId = ins.id as string;
+  }
   const { data: asg } = await admin
     .from('project_assignments').select('project_id').eq('member_id', member!.id).eq('is_deleted', false);
   assigned = new Set((asg ?? []).map((a) => a.project_id as string));
@@ -107,6 +133,16 @@ beforeAll(async () => {
     { table: 'client_payment_applications', key: 'id', cols: 'id, invoice_id', project: (r) => g(inv, r.invoice_id), money: true },
   ];
 }, 120_000);
+
+// Remove the run's assignment again — the seeded state has none (see header).
+afterAll(async () => {
+  if (runAssignmentId) {
+    await admin.from('project_assignments').update({ is_deleted: true, deleted_at: new Date().toISOString() }).eq('id', runAssignmentId);
+  }
+  const { count } = await admin.from('project_assignments').select('id', { count: 'exact', head: true })
+    .eq('member_id', peMemberId).eq('is_deleted', false);
+  record('assignmentsLeftAfterRun', count);
+});
 
 describe('FILL-7.2 — every Floor table: exactly its own projects, zero elsewhere', () => {
   const tally: Array<Record<string, unknown>> = [];
