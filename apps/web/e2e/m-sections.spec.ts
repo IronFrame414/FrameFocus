@@ -223,6 +223,12 @@ test.describe('M-13 · Change Orders', () => {
 // role floor, so RLS would NOT catch a leak. Each role signs in for real rather
 // than being simulated.
 //
+// [S112 R5a] The two sentences above and the [S114] paragraph below are quoted
+// history: the S121 read floor (20260830000000) gave the policy a role floor,
+// and foreman/crew/sub now read NO change orders — the non-vacuity test further
+// down already records that inversion. For owner/admin (and a PM author) the
+// loop is still the pass that matters.
+//
 // [S114] The subcontractor arm was skipped on #127 grounds. #127 is closed and
 // the arm now runs. It is not a formality — verified at the database, the QA sub
 // reads both COs on this project at full value (net_delta 1410 and 21385.91).
@@ -311,6 +317,10 @@ test.describe('A-33c · no money on M-13 under ANY role', () => {
       page.getByTestId('m-co-row'),
       'the sub still reads change orders — the #117 floor has regressed'
     ).toHaveCount(0);
+    // [S112 R5a] And the screen says WHY rather than "No change orders.", which
+    // would be false — the project has COs; the floor hides them.
+    await expect(page.getByTestId('m-co-office-only')).toBeVisible();
+    await expect(page.getByTestId('m-empty')).toHaveCount(0);
   });
 });
 

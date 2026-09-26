@@ -73,6 +73,10 @@ export const en = {
   'project.coStatus.voided': 'Voided',
   'project.changes.new': 'New change order',
   'project.changes.empty': 'No change orders.',
+  // [S112 R5a] Foreman/crew/sub read no COs (S121 read floor) — "No change
+  // orders." would be false for them. Worded by role, like shell.denied.coRead.
+  'project.changes.officeOnly':
+    'Change orders are handled by the office. Your project manager can tell you what changed.',
   'project.co.title': 'Change Order',
   'project.co.titleField': 'Title',
   'project.co.description': 'Description',
@@ -325,6 +329,8 @@ export const es: Record<keyof typeof en, string> = {
   'project.coStatus.voided': 'Anulada',
   'project.changes.new': 'Nueva orden de cambio',
   'project.changes.empty': 'No hay órdenes de cambio.',
+  'project.changes.officeOnly':
+    'La oficina se encarga de las órdenes de cambio. Tu gerente de proyecto te puede decir qué cambió.',
   'project.co.title': 'Orden de cambio',
   'project.co.titleField': 'Título',
   'project.co.description': 'Descripción',

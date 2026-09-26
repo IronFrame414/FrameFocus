@@ -128,9 +128,11 @@ export function canReachDetail(role: string | null | undefined): boolean {
 // ===========================================================================
 // D-51's WRITE surface — and the asymmetry with everything above
 // ===========================================================================
-// Everything above this line gates a READ, and §4.11.10b's third conflict is
-// why: those four tables carry no subcontractor arm on SELECT, so the guard is
-// the only thing there is.
+// Everything above this line gates a READ. [S112 R5a] CORRECTED — the text
+// that stood here, quoted not deleted: _"§4.11.10b's third conflict is why:
+// those four tables carry no subcontractor arm on SELECT, so the guard is the
+// only thing there is."_ Stale for three of the four since S121/S131/S154; this
+// file's own header records which. Only `files` is still guard-only.
 //
 // CO WRITES ARE THE OPPOSITE CASE, and the difference is worth stating rather
 // than leaving a reader to infer that this file is uniformly load-bearing:
@@ -149,8 +151,11 @@ export function canReachDetail(role: string | null | undefined): boolean {
 // every save failed with an RLS error, which is a worse experience than a
 // redirect but is NOT a permission hole.
 //
-// §4.11.11 puts it as the asymmetry that makes #117 tolerable: "Writing is
-// DB-enforced; reading is not." This file now holds one example of each.
+// §4.11.11 put it as the asymmetry that made #117 tolerable: _"Writing is
+// DB-enforced; reading is not."_ [S112 R5a] Quoted, no longer true: since the
+// S121 read floor (20260830000000_change_order_read_floor.sql) READING a CO is
+// DB-enforced too — owner/admin, or a PM on the COs they created. What remains
+// UI-only is a PM author seeing `net_delta` on their own CO (#117).
 
 /** D-51's three roles. Mirrors `change_orders_insert_authorized` exactly. */
 const CO_WRITE_ROLES = ['owner', 'admin', 'project_manager'];
@@ -158,10 +163,13 @@ const CO_WRITE_ROLES = ['owner', 'admin', 'project_manager'];
 /**
  * Block a role the DB would refuse from ever reaching a CO write screen.
  *
- * Unlike `requireDetailAccess`, this excludes FIVE roles rather than one —
- * foreman and crew_member are refused here even though D-53 lets them READ
- * M-31. Two different rules on one entity, which is exactly why they are two
- * functions rather than one parameterised guard.
+ * Unlike `requireDetailAccess`, this excludes FIVE roles rather than one.
+ * [S112 R5a] _Superseded, quoted:_ "foreman and crew_member are refused here
+ * even though D-53 lets them READ M-31." — no longer so: the S121 read floor
+ * refuses them the row, so M-31 sends them back with `?denied=co-read`. The
+ * READ rule lives in `readsChangeOrders` below; the two stay separate
+ * functions because the read rule is about to widen (an approved-CO summary
+ * for crew/foreman) while the write rule is not.
  */
 export async function requireCoWriteAccess(backTo: string): Promise<void> {
   const profile = await getMyProfile();
@@ -177,6 +185,26 @@ export async function requireCoWriteAccess(backTo: string): Promise<void> {
 /** The same test, for HIDING the control (D-54 step 1). */
 export function canWriteCo(role: string | null | undefined): boolean {
   return CO_WRITE_ROLES.includes(role ?? '');
+}
+
+/**
+ * [S112 R5a] Can this role READ change orders at all?
+ *
+ * Mirrors `change_orders_select_visible` (20260830000000, the S121 read
+ * floor): owner and admin read every CO; a project manager reads the ones they
+ * created; foreman, crew_member and subcontractor read NONE — the database
+ * hands them an empty list. So for them M-13's "No change orders." was a false
+ * statement about the project, not an empty state. The list shows them a
+ * role-worded notice instead (`project.changes.officeOnly`).
+ *
+ * ONE HELPER ON PURPOSE: a follow-up branch will give crew/foreman an
+ * approved-CO summary on this screen, and that change should be made here, in
+ * one place, rather than hunted through the list.
+ *
+ * A PM is "true" even with no authored COs — for them the empty state is true.
+ */
+export function readsChangeOrders(role: string | null | undefined): boolean {
+  return ['owner', 'admin', 'project_manager'].includes(role ?? '');
 }
 
 // ===========================================================================
