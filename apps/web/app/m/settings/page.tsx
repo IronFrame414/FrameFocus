@@ -4,6 +4,8 @@ import { getMyProfile } from '@/lib/services/profiles';
 import { getCompany, getCompanyTimeSettings } from '@/lib/services/company';
 import { SetMobileHeader } from '../mobile-header';
 import { getMobileT } from '@/lib/i18n/server';
+import type { MsgKey } from '@/lib/i18n/messages';
+import type { CompanyRole } from '@framefocus/shared';
 
 // M6M §4.13.7 — M-30 · Settings. READ-ONLY, for every role including Owner.
 //
@@ -24,6 +26,19 @@ import { getMobileT } from '@/lib/i18n/server';
 // its own permission design that this spec has not done.
 //
 // A-48 asserts NO editable control as OWNER — the only role that could fail it.
+
+// [S112 audit F9] Settings showed the raw tokens 'crew_member crew'. The role
+// maps to its own label; member_type reuses /m/team's tags, so the two screens
+// name a person the same way.
+const ROLE_KEY: Record<CompanyRole, MsgKey> = {
+  owner: 'shell.role.owner',
+  admin: 'shell.role.admin',
+  project_manager: 'shell.role.project_manager',
+  foreman: 'shell.role.foreman',
+  crew_member: 'shell.role.crew_member',
+  subcontractor: 'shell.role.subcontractor',
+  client: 'shell.role.client',
+};
 
 export default async function MobileSettingsPage() {
   // The role comes from a SECOND READ IN THE PAGE via a named service function
@@ -70,13 +85,19 @@ export default async function MobileSettingsPage() {
             data-testid="m-settings-role"
             className="font-mono text-[11px] font-semibold text-m6m-muted"
           >
-            {profile?.role ?? '—'}
+            {profile?.role && profile.role in ROLE_KEY
+              ? t(ROLE_KEY[profile.role as CompanyRole])
+              : (profile?.role ?? '—')}
           </span>
           <span
             data-testid="m-settings-member-type"
             className="font-mono text-[11px] text-m6m-muted"
           >
-            {member?.member_type ?? '—'}
+            {member?.member_type === 'subcontractor'
+              ? t('directory.team.typeTag.subcontractor')
+              : member?.member_type
+                ? t('directory.team.typeTag.crew')
+                : '—'}
           </span>
         </p>
       </section>

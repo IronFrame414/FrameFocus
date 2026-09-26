@@ -1,10 +1,9 @@
 import Link from 'next/link';
-import { makeT, type MsgKey, type T } from '@/lib/i18n/messages';
+import type { MsgKey, T } from '@/lib/i18n/messages';
 
 // S110 H — THESE ARE SERVER COMPONENTS, SO THEY CANNOT CALL useT(). A component
 // here that shows system text takes an optional `t` (the page's getMobileT()),
 // and falls back to English when a caller has not passed one.
-const EN_T = makeT('en');
 
 // M6M — shared primitives for the §4.13 list screens.
 //
@@ -45,14 +44,15 @@ export function FilterChips({
   active,
   basePath,
   param,
-  t = EN_T,
+  t,
 }: {
   chips: readonly Chip[];
   active: string | null;
   basePath: string;
   param: string;
-  /** S110 H — the page's getMobileT(); English when omitted. */
-  t?: T;
+  /** S110 H — the page's getMobileT(). [S112 audit F15] REQUIRED: an English
+   *  default let four lists ship English labels in Spanish, twice. */
+  t: T;
 }) {
   return (
     <div
@@ -204,7 +204,7 @@ export function daysLeft(targetEndDate: string | null, today: string): number | 
  * The em-dash is the null state, NEVER `0` — the same distinction §2's money
  * token draws between "$0.00" and "not recorded".
  */
-export function daysLeftLabel(targetEndDate: string | null, today: string, t: T = EN_T): string {
+export function daysLeftLabel(targetEndDate: string | null, today: string, t: T): string {
   const n = daysLeft(targetEndDate, today);
   return n === null ? '—' : t('shell.daysLeft', { n });
 }
@@ -314,14 +314,15 @@ export function ContactActions({
   mobile,
   email,
   name,
-  t = EN_T,
+  t,
 }: {
   phone?: string | null;
   mobile?: string | null;
   email?: string | null;
   name: string;
-  /** S110 H — the page's getMobileT(); English when omitted. */
-  t?: T;
+  /** S110 H — the page's getMobileT(). [S112 audit F15] REQUIRED: an English
+   *  default let four lists ship English labels in Spanish, twice. */
+  t: T;
 }) {
   // `mobile` wins when both are present — it is the number that reaches a person
   // on site, which is the whole argument for these screens existing on a phone.
@@ -487,11 +488,12 @@ export const DENIED_KEYS: Record<string, MsgKey> = {
 
 export function DeniedNotice({
   kind,
-  t = EN_T,
+  t,
 }: {
   kind: string | undefined;
-  /** S110 H — the page's getMobileT(); English when omitted. */
-  t?: T;
+  /** S110 H — the page's getMobileT(). [S112 audit F15] REQUIRED: an English
+   *  default let four lists ship English labels in Spanish, twice. */
+  t: T;
 }) {
   const key = kind ? DENIED_KEYS[kind] : undefined;
   if (!key) return null;

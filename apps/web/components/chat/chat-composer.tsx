@@ -463,6 +463,7 @@ export function ChatComposer({ projectId, kind, disabled, onSend }: ChatComposer
             alignItems: 'center',
             gap: '6px',
             padding: '9px 14px',
+            minHeight: '44px', // [S112 audit F6] measured 38-40px; M6M §2 floor is 44.
             borderRadius: '9px',
             border: `1px solid ${color.primary}`,
             backgroundColor: color.blueTint,
@@ -491,6 +492,7 @@ export function ChatComposer({ projectId, kind, disabled, onSend }: ChatComposer
             alignItems: 'center',
             gap: '6px',
             padding: '9px 12px',
+            minHeight: '44px', // [S112 audit F6] measured 38-40px; M6M §2 floor is 44.
             borderRadius: '9px',
             border: `1px solid ${color.inputBorder}`,
             backgroundColor: '#fff',
@@ -516,6 +518,7 @@ export function ChatComposer({ projectId, kind, disabled, onSend }: ChatComposer
             gap: '6px',
             marginLeft: 'auto',
             padding: '9px 16px',
+            minHeight: '44px', // [S112 audit F6] measured 38-40px; M6M §2 floor is 44.
             borderRadius: '9px',
             border: 'none',
             backgroundColor:

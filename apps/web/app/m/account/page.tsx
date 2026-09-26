@@ -22,13 +22,14 @@ export default async function MobileAccountPage() {
         <NameForm
           initialFirstName={profile.first_name ?? ''}
           initialLastName={profile.last_name ?? ''}
+          compact
         />
       </section>
       <section className="mt-[14px] rounded-[15px] border border-m6m-border bg-m6m-card p-[16px]">
         <h2 className="mb-[12px] text-[15px] font-semibold text-m6m-navy">
           {t('account.password')}
         </h2>
-        <PasswordForm />
+        <PasswordForm compact />
       </section>
       {/* S110 H, ruling 1 — the language toggle, same form as the desktop page. */}
       <section className="mt-[14px] rounded-[15px] border border-m6m-border bg-m6m-card p-[16px]">

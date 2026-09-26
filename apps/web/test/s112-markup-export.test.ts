@@ -10,6 +10,7 @@ import {
 } from '@/lib/markup/export-marked';
 import { scaledSize, DISPLAY_MAX_EDGE } from '@/lib/markup/flatten-image';
 import { shareImages, shareFailureNote } from '@/lib/share-image';
+import { makeT } from '@/lib/i18n/messages';
 
 // [S112 RULING R1] EXPORTS REBUILD FULL RESOLUTION; THE STORED DERIVATIVE IS
 // THE FALLBACK. The save side (2,048 px derivative) is asserted in
@@ -343,7 +344,13 @@ describe('share-image · bytes already built are shared as a File', () => {
     });
     const out = await shareImages([{ blob: new Blob(['x']), fileName: 'a.jpg' }]);
     expect(out).toEqual({ ok: false, reason: 'not-allowed' });
-    expect(shareFailureNote('not-allowed')).not.toBeNull();
+    // [wave-1 merge] F10 made the note take `t`; assert the real sentence in both languages.
+    expect(shareFailureNote('not-allowed', makeT('en'))).toBe(
+      'The photo is ready — tap Share again to send it.'
+    );
+    expect(shareFailureNote('not-allowed', makeT('es'))).toBe(
+      'La foto está lista — toca Compartir otra vez para enviarla.'
+    );
     // CONTROL: a dismissed sheet stays a silent cancel.
     stubShare(async () => {
       throw Object.assign(new Error('dismissed'), { name: 'AbortError' });

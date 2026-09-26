@@ -310,7 +310,18 @@ function Tile({
             loaded ? 'opacity-100' : 'opacity-0'
           }`}
         />
-      ) : null}
+      ) : (
+        // [S112 audit F14] NO URL AT ALL — the file could not be signed (its
+        // storage object is gone: an orphaned row or a failed upload). There is
+        // no <img>, so onError can never fire and the placeholder above used to
+        // read as "still loading" forever. Say so instead.
+        <div
+          data-testid="m-tile-unavailable"
+          className="absolute inset-0 flex items-center justify-center px-[6px] text-center text-[12px] font-semibold text-m6m-navy"
+        >
+          {t('photos.grid.unavailable')}
+        </div>
+      )}
 
       {/* -------------------------------------------------------------------
           §4.7a.3 — THE MARKUP INDICATOR. TOP-RIGHT, CIRCULAR, ICON-ONLY (A-23q).
@@ -449,7 +460,7 @@ function SelectionBar({
     // absent the action says so rather than failing silently — and says so
     // BEFORE rebuilding any image it could never send.
     if (!shareSupported()) {
-      setNote(shareFailureNote('unsupported'));
+      setNote(shareFailureNote('unsupported', t));
       return;
     }
     setBusy(true);
@@ -498,7 +509,7 @@ function SelectionBar({
 
     const outcome = await shareImages(items);
     if (!outcome.ok) {
-      const note = shareFailureNote(outcome.reason);
+      const note = shareFailureNote(outcome.reason, t);
       if (note) setNote(note);
     }
     setBusy(false);
@@ -507,10 +518,10 @@ function SelectionBar({
   return (
     <div
       data-testid="m-selection-bar"
-      className="relative flex items-center gap-[8px] border-b border-m6m-border bg-m6m-card px-[18px] py-[10px]"
+      className="relative flex flex-wrap items-center gap-[8px] border-b border-m6m-border bg-m6m-card px-[18px] py-[10px]"
     >
       <span data-testid="m-selection-count" className="flex-1 font-mono text-[13px] text-m6m-navy">
-        {t('photos.grid.selected', { n: count })}
+        {t(count === 1 ? 'photos.grid.selectedOne' : 'photos.grid.selected', { n: count })}
       </span>
       <button
         type="button"
@@ -549,7 +560,7 @@ function SelectionBar({
           data-testid="m-bulk-delete-confirm"
           role="dialog"
           aria-label={t('photos.grid.confirmDelete')}
-          className="absolute inset-x-[18px] top-[56px] z-50 rounded-[14px] border border-m6m-border bg-m6m-card p-[14px] shadow-lg"
+          className="absolute inset-x-[18px] top-full z-50 mt-[6px] rounded-[14px] border border-m6m-border bg-m6m-card p-[14px] shadow-lg"
         >
           <p className="text-[15px] font-semibold text-m6m-navy">
             {count === 1
@@ -579,7 +590,14 @@ function SelectionBar({
       ) : null}
 
       {note ? (
-        <p data-testid="m-selection-note" role="status" className="sr-only">
+        // [S112 audit F10] VISIBLE. This was `sr-only` from the M-8 build on, so
+        // a failed Share ("This browser cannot share images…") or a partial
+        // Delete ("2 of 3 failed") changed nothing on screen for anyone sighted.
+        <p
+          data-testid="m-selection-note"
+          role="status"
+          className="basis-full pt-[6px] text-[13px] font-semibold text-m6m-danger"
+        >
           {note}
         </p>
       ) : null}

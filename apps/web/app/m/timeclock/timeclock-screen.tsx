@@ -15,7 +15,8 @@ import { buildClockInEntries, buildClockOutEntries } from '@/lib/offline/capture
 import type { QueueEntry } from '@/lib/offline/queue';
 import { SetMobileHeader } from '../mobile-header';
 import { captureGps } from './capture-gps';
-import { useT } from '@/components/i18n/language-provider';
+import { useT, useUiLang } from '@/components/i18n/language-provider';
+import { dateLocale } from '@/lib/i18n/dates';
 import type { MsgKey, T } from '@/lib/i18n/messages';
 
 // M6M §4.5 / §4.5a / §4.12.1 — the 7a interaction, exactly as D-27 shapes it.
@@ -103,8 +104,11 @@ export function TimeclockScreen({
   const router = useRouter();
   const offlineSync = useOfflineSync();
   const t = useT();
+  const uiLang = useUiLang();
   const entries = offlineSync?.entries;
-  const today = new Date().toLocaleDateString('en-US', {
+  // [S112 audit F4] was 'en-US' — the first screen a Spanish crew member opens
+  // each day said 'Sat, Sep 26'.
+  const today = new Date().toLocaleDateString(dateLocale(uiLang), {
     weekday: 'short',
     month: 'short',
     day: 'numeric',
@@ -335,7 +339,17 @@ function ClockInForm({
           <h2 className="mb-[8px] mt-[18px] font-mono text-[11px] font-medium uppercase tracking-wide text-m6m-muted">
             {t('field.projectHeading')}
           </h2>
-          <ul className="overflow-hidden rounded-[14px] border border-m6m-border bg-m6m-card">
+          {ordered.length === 0 ? (
+            // [S112 audit F21] A crew member on no project (their first day, say)
+            // got an empty heading over nothing. Say why, and who can fix it.
+            <p
+              data-testid="m-clock-no-projects"
+              className="rounded-[14px] border border-dashed border-m6m-border bg-m6m-card px-[16px] py-[18px] text-center text-[15px] text-m6m-navy"
+            >
+              {t('field.clock.noProjects')}
+            </p>
+          ) : null}
+          <ul className="overflow-hidden rounded-[14px] border border-m6m-border bg-m6m-card empty:hidden">
             {ordered.map((p) => {
               const on = projectId === p.id;
               return (
@@ -391,6 +405,14 @@ function ClockInForm({
       >
         {busy ? t('field.clock.clockingIn') : t('field.clock.clockIn')}
       </button>
+      {/* [S112 audit F13] A disabled button explained nothing. Say what it is
+          waiting for — the same pattern as the punch screen's "Attach the
+          photo first." */}
+      {!ready && !busy && !(needsProject && ordered.length === 0) ? (
+        <p data-testid="m-clock-hint" className="mt-[8px] text-center text-[12px] text-m6m-muted">
+          {type === null ? t('field.clock.pickType') : t('field.clock.pickProject')}
+        </p>
+      ) : null}
     </div>
   );
 }

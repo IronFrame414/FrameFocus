@@ -3,7 +3,8 @@ import { getCompanyTimeSettings } from '@/lib/services/company';
 // [S106] was a local copy of the company-tz calendar-date rule.
 import { companyToday } from '@framefocus/shared/utils/dates';
 import { SectionHeader } from '../section-header';
-import { getMobileT } from '@/lib/i18n/server';
+import { getMobileT, getMyLanguage } from '@/lib/i18n/server';
+import { dateLocale } from '@/lib/i18n/dates';
 import type { MsgKey } from '@/lib/i18n/messages';
 import { EmptyState, ListRow, SectionLabel } from '../../../mobile-ui';
 
@@ -34,9 +35,11 @@ const SOURCE_KEY: Record<CalendarEvent['source'], MsgKey> = {
   compliance: 'project.schedule.source.compliance',
 };
 
-function formatDay(iso: string): string {
+// [S112 audit F4] `locale` from dateLocale(): Spanish readers were shown English
+// weekdays and months. The zone stays UTC — these are date-only values.
+function formatDay(iso: string, locale: string): string {
   const [y, m, d] = iso.split('-').map(Number);
-  return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString('en-US', {
+  return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString(locale, {
     weekday: 'short',
     month: 'short',
     day: 'numeric',
@@ -49,11 +52,13 @@ export default async function ProjectSchedulePage({
 }: {
   params: { projectId: string };
 }) {
-  const [events, timeSettings, t] = await Promise.all([
+  const [events, timeSettings, t, lang] = await Promise.all([
     getCalendarEvents({ projectId: params.projectId }),
     getCompanyTimeSettings(),
     getMobileT(),
+    getMyLanguage(),
   ]);
+  const locale = dateLocale(lang);
 
   const today = companyToday(timeSettings.timezone);
 
@@ -82,7 +87,7 @@ export default async function ProjectSchedulePage({
         [...past, ...upcoming].map((day) => (
           <section key={day} data-testid="m-day-group" data-day={day}>
             <SectionLabel>
-              {formatDay(day)}
+              {formatDay(day, locale)}
               {day === today ? t('project.schedule.todaySuffix') : ''}
             </SectionLabel>
             <ul className="rounded-[15px] border border-m6m-border bg-m6m-card px-[12px]">
