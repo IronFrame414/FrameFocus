@@ -174,6 +174,16 @@ _(none yet)_
 
 ## Log
 
+- 03:43Z — **S111 Part One started** on `feature/s111-project-role` (fast-forwarded to main
+  `528bc76b`; parked). Committed, **not yet applied** because CI is live:
+  - **step 1** (`5a1eef2e`): the role exists; only the Owner can grant it. The database guard
+    also closes a live hole where an Admin could insert an Admin invitation via PostgREST.
+  - **step 2** (`8a411b3f`): every Floor read arm and Q9.
+  - **identity + proof harness** (`b9c8e0e6`).
+  Q4's condition checked: no column in the directories carries rates or pricing. The 41 live
+  negative-role policies were re-measured; none is a company-wide write. A `cp` of `.env.local`
+  into a new worktree was blocked by a deny rule; I respected it and Part One uses the main
+  checkout instead.
 - 03:31Z — **audit fixes complete to the extent ruled**, on `feature/s112-audit-fixes`, parked.
   Built: F4, F5, F6, F7, F9, F10, F13, F14, F15, F16, F17, F18, F19, F20, F21, F24.
   Withdrawn: F12 (the ruled swatch exception). Needs a ruling: F1, F2, F3, F8, F11, F22, F23 (R2–R6).
