@@ -67,6 +67,11 @@ const config: Config = {
           navy: '#0f1729', // app bar, primary text
           blue: '#3b4ae0', // active state, icons, primary button
           amber: '#f59e0b', // camera action, avatar, primary field CTA, counts
+          // RULED [Josh, S112 R6]: amber as TEXT on a light surface. #f59e0b is
+          // 2.15:1 on white; this is the same hue (37.7deg) darkened until it
+          // clears AA on both surfaces: 4.89:1 on card #ffffff, 4.52:1 on page
+          // #f4f6fa. Text only (tile badges) — fills stay `amber`.
+          'amber-text': '#9d6506',
           danger: '#c0362c', // sign out, damage/blocking badges — RULED: stays
           surface: '#f4f6fa', // page background
           card: '#ffffff', // all cards and tiles

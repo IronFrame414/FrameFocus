@@ -176,10 +176,18 @@ export default async function MobileProjectHubPage({
 
   return (
     <div className="pb-[18px]">
-      {/* §4.3's app bar: the project name and `PRJ-### · {client}`. The back
-          chevron and the active Projects tab come from the shell, which derives
-          both from the pathname (A-30, A-1c). */}
-      <SetMobileHeader title={project.name} sub={subLine} />
+      {/* §4.3's app bar. The back chevron and the active Projects tab come
+          from the shell, which derives both from the pathname (A-30, A-1c).
+
+          [S112 audit F11, RULED Josh] The title is the SCREEN ("Project"),
+          not the project's name. _Superseded comment, quoted not deleted:_
+          "§4.3's app bar: the project name and `PRJ-### · {client}`." — with
+          `title={project.name}`, the name rendered twice, one above the
+          other: in the app bar AND as the hero h2 directly beneath it. The
+          hero keeps the name (it is the page's content heading); the bar
+          names the screen, as every section screen's bar does (section-
+          header.tsx: section name + the same `PRJ-### · {client}` sub). */}
+      <SetMobileHeader title={t('project.hub.title')} sub={subLine} />
 
       {/* ------------------------------------------------------------------ */}
       {/* §4.3's NAVY HEADER — it continues the app bar rather than sitting    */}

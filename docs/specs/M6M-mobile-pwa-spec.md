@@ -663,6 +663,13 @@ Search filters live. Tap a card → M-3.
 Navy header: back chevron, project name 21px/800, mono `PRJ-### · {client}`, status pill, and a
 **2-stat strip** — **Days left / Punch** (mono 19px; **Punch amber when non-zero**, muted at zero).
 
+> **AMENDED [Josh, S112 audit F11]:** the app bar's title is the screen name (**"Project"**, i18n
+> `project.hub.title`), not the project name. As built, the name rendered twice — app bar title and the
+> 21px hero directly beneath it. The hero keeps the name; the mono `PRJ-### · {client}` stays in the bar's
+> sub-line, as on every section screen. The Punch List tile badge's text uses `m6m.amber-text`
+> (`#9d6506`, 4.89:1 on the white tile) rather than `amber` (2.15:1) and wraps instead of truncating
+> [S112 R6]; the navy-header Punch stat keeps `amber`.
+
 > **AMENDED [S98, D-19]:** the strip was **3 stats — Progress / Days left / Punch — divided by two 1px
 > rules**. **Progress is cut** (no project-level percentage exists; see §8a). **Respec, not a gap:** the
 > two remaining stats split the header width **50/50**, separated by a **single** 1px rule on the centre

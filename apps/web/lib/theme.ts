@@ -16,6 +16,10 @@ export const color = {
   blueTint: '#f2f4ff', // ghost-primary bg (same token as the Tailwind 50 stop)
   blueTintAlt: '#e8ecfb', // info chip bg (same token as the Tailwind 100 stop)
   amber: '#f59e0b', // logo "Works", avatar, event accents
+  // RULED [Josh, S112 R6]: same-hue amber for TEXT on light surfaces —
+  // 4.89:1 on cardBg, 4.52:1 on pageBg (`amber` is 2.15:1 on white). Tracks
+  // tailwind.config.ts m6m.amber-text. Text only; fills stay `amber`.
+  amberText: '#9d6506',
 
   // Surfaces
   pageBg: '#f4f6fa',
