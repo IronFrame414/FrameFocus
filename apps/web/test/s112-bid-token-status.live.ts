@@ -15,7 +15,9 @@ import { GET, POST } from '../app/api/bid/[token]/files/route';
 //            the winner stays live (until expiry, or conversion — see below);
 //   estimate converted, voided or deleted → every token on it closed;
 //   (f)      every endpoint behind the token: GET files, POST files, and
-//            get_sub_bid_request (`anon` may call it directly).
+//            get_sub_bid_request — ~~(`anon` may call it directly)~~ SUPERSEDED by the
+//            anon lockdown (20261870000000): the page calls it with the service
+//            role, and a direct anon call is refused outright (asserted below).
 //
 // NEGATIVE FIRST, twice over: the status cases were run against origin/main
 // (4 red: a cancelled token listed and fetched the scope, uploaded, and read
@@ -490,31 +492,78 @@ describe("5. the token's OTHER endpoints (ruling f)", () => {
     expect(res.status).toBe(200);
   });
 
+  // ==========================================================================
+  // ⚠️ INVERTED IN PLACE [S112, Josh — merge-order ruling]. The anon lockdown
+  // (20261870000000) removed anon's EXECUTE on get_sub_bid_request, so the
+  // direct anon call this block used to make is now refused outright. The
+  // superseded assertions, QUOTED rather than deleted:
+  //
+  //   it(`get_sub_bid_request (anon, direct): ${k} returns NO scope, message or allowance`, …
+  //     const anon = createClient(URL_, ANON, { auth: { persistSession: false } });
+  //     const { data } = await anon.rpc('get_sub_bid_request', { p_token: tokens[k] });
+  //     expect(d.scope_text ?? null).toBeNull();
+  //     expect(d.message ?? null).toBeNull();
+  //     expect(d.allowance_amount ?? null).toBeNull();
+  //
+  //   it('get_sub_bid_request CONTROL: a submitted, open bid still returns its scope', …
+  //     const anon = createClient(URL_, ANON, …);
+  //     const { data } = await anon.rpc('get_sub_bid_request', { p_token: tokens.submitted });
+  //     expect(data.scope_text).toBe(`${MARKER} scope text`);
+  //
+  // (An intermediate edit, b99c41be, swapped the caller to the service role
+  // but rewrote those lines instead of quoting them. Restored here.)
+  //
+  // WHAT THE REPLACEMENT PROVES — the same claim, made STRONGER, not moved:
+  // the ruling is that a closed token gets only status, expiry and company
+  // name. The old test checked three named fields were absent, which a NEW
+  // leaked field (estimate, line item, the sub's reply) would have passed.
+  // This asserts the EXACT key set, so any added key fails it. The caller is
+  // the service role because that is how /bid/[token]/page.tsx calls it — the
+  // payload under test is the one a sub actually receives.
+  // ==========================================================================
+  const CLOSED_KEYS = ['company_name', 'expires_at', 'is_expired', 'status', 'token'];
+
   for (const k of ['cancelled', 'loser'] as const) {
-    // [S112 anon lockdown, 20261870000000] anon can no longer call this at all;
-    // the PAGE calls it with the service role, so that is the payload to check.
-    it(`get_sub_bid_request (as the page calls it): ${k} returns NO scope, message or allowance`, async () => {
-      const { data } = await admin.rpc('get_sub_bid_request', { p_token: tokens[k] });
+    it(`get_sub_bid_request (as the page calls it): ${k} returns ONLY status, expiry and company name`, async () => {
+      const { data, error } = await admin.rpc('get_sub_bid_request', { p_token: tokens[k] });
+      expect(error, error?.message).toBeNull();
       const d = (data ?? {}) as Record<string, unknown>;
       console.log(
-        `[S112 bid RPC ${k}] status=${String(d.status)} scope=${JSON.stringify(d.scope_text ?? null)} allowance=${JSON.stringify(d.allowance_amount ?? null)}`
+        `[S112 bid RPC ${k}] keys=${Object.keys(d).sort().join(',')} status=${String(d.status)}`
       );
+      expect(Object.keys(d).sort()).toEqual(CLOSED_KEYS);
+      expect(d.token).toBe(tokens[k]);
+      expect(['cancelled', 'declined', 'expired']).toContain(d.status);
+      const { data: co } = await admin
+        .from('companies')
+        .select('name')
+        .eq('id', companyId)
+        .single();
+      expect(d.company_name).toBe((co as { name: string }).name);
+      // The three the old test named, kept as a readable second statement.
       expect(d.scope_text ?? null).toBeNull();
       expect(d.message ?? null).toBeNull();
       expect(d.allowance_amount ?? null).toBeNull();
     });
   }
 
-  it('get_sub_bid_request CONTROL: a submitted, open bid still returns its scope', async () => {
+  it('get_sub_bid_request CONTROL: a submitted, open bid still returns its scope — and MORE than the closed keys', async () => {
     const { data } = await admin.rpc('get_sub_bid_request', { p_token: tokens.submitted });
-    expect((data as Record<string, unknown>).scope_text).toBe(`${MARKER} scope text`);
+    const d = data as Record<string, unknown>;
+    expect(d.scope_text).toBe(`${MARKER} scope text`);
+    // The control that must fire: an OPEN token's payload is not the closed
+    // shape, so the key-set assertion above is not passing on every payload.
+    expect(Object.keys(d).sort()).not.toEqual(CLOSED_KEYS);
   });
 
-  it('get_sub_bid_request is NOT callable by anon at all (S112 lockdown; the page uses the service role)', async () => {
-    const anon = createClient(URL_, ANON, { auth: { persistSession: false } });
-    const { error } = await anon.rpc('get_sub_bid_request', { p_token: tokens.cancelled });
-    expect(error?.message ?? '').toMatch(/permission denied|42501/i);
-  });
+  for (const k of ['cancelled', 'submitted'] as const) {
+    it(`get_sub_bid_request is NOT callable by anon at all — ${k} token (S112 lockdown; the page uses the service role)`, async () => {
+      const anon = createClient(URL_, ANON, { auth: { persistSession: false } });
+      const { data, error } = await anon.rpc('get_sub_bid_request', { p_token: tokens[k] });
+      expect(data).toBeNull();
+      expect(error?.message ?? '').toMatch(/permission denied|42501/i);
+    });
+  }
 
   it('bid_token_state is NOT callable by anon (it would be a token oracle)', async () => {
     const anon = createClient(URL_, ANON, { auth: { persistSession: false } });
