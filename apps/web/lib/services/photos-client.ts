@@ -4,8 +4,9 @@ import {
   type MarkupData,
   type MarkupShape,
 } from '@framefocus/shared/types/markup';
-import { derivativePathFor } from '@framefocus/shared/utils/markup';
+import { derivativePathFor, markupFingerprint } from '@framefocus/shared/utils/markup';
 import { requestThumbnail } from '@/lib/photos/request-thumbnail';
+import { rememberLocalDerivative } from '@/lib/photos/local-derivative';
 
 const BUCKET = 'project-files';
 
@@ -107,10 +108,14 @@ export async function saveMarkup(
   // file_path, file_size and mime_type are not in the payload and are never
   // modified by any number of saves.
   // ---------------------------------------------------------------------
-  const { error: rowError } = await supabase
+  // [S112] `.select('markup_data')` returns the row AS STORED in the same
+  // request — no extra round trip — so the local copy below is fingerprinted
+  // over jsonb's canonical key order, exactly as the server fingerprints it.
+  const { data: storedRows, error: rowError } = await supabase
     .from('files')
     .update({ markup_data: markup as unknown as Record<string, unknown> })
-    .eq('id', fileId);
+    .eq('id', fileId)
+    .select('markup_data');
 
   if (rowError) return { status: 'failed', error: rowError.message };
 
@@ -144,5 +149,8 @@ export async function saveMarkup(
   // THIS markup. Its name carries the markup's fingerprint, so until it exists
   // the grid falls back to the full derivative — never to a stale thumbnail.
   requestThumbnail(fileId);
+  // [S112 3c] The viewer shows THESE bytes instead of downloading them back.
+  const stored = storedRows?.[0]?.markup_data;
+  if (stored) rememberLocalDerivative(fileId, markupFingerprint(stored), blob);
   return { status: 'saved' };
 }

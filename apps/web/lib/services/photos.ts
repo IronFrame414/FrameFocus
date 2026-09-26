@@ -1,5 +1,10 @@
 import { createClient } from '@/lib/supabase-server';
-import { hasMarkup, derivativePathFor, thumbPathFor } from '@framefocus/shared/utils/markup';
+import {
+  hasMarkup,
+  derivativePathFor,
+  thumbPathFor,
+  markupFingerprint,
+} from '@framefocus/shared/utils/markup';
 import type { MarkupData } from '@framefocus/shared/types/markup';
 import { getFiles, getSignedUrls, type FileRecord } from './files';
 
@@ -36,6 +41,13 @@ export interface PhotoRecord {
   /** §4.10 — "a file carrying marks is flagged from markup_data being non-empty". */
   hasMarkup: boolean;
   markup: MarkupData | null;
+  /**
+   * [S112] `markupFingerprint()` of the RAW `files.markup_data` — the same
+   * input the thumbnail name uses — or null when unannotated. Lets the viewer
+   * show the image a save just built (lib/photos/local-derivative.ts) only
+   * while it matches the markup the server holds.
+   */
+  markupFingerprint: string | null;
   source: PhotoSource;
   /** The record the badge points at, for M-9's tappable Source row (A-25c). */
   sourceId: string | null;
@@ -202,6 +214,7 @@ export async function getProjectPhotos(
         ai_tags: file.ai_tags,
         hasMarkup: annotated,
         markup,
+        markupFingerprint: annotated ? markupFingerprint(file.markup_data) : null,
         source,
         sourceId,
         displayUrl,
@@ -278,6 +291,7 @@ export async function getPhoto(fileId: string, projectId: string): Promise<Photo
     ai_tags: file.ai_tags,
     hasMarkup: annotated,
     markup,
+    markupFingerprint: annotated ? markupFingerprint(file.markup_data) : null,
     source,
     sourceId,
     displayUrl,
@@ -354,6 +368,7 @@ export async function getReceiptFile(
     ai_tags: file.ai_tags,
     hasMarkup: false,
     markup: null,
+    markupFingerprint: null,
     source: null,
     sourceId: null,
     displayUrl,

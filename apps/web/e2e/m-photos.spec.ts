@@ -932,13 +932,31 @@ test.describe('[S112] the markup save, by taps', () => {
     await page.mouse.move(box!.x + 100, box!.y + 100, { steps: 6 });
     await page.mouse.up();
     await expect(svg.locator('rect')).toHaveCount(1);
+
+    // [S112 3c] Every GET of THIS photo's derivative from the Save tap on.
+    // Other fixture photos' derivatives may load in the filmstrip; only the
+    // target's own bytes are the round trip 3c removed.
+    const derivativeGets: string[] = [];
+    const onRequest = (req: { method(): string; url(): string }) => {
+      if (req.method() === 'GET' && req.url().includes(encodeURI(`${target.path}.markup.jpg`))) {
+        derivativeGets.push(req.url());
+      }
+    };
+    page.on('request', onRequest);
     await page.getByTestId('m-markup-save').click();
 
     // Symptom 1 — back on the viewer, it must already be the MARKED photo.
     await expect(page).toHaveURL(new RegExp(`/photos/${target.id}$`), { timeout: 20_000 });
     await expect(page.getByTestId('m-save-note')).toHaveCount(0);
     await expect(page.getByTestId('m-viewer-markup-indicator')).toBeVisible({ timeout: 10_000 });
-    await expect(page.getByTestId('m-stage-image')).toHaveAttribute('src', /\.markup\.jpg\?/);
+    // [S112 3c] …shown from the image this tab just built, not downloaded back.
+    const stage = page.getByTestId('m-stage-image');
+    await expect(stage).toHaveAttribute('src', /^blob:/);
+    await expect
+      .poll(() => stage.evaluate((el) => (el as HTMLImageElement).naturalWidth))
+      .toBeGreaterThan(0);
+    page.off('request', onRequest);
+    expect(derivativeGets).toEqual([]);
 
     // Symptom 2 — reopen by tap: the editor must start from the saved drawing.
     await page.getByTestId('m-viewer-overflow').click();
