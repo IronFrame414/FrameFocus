@@ -7,7 +7,8 @@ import { ChevronLeft, ChevronRight, X, MoreVertical } from 'lucide-react';
 import { softDeleteFile } from '@/lib/services/files-client';
 import { shareTargetFor } from '@framefocus/shared/utils/markup';
 import { shareFailureNote, shareImages } from '@/lib/share-image';
-import { useT } from '@/components/i18n/language-provider';
+import { useT, useUiLang } from '@/components/i18n/language-provider';
+import { dateLocale } from '@/lib/i18n/dates';
 
 // M6M §4.9 — M-9 · Photo viewer. Dark canvas #0d1220.
 //
@@ -84,6 +85,7 @@ export function PhotoViewer({
 }) {
   const router = useRouter();
   const t = useT();
+  const uiLang = useUiLang();
   const photo = photos[index];
 
   const [showOriginal, setShowOriginal] = useState(false);
@@ -264,17 +266,19 @@ export function PhotoViewer({
     router.refresh();
   }
 
-  // Date formatting, not copy — stays as is (the locale is the shared date rule).
+  // [S112 audit F4] Superseded note, quoted: "Date formatting, not copy — stays
+  // as is (the locale is the shared date rule)." No ruling kept dates English;
+  // Spanish readers saw "Aug 25, 2026, 9:06 PM". The words follow the reader.
   const takenText = useMemo(() => {
     if (!photo.takenAt) return '—';
-    return new Date(photo.takenAt).toLocaleString('en-US', {
+    return new Date(photo.takenAt).toLocaleString(dateLocale(uiLang), {
       year: 'numeric',
       month: 'short',
       day: 'numeric',
       hour: 'numeric',
       minute: '2-digit',
     });
-  }, [photo.takenAt]);
+  }, [photo.takenAt, uiLang]);
 
   return (
     <div className="flex min-h-full flex-col bg-m6m-canvas text-white">

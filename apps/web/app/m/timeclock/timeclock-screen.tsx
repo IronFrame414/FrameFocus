@@ -15,7 +15,8 @@ import { buildClockInEntries, buildClockOutEntries } from '@/lib/offline/capture
 import type { QueueEntry } from '@/lib/offline/queue';
 import { SetMobileHeader } from '../mobile-header';
 import { captureGps } from './capture-gps';
-import { useT } from '@/components/i18n/language-provider';
+import { useT, useUiLang } from '@/components/i18n/language-provider';
+import { dateLocale } from '@/lib/i18n/dates';
 import type { MsgKey, T } from '@/lib/i18n/messages';
 
 // M6M §4.5 / §4.5a / §4.12.1 — the 7a interaction, exactly as D-27 shapes it.
@@ -103,8 +104,11 @@ export function TimeclockScreen({
   const router = useRouter();
   const offlineSync = useOfflineSync();
   const t = useT();
+  const uiLang = useUiLang();
   const entries = offlineSync?.entries;
-  const today = new Date().toLocaleDateString('en-US', {
+  // [S112 audit F4] was 'en-US' — the first screen a Spanish crew member opens
+  // each day said 'Sat, Sep 26'.
+  const today = new Date().toLocaleDateString(dateLocale(uiLang), {
     weekday: 'short',
     month: 'short',
     day: 'numeric',

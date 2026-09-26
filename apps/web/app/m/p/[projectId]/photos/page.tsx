@@ -8,7 +8,8 @@ import { SetMobileHeader } from '../../../mobile-header';
 import { FilterChips, type Chip } from '../../../mobile-ui';
 import { PhotoGrid, type GridPhoto } from './photo-grid';
 import { PhotoSearch } from './photo-search';
-import { getMobileT } from '@/lib/i18n/server';
+import { getMobileT, getMyLanguage } from '@/lib/i18n/server';
+import { dateLocale } from '@/lib/i18n/dates';
 import type { T } from '@/lib/i18n/messages';
 
 // M6M §4.8 — M-8 · Project photos, the gallery.
@@ -44,11 +45,12 @@ function chips(t: T): readonly Chip[] {
 }
 
 /** `TODAY` / `JUL 8` — §4.8's mono uppercase day label. */
-function dayLabel(iso: string, todayIso: string, t: T): string {
+function dayLabel(iso: string, todayIso: string, t: T, locale: string): string {
   if (iso === todayIso) return t('photos.day.today');
   const d = new Date(`${iso}T00:00:00`);
   return d
-    .toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+    // [S112 audit F4] was 'en-US' — Spanish readers saw 'AUG 25'.
+    .toLocaleDateString(locale, { month: 'short', day: 'numeric' })
     .toUpperCase();
 }
 
@@ -60,6 +62,7 @@ export default async function ProjectPhotosPage({
   searchParams: { source?: string; q?: string };
 }) {
   const t = await getMobileT();
+  const locale = dateLocale(await getMyLanguage());
   const raw = searchParams.source;
   const active = raw === 'log' || raw === 'delivery' || raw === 'punch' ? raw : null;
 
@@ -108,7 +111,7 @@ export default async function ProjectPhotosPage({
       hasMarkup: p.hasMarkup,
       source: p.source,
       day,
-      dayLabel: day ? dayLabel(day, todayIso, t) : t('photos.day.undated'),
+      dayLabel: day ? dayLabel(day, todayIso, t, locale) : t('photos.day.undated'),
     };
   });
 
