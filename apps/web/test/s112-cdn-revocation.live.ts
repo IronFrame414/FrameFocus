@@ -49,6 +49,10 @@ let subMemberId = '';
 const fileRowId: Record<string, string> = {};
 const tok: Record<string, string> = {};
 const preSigned: Record<string, string> = {};
+/** A 20 s signed URL per object, fetched while valid — then past its expiry, with NO credentials. */
+const shortSigned: Record<string, string> = {};
+const SHORT_TTL = 20;
+const shortMintedAt: Record<string, number> = {};
 
 const urlFor = (p: string) =>
   `${URL_}/storage/v1/object/authenticated/${BUCKET}/${p.split('/').map(encodeURIComponent).join('/')}`;
@@ -181,6 +185,13 @@ it.skipIf(!RUN)('revocation window', async () => {
     console.log(`[Q6d] prime ${o.key}: ${last.s} ${last.cf}`);
     expect(last.s, `the sub cannot read ${o.key} BEFORE revocation — the fixture is wrong`).toBe(200);
     preSigned[o.path] = (await signAs(SUB, o.path))!;
+    {
+      const c = await sessionFor(SUB);
+      const { data } = await c.storage.from(BUCKET).createSignedUrl(o.path, SHORT_TTL);
+      shortSigned[o.path] = data!.signedUrl;
+      shortMintedAt[o.path] = Date.now();
+      for (let i = 0; i < 3; i++) await (await fetch(shortSigned[o.path])).arrayBuffer(); // warm the edge
+    }
     expect(preSigned[o.path], `sub could not sign ${o.key} before revocation`).toBeTruthy();
     // CONTROLS before revocation: must already be refused.
     expect((await get(tok.crew, o.path)).s, `crew (never assigned) reads ${o.key}`).not.toBe(200);
@@ -201,7 +212,7 @@ it.skipIf(!RUN)('revocation window', async () => {
   console.log(`[Q6d] REVOKED at t0 (A: unassigned; B: files row deleted)`);
 
   const firstRefused: Record<string, Record<string, number | null>> = {};
-  for (const o of objs) firstRefused[o.key] = { GET: null, SIGN: null, URL: null, 'GET(fresh token)': null };
+  for (const o of objs) firstRefused[o.key] = { GET: null, SIGN: null, URL: null, 'GET(fresh token)': null, EXPIRED: null };
   let freshSub = '';
   let leaks = 0;
 
@@ -212,12 +223,19 @@ it.skipIf(!RUN)('revocation window', async () => {
     let stillReadable = 0;
     for (const o of objs) {
       const g = await get(tok.sub, o.path);
+      const r0 = (k: string) => firstRefused[k];
       const sgn = await signAs(SUB, o.path);
       const u = await fetch(preSigned[o.path]);
       await u.arrayBuffer();
       const f = freshSub ? await get(freshSub, o.path) : null;
       const c1 = await get(tok.crew, o.path);
       const c2 = await get(tok.other, o.path);
+      // Supabase docs: an EXPIRED token's cached response "can continue to be served".
+      // No apikey, no JWT — a signed URL is a bearer link; anyone holding it.
+      const x = await fetch(shortSigned[o.path]);
+      await x.arrayBuffer();
+      const pastExpiry = Math.round((Date.now() - shortMintedAt[o.path]) / 1000) - SHORT_TTL;
+      if (x.status !== 200 && r0(o.key).EXPIRED === null && pastExpiry > 0) r0(o.key).EXPIRED = sec;
       if (c1.s === 200 || c2.s === 200) leaks++;
       const r = firstRefused[o.key];
       if (g.s !== 200 && r.GET === null) r.GET = sec;
@@ -226,7 +244,7 @@ it.skipIf(!RUN)('revocation window', async () => {
       if (f && f.s !== 200 && r['GET(fresh token)'] === null) r['GET(fresh token)'] = sec;
       if (g.s === 200 || u.status === 200 || f?.s === 200) stillReadable++;
       line.push(
-        `${o.key}: GET ${g.s}/${g.cf} SIGN ${sgn ? 'yes' : 'no'} URL ${u.status}` +
+        `${o.key}: GET ${g.s}/${g.cf} SIGN ${sgn ? 'yes' : 'no'} URL ${u.status}/${u.headers.get('cf-cache-status')} 20s-URL(${pastExpiry > 0 ? `expired ${pastExpiry}s ago` : 'valid'}) ${x.status}/${x.headers.get('cf-cache-status')}` +
           (f ? ` fresh ${f.s}/${f.cf}` : '') +
           ` | crew ${c1.s} other ${c2.s}`
       );
