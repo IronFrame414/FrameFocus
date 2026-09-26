@@ -53,9 +53,12 @@ const COMPANY_A_IDENTITIES = [
   { email: 'josh+test50@worthprop.com', role: 'owner', first: 'Dave', last: 'Whitfield' },
   { email: 'josh+qa-admin@worthprop.com', role: 'admin', first: 'QA', last: 'Admin A' },
   { email: 'josh+pm@worthprop.com', role: 'project_manager', first: 'QA', last: 'PM A' },
-  // [S111 Part One] The new role's identity. Assigned to the fixture project by
-  // the role-check block below like PM/foreman/crew, and to NO other project —
-  // so s111-project-executive-floor.live.ts has an off-project zero to prove.
+  // [S111 Part One] The new role's identity. ⚠️ CREATED BUT NEVER ASSIGNED here —
+  // both assignment loops below skip it. Measured: assigned to company A's
+  // fixture project it becomes a 5th postable person in QA A's crew thread and
+  // desktop-chat-mentions (which pins 4) went red on EVERY branch's CI, since all
+  // of them run against this database. s111-project-executive-floor.live.ts
+  // assigns it for the duration of its own run and removes it after.
   { email: 'josh+qa-pe@worthprop.com', role: 'project_executive', first: 'QA', last: 'Project Exec A' },
   { email: 'josh+qa-foreman@worthprop.com', role: 'foreman', first: 'QA', last: 'Foreman A' },
   { email: 'josh+crew@worthprop.com', role: 'crew_member', first: 'QA', last: 'Crew A' },
@@ -505,6 +508,7 @@ await seedIsolationFixtures(companyB, 'B', bOwnerMemberId);
 console.log('\nRole-check assignments on company A fixture project:');
 for (const { email, role } of COMPANY_A_IDENTITIES) {
   if (role === 'owner' || role === 'admin') continue;
+  if (role === 'project_executive') continue; // [S111] never assigned here — see its identity entry
   const { data: profile } = await db.from('profiles').select('id').eq('email', email).single();
   const memberId = await memberIdFor(profile.id);
   await ensureRow(
@@ -670,6 +674,7 @@ const SECTIONS_PROJECT_ID = 'eaf0e25b-d60e-49c0-89b2-5612118d94b4';
     // have rows are left exactly as they are.
     for (const { email, role } of COMPANY_A_IDENTITIES) {
       if (role === 'owner' || role === 'admin') continue; // reach every project already
+      if (role === 'project_executive') continue; // [S111] never assigned here — see its identity entry
       const { data: p } = await db.from('profiles').select('id').eq('email', email).single();
       const memberId = await memberIdFor(p.id);
       await ensureRow(
