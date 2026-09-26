@@ -436,8 +436,17 @@ duplicate data access is written for mobile.
 | danger      | `#c0362c`                             | sign out, damage/blocking badges                           |
 | surface     | `#f4f6f9`                             | page background                                            |
 | card        | `#ffffff`, border `#e6e9ef`           | all cards and tiles                                        |
-| muted       | `#8a919c` on light, `#8fa0c4` on navy | inactive tab, captions                                     |
+| muted       | `#687081` on light, `#8fa0c4` on navy | inactive tab, captions — **RULED [Josh, S112 R4]**, below  |
 | dark canvas | `#0d1220`                             | photo viewer and markup only                               |
+
+**muted on light — RULED [Josh, S112 R4]: `#687081` (4.97:1 on cards, 4.60:1 on page); may be tuned,
+never below 4.5.** _Superseded values, quoted rather than deleted:_ this row read _"`#8a919c` on
+light"_ as written, and the shipped token had since moved to _"`#8792a8`"_ with the desktop README
+ramp (desktop-redesign R6 — `desktop-redesign-build-log.md` Entry 4). `#8792a8` measured **3.13:1 on
+the card (`#ffffff`) and 2.89:1 on the page (`#f4f6fa`)** — under WCAG AA 4.5:1 for the captions it
+carries. `tailwind.config.ts` `m6m.muted` and `lib/theme.ts` `mutedAlt` move together (R6: they track
+each other), and the hard-coded `#8792a8` copies in app code moved with them. The navy variant is
+unchanged.
 
 **Type.** Barlow for UI. **IBM Plex Mono for every number, ID, timestamp, and micro-label.** Body ≥15px
 (≥14px on the dark photo screens). Captions ≥11px, mono, captions only.

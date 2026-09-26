@@ -418,7 +418,7 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
           border: `1.5px dashed ${dropKey === key ? '#3b4ae0' : '#d5dae4'}`,
           background: dropKey === key ? '#f2f4ff' : 'transparent',
           fontSize: '0.72rem',
-          color: '#8792a8',
+          color: '#687081',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
@@ -1147,7 +1147,7 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
             )}
             {/* #7 — TOTAL label stacked above the figure; #5 — greyed when $0. */}
             <span style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'flex-end', lineHeight: 1.15, verticalAlign: 'middle' }}>
-              <span style={{ fontFamily: font.mono, fontSize: '9px', fontWeight: 700, letterSpacing: '.08em', color: '#8792a8' }}>
+              <span style={{ fontFamily: font.mono, fontSize: '9px', fontWeight: 700, letterSpacing: '.08em', color: '#687081' }}>
                 TOTAL
               </span>
               <span style={{ ...monoNum, color: isUnpriced ? '#9aa4b8' : undefined }}>
@@ -1249,7 +1249,7 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
           <div
             style={{
               fontSize: '0.8125rem',
-              color: '#8792a8',
+              color: '#687081',
               marginBottom: '0.5rem',
               padding: '1rem',
               border: '1px dashed #d5dae4',
@@ -1500,7 +1500,7 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
                 background: 'none',
                 cursor: 'pointer',
                 padding: '0 0.25rem 0 0',
-                color: '#8792a8',
+                color: '#687081',
                 fontSize: '0.75rem',
                 lineHeight: 1,
               }}
@@ -1533,7 +1533,7 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
               {fmtMoney(catTotal)}
             </span>
             {/* 9b (§2) — category count line. */}
-            <span style={{ fontSize: '0.72rem', color: '#8792a8' }}>
+            <span style={{ fontSize: '0.72rem', color: '#687081' }}>
               {subs.length} subcategor{subs.length === 1 ? 'y' : 'ies'} ·{' '}
               {lineItems.filter((l) => l.category_id === category.id).length} section
               {lineItems.filter((l) => l.category_id === category.id).length === 1 ? '' : 's'}

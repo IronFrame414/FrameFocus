@@ -88,7 +88,7 @@ export default function FileRow({
           </span>
         )}
         {file.supersedes_id && (
-          <span style={{ marginLeft: '6px', fontSize: '0.6875rem', color: '#8792a8' }}>
+          <span style={{ marginLeft: '6px', fontSize: '0.6875rem', color: '#687081' }}>
             supersedes an earlier revision
           </span>
         )}

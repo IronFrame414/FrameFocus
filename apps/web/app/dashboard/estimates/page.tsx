@@ -11,7 +11,7 @@ function SiteVisitsPanel({ visits }: { visits: SiteVisit[] }) {
   if (visits.length === 0) return null;
   return (
     <section data-testid="site-visits-panel" style={{ border: '1px solid #e4e8ef', borderRadius: '14px', padding: '1rem 1.25rem', marginBottom: '1rem', background: '#fff' }}>
-      <h2 style={{ fontSize: '0.75rem', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#8792a8', margin: '0 0 0.5rem' }}>
+      <h2 style={{ fontSize: '0.75rem', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#687081', margin: '0 0 0.5rem' }}>
         Site visits waiting to be priced · {visits.length}
       </h2>
       <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>

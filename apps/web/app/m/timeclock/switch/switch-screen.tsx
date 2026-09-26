@@ -51,7 +51,7 @@ const TYPE_KEY: Record<string, MsgKey> = Object.fromEntries(
 
 /** Timeline fill per type — work-family blue, break grey, travel/shop amber. */
 function barColor(type: string): string {
-  if (type === 'break') return '#8792a8';
+  if (type === 'break') return '#687081';
   if (type === 'travel' || type === 'shop') return '#f59e0b';
   return '#3b4ae0';
 }
