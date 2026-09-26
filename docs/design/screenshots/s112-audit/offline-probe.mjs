@@ -1,0 +1,33 @@
+// Offline: the strip's fit at 360, and what a tab tap does with no network.
+import { chromium } from '/workspaces/FrameFocus/node_modules/playwright/index.mjs';
+import { mkdirSync } from 'node:fs';
+const BASE = 'http://localhost:3100';
+const OUT = process.env.OUT; mkdirSync(OUT, { recursive: true });
+const b = await chromium.launch();
+const ctx = await b.newContext({ viewport: { width: 360, height: 800 }, isMobile: true, hasTouch: true });
+const page = await ctx.newPage();
+await page.goto(`${BASE}/sign-in`);
+await page.locator('#email').fill('josh+crew@worthprop.com');
+await page.locator('#password').fill('FrameFocusTest!2026');
+await page.getByRole('button', { name: /sign in/i }).click();
+await page.waitForURL((u) => !u.pathname.startsWith('/sign-in'));
+await page.goto(`${BASE}/m/logs/new`, { waitUntil: 'networkidle' });
+const sw = await page.evaluate(async () => !!(await navigator.serviceWorker?.getRegistration?.()));
+await ctx.setOffline(true);
+await page.evaluate(() => window.dispatchEvent(new Event('offline')));
+await page.waitForTimeout(800);
+const strip = await page.evaluate(() => {
+  const s = document.querySelector('[data-testid="m-offline-strip"]');
+  if (!s) return null;
+  const r = s.getBoundingClientRect();
+  const span = s.querySelector('span.flex-1');
+  return { h: Math.round(r.height), w: Math.round(r.width), text: s.innerText.replace(/\s+/g, ' '), spanClipped: span ? span.scrollWidth > span.clientWidth : null, over: document.documentElement.scrollWidth - innerWidth };
+});
+await page.screenshot({ path: `${OUT}/offline-logs-new-${process.env.LANGTAG}.jpg`, type: 'jpeg', quality: 60 });
+const t0 = Date.now();
+await page.locator('[data-testid="m-tab-projects"]').click();
+await page.waitForTimeout(2500);
+const after = await page.evaluate(() => ({ path: location.pathname, text: (document.querySelector('[data-testid="m-content"]')?.innerText || document.body.innerText).slice(0, 160).replace(/\s+/g, ' ') }));
+await page.screenshot({ path: `${OUT}/offline-after-tab-${process.env.LANGTAG}.jpg`, type: 'jpeg', quality: 60 });
+console.log(JSON.stringify({ serviceWorker: sw, strip, afterTabTap: after, ms: Date.now() - t0 }));
+await b.close();
