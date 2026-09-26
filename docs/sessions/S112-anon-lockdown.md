@@ -61,6 +61,11 @@ COMMIT;
 
 `test_invite_lookup` is not restored by the rollback (nothing calls it).
 
+**The rollback was PROVEN on rebuild-test**, then migration 1 re-applied: after the rollback anon could
+execute **279** functions (the original 280 less the dropped test function), with **0** granted that
+the backup did not have and **0** the backup had but were not restored. Re-applied: anon 3,
+authenticated 296.
+
 ## ⚠️ Merge-order note
 
 `feature/s112-bid-token-status`'s live test calls `get_sub_bid_request` as anon to show a closed bid
