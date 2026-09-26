@@ -3,7 +3,7 @@ import { getChangeOrders, CO_STATUS_LABELS } from '@/lib/services/change-orders'
 import { getMobileT } from '@/lib/i18n/server';
 import type { MsgKey } from '@/lib/i18n/messages';
 import { getMyProfile } from '@/lib/services/profiles';
-import { canReachDetail, canWriteCo } from '@/app/m/detail-access';
+import { canReachDetail, canWriteCo, readsChangeOrders } from '@/app/m/detail-access';
 import { SectionHeader } from '../section-header';
 import { DeniedNotice, EmptyState, ListRow, ListRowLink, StatusPill } from '../../../mobile-ui';
 
@@ -18,10 +18,15 @@ import { DeniedNotice, EmptyState, ListRow, ListRowLink, StatusPill } from '../.
 //      figure anywhere on /m — a pattern this spec has deliberately never had
 //      (D-11 puts every role on the same screens). D-37's Expenses is not that:
 //      an expense amount is actual cost, visible to all roles by design.
-//   2. change_orders_select_visible has NO role floor and NO author scoping —
-//      it is company + can_view_project and nothing else. The Financial
-//      Visibility Floor gates CO amounts at the UI ONLY (TECH_DEBT #117), so a
-//      leak here would NOT be caught by RLS.
+//   2. [S112 R5a] CORRECTED. _Superseded, quoted not deleted:_ "change_orders_
+//      select_visible has NO role floor and NO author scoping — it is company +
+//      can_view_project and nothing else. The Financial Visibility Floor gates
+//      CO amounts at the UI ONLY (TECH_DEBT #117), so a leak here would NOT be
+//      caught by RLS." False since the S121 read floor
+//      (20260830000000_change_order_read_floor.sql): the policy admits owner/
+//      admin, or a PM on the COs they created — nobody else. What is still
+//      UI-only is narrow: a PM author sees net_delta on their own COs (#117).
+//      D-26 holds anyway — reason 1 stands on its own, and a PM is a reader.
 //
 // A-33c walks all six roles, and the owner/admin pass is the one that matters:
 // a build that adds a role gate "because owners may as well see it" satisfies
@@ -71,6 +76,12 @@ export default async function ProjectChangesPage({
   // database all agree.
   const canWrite = canWriteCo(profile?.role);
 
+  // [S112 R5a, RULED Josh] Foreman, crew and subcontractor read NO change
+  // orders — the database returns an empty list (readsChangeOrders' comment).
+  // "No change orders." would tell them the project has none, which is false;
+  // they get a notice worded by role instead, modelled on shell.denied.coRead.
+  const canRead = readsChangeOrders(profile?.role);
+
   return (
     <div className="px-[18px] pb-[18px] pt-[14px]">
       <SectionHeader projectId={params.projectId} title={t('project.tile.changes')} />
@@ -86,7 +97,15 @@ export default async function ProjectChangesPage({
         </Link>
       ) : null}
 
-      {cos.length === 0 ? (
+      {!canRead ? (
+        <p
+          data-testid="m-co-office-only"
+          role="status"
+          className="rounded-[15px] border border-m6m-border bg-m6m-card px-[14px] py-[12px] text-[15px] text-m6m-navy"
+        >
+          {t('project.changes.officeOnly')}
+        </p>
+      ) : cos.length === 0 ? (
         <EmptyState>{t('project.changes.empty')}</EmptyState>
       ) : (
         <ul className="rounded-[15px] border border-m6m-border bg-m6m-card px-[12px]">

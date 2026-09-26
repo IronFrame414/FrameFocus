@@ -236,9 +236,12 @@ test.describe('M-31 · net_delta is Owner/Admin/PM only (D-51), and it is UI-onl
     await expect(page.getByTestId('m-denied')).not.toContainText(/subcontractor/i);
     await expect(page.getByTestId('m-tabbar')).toBeVisible();
 
-    // And the list it would have come from is empty for them.
+    // And the list it would have come from is empty for them — and says why
+    // rather than claiming the project has none [S112 R5a].
     await page.goto(`/m/p/${PROJECT}/changes`);
     await expect(page.getByTestId('m-co-row')).toHaveCount(0);
+    await expect(page.getByTestId('m-co-office-only')).toBeVisible();
+    await expect(page.getByTestId('m-empty')).toHaveCount(0);
   });
 
   test('the signing token is never rendered', async ({ page }) => {
