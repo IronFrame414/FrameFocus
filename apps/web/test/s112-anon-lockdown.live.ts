@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
-import { ANON, URL_, admin, assertRebuildTest, sessionFor } from './live-session';
+import { ANON, URL_, admin, assertRebuildTest, deleteCompanies, sessionFor } from './live-session';
 
 // ============================================================================
 // S112 — the public ANON key may execute exactly the functions a logged-out
@@ -122,7 +122,17 @@ describe('3. CONTROL — nothing changes for signed-in users or the auth service
     const { data, error } = await admin.auth.admin.createUser({ email, password: 'S112-lockdown-pass!9', email_confirm: true });
     console.log(`[S112 signup trigger] ${error ? `ERROR ${error.message}` : 'created'}`);
     expect(error, error?.message).toBeNull();
-    if (data.user) await admin.auth.admin.deleteUser(data.user.id);
+    // ⚠️ The signup trigger ALSO creates a company, profile and member. The first
+    // version deleted only the auth user — which failed silently (the profile
+    // still referenced it) and left three "My Company" tenants whose members
+    // shifted m-writes M-40's unordered pick into another company: 2 red in CI
+    // run 36243095129. Remove the tenant, then the user, and check both.
+    const { data: prof } = await admin.from('profiles').select('company_id').eq('user_id', data.user!.id).maybeSingle();
+    if (prof) await deleteCompanies(admin, [(prof as { company_id: string }).company_id]);
+    const del = await admin.auth.admin.deleteUser(data.user!.id);
+    expect(del.error, del.error?.message).toBeNull();
+    const { count } = await admin.from('profiles').select('id', { count: 'exact', head: true }).eq('user_id', data.user!.id);
+    expect(count, 'the signup left a profile behind').toBe(0);
   });
 
   it('a public company logo still downloads with no credentials', async () => {
