@@ -450,3 +450,10 @@ not here. Known fix: a named predicate for that one panel only. ⚠️ The relea
 invoice arms admit the exact sequence, live. Converts to a real number when the branch lands (next free on main: `#164`).
 
 ## S181b Phase 3 step 4 — the false-citation line — CORRECTED in place (Step Q2 above, old text quoted)
+
+## S181b — closing gate
+
+`next lint` on the three changed live tests: exit 0, "No ESLint warnings or errors". `rm -rf .next && next build`: **exit 0**, "✓ Compiled
+successfully", "✓ Generating static pages (133/133)". ⚠️ The last CI run (`36353398976`, green) is on `487db131`. Everything since is `[skip ci]` and
+touches only `apps/web/test/*.live.ts` (which CI type-checks but does not run) plus docs, so **CI has not seen HEAD**. A `[CI]` commit is owed
+before any merge. The merge is blocked on production anyway (condition 3).
