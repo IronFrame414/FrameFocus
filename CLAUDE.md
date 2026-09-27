@@ -147,6 +147,8 @@ a **wrapper's status** (`tail`, `echo`, `time`, a task summary); **truncated out
 not "no result"); a **cached result** (a Turbo hit is not a run); the **wrong scope** (Prettier on a
 `/tmp` copy); a **probe that cannot fail**. **State row counts, and run a control that must fire.**
 
+**An off-project negative written with `.insert().select()` measures the READ policy, not the write policy: write without returning rows, and count with the service role.** [Josh, S181c; `#2-pe`]
+
 The exit-status rules:
 
 1. **Never judge through a pipe.** Use `cmd > log 2>&1; echo $?` immediately, or `set -o pipefail`,
