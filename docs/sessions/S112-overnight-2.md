@@ -10,6 +10,21 @@ service key. Nothing was merged to main.
 
 ## NEEDS A RULING
 
+### N4 — Four CLAUDE.md deletion candidates (queue 6)
+
+**The question in full.** The CLAUDE.md restructure removed nothing from the record: every line is
+verbatim in `docs/claude/`. Four items were **left out of the compressed CLAUDE.md** as candidates for
+deletion. Should they stay out, or come back?
+
+1. **"Expo EAS: cloud builds…" and "port forwarding … Expo (8081)".** Mobile has been a PWA since
+   S97, and nothing builds with EAS.
+2. **Git Workflow: "`dev` branch for integration".** No `dev` branch exists on origin (checked).
+3. **"Status: Modules 1, 2, and 3 complete".** Stale. STATE.md is the live status.
+4. **The "Last updated / Previously" banners.** Now in `docs/claude/history.md`.
+
+**Recommendation:** keep all four out. They stay in `docs/claude/`. If "a `dev` branch" is meant to
+exist, that is a separate decision.
+
 ### N3 — Which of the 37 file inputs get `multiple`? (queue 2b)
 
 **The question in full.** You asked for a proposal: which upload controls take several files at
@@ -214,6 +229,17 @@ entry. The re-measure at about 20 signed COs is filed as `#1-cosum`.
   - storage-limited on file 2 of 6 → **2 calls made**, 5 marked "not attempted";
   - progress snapshots are exactly `uploading,queued → done,queued → done,uploading → done,done`.
 - **Full gate:** suite 124 files / 1,718; tsc 0; eslint 0; `next build` 0.
+- **LIVE, on rebuild-test, the Owner's real session through the real `uploadFile()`**
+  (`test/s112-files-upload.live.ts`, 3/3, run with CI idle at 00:56Z). **10 files × 256 KB (PDF):**
+
+  | Concurrency | Wall time | Max in flight | Landed | `files` rows |
+  | --- | --- | --- | --- | --- |
+  | 1 (the old sequential loop) | **4,249 ms** | 1 | 10/10 | 10 |
+  | **3 (the default)** | **1,983 ms** | 3 | 10/10 | 10 |
+
+  That is **2.1× faster at ≤ 3 in flight**. PDFs were used so image thumbnailing and auto-tag stay
+  out of the timing. The teardown was checked independently: **0 objects, 0 rows, 0 contacts,
+  0 projects** left.
 - **Per-file progress is per-FILE STATE, not a byte bar.** `uploadFile()` goes through supabase-js
   Storage, which exposes no upload progress events. A byte bar would need an XHR upload path, a
   second transport (N3 item d).
@@ -299,12 +325,46 @@ entry. The re-measure at about 20 signed COs is filed as `#1-cosum`.
   (`2daf0d13`) in history. The **final state** is a trim derived from the corrected page, and the
   proof test keeps it that way.
 
+- **2a, LIVE (same harness):** on a disposable project holding a `photos` JPEG, an `other` JPEG (a
+  permit photographed on site) and a `plans` PDF:
+  - `getFiles` → **3 rows** (the control);
+  - `getDocumentFiles` → **exactly** the permit JPEG and the PDF.
+
+  **The image filed as a document stays.** That is category, not MIME, proven through the real
+  service.
+
+### Queue 6 — CLAUDE.md restructured, 936 → **349** lines (`feature/s112-claude-md-restructure` @ `b999b721`)
+
+- **The audit came FIRST.** `docs/claude/AUDIT-S112.md` (`48f0f881`) was committed before any edit.
+  It lists every section, its line count and KEEP / COMPRESS / MOVE / DELETE.
+- **Lossless, and checked mechanically.** Every section's full original text was moved **verbatim**
+  into `docs/claude/`: `rules.md`, `roles.md`, `database.md`, `platform.md`, `gotchas.md`,
+  `conventions.md`, `superseded.md`, `history.md`.
+  - **723 of 723** non-blank original lines are present verbatim there (0 missing);
+  - **936/936** line ranges were assigned to a file.
+- **CLAUDE.md keeps every rule in operative form**, with a link to its full text. All 13 RULED and
+  MANDATORY headings are present. So are 24 spot-checked specifics, including the Phase 0/2 rules,
+  `pkill`, `SET row_security`, the storage subquery, `NUMERIC(10,6)`, `ON DELETE SET NULL`, `#117`,
+  `presentation_level`, `--unidiff-zero` and `forEveryRole`.
+- **The two new MANDATORY rules are added:**
+  - "Never reformat a file the repo does not already format";
+  - "Role-permission tests are TOTAL maps".
+
+  Their full text, including the refund incident, is in `rules.md`.
+- **A link that was already broken on main is fixed:** `docs/module4-architecture.md` →
+  `docs/specs/module4-architecture.md`.
+- **Merge note.** `feature/s112-followup-docs` and `feature/s112-wave2-integration` each add a small
+  CLAUDE.md hunk: the reformat rule, and the R5b Floor note. Whichever lands after this branch
+  conflicts in CLAUDE.md:
+  - **the reformat rule** is already in this restructure, so drop that hunk;
+  - **the R5b note** belongs as one sentence in the Financial Floor section, plus its full text in
+    `roles.md`. It was deliberately left out here because R5b is not on production yet.
+
 ## BUILT BUT UNTESTED
 
-- **Queue 2a in a browser.** The desktop Files and `/m` Files pages have not been loaded against
-  real rows tonight, because CI run 36282031683 holds rebuild-test. The query is proven at the
-  unit level. A live row-count proof through the real service runs once CI is idle (next log
-  entry).
+- **Queues 2a and 2b in a browser.** No page was loaded in a browser tonight. What was proven is
+  the service (live) and the queue (live + unit). CI will exercise the existing Files and Photos
+  e2e specs on the branch.
 
 ## BLOCKED
 
@@ -356,8 +416,10 @@ _(none yet)_
 | Branch | CI | Ready? |
 | --- | --- | --- |
 | `main` @ `80e15bad` | post-merge run **36278907305 ✅**: 590 passed, 1 flaky (`desktop-chat-switcher` ND-34, the known chat flake, while a duplicate PR-triggered run shared rebuild-test), 21 skipped | — |
-| `feature/s112-wave2-integration` @ `ac3a9680` | run **36282031683**: running | **No.** Needs green CI **and** Josh's runbook step 8. |
-| `feature/s112-files-and-upload` @ `3dec2b85` | not run yet (one slot) | 2a + 2b done; needs CI + N1/N2/N3. No migration. |
+| `feature/s112-wave2-integration` @ `ac3a9680` | run **36282031683 ✅**: 591 passed, 0 failed, **0 flaky**, 21 skipped (31.2 min). Same total as main: the branch changes assertions inside existing tests and adds or removes no `test(` block (checked). | **No — waiting only on Josh's runbook step 8** (migration `20261840000000` on production). CI is done. |
+| `feature/s112-files-and-upload` @ `06482cc8` | not run yet (one slot) | 2a + 2b done and proven live. Needs CI + N1/N2/N3. No migration. |
+| `feature/s112-claude-md-restructure` @ `b999b721` | docs only, `[skip ci]` | Needs Josh's read + N4. Merge note above. |
+| `feature/s112-m-loading` @ `72d603b3` | run **36284154586**: running (rebased onto wave 2) | See queue 4. |
 | `feature/s112-role-permission-maps` @ `5fae3896` | not run yet | Tests only. Needs CI. |
 | `feature/s112-proposal-payload` @ `2daf0d13` | not run yet | Needs CI. No migration. |
 
@@ -369,3 +431,4 @@ _(none yet)_
 - 00:36Z (logged at the time as '~01:05Z', same mistake; every entry from here uses `date -u`) — 2b built (`3dec2b85`), unit-proven; N3 raised. 10-file timing + 2a live proof wait for CI 36282031683 to free rebuild-test. Starting queue 3 (code only).
 - 00:43Z — queue 3 done (`5fae3896`). Found and fixed: the BUILT BUT UNTESTED heading had been dropped by the 2b edit. CI 36282031683 still in E2E (started 00:17Z). Next: queue 5 code while CI runs; 10-file timing + 2a live proof once rebuild-test is free.
 - 00:46Z — queue 5 done (`2daf0d13`). CI 36282031683 still in E2E. Next: queue 6 audit table (docs only) while waiting; then CI queue: m-loading (queue 4) and the three new branches, one at a time.
+- 00:59Z — wave-2 CI 36282031683 GREEN (591/0/0). Queue 6 done (`b999b721`). 2a/2b proven LIVE (10 files: 4,249 → 1,983 ms). Queue 4: m-loading rebased onto wave 2, CI 36284154586 started 00:59Z.
