@@ -56,6 +56,9 @@ async function sweep() {
       );
     await admin.from('change_orders').delete().in('project_id', ids);
     await admin.from('invoices').delete().in('project_id', ids);
+    // [S181] Q1 / Q2 fixtures.
+    await admin.from('client_refunds').delete().in('project_id', ids);
+    await admin.from('client_contracts').delete().in('project_id', ids);
     await admin
       .from('project_budget_amounts')
       .delete()
@@ -385,5 +388,68 @@ describe('S111 step 3 — OFF its project, the same writes touch NOTHING', () =>
     expect(Number(f!.contract_value)).toBe(50000);
     expect(Number(b!.budgeted_amount)).toBe(1000);
     expect(coCount).toBe(1);
+  });
+});
+
+// ===========================================================================
+// [S181] What the role still CANNOT do — on its OWN project. Q1 (RULED Josh):
+// no refunds, neither issue nor approve. Q2 (RULED Josh): no contract
+// authority. Each refusal sits beside a service-role control proving the
+// payload itself is valid, so the refusal is the policy, not a bad row.
+// ===========================================================================
+describe('S181 — ON its own project, what the PE is still REFUSED', () => {
+  it('Q1 a refund: the PE cannot INSERT one (control: the same row is valid)', async () => {
+    const refund = {
+      contact_id: contactId,
+      project_id: proj.on,
+      refund_date: '2026-09-27',
+      amount: 10,
+      source: 'other',
+    };
+    const { data: peRow, error: peErr } = await pe.from('client_refunds').insert(refund).select('id');
+    const { data: ctl, error: ctlErr } = await admin
+      .from('client_refunds')
+      .insert({ ...refund, company_id: companyId })
+      .select('id, status');
+    // ...and it cannot APPROVE the valid one either (UPDATE touches 0).
+    const approve = ctl?.[0]
+      ? await touched(
+          'client_refunds',
+          { status: 'approved', approved_at: new Date().toISOString() },
+          ctl[0].id as string
+        )
+      : -2;
+    const { data: after } = ctl?.[0]
+      ? await admin.from('client_refunds').select('status, approved_at').eq('id', ctl[0].id).single()
+      : { data: null };
+    record('S181_Q1_refund', {
+      peInsert: peRow?.length ?? 0,
+      peError: peErr?.message ?? null,
+      control: ctl?.length ?? ctlErr?.message,
+      peApprove: approve,
+      after,
+    });
+    expect(ctlErr?.message ?? null).toBeNull();
+    expect(ctl).toHaveLength(1);
+    expect(peRow?.length ?? 0).toBe(0);
+    expect(approve).toBeLessThanOrEqual(0);
+    expect(after).toEqual({ status: 'pending_approval', approved_at: null });
+  });
+
+  it('Q2 a client contract: the PE cannot void it (touches 0; the row is unchanged)', async () => {
+    const { data: cc, error: ccErr } = await admin
+      .from('client_contracts')
+      .insert({ company_id: companyId, project_id: proj.on, status: 'sent' })
+      .select('id')
+      .single();
+    expect(ccErr?.message ?? null).toBeNull();
+    // Control: the PE can SEE it (client_contracts_select_visible), so 0 below is authority.
+    const { data: seen } = await pe.from('client_contracts').select('id').eq('id', cc!.id);
+    const vo = await touched('client_contracts', { status: 'void' }, cc!.id as string);
+    const { data: after } = await admin.from('client_contracts').select('status').eq('id', cc!.id).single();
+    record('S181_Q2_contract_void', { seen: seen?.length ?? 0, touched: vo, after });
+    expect(seen).toHaveLength(1);
+    expect(vo).toBeLessThanOrEqual(0);
+    expect(after?.status).toBe('sent');
   });
 });

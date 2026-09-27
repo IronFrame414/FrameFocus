@@ -209,3 +209,21 @@ PE, so nothing needed inverting.
 
 **Open item found, not changed:** `20261910000000` grants the PE `retainage_releases` INSERT/UPDATE, but the Payments
 retainage-release panel is gated `canRecord` (O/A). The DB permits more than the UI offers (fails closed). Needs a ruling.
+
+## Step C-2 (part 1) — live tests written; NEGATIVE-FIRST run, before any migration — DONE
+
+Env: `apps/web/.env.local` restored for **rebuild-test only** from `supabase projects api-keys --project-ref nmyphyhmfttxkdoposvf`
+(the service key's JWT decodes to ref `nmyphyhmfttxkdoposvf`, role `service_role`; the file is gitignored and the keys were not
+printed). CI check before running: `gh run list --status in_progress` → 0.
+
+New `test/s181-project-executive-liens.live.ts` (14 tests, disposable `PEL` fixtures) and `s111-project-executive-writes.live.ts`
+(+2: Q1 refund, Q2 contract void). **Pre-migration run:**
+- Lien file: **OFF 7/7 green, ON 7/7 red.** OFF counts (PE vs service-role control): releases 0/3; OFF inserts landed
+  [0,0,0]; update touched 0 (statuses unchanged `draft`×3); expenses/allocations/payments 0/1 each; money file 0/1; storage
+  upload refused ("new row violates row-level security policy") plus 0 file rows; template insert 0.
+- ⚠️ **The first pre-run had N4 red: the PE read the OFF expense (1).** The cause was the **fixture**, which set `author_member_id` = the PE.
+  `expenses_select_scoped` has an existing any-role "authored by me" arm. The fixture now authors as the Owner's member
+  (asserted ≠ PE) and N4 is green, 0/1. The author arm is existing behaviour for every role and is not changed here.
+- Writes file: W1–W4 red (0 rows / RLS); X1–X4 green (0 touched, service role confirms OFF rows unchanged); **Q1**: PE refund
+  insert refused by RLS, control inserted 1, PE approve touched 0, row still `pending_approval`; **Q2**: PE sees the
+  contract (1) and its void touched 0, status still `sent`. Teardown left 0 projects.
