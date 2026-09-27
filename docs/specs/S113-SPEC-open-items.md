@@ -53,10 +53,28 @@ State each deletion and why it was safe.
 
 # PART A — security and credentials
 
-**A-1. The Resend API keys.** Two keys were exposed in the S103 transcript and have gone unrotated for
-nine sessions. ⚠️ This is a live credential in a chat log and it is older than the anon hole closed on
-2026-09-26. Josh rotates them in the Resend dashboard; CC writes the exact steps including which Vercel
-variable to update and what redeploy is needed, and a check that proves mail still sends afterwards.
+**A-1. The Resend API keys.** ✅ **DONE [Josh, 2026-09-27].** Two keys were exposed in the S103
+transcript and had gone unrotated for nine sessions. ⚠️ This was a live credential in a chat log,
+older than the anon hole closed on 2026-09-26.
+
+**What was done (each step verified, not assumed):**
+
+- New key `framefocus-prod-2026-09` created; `RESEND_API_KEY` updated in Vercel (**Production only**);
+  redeployed; **verified by sending a real proposal from production and receiving it.**
+- **Three old API keys deleted:** `vercel-production`, `RESEND_API_KEY`, `CRON_SECRET`. Only the new
+  key remains.
+- `RESEND_SIGNING_SECRET` rotated in Resend; Vercel updated (Production only); redeployed; **verified
+  by a real event returning 200 in the endpoint's delivery log** — not assumed.
+- Confirmed before deleting: **no consumer outside production.** `.github/` contains no `RESEND`
+  reference, so CI never used one.
+
+**⚠️ Finding (recorded, not just the fact) — a secret's NAME is unreliable evidence of what it is.**
+Two of the deleted Resend keys were named `RESEND_API_KEY` and **`CRON_SECRET`** — variable names, not
+purposes, and `CRON_SECRET` has nothing to do with Resend at all. Someone created keys while pasting
+the wrong label. **Any future secret audit must treat a key's name as unreliable evidence of what it
+is or what uses it** — verify by what actually consumes it. This is the secret-store instance of the
+S180 rule **"audit by what is CALLED, not by what matches a catalog filter"** (CLAUDE.md / `rules.md`):
+a name is a catalog property, not proof of use.
 
 **A-2. The `supabase_admin` default ACL guard.** Built as `20261900000000` on
 `feature/s112-default-acl-guard`, unmerged and unapplied. The `postgres` default is fixed; this one
