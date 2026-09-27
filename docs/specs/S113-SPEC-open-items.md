@@ -149,6 +149,60 @@ corrected page, never to the current one.
 
 ---
 
+## Photo-viewer UI (Josh, S180 hand-off) — measured before building; ordered by severity
+
+Branch: `feature/s113-photo-viewer-ui`. All three MEASURED; none built yet — each needs a Josh input
+recorded below. The `/m` viewer is `apps/web/app/m/p/[projectId]/photos/[fileId]/viewer.tsx`.
+
+**B-8 (Josh's #3, the priority) — the Comments button does nothing.**
+**FILL-A1 — MEASURED: it is a HALF-BUILT feature, not a wiring bug, and NO data is at risk.**
+- **What it's bound to:** `viewer.tsx:765` — `<ActionTile testId="m-action-comment"
+  label={t('photos.viewer.comment')} disabled />`. It is rendered **`disabled` with no `onClick` and
+  no `href`** — bound to nothing.
+- **Backend:** there is **none.** No comments table and no comment column exist — verified on the DB
+  (rebuild-test): `information_schema` → **0 tables matching `comment`, 0 columns matching `comment`**.
+  No comments service or route in `apps/web/lib/services` or `apps/web/app/api` (the grep hits are the
+  word "comment" in code, and `-- comment` in SQL).
+- **⚠️ Lost-data check (Josh's flag): CLEAR.** No backend ever existed, so nothing was ever written;
+  no comments people believe they left are stranded. This is a dead button, not lost data.
+- **Owed decision (report-before-build):** Josh scopes what a photo comment should DO (who can leave
+  one, who sees it, does it notify, does it reach the client portal) before it is built. Until then it
+  correctly stays `disabled`.
+
+**B-9 (Josh's #2) — Markup on site-visit photos. ⚠️ THE FREEZE BLOCKS IT ON A SENT ESTIMATE — Josh's ruling.**
+**FILL-B1 — MEASURED against `enforce_site_visit_file_freeze`.**
+- The freeze trigger `files_z_site_visit_freeze` is **`BEFORE UPDATE ON files`**
+  (`20261730000000:266`); the function `enforce_site_visit_file_freeze` (`20261770000000:347`) lists
+  **`NEW.markup_data IS DISTINCT FROM OLD.markup_data`** (`:381`) among the changes it refuses on a
+  frozen capture. Markup saves via **`.update({ markup_data })`** (`photos-client.ts:78`), an UPDATE.
+- **SENT estimate (site visit frozen, `frozen_at` set, photo captured before it): markup is BLOCKED**
+  — the markup_data UPDATE raises `42501 'This site-visit photo is frozen…'`.
+- **UNSENT estimate (`frozen_at` NULL): markup is ALLOWED** — the trigger returns early (`:366`).
+- **⚠️ STOP-AND-REPORT, per the hand-off:** whether a record a client already received may be
+  annotated afterward is **Josh's ruling, not CC's.** Building is paused on B-9 until he rules the
+  sent case. Options for the sent case: (a) keep it blocked and show a role-worded "this visit was
+  sent and is frozen" notice instead of a dead markup control; (b) allow annotation but on a NEW
+  derivative that does not mutate the frozen original (needs a freeze carve-out like the S111
+  conversion re-point, and is a Floor/record-integrity decision). **Unsent markup is uncontroversial
+  and buildable** once the entry point knows to enable only when `frozen_at IS NULL`.
+
+**B-10 (Josh's #1) — Move Markup to the bottom action bar. FILL-C1 — MEASURED (placement).**
+- **Bottom bar today** (`viewer.tsx` `m-viewer-actions`, a `grid-cols-4`): **Save · Share · Comment
+  (disabled) · Delete** (Delete is absent for a role `files_delete_owner_admin` refuses, replaced by a
+  hidden span). **Markup is NOT in the bar** — it lives in the **⋮ overflow menu** (`viewer.tsx:434`,
+  a `Link` to `…/markup`), beside disabled Set-as-cover / Move / Report.
+- **What moves / gets displaced:** the bar is already 4-up. Moving Markup in needs a 5th slot or must
+  displace one tile. The **natural displacement is the dead Comment tile (B-8)** — which couples C to
+  A: doing C cleanly wants B-8 resolved (or the Comment tile simply replaced by Markup). Flag the
+  coupling; do not silently drop Comment.
+- **⚠️ PARITY:** the desktop has **no equivalent bottom bar.** Desktop markup is a **dedicated page
+  route** (`app/dashboard/projects/[id]/files/[fileId]/markup/`) opened from the file view. So moving
+  Markup within the `/m` bar is a **layout/affordance difference, not a behavioural divergence**
+  (markup does the same thing on both surfaces) — allowed by the PARITY rule. No desktop change is
+  implied or needed.
+
+---
+
 # PART C — the project-scoped role (`project_executive`)
 
 Full access to the projects it is assigned to, money included; nothing at company level. Q1–Q20 are
