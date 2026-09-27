@@ -341,3 +341,37 @@ newest `20261880000000`, Step 0 hash gate passed.
 
 **Nothing in the audit needs a ruling.** No claim was disproved except the citation line, which the prompt already rules on.
 Going to Phase 3.
+
+## S181b Phase 3 step 2 — FILL-R-1, the retainage live test — DONE (rebuild-test)
+
+RULED [Josh, 2026-09-27]: 1910's PE INSERT/UPDATE on `retainage_releases` is **kept**; prove it is project-scoped. 1910 was not edited.
+
+New `apps/web/test/s181-project-executive-retainage.live.ts` (10 tests, disposable `PER` fixtures, as the real `josh+qa-pe` session):
+ON (own company, assigned), UNASSIGNED (own company), FOREIGN (TEST CO 2, `josh+qa-b-owner`'s company) **with a forged PE assignment row**, so
+`is_assigned_to_project()` is TRUE there and only `pe_on_project()`'s company check can refuse it. CI in progress before each run: 0.
+
+- **Control:** 0/0/0 releases before; the forged assignment counts 1.
+- **N1** INSERT on UNASSIGNED → RLS error, service-role tally 0. **N2** INSERT on FOREIGN, default `company_id` and explicit foreign
+  `company_id` → both RLS, tally 0.
+- **Y1** INSERT on ON → 1 row, `company_id` = its company, tally 1. **Y2** UPDATE on ON → touched 1, service role reads 275 / warned true.
+- **Y3** moving its release onto UNASSIGNED or FOREIGN → both RLS; the row is still on ON; tallies 0/0.
+- **C** service role inserts the same shape on UNASSIGNED and FOREIGN → 1/1 (the payload is valid, so N1/N2 were the policy).
+- **N3** PE reads 0 of those 2 (control 2), still reads its own 1. **N4** UPDATE touches 0 on each; service role reads 100/100 unchanged.
+- Result: **10 passed (10)**, exit 0. Teardown: `PER` projects 0, contacts 0, orphan releases 0. `tsc --noEmit` exit 0, 0 errors.
+
+⚠️ **The first version of this test could not fail, and the sabotage caught it.** All four PE write arms were widened on rebuild-test
+(INSERT: `company_id AND role AND is_assigned_to_project` — the company check removed; UPDATE: `company_id AND role` — project scope removed).
+The first version stayed **10/10 green**. The cause: every negative used `.insert().select()` / `.update().select()`. With RETURNING,
+Postgres also checks the row against the PE's **SELECT** arm, and that refusal rolls the statement back. So those tests measured the
+READ arm. A caller sending `return=minimal` skips the SELECT check, and the app's own insert (`payments-client.ts:391`) sends no `.select()`.
+Rewritten: every negative INSERT and every WITH CHECK (move) probe writes **without RETURNING** and is judged by the service role's count.
+Re-run against the same sabotage → **2 failed / 5 passed / 3 skipped**, exit 1: N2 — the foreign insert **landed** (tally 1); Y3 — the move
+**landed** (tallies `[0, 1]`, not `[0, 0]`); the 3 skips are the C/N3/N4 block, whose control insert then hit the unique key. N1 stayed
+green, correctly: that sabotage kept the assignment check. Restored to the migration text; all three `retainage_releases_*_project_executive`
+policies read back identical to the pre-sabotage read → **10/10**.
+Stated limit: an UPDATE filtered by id always reads the row, so the SELECT arm and the UPDATE's USING refuse N4 **together**. No PostgREST
+call can reach the UPDATE USING arm alone.
+
+⚠️ **Consequence for the S181 evidence (next step):** the S181 OFF-insert negatives (`s111-project-executive-writes` X1 CO + line-item inserts,
+`s181-project-executive-liens` N2 / Y6) were written with `.select()`, and S181's sabotage widened only SELECT arms. Whether they measure
+the INSERT/UPDATE arms at all is **unproven**. Measured next.
