@@ -103,6 +103,7 @@ export function TextField({
   placeholder,
   required = false,
   inputMode,
+  hint,
 }: {
   label: string;
   value: string;
@@ -111,6 +112,8 @@ export function TextField({
   placeholder?: string;
   required?: boolean;
   inputMode?: 'text' | 'decimal' | 'numeric';
+  /** A line of guidance under the field, tied to it with aria-describedby. */
+  hint?: string;
 }) {
   return (
     <div className="mt-[14px]">
@@ -118,6 +121,7 @@ export function TextField({
       <input
         data-testid={testId}
         value={value}
+        aria-describedby={hint ? `${testId}-hint` : undefined}
         inputMode={inputMode}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
@@ -125,7 +129,16 @@ export function TextField({
           inputMode === 'decimal' || inputMode === 'numeric' ? 'font-mono' : ''
         }`}
       />
+      {hint ? <FieldHint id={`${testId}-hint`}>{hint}</FieldHint> : null}
     </div>
+  );
+}
+
+function FieldHint({ id, children }: { id: string; children: string }) {
+  return (
+    <p id={id} data-testid={id} className="mt-[6px] text-[13px] text-m6m-muted">
+      {children}
+    </p>
   );
 }
 
@@ -135,12 +148,15 @@ export function TextAreaField({
   onChange,
   testId,
   rows = 3,
+  hint,
 }: {
   label: string;
   value: string;
   onChange: (v: string) => void;
   testId: string;
   rows?: number;
+  /** A line of guidance under the field, tied to it with aria-describedby. */
+  hint?: string;
 }) {
   return (
     <div className="mt-[14px]">
@@ -148,10 +164,12 @@ export function TextAreaField({
       <textarea
         data-testid={testId}
         value={value}
+        aria-describedby={hint ? `${testId}-hint` : undefined}
         rows={rows}
         onChange={(e) => onChange(e.target.value)}
         className="w-full rounded-[12px] border border-m6m-border bg-m6m-card px-[14px] py-[10px] text-[16px] text-m6m-navy"
       />
+      {hint ? <FieldHint id={`${testId}-hint`}>{hint}</FieldHint> : null}
     </div>
   );
 }

@@ -560,7 +560,25 @@ top of this file is advanced to `#164` in the same commit, which is what keeps t
   Traps: `test/s109-row-activation.test.tsx` + `e2e/desktop-row-activation-s109.spec.ts`, each
   proven by sabotage — see `S109-report.md` Step 4.
 
-### Branch-scoped, awaiting real numbers — `feature/m-visual-sweep` [2026-09-24]
+### Branch-scoped, awaiting real numbers — `feature/s112-co-summary` [S112 follow-up, 2026-09-27]
+
+> Provisional ids per the S136 rule: never allocate a bare `#N` on a branch.
+
+- **#1-cosum — re-measure money typed into change-order TITLES and DESCRIPTIONS once production has
+  real history (≈ 20 signed COs), and rule again on evidence. FILED by ruling [Josh, S112 follow-up
+  R5b].** `get_approved_change_order_summaries()` (20261840000000) shows every staff role the title,
+  description and date of signed COs. The database keeps money COLUMNS out; it cannot keep typed money
+  out of prose. **Shipped on a vacuous measurement, knowingly:** production returned
+  `all_statuses_total = 0` — no change orders at all — so "0 carry money" was a pass on zero rows, which
+  is a failure by CLAUDE.md's own rule; rebuild-test's 11 signed COs are fixtures and say nothing about
+  how a person writes a title. What justified shipping was that nothing existed to leak and the
+  no-price hint (`project.coEditor.noPriceHint`, title + description, desktop + `/m`) lands first.
+  **Use the SAME instrument when this is re-run**: the corrected query in
+  `docs/sessions/S112-followup-report.md` §9 (five patterns incl. bare decimals and currency-word-first;
+  counts title and description SEPARATELY). Decision rule is there too: title hits > 0 means even
+  title + date leaks.
+
+
 
 > Provisional ids per the S136 rule: never allocate a bare `#N` on a branch.
 

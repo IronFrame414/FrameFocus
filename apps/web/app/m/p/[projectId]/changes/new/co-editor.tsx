@@ -220,12 +220,14 @@ export function CoEditor({
         <section data-testid="m-co-fields">
           <TextField
             label={t('project.co.titleField')}
-            value={title} onChange={setTitle} testId="m-co-edit-title" />
+            value={title} onChange={setTitle} testId="m-co-edit-title"
+            hint={t('project.coEditor.noPriceHint')} />
           <TextField
             label={t('project.co.description')}
             value={description}
             onChange={setDescription}
             testId="m-co-edit-description"
+            hint={t('project.coEditor.noPriceHint')}
           />
           <TextField
             label={t('project.co.reason')}

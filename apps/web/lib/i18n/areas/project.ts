@@ -182,6 +182,8 @@ export const en = {
   'project.coEditor.saveRow': 'Save row',
   'project.coEditor.unit': 'Unit',
   'project.coEditor.creditHint': 'A negative value records a credit.',
+  // [S112 R5b] On the title AND description, on both surfaces — see co-editor.tsx.
+  'project.coEditor.noPriceHint': 'Crew and foremen can read this. Keep prices and amounts out of it.',
   'project.coEditor.addRow': 'Add row',
   // ── contacts ──
   'project.contacts.empty': 'No contacts on this project.',
@@ -443,6 +445,7 @@ export const es: Record<keyof typeof en, string> = {
   'project.coEditor.saveRow': 'Guardar fila',
   'project.coEditor.unit': 'Unidad',
   'project.coEditor.creditHint': 'Un valor negativo registra un crédito.',
+  'project.coEditor.noPriceHint': 'El personal de obra puede leer esto. No incluyas precios ni montos.',
   'project.coEditor.addRow': 'Agregar fila',
   'project.contacts.empty': 'No hay contactos en este proyecto.',
   'project.contacts.unnamed': 'Contacto sin nombre',

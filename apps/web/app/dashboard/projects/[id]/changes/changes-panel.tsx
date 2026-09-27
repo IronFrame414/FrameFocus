@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useConfirm } from '@/components/confirm/confirm-provider';
+import { useT } from '@/components/i18n/language-provider';
 import type { RedactedCo } from '@/lib/co-redaction';
 import type { ApprovedCoSummary } from '@/lib/change-orders/summaries';
 import {
@@ -94,6 +95,7 @@ export function ChangesPanel({
 }: ChangesPanelProps) {
   const router = useRouter();
   const confirm = useConfirm();
+  const t = useT();
   const [formOpen, setFormOpen] = useState(false);
   const [title, setTitle] = useState('');
   const [coType, setCoType] = useState<ChangeOrderType>(
@@ -238,8 +240,13 @@ export function ChangesPanel({
               onChange={(e) => setTitle(e.target.value)}
               placeholder="e.g. Kitchen cabinet upgrade"
               style={{ ...inputStyle, width: '100%' }}
+              aria-describedby="co-create-title-hint"
               autoFocus
             />
+            {/* [S112 R5b] Same key as /m (PARITY): staff read signed COs' text. */}
+            <p id="co-create-title-hint" data-testid="co-create-title-hint" style={{ fontSize: '12px', color: '#6b7280', margin: '4px 0 0' }}>
+              {t('project.coEditor.noPriceHint')}
+            </p>
           </div>
           <div>
             <label style={{ ...microLabelStyle, display: 'block', marginBottom: '4px' }}>
