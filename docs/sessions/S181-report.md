@@ -227,3 +227,43 @@ New `test/s181-project-executive-liens.live.ts` (14 tests, disposable `PEL` fixt
 - Writes file: W1–W4 red (0 rows / RLS); X1–X4 green (0 touched, service role confirms OFF rows unchanged); **Q1**: PE refund
   insert refused by RLS, control inserted 1, PE approve touched 0, row still `pending_approval`; **Q2**: PE sees the
   contract (1) and its void touched 0, status still `sent`. Teardown left 0 projects.
+
+## Step C-2 (part 2) — `20261910000000`, `20261920000000`, `20261930000000` APPLIED TO REBUILD-TEST; live tests GREEN
+
+**Apply mechanics.** `supabase/.temp/linked-project.json` → `nmyphyhmfttxkdoposvf`; CI in progress: 0. The first dry run refused
+(`LegacyDbPushMissingLocalError`: remote-only 20261850/1860/1890/1900 from unmerged S112 branches). The suggested
+`migration repair --status reverted …` would falsely record those as reverted, so it was **NOT run**. Instead I followed the S111-thumbnails
+precedent: the four files were copied in **temporarily and uncommitted** from their own commits (682a5c3b, e2ee355f,
+b99c41be, 364ef1f7). The dry run then listed **exactly** 1910, 1920, 1930. Push exit 0, "Applying migration" ×3. The copies were deleted
+and `git status` was clean.
+
+**Verified by object (MCP, rebuild-test):** ledger rows 1910/1920/1930 present; 19 non-SELECT `*_project_executive` policies
+(17 from 1910 + 2 lien write arms from 1930); `enforce_invoice_void_authority`, `enforce_change_order_void_authority`,
+`enforce_invoices_column_scope` carry `pe_on_project`; **`enforce_contract_void_authority` does NOT (Q2)**;
+`invoices_insert_authorized` names project_executive; 1920 arms 4/4; 1930 arms 8/8; the 4 new functions have anon EXECUTE = false.
+
+**Live, post-migration — 3 files, 32/32 passed, exit 0:**
+- `s181-project-executive-liens` 14/14: OFF unchanged from the pre-run (releases 0/3, inserts [0,0,0], update 0, expenses 0/1 ×3,
+  money file 0/1, storage refused, template insert 0). ON: templates/boxes **8/3 = service role 8/3**; expense, allocation, payment
+  **1/1/1**; money file **1**; **3 releases generated, one in each subject shape**; send 1, void 1; moving a release onto the OFF
+  invoice refused (RLS WITH CHECK, invoice unchanged); **executed-copy upload under its own release: storage OK, files row 1,
+  linked 1, signed URL issued**. So the storage arm works, and the nested `files` RLS works inside storage. Teardown 0.
+- `s111-project-executive-writes` 11/11: W1 update/insert/line item 1/1/1; W2 contract/budgeted 1/1; W3 edit/approve/void
+  1/1/1; W4 CO void 1. X1–X3 all 0, and X4 shows the service role's OFF rows unchanged. **Q1** refund insert refused (RLS), control 1,
+  approve 0, row `pending_approval`. **Q2** contract visible 1, void touched 0, still `sent`. Teardown 0.
+- `s111-project-executive-floor` 7/7 (the S112 FILL-7.2 read proof, re-run on the new schema).
+
+**Sabotage (FILL-7.3 style), rebuild-test only, restored:** `lien_releases_select_project_executive` and
+`expenses_select_project_executive` were widened to `company_id AND role = 'project_executive'` → **2 failed / 12 passed** (N1: PE read
+**3/3** OFF releases; N4: PE read the OFF expense **1/1**). Restored to the exact migration text (qual read back) → 14/14.
+
+**Generated types.** `supabase gen types --linked` was written to a temp file and diffed. Only the four new `pe_*` function entries were taken
+(17 lines, the generator's text and positions). The generated file also carries objects from other branches or out-of-sync:
+`s112_anon_lockdown_backup` (table), `anon_execute_exposure`, `bid_token_state`, `close_sub_bid_request`, and it lacks
+`test_invite_lookup`. **None of those were taken**; the remaining diff is exactly those five objects.
+
+**Schema fingerprint baseline** (`npm run db:fingerprint`, exit 0, "agreement confirmed on all six replayable dimensions"):
+policies 410, triggers 285, functions 325, constraints 1012, latest 20261930000000. ⚠️ **`#1-s112f` applies:** rebuild-test
+also carries 20261850/1860/1890/1900 (unmerged), so the policy and function counts include their objects. The committed
+branch baseline was wrong the other way (it lacked this branch's). Committed as generated, with this caveat; the
+cron route that imports it will compare production against a baseline that includes those four until they merge.
