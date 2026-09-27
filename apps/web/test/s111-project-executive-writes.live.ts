@@ -40,6 +40,10 @@ const proj = { on: '', off: '' };
 const co = { on: '', off: '' };
 const inv = { on: '', off: '' };
 const bi = { on: '', off: '' };
+// [S181b] PEW BARE: unassigned, and holding NONE of the one-per-parent rows
+// (financials, budgeted amount, contract amounts, rates, line rows, invoices),
+// so a widened write arm LANDS a row instead of colliding with a unique key.
+const bare = { project: '', budgetItem: '', contract: '', co: '', lineItem: '' };
 
 async function sweep() {
   const { data: ps } = await admin.from('projects').select('id').like('name', `${MARKER} %`);
@@ -141,6 +145,75 @@ async function makeInvoice(projectId: string): Promise<string> {
   return data!.id as string;
 }
 
+/** [S181b] The bare OFF project and its empty parents; every row by the service role. */
+async function makeBare(seq: number): Promise<void> {
+  const { data: p, error } = await admin
+    .from('projects')
+    .insert({
+      company_id: companyId,
+      contact_id: contactId,
+      project_number: 'PRJ-PEW-BARE',
+      name: `${MARKER} BARE project`,
+      status: 'active',
+      project_internal_seq: seq,
+    })
+    .select('id')
+    .single();
+  if (error) throw new Error(`project BARE: ${error.message}`);
+  bare.project = p!.id as string;
+  const { data: item, error: biErr } = await admin
+    .from('project_budget_items')
+    .insert({ company_id: companyId, project_id: bare.project, description: `${MARKER} bare line` })
+    .select('id')
+    .single();
+  if (biErr) throw new Error(`budget item BARE: ${biErr.message}`);
+  bare.budgetItem = item!.id as string;
+  const { data: cc, error: ccErr } = await admin
+    .from('client_contracts')
+    .insert({ company_id: companyId, project_id: bare.project, status: 'draft' })
+    .select('id')
+    .single();
+  if (ccErr) throw new Error(`contract BARE: ${ccErr.message}`);
+  bare.contract = cc!.id as string;
+  // Authored by the Owner, NOT the PE: an "authored by me" arm must not be
+  // what the PE reaches it through (the S181 expenses fixture trap).
+  const { data: owner } = await admin
+    .from('profiles')
+    .select('id')
+    .eq('company_id', companyId)
+    .eq('role', 'owner')
+    .order('created_at', { ascending: true })
+    .limit(1)
+    .single();
+  const { data: om } = await admin
+    .from('company_members')
+    .select('id')
+    .eq('profile_id', owner!.id)
+    .single();
+  const { data: c, error: cErr } = await admin
+    .from('change_orders')
+    .insert({
+      company_id: companyId,
+      project_id: bare.project,
+      co_number: `${MARKER}-9`,
+      title: `${MARKER} CO 9`,
+      co_type: 'time_and_materials',
+      status: 'draft',
+      author_member_id: om!.id,
+    })
+    .select('id')
+    .single();
+  if (cErr) throw new Error(`CO BARE: ${cErr.message}`);
+  bare.co = c!.id as string;
+  const { data: li, error: liErr } = await admin
+    .from('change_order_line_items')
+    .insert({ company_id: companyId, change_order_id: bare.co, name: `${MARKER} bare item`, sort_order: 0 })
+    .select('id')
+    .single();
+  if (liErr) throw new Error(`line item BARE: ${liErr.message}`);
+  bare.lineItem = li!.id as string;
+}
+
 beforeAll(async () => {
   assertRebuildTest();
   const { data: prof, error } = await admin
@@ -195,6 +268,7 @@ beforeAll(async () => {
   co.off = await makeCo(proj.off, 2);
   inv.on = await makeInvoice(proj.on);
   inv.off = await makeInvoice(proj.off);
+  await makeBare(base + 2);
 
   pe = await sessionFor(PE);
 }, 180_000);
@@ -489,5 +563,109 @@ describe('S181 — ON its own project, what the PE is still REFUSED', () => {
     expect(seen).toHaveLength(1);
     expect(vo).toBeLessThanOrEqual(0);
     expect(after?.status).toBe('sent');
+  });
+});
+
+// ===========================================================================
+// [S181b, RULED Josh Q1] The remaining 1910 INSERT arms, OFF its project
+// (PEW BARE), each judged by the write arm alone. Every probe states the
+// service role's count before and after, and each was run against its own
+// sabotage (that one arm widened to company scope) and went red.
+// ===========================================================================
+// No .select() on a negative write: RETURNING makes the SELECT policy judge the row, not the write policy.
+async function quietly(write: PromiseLike<{ error: { message: string } | null }>): Promise<string | null> {
+  const { error } = await write;
+  return error?.message ?? null;
+}
+
+async function tally(table: string, col: string, id: string): Promise<number> {
+  const { count, error } = await admin.from(table).select('id', { count: 'exact', head: true }).eq(col, id);
+  if (error) throw new Error(`tally ${table}: ${error.message}`);
+  return count ?? 0;
+}
+
+/** One probe: count, write as the PE with no RETURNING, count again. */
+async function probe(
+  key: string,
+  table: string,
+  col: string,
+  id: string,
+  row: Record<string, unknown>
+): Promise<void> {
+  const before = await tally(table, col, id);
+  const err = await quietly(pe.from(table).insert(row));
+  const after = await tally(table, col, id);
+  record(key, { before, after, error: err });
+  expect(before).toBe(0);
+  expect(err ?? '').toMatch(/row-level security/i);
+  expect(after).toBe(0);
+}
+
+describe('S181b — OFF its project (PEW BARE), each remaining INSERT arm refuses on its own', () => {
+  it('P0 CONTROL: BARE is unassigned and holds none of the rows below', async () => {
+    const { count: assigned } = await admin
+      .from('project_assignments')
+      .select('id', { count: 'exact', head: true })
+      .eq('project_id', bare.project)
+      .eq('member_id', peMemberId);
+    const empty = [
+      await tally('project_financials', 'project_id', bare.project),
+      await tally('project_budget_amounts', 'budget_item_id', bare.budgetItem),
+      await tally('client_contract_amounts', 'client_contract_id', bare.contract),
+      await tally('instrument_rates', 'change_order_id', bare.co),
+      await tally('change_order_line_rows', 'line_item_id', bare.lineItem),
+      await tally('invoices', 'project_id', bare.project),
+    ];
+    record('P0_bare', { assigned, empty });
+    expect(assigned).toBe(0);
+    expect(empty).toEqual([0, 0, 0, 0, 0, 0]);
+  });
+
+  it('P1 project_financials_insert_project_executive', async () => {
+    await probe('P1_financials', 'project_financials', 'project_id', bare.project, {
+      project_id: bare.project,
+      contract_value: 1,
+    });
+  });
+
+  it('P2 project_budget_amounts_insert_project_executive', async () => {
+    await probe('P2_budget_amounts', 'project_budget_amounts', 'budget_item_id', bare.budgetItem, {
+      budget_item_id: bare.budgetItem,
+      budgeted_amount: 1,
+    });
+  });
+
+  it('P3 client_contract_amounts_insert_project_executive', async () => {
+    await probe('P3_contract_amounts', 'client_contract_amounts', 'client_contract_id', bare.contract, {
+      client_contract_id: bare.contract,
+    });
+  });
+
+  it('P4 instrument_rates_insert_project_executive (a CO rate — renegotiate)', async () => {
+    await probe('P4_rates', 'instrument_rates', 'change_order_id', bare.co, {
+      change_order_id: bare.co,
+      rate_type: 'tm_labor_hourly',
+      rate: 50,
+      effective_from: '2026-09-27',
+    });
+  });
+
+  it('P5 change_order_line_rows_insert_project_executive', async () => {
+    await probe('P5_line_rows', 'change_order_line_rows', 'line_item_id', bare.lineItem, {
+      line_item_id: bare.lineItem,
+      row_type: 'other',
+      name: 'should not land',
+      sort_order: 0,
+      amount: 1,
+    });
+  });
+
+  it('P6 invoices_insert_authorized — its project_executive clause (scoped by can_view_project)', async () => {
+    await probe('P6_invoice', 'invoices', 'project_id', bare.project, {
+      project_id: bare.project,
+      author_member_id: peMemberId,
+      title: 'should not land',
+      presentation_level: 'full_detail',
+    });
   });
 });

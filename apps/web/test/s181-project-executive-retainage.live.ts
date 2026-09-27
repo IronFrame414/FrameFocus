@@ -146,6 +146,7 @@ async function releasesOn(projectId: string): Promise<number> {
   return count ?? 0;
 }
 
+// No .select() on a negative write: RETURNING makes the SELECT policy judge the row, not the write policy.
 /** A PE write with NO RETURNING — only the write policy judges it. The error, or null. */
 async function quietly(
   write: PromiseLike<{ error: { message: string } | null }>

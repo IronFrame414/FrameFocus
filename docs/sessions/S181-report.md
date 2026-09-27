@@ -457,3 +457,59 @@ invoice arms admit the exact sequence, live. Converts to a real number when the 
 successfully", "✓ Generating static pages (133/133)". ⚠️ The last CI run (`36353398976`, green) is on `487db131`. Everything since is `[skip ci]` and
 touches only `apps/web/test/*.live.ts` (which CI type-checks but does not run) plus docs, so **CI has not seen HEAD**. A `[CI]` commit is owed
 before any merge. The merge is blocked on production anyway (condition 3).
+
+---
+
+# S181c — rulings on the S181b questions [Josh, 2026-09-27], recorded in substance
+
+- **Q1 A** — build all eight no-RETURNING negatives on this branch before merge. A negative that reads as proof and cannot fail is worse than
+  none, because it stops anyone looking. Each gets its own sabotage that must go red, with the count before and after. Each test file carries one
+  comment line saying why the row is not requested back.
+- **Q2 A** — file the repo-wide `.insert().select()` pattern as a debt item and audit it on its own branch. **Run the enumeration now** and put
+  the full count and file list in the item. Fix none of them here.
+- **Q3 A, two conditions** — the PE may read stored contract files on its own projects, read-only, **on the operational-arms branch, not
+  this one**. (1) It must be a database read arm that resolves the project through the file's subject, not a UI gate (#136). (2) It carries a
+  negative test, written without RETURNING, proving a contract file on another project is unreachable.
+- Plus: one line in CLAUDE.md under the measurement rules. And: the Q1 commits start a CI run; let it finish before any merge.
+
+## S181c step 1 — Q1: the eight write arms, each measured alone — DONE (rebuild-test)
+
+**New probes (additions only: writes +178/−0, liens +41/−0, retainage +1/−0; neither S181 file is Prettier-clean, both were hand-edited):**
+- `s111-project-executive-writes`: a new disposable project **`PEW BARE`**, unassigned. It holds a budget item with no amount, a draft client
+  contract with no amounts, and a T&M CO **authored by the Owner** (not the PE: the S181 author-arm trap) with one line item. It has no
+  financials, rates, line rows or invoices. **Why a new project:** every one of these tables has a one-per-parent unique key
+  (`project_financials_project_unique`, `project_budget_amounts_item_unique`, `client_contract_amounts_client_contract_id_key`,
+  `instrument_rates_co_type_date_key`), and the existing OFF fixtures already hold those rows. A widened arm's row would collide instead of landing
+  (the N2b lesson). **P0** control: assigned 0, the six tallies `[0,0,0,0,0,0]`. **P1–P6** each count with the service role, write as the PE
+  with NO RETURNING, then count again.
+- `s181-project-executive-liens`: **N6b** is the files row under an OFF release's folder with no RETURNING. **N6c** is a storage upload under a
+  different OFF release's folder, counted with `admin.storage.list`. N6 is kept.
+- One comment line in each of the three files: "No .select() on a negative write: RETURNING makes the SELECT policy judge the row, not the write policy."
+
+**Clean run (real policies):** every probe before **0**, after **0**, error "new row violates row-level security policy". Writes **19/19**,
+liens **17/17**, exit 0. `tsc --noEmit` exit 0, 0 errors.
+
+**Eight sabotages, one arm at a time.** Each arm was widened to company + role; the run was read; the arm was restored before the next one:
+
+| # | Arm (policy) | Sabotage | Red (only the target unless stated) | Before → after |
+|---|---|---|---|---|
+| P1 | `project_financials_insert_project_executive` | `pe_on_project` dropped | 1 failed / 18 passed, P1 | 0 → **1** |
+| P2 | `project_budget_amounts_insert_project_executive` | `pe_on_budget_item` dropped | 1 / 18, P2 | 0 → **1** |
+| P3 | `client_contract_amounts_insert_project_executive` | `pe_on_client_contract` dropped | 1 / 18, P3 | 0 → **1** |
+| P4 | `instrument_rates_insert_project_executive` | the estimate/CO scope dropped | 1 / 18, P4 | 0 → **1** |
+| P5 | `change_order_line_rows_insert_project_executive` | the line-item EXISTS dropped | 1 / 18, P5 | 0 → **1** |
+| P6 | `invoices_insert_authorized` (PE clause) | `can_view_project` dropped | 1 / 18, P6 | 0 → **1** |
+| N6b | `files_insert_project_executive_lien` | `pe_can_attach_lien_release` → role check | 1 / 16, N6b | 0 → **1** |
+| N6c | storage `project_files_insert_project_executive_lien` | `pe_can_attach_lien_release` → inline role check | 2 / 15: **N6c and N6** | 0 → **1** |
+
+N6 also going red under the storage sabotage is a finding. **N6's storage half was always a real probe**: a plain storage upload does not
+send the row back through the SELECT arm. Only N6's `files` half (`.insert().select()`) was masked, and N6b now covers it.
+
+**Restore verified:** all eight read back identical to the pre-sabotage read. A catalog sweep for the sabotage markers (`get_my_role() =
+'project_executive'`, `profiles.role =`) finds only 1930's two template SELECT arms (their own text) plus pre-existing contacts,
+subcontractors and company-logo policies, none of which were touched. **Clean re-run:** writes 19/19, liens 17/17, retainage 10/10, floor 7/7,
+all exit 0. Teardown: `PEW|PER|PEL` projects 0, contacts 0, `pel-` files rows 0, storage objects 0. CI in progress before each run: 0.
+
+**Now proven by an arm-isolating negative:** every PE INSERT arm on this branch. The CO and line-item arms (X1b), lien releases (N2b),
+retainage (FILL-R-1 N1/N2) and the eight above: 12 insert arms plus the storage arm. **UPDATE/DELETE arms** remain bounded by the SELECT
+arm on every PostgREST path (stated limit, S181b). The SELECT arms' sabotages go red.

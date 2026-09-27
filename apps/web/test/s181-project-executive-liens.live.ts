@@ -477,6 +477,47 @@ describe('S181 OFF — another project: the PE reaches NOTHING (control beside e
     expect(row?.length ?? 0).toBe(0);
   });
 
+  // [S181b, RULED Josh Q1] N6 asks for the files row back, so the SELECT arm judged it; these two split N6 per
+  // write arm, each with its own sabotage (red), the service role's count stated before and after.
+  // No .select() on a negative write: RETURNING makes the SELECT policy judge the row, not the write policy.
+  it('N6b files_insert_project_executive_lien: a files row under an OFF release folder, NO RETURNING', async () => {
+    const path = `${companyId}/lien-releases/${offReleases[1]}/${MARKER.toLowerCase()}-off-row.pdf`;
+    const rows = async () =>
+      (await admin.from('files').select('id', { count: 'exact', head: true }).eq('file_path', path)).count ?? 0;
+    const before = await rows();
+    const { error } = await pe.from('files').insert({
+      project_id: null,
+      category: 'lien_releases',
+      file_name: `${MARKER.toLowerCase()}-off-row.pdf`,
+      file_path: path,
+      file_size: 12,
+      mime_type: 'application/pdf',
+    });
+    const after = await rows();
+    record('N6b_files_row', { before, after, error: error?.message ?? null });
+    expect(before).toBe(0);
+    expect(error?.message ?? '').toMatch(/row-level security/i);
+    expect(after).toBe(0);
+  });
+
+  it('N6c project_files_insert_project_executive_lien: a storage upload under an OFF release folder', async () => {
+    const folder = `${companyId}/lien-releases/${offReleases[2]}`;
+    const name = `${MARKER.toLowerCase()}-off-obj.pdf`;
+    storagePaths.push(`${folder}/${name}`);
+    const objects = async () =>
+      ((await admin.storage.from(BUCKET).list(folder, { search: name })).data ?? []).filter((o) => o.name === name)
+        .length;
+    const before = await objects();
+    const up = await pe.storage
+      .from(BUCKET)
+      .upload(`${folder}/${name}`, new Blob(['%PDF-1.4 off'], { type: 'application/pdf' }), { upsert: false });
+    const after = await objects();
+    record('N6c_storage_object', { before, after, error: up.error?.message ?? null });
+    expect(before).toBe(0);
+    expect(up.error?.message ?? '').toMatch(/row-level security/i);
+    expect(after).toBe(0);
+  });
+
   it('N7 templates are READ-ONLY: an insert is refused', async () => {
     const { data } = await pe
       .from('lien_release_templates')
