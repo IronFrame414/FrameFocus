@@ -52,11 +52,14 @@ export function SubReleasesSection({
   releases,
   templates,
   subContracts,
+  canMarkComplete,
 }: {
   projectId: string;
   releases: SubRelease[];
   templates: SubTemplate[];
   subContracts: SubContractRow[];
+  /** [S181 Q2] canMarkSubContractComplete(role) — Owner/Admin. */
+  canMarkComplete: boolean;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
@@ -160,7 +163,9 @@ export function SubReleasesSection({
               )}
 
               <span style={{ marginLeft: 'auto', display: 'flex', gap: '8px', alignItems: 'center' }}>
-                {!sc.completed ? (
+                {/* [S181 Q2] Completion is contract authority (Owner/Admin by the
+                    column-scope trigger); a Project Executive is not offered it. */}
+                {!canMarkComplete ? null : !sc.completed ? (
                   <button
                     type="button"
                     disabled={busy === `complete-${sc.id}`}

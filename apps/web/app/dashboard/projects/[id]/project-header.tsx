@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import type { ProjectWithContact } from '@/lib/services/projects';
 import { PROJECT_STATUS_LABELS } from '@/lib/services/projects-client';
+import { LIEN_RELEASE_ROLES } from '@/lib/services/lien-releases-shared';
 import { badgeStyle, color, font, h2Style, primaryButtonStyle } from '@/lib/theme';
 
 interface ProjectHeaderProps {
@@ -77,9 +78,11 @@ const TABS: { slug: string; label: string; roles?: string[] }[] = [
   {
     slug: 'lien-releases',
     label: 'Lien Releases',
-    // [S111] NOT a Project Executive: lien_releases has no PE read arm, and
-    // whether it may bind the company on a release is unruled (§8.2).
-    roles: ['owner', 'admin'],
+    // [S111] _Superseded, quoted:_ "NOT a Project Executive: lien_releases has
+    // no PE read arm, and whether it may bind the company on a release is
+    // unruled (§8.2)." [S181] RULED included (Josh 2026-09-26); the PE arms are
+    // 20261930000000. The same list the page, the route and the prompt read.
+    roles: [...LIEN_RELEASE_ROLES],
   },
   { slug: 'punch', label: 'Punch List' },
   { slug: 'deliveries', label: 'Deliveries' },

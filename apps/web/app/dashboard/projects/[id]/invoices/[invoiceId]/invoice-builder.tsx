@@ -10,6 +10,7 @@
 
 import { useMemo, useState } from 'react';
 import { seesProjectMoney } from '@framefocus/shared/constants/roles';
+import { canManageLienReleases } from '@/lib/services/lien-releases-shared';
 import { useRouter } from 'next/navigation';
 import { useConfirm } from '@/components/confirm/confirm-provider';
 import {
@@ -453,9 +454,9 @@ export function InvoiceBuilder(props: InvoiceBuilderProps) {
             /* 7F §5.1 — Owner/Admin only, matching the release role gate
                (§8.2). A PM sees no prompt because a PM cannot generate one;
                offering a link that refuses is worse than offering nothing. */
-            lienReleasePrompt={
-              role === 'owner' || role === 'admin' ? { projectId } : null
-            }
+            /* [S181] + a Project Executive — canManageLienReleases(), the same
+               predicate as the page and the route (lien authority RULED included). */
+            lienReleasePrompt={canManageLienReleases(role) ? { projectId } : null}
             /* 7G §5.4 — stored at push time (S103 Q4), null until the sync
                completes or forever if the QuickBooks company has no Payments.
                Not Floor-gated: it is a URL, not a figure, and it inherits

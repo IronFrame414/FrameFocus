@@ -178,3 +178,34 @@ by M6M D-26; the detail page's `MONEY_ROLES` already includes the PE). That is a
 
 **Deliberately left alone:** `/dashboard/projects` list `canSeeFinancials` = O/A — the portfolio list is company-level money
 (FILL-2: "portfolio money: none"); the PE sees its projects' figures inside each project.
+
+## Step C-4 — lien releases (built; migration NOT YET APPLIED; live test next)
+
+**Inventory (every table, policy, route):**
+- Tables: `lien_releases` (subject = `invoice_id` | `expense_id` | `sub_contract_id`, `lien_releases_subject_check`; no project_id;
+  no DELETE policy for any role), `lien_release_templates`, `lien_release_template_boxes`, `files` (category `lien_releases`,
+  project_id NULL), `storage.objects` (`{company}/lien-releases/…`).
+- Policies before: all Owner/Admin (`lien_releases_{select,insert,update}_owner_admin`, templates/boxes same). Triggers on
+  `lien_releases`: only `updated_at`/`updated_by`.
+- Routes/UI: `POST /api/lien-releases/generate`; desktop `projects/[id]/lien-releases/page.tsx` (+ `releases-panel.tsx`,
+  `sub-releases-section.tsx`); the tab in `project-header.tsx`; the invoice builder's prompt. Client writes in
+  `lien-releases-client.ts` (void, mark sent, attach notarized/signed copy via `uploadFile`). **No `/m` lien surface for any role.**
+
+**`20261930000000_s181_pe_lien_releases.sql`** (written, not applied):
+- `pe_on_lien_subject(invoice, expense, sub_contract)` resolves the subject's project through `pe_on_project`.
+- PE `SELECT` / `INSERT` / `UPDATE` (USING + WITH CHECK) on `lien_releases`, scoped through it. No DELETE.
+- Q6: read-only PE arms on `lien_release_templates` and `lien_release_template_boxes`. No write arms.
+- `files` SELECT arm (a release's blank/executed copy, or an unlinked upload under its folder) and INSERT arm (only under
+  `{company}/lien-releases/{a reachable release}/`).
+- `storage.objects` INSERT arm under the same folder: inline `profiles` subquery plus `pe_can_attach_lien_release(text)`, which
+  resolves the caller from `auth.uid()` inline. It never calls `get_my_company_id()` (the CLAUDE.md storage trap).
+- **Constraints added: none.** No production row count is governed.
+
+**TS:** one predicate, `canManageLienReleases` (O/A/PE, `LIEN_RELEASE_ROLES`), now read by the page gate, the tab, the generate
+route (403 plus a server log) and the invoice prompt. `canMarkSubContractComplete` (O/A) hides Mark complete/Reopen from the PE (Q2):
+verified live that `enforce_subcontractor_contracts_column_scope` raises on `completed_at` below O/A. Unit total maps: 28/28.
+Test sweep: `s140-lien-releases` and `s145-sub-inbound` assert PM/foreman floors only; nothing asserts the old rule for the
+PE, so nothing needed inverting.
+
+**Open item found, not changed:** `20261910000000` grants the PE `retainage_releases` INSERT/UPDATE, but the Payments
+retainage-release panel is gated `canRecord` (O/A). The DB permits more than the UI offers (fails closed). Needs a ruling.

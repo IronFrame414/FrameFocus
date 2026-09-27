@@ -7,7 +7,11 @@ import {
   resolveSubReleaseValues,
 } from '@/lib/services/lien-releases';
 import { renderRelease } from '@/lib/services/lien-release-pdf-service';
-import { isLegalValueKey, type ReleaseType } from '@/lib/services/lien-releases-shared';
+import {
+  canManageLienReleases,
+  isLegalValueKey,
+  type ReleaseType,
+} from '@/lib/services/lien-releases-shared';
 import type { SubReleaseTrigger } from '@/lib/services/lien-releases';
 
 // 7F §7 — the generate flow, server side.
@@ -20,7 +24,9 @@ import type { SubReleaseTrigger } from '@/lib/services/lien-releases';
 // value is editable before anything renders: the instrument is signed and
 // cannot be retracted, so the user gets the last look.
 //
-// Roles: OWNER/ADMIN ONLY (§8.2), narrower than the invoice routes beside it.
+// Roles: _superseded, quoted:_ "OWNER/ADMIN ONLY (§8.2), narrower than the
+// invoice routes beside it." [S181] Owner, Admin and a Project Executive on its
+// own projects (RULED Josh 2026-09-26; the scope is RLS, 20261930000000).
 // A release waives legal rights and voiding does not retrieve it, so whatever
 // generates one must be authorised to bind the company.
 //
@@ -47,12 +53,15 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
   }
 
-  if (!['owner', 'admin'].includes(profile.role)) {
+  // [S181] Owner, Admin and a Project Executive — canManageLienReleases(). The
+  // lien_releases INSERT below runs as the caller, so RLS (20261930000000)
+  // refuses a Project Executive a subject on a project it is not on.
+  if (!canManageLienReleases(profile.role)) {
     console.error(
       `[lien-releases/generate] role ${profile.role} may not generate a lien release`
     );
     return NextResponse.json(
-      { error: 'Only an Owner or Admin can generate a lien release' },
+      { error: 'Only an Owner, an Admin or a Project Executive can generate a lien release' },
       { status: 403 }
     );
   }
