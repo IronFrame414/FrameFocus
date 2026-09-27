@@ -511,5 +511,38 @@ subcontractors and company-logo policies, none of which were touched. **Clean re
 all exit 0. Teardown: `PEW|PER|PEL` projects 0, contacts 0, `pel-` files rows 0, storage objects 0. CI in progress before each run: 0.
 
 **Now proven by an arm-isolating negative:** every PE INSERT arm on this branch. The CO and line-item arms (X1b), lien releases (N2b),
-retainage (FILL-R-1 N1/N2) and the eight above: 12 insert arms plus the storage arm. **UPDATE/DELETE arms** remain bounded by the SELECT
-arm on every PostgREST path (stated limit, S181b). The SELECT arms' sabotages go red.
+retainage (FILL-R-1 N1/N2) and the eight above: ~~12 insert arms plus the storage arm~~ **12 INSERT arms in total, the storage arm
+included** (X1b 2 + N2b 1 + retainage 1 + P1–P6 6 + N6b 1 + N6c 1; corrected in place, it was miscounted as 13). That is every INSERT arm
+1910 and 1930 create or amend: 9 in 1910 (change_orders, CO line items, CO line rows, financials, budgeted, contract amounts, rates,
+retainage, the invoices clause) and 3 in 1930 (lien_releases, files, storage). 1920 has none. **UPDATE/DELETE arms** remain bounded by the
+SELECT arm on every PostgREST path (stated limit, S181b). The SELECT arms' sabotages go red.
+
+## S181c step 2 — Q2: the repo-wide enumeration, filed as `#2-pe` — DONE (read-only; nothing fixed here)
+
+`node scripts/enum-insert-select-negatives.mjs` (new, committed so the count is reproducible; `--all` lists every user-session statement),
+run at `4425d640`, exit 0: **151** live files, **429** `insert().select()` statements, **375** by the service role, **54** by a user session in
+**21** files. The script's refusal heuristic flags 28 in 10 files, but a heuristic is not a classification, so all 54 were read by hand against
+their tables' SELECT policies on rebuild-test (`pg_policies`). **27** assert a refusal. Of those, 3 are not RLS negatives (2 deliberate trap
+demonstrations, 1 unique-key test), leaving **24 RLS negatives**. **6** are in scope (the session can read the row, so the write arm judges it).
+**18** are masked. 4 of those are already paired on this branch (X1b ×2, N2b, N6b). **14 remain, in 7 files**, each listed by file:line in
+`TECH_DEBT.md #2-pe`, with the per-test fix and the unique-key caution. The heuristic under-counts: it missed 3 masked negatives written as
+`expect(error ?? data?.length === 0).toBeTruthy()`, found by hand. **Blind spots, stated:** 136 `.from(<variable>)` calls and 5 `.upsert(` in
+live files are not parsed. Prior art: `s98ct-offline.live.ts:365` (S105) documented this mechanism. It was never applied to floor tests.
+
+## S181c step 3 — Q3 filed as `#3-pe` — DONE (not built, by ruling)
+
+PE read of stored contract files on its own projects, on the operational-arms branch. The conditions are recorded verbatim in substance:
+a database read arm resolving the project through the file's subject (#136), and a no-RETURNING negative with a service-role control and its own
+sabotage. SELECT only.
+
+## S181c step 4 — CLAUDE.md — DONE
+
+One line under "The thing inspected must be the thing being judged", after the instruments list (+2 lines, one of them blank): "An off-project
+negative written with `.insert().select()` measures the READ policy, not the write policy: write without returning rows, and count with the
+service role." CLAUDE.md is now 391 lines. It was already over its 350 target before this line, at 389.
+
+## S181c — gate before CI
+
+`tsc --noEmit` exit 0, 0 errors; `next lint` on the three changed live tests exit 0, no warnings. This commit is pushed **without** `[skip ci]`
+so CI runs on HEAD for the first time since `487db131`. ⚠️ **Merge waits for that run** and for production (condition 3: none of the five
+migrations is on production).
