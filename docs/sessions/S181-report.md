@@ -546,3 +546,5 @@ service role." CLAUDE.md is now 391 lines. It was already over its 350 target be
 `tsc --noEmit` exit 0, 0 errors; `next lint` on the three changed live tests exit 0, no warnings. This commit is pushed **without** `[skip ci]`
 so CI runs on HEAD for the first time since `487db131`. ⚠️ **Merge waits for that run** and for production (condition 3: none of the five
 migrations is on production).
+
+**CI result:** run `36357719601` on `173f9f31`: **success**. "Lint & Type Check" success, "E2E (Playwright)" success (`gh run watch --exit-status` exit 0; `gh run view` headSha `173f9f31c6d1…`). The commit after it touches only this report (`docs/`), the delta the tree-identity exemption allows; the path list is in that commit.
