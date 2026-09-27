@@ -560,6 +560,27 @@ top of this file is advanced to `#164` in the same commit, which is what keeps t
   Traps: `test/s109-row-activation.test.tsx` + `e2e/desktop-row-activation-s109.spec.ts`, each
   proven by sabotage — see `S109-report.md` Step 4.
 
+### Branch-scoped, awaiting real numbers — `feature/s111-project-role` [S181b, 2026-09-27]
+
+> Provisional ids per the S136 rule: never allocate a bare `#N` on a branch.
+
+- **#1-pe — the Payments tab does not offer a Project Executive the retainage release the database
+  permits. FILED by ruling [Josh, 2026-09-27] (S181b FILL-R-2); build it with the operational arms
+  (ruling Q3), NOT on this branch.** `20261910000000` grants the role INSERT/UPDATE on
+  `retainage_releases`, scoped by `pe_on_project(project_id)` (kept by ruling: releasing retainage is a
+  payment action on its own project, inside Q9). `payments-view.tsx:400` renders
+  `RetainageReleasePanel` only under `canRecord` (`role === 'owner' || role === 'admin'`, line 147), so
+  the PE never sees it. **This fails closed:** the database permits more than the UI offers. The
+  reverse would violate the Floor. **Known fix:** gate that one panel on a named predicate that admits the
+  PE (as `canRecordNew` already does for record-payment), and leave every other `canRecord` control
+  alone: unapply, void payment, apply credit, refunds (Q1), reminder settings. The database refuses the
+  PE all of those. ⚠️ **The release also DRAFTS AN INVOICE** (`payments-client.ts`
+  createRetainageRelease: invoice insert, fixed lines, recalc, then the release row). So the build must
+  prove the PE's invoice arms admit that exact sequence on its own project, with a live ON/OFF test. It
+  must not assume they do. The DB arm's scoping is already proven:
+  `test/s181-project-executive-retainage.live.ts` (10/10, sabotage red). `/m` has no Payments surface for
+  any role, so PARITY is unaffected.
+
 ### Branch-scoped, awaiting real numbers — `feature/s112-co-summary` [S112 follow-up, 2026-09-27]
 
 > Provisional ids per the S136 rule: never allocate a bare `#N` on a branch.

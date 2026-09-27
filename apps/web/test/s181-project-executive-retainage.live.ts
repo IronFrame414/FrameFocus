@@ -27,10 +27,17 @@
  * write arms widened on rebuild-test, the first version of this file stayed
  * 10/10 green. A caller sending `return=minimal` skips the SELECT check, and
  * the app's own insert (`payments-client.ts` createRetainageRelease) sends no
- * `.select()`. So every negative INSERT and every WITH CHECK (move) probe
- * below writes WITHOUT RETURNING and is judged by the service role's count.
- * (An UPDATE filtered by id always reads the row, so the SELECT arm gates the
- * UPDATE's USING half as well; N4 states that rather than claiming more.)
+ * `.select()`. So every negative INSERT below writes WITHOUT RETURNING and is
+ * judged by the service role's count.
+ *
+ * ⚠️ AN UPDATE CANNOT BE ISOLATED THIS WAY. A PostgREST UPDATE always has a
+ * WHERE, so Postgres applies the SELECT arm to the EXISTING row and to the NEW
+ * row, RETURNING or not. Measured: with the UPDATE arm widened (USING and WITH
+ * CHECK both `company_id AND role`), both Y3 moves were still refused ("new row
+ * violates row-level security"). So N4 and Y3 are refused by the SELECT arm
+ * and the UPDATE arm TOGETHER. They are kept as floor checks, and are not
+ * evidence that the UPDATE arm alone is scoped. That arm is bounded by the
+ * SELECT arm on every reachable path.
  *
  * DISPOSABLE FIXTURES, swept by marker on the way in and out. RUN ONLY WHILE
  * NO CI IS LIVE.
@@ -267,7 +274,7 @@ describe('FILL-R-1 — ON its own project, INSERT and UPDATE land', () => {
     });
   });
 
-  it('Y3 ⚠️ cannot MOVE its release onto UNASSIGNED or FOREIGN (WITH CHECK); the row stays on ON', async () => {
+  it('Y3 ⚠️ cannot MOVE its release onto UNASSIGNED or FOREIGN (SELECT + UPDATE arms together, see header); the row stays on ON', async () => {
     const move = (projectId: string) =>
       quietly(pe.from('retainage_releases').update({ project_id: projectId }).eq('id', onRelease));
     expect((await move(proj.unassigned)) ?? '').toMatch(RLS);

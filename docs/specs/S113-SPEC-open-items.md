@@ -268,6 +268,10 @@ screens render it, the role Josh asked for does not exist from a user's point of
 > touched 0), `s181-project-executive-liens` 14/14, `s111-project-executive-floor` 7/7, 32/32 in total. Sabotage (two PE read
 > arms widened company-wide) → 2 red (3/3 OFF releases and 1/1 OFF expense read), restored → green. **Constraints added:
 > none**, so no production row count is governed. Production: **not applied**; `docs/sessions/S181-PRODUCTION-RUNBOOK.md`.
+>
+> **CORRECTED [S181b, 2026-09-27].** X1's OFF inserts used `.select()`, so the SELECT arm refused them. They stayed green with the CO and
+> CO-line-item INSERT arms widened. Added **X1b** (no RETURNING, service-role tally): green on the real arms, red when they are widened.
+> Now `s111-project-executive-writes` 12/12. The two sabotages above widened only SELECT arms.
 **FILL-C-3** — ⚠️ **The refund near-miss.** A reformatting cleanup moved a line from
 `canRecordPayment` into `canIssueRefund`, which would have granted this role refund authority. It
 compiled and no test caught it, because `payments-shared.test.ts:141-143` enumerates Owner, Admin and
@@ -293,6 +297,12 @@ role cannot reach another project's.
 > inserts against its invoice, expense and subcontract land [0,0,0]; update touches 0; moving its own release onto the
 > other project's invoice is refused; uploading under the other project's release folder is refused. ON: 3 releases,
 > send/void, executed-copy upload plus signed URL all land. No `/m` lien surface exists for any role.
+>
+> **CORRECTED [S181b, 2026-09-27].** The "inserts … land [0,0,0]" negative used `.insert().select()`, so the PE's SELECT arm refused it
+> on RETURNING. With the INSERT arm widened to company scope it stayed green, so it never measured the INSERT arm. The facts above stand.
+> Added **N2b**: the same three inserts with NO RETURNING, tallied by the service role. Green on the real arm; red when the arm is widened
+> (the rows land). The "moving … is refused" check is the SELECT arm on the new row plus the UPDATE arm together. No PostgREST call
+> isolates the UPDATE arm. Report: `docs/sessions/S181-report.md` § S181b.
 
 ---
 

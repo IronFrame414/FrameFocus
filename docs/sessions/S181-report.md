@@ -151,7 +151,13 @@ validity of types", "✓ Generating static pages (133/133)" (a real build, not a
 
 Re-checked at edit time, rebuild-test 2026-09-27 18:57 UTC: `schema_migrations` has 0 rows for 20261910000000, there are 0 PE write
 policies, and `enforce_contract_void_authority` carries no `pe_on_project`. 1910 has never existed outside this branch.
-Production is not readable from here; the `m1910_*` columns of Josh's pasted row confirm it.
+> **CORRECTED [S181b, 2026-09-27] — a false citation.** _As first written:_ "Production is not readable from here; the `m1910_*`
+> columns of Josh's pasted row confirm it." **No such row existed when this line was written.** The rebuild-test check above is at
+> 18:57 UTC (14:57 ET). Josh first measured production by object at **18:15 ET (22:15 UTC)**, more than three hours later. At edit
+> time, 1910's absence from production rested on inference: no document on `main` recorded it applied, and the file existed only
+> on this branch. It was not a measurement. **What the later measurement shows:** at 18:15 ET production had none of
+> 1820/1830/1910/1920/1930, `newest_migration = 20261880000000`, `pe_profiles_now = 0`. An apply-then-revert in between would be the only way
+> 1910 could have been present at 14:57 ET, and nothing records one. So the edit was safe, but it was verified afterwards, not beforehand as this line claimed.
 The whole `CREATE OR REPLACE FUNCTION enforce_contract_void_authority()` block was removed (its only change was the PE
 clause, 1 occurrence) and replaced by a comment quoting what it did. The header's "NOT GRANTED" list now names it.
 TS already agrees: `contracts/page.tsx:39` `canManage` = owner/admin/PM, and `canManageContracts` = owner/admin (total map: PE false).
@@ -248,8 +254,18 @@ and `git status` was clean.
   **1/1/1**; money file **1**; **3 releases generated, one in each subject shape**; send 1, void 1; moving a release onto the OFF
   invoice refused (RLS WITH CHECK, invoice unchanged); **executed-copy upload under its own release: storage OK, files row 1,
   linked 1, signed URL issued**. So the storage arm works, and the nested `files` RLS works inside storage. Teardown 0.
+  > **CORRECTED [S181b] — disproved by sabotage.** _Quoted:_ "moving a release onto the OFF invoice refused (RLS WITH CHECK, …)" and
+  > "inserts [0,0,0]" as proof of the write arms. With `lien_releases_insert/update_project_executive` widened to `company_id AND role`,
+  > this file stayed **14/14 green**. The OFF inserts used `.select()`, so the PE's **SELECT** arm refused them on RETURNING. The move was
+  > refused by the SELECT arm on the **new** row, which Postgres applies to every UPDATE with a WHERE. The facts stand (0 landed, the move was refused).
+  > The attribution does not: nothing here measured the INSERT arm. Fixed with the new **N2b** (next step).
 - `s111-project-executive-writes` 11/11: W1 update/insert/line item 1/1/1; W2 contract/budgeted 1/1; W3 edit/approve/void
   1/1/1; W4 CO void 1. X1–X3 all 0, and X4 shows the service role's OFF rows unchanged. **Q1** refund insert refused (RLS), control 1,
+  > **CORRECTED [S181b] — X1's inserts did not measure the INSERT arms.** _Quoted:_ "X1–X3 all 0". With
+  > `change_orders_insert_project_executive` and `change_order_line_items_insert_project_executive` widened, the file stayed **11/11
+  > green**: X1's `.insert().select()` was refused by the SELECT arm on RETURNING. Fixed with the new **X1b** (next step). X2/X3 are
+  > UPDATEs and are gated by SELECT + UPDATE together (see FILL-R-1's stated limit). Q1 is **not** affected: it inserts on the PE's **own**
+  > project, where the SELECT arm admits the row, so a PE INSERT arm on `client_refunds` would land and turn it red.
   approve 0, row `pending_approval`. **Q2** contract visible 1, void touched 0, still `sent`. Teardown 0.
 - `s111-project-executive-floor` 7/7 (the S112 FILL-7.2 read proof, re-run on the new schema).
 
@@ -365,13 +381,72 @@ The first version stayed **10/10 green**. The cause: every negative used `.inser
 Postgres also checks the row against the PE's **SELECT** arm, and that refusal rolls the statement back. So those tests measured the
 READ arm. A caller sending `return=minimal` skips the SELECT check, and the app's own insert (`payments-client.ts:391`) sends no `.select()`.
 Rewritten: every negative INSERT and every WITH CHECK (move) probe writes **without RETURNING** and is judged by the service role's count.
-Re-run against the same sabotage → **2 failed / 5 passed / 3 skipped**, exit 1: N2 — the foreign insert **landed** (tally 1); Y3 — the move
-**landed** (tallies `[0, 1]`, not `[0, 0]`); the 3 skips are the C/N3/N4 block, whose control insert then hit the unique key. N1 stayed
+Re-run against the same sabotage → **2 failed / 5 passed / 3 skipped**, exit 1.
+
+> **CORRECTED [S181b, next step] — the line below was wrong.** _As first written:_ "N2 — the foreign insert **landed** (tally 1);
+> Y3 — the move **landed** (tallies `[0, 1]`, not `[0, 0]`)". **What happened:** N2's foreign insert landed (tally 1). Y3's
+> moves were **refused**. Y3 went red only on its final tally `[0, 1]`, and that 1 is **N2's** landed row on FOREIGN. The next step's
+> lien sabotage proved why: a PostgREST UPDATE always has a WHERE, so Postgres checks the SELECT arm against the existing **and the new**
+> row, RETURNING or not. A move is refused by the SELECT arm whatever the UPDATE arm says. The file's header and Y3's title now say so.
+
+The 3 skips are the C/N3/N4 block, whose control insert then hit the unique key. N1 stayed
 green, correctly: that sabotage kept the assignment check. Restored to the migration text; all three `retainage_releases_*_project_executive`
 policies read back identical to the pre-sabotage read → **10/10**.
-Stated limit: an UPDATE filtered by id always reads the row, so the SELECT arm and the UPDATE's USING refuse N4 **together**. No PostgREST
-call can reach the UPDATE USING arm alone.
+Stated limit (widened by the correction above): an UPDATE through PostgREST is refused by the SELECT arm and the UPDATE arm **together**,
+on the existing row (N4) and the new row (Y3). No PostgREST call can reach the UPDATE arm alone, so no test can isolate it. On every
+reachable path it is bounded by the SELECT arm, whose sabotage goes red (S181 N1/N4, and the audit's re-run above).
 
 ⚠️ **Consequence for the S181 evidence (next step):** the S181 OFF-insert negatives (`s111-project-executive-writes` X1 CO + line-item inserts,
 `s181-project-executive-liens` N2 / Y6) were written with `.select()`, and S181's sabotage widened only SELECT arms. Whether they measure
 the INSERT/UPDATE arms at all is **unproven**. Measured next.
+
+## S181b Phase 3 step 1 — a disproved S181 claim: its OFF-write negatives did not measure the write arms — FIXED (tests only)
+
+**Measured.** On rebuild-test, four PE write arms were widened to `company_id = get_my_company_id() AND get_my_role() = 'project_executive'`:
+`change_orders_insert_`, `change_order_line_items_insert_`, `lien_releases_insert_` and `lien_releases_update_project_executive`
+(4 rows read back with `get_my_role()`). Then S181's files, unchanged: `s181-project-executive-liens` **14/14 green**, exit 0;
+`s111-project-executive-writes` **11/11 green**, exit 0. **They cannot fail on those arms.** The **database is correct**: each arm reads
+back as its migration text. The defect is the evidence. S181's two sabotages widened only SELECT arms, which is why they went red and this did not.
+
+**Two mechanisms, both measured:**
+1. **INSERT with RETURNING** (`.insert().select()`) also checks the new row against the SELECT arm. Off the PE's project that arm refuses, and
+   the statement rolls back. Without RETURNING, only the INSERT arm judges it.
+2. **Every UPDATE through PostgREST** has a WHERE clause, so Postgres applies the SELECT arm to the existing row **and to the new row**,
+   RETURNING or not. Measured: a no-RETURNING move (`Y6b`, `update({invoice_id: OFF}).eq(id)`) under a widened UPDATE WITH CHECK was still
+   refused with "new row violates row-level security policy". **No PostgREST call isolates an UPDATE arm.** It is always bounded by the
+   SELECT arm, whose sabotage goes red. Y6b could not fail, so it was dropped (never committed). S181's Y6 is kept, and its attribution is corrected above.
+
+**Fixed, by addition only.** No assertion was deleted (`git diff --numstat`: +38/−0 writes, +33/−0 liens). Neither file is Prettier-clean on
+the branch, so both were hand-edited:
+- `s111-project-executive-writes` **X1b**: the OFF CO insert and line-item insert with **no RETURNING** → each gets an RLS error; service
+  role counts COs on OFF = 1 (its own) and line items = 0.
+- `s181-project-executive-liens` **N2b**: the three OFF-subject inserts (invoice, expense, subcontract) with **no RETURNING**, type
+  `unconditional` → each gets an RLS error; service-role tally per subject `[1,1,1]` before and after. ⚠️ The first N2b used `conditional`.
+  Under sabotage that went red on `duplicate key … idx_lien_releases_one_per_{invoice,expense,sub_contract}_type` (all three), because the
+  service role already holds a `conditional` per subject, so a widened arm's rows collided instead of landing. Switched to `unconditional`,
+  so a widened arm's rows land where the tally sees them.
+
+**Control that must fire (same four arms widened):** liens **1 failed / 14 passed** (N2b: `expected '' to match /row-level security/`, the
+rows landed); writes **2 failed / 10 passed** (X1b: the insert landed; X4: `expected 2 to be 1`, the landed CO). **Restored** to the migration
+text. A read-back of every `*project_executive*` policy still containing `get_my_role() = 'project_executive'` returns only
+`lien_release_templates_select_` and `lien_release_template_boxes_select_project_executive`, which is 1930's own text (lines 132–136, Q6
+company-wide read). **Clean run:** liens **15/15**, writes **12/12**, retainage **10/10**, floor **7/7**, all exit 0. `tsc --noEmit` exit 0,
+0 errors. Teardown: `PER|PEW|PEL` projects 0, orphan liens 0, `retainage_releases` rows 0. CI in progress before each run: 0.
+
+**Corrected in place, old text quoted:** this report's Step C-2 part 2 (lien move attribution, X1) and my own FILL-R-1 Y3 line; S113
+FILL-C-2 and FILL-C-4.
+
+**Stated residual — write arms still WITHOUT a no-RETURNING OFF negative** (their scoping is by `pe_on_*` like the ones above, but it is
+unmeasured this way): 1910's INSERT arms on `project_financials`, `project_budget_amounts`, `client_contract_amounts`, `instrument_rates`,
+`change_order_line_rows`, and the PE clause in `invoices_insert_authorized`; 1930's `files_insert_project_executive_lien` and storage
+`project_files_insert_project_executive_lien` (N6's storage refusal was never run under a write-arm sabotage). **Also unmeasured: the same
+`.insert().select()` pattern in OFF-project negatives across the rest of the repo's live tests.** Raised as a question, not built (the prompt's "nothing else").
+
+## S181b Phase 3 step 3 — FILL-R-2 filed — DONE
+
+`TECH_DEBT.md` → new branch section `feature/s111-project-role` → **`#1-pe`**: the Payments tab's retainage-release panel
+(`payments-view.tsx:400`, `canRecord` = O/A) does not offer the PE what 1910 permits. It fails closed. Build it with the operational arms,
+not here. Known fix: a named predicate for that one panel only. ⚠️ The release also drafts an invoice, so that build must prove the PE's
+invoice arms admit the exact sequence, live. Converts to a real number when the branch lands (next free on main: `#164`).
+
+## S181b Phase 3 step 4 — the false-citation line — CORRECTED in place (Step Q2 above, old text quoted)

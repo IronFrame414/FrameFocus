@@ -330,6 +330,44 @@ describe('S111 step 3 — OFF its project, the same writes touch NOTHING', () =>
     expect(li?.length ?? 0).toBe(0);
   });
 
+  // [S181b] X1 above cannot fail on the INSERT arms: `.insert().select()` also
+  // checks the new row against the PE's SELECT arm, whose refusal rolls the
+  // statement back. Measured: with change_orders_insert_project_executive and
+  // change_order_line_items_insert_project_executive widened to
+  // `company_id AND role`, X1 stayed green. X1 is kept (it still proves the
+  // read side); this is the probe that reaches the write arms — NO RETURNING,
+  // judged by the service role's count.
+  it('X1b the same inserts WITHOUT RETURNING: refused by the write arm, service role counts nothing new', async () => {
+    const { error: insErr } = await pe.from('change_orders').insert({
+      project_id: proj.off,
+      co_number: `${MARKER}-5`,
+      title: `${MARKER} CO 5`,
+      co_type: 'fixed_price',
+      status: 'draft',
+    });
+    const { error: liErr } = await pe
+      .from('change_order_line_items')
+      .insert({ change_order_id: co.off, name: 'should not land', sort_order: 0 });
+    const { count: coCount } = await admin
+      .from('change_orders')
+      .select('id', { count: 'exact', head: true })
+      .eq('project_id', proj.off);
+    const { count: liCount } = await admin
+      .from('change_order_line_items')
+      .select('id', { count: 'exact', head: true })
+      .eq('change_order_id', co.off);
+    record('X1b_off_no_returning', {
+      insert: insErr?.message ?? null,
+      lineItem: liErr?.message ?? null,
+      coCount,
+      liCount,
+    });
+    expect(insErr?.message ?? '').toMatch(/row-level security/i);
+    expect(liErr?.message ?? '').toMatch(/row-level security/i);
+    expect(coCount).toBe(1); // the service role's CO 2 only
+    expect(liCount).toBe(0);
+  });
+
   it('X2 money side tables untouched', async () => {
     const fin = await touched('project_financials', { contract_value: 1 }, proj.off, 'project_id');
     const bud = await touched(

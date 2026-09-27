@@ -390,6 +390,39 @@ describe('S181 OFF — another project: the PE reaches NOTHING (control beside e
     expect(after).toBe(1); // only the service role's
   });
 
+  // [S181b] N2 above cannot fail on the INSERT arm: `.insert().select()` also
+  // checks the new row against the PE's SELECT arm, whose refusal rolls the
+  // statement back. Measured: with lien_releases_insert_project_executive
+  // widened to `company_id AND role`, N2 stayed green. N2 is kept; this probe
+  // writes WITHOUT RETURNING and tallies every subject with the service role.
+  it('N2b the same inserts WITHOUT RETURNING: refused by the write arm, no subject gains a row', async () => {
+    const tally = async () => [
+      await adminCount('lien_releases', 'invoice_id', [inv.off]),
+      await adminCount('lien_releases', 'expense_id', [exp.off]),
+      await adminCount('lien_releases', 'sub_contract_id', [sc.off]),
+    ];
+    const before = await tally();
+    const tries = [
+      { direction: 'client_outbound', invoice_id: inv.off, template_id: clientTemplateId },
+      { direction: 'sub_inbound', expense_id: exp.off, template_id: subTemplateId },
+      { direction: 'sub_inbound', sub_contract_id: sc.off, template_id: subTemplateId },
+    ];
+    const errors: (string | null)[] = [];
+    for (const t of tries) {
+      // 'unconditional': each OFF subject already holds the service role's
+      // 'conditional', and the one-per-subject-per-TYPE unique indexes would
+      // otherwise refuse a widened arm's row with a key error instead of letting
+      // it land where the tally can see it (measured: all three did).
+      const { error } = await pe.from('lien_releases').insert({ type: 'unconditional', ...t });
+      errors.push(error?.message ?? null);
+    }
+    const after = await tally();
+    record('N2b_off_insert_no_returning', { errors, before, after });
+    for (const e of errors) expect(e ?? '').toMatch(/row-level security/i);
+    expect(before).toEqual([1, 1, 1]);
+    expect(after).toEqual(before);
+  });
+
   it('N3 an UPDATE of an OFF release touches 0 rows, and the row is unchanged', async () => {
     const { data } = await pe.from('lien_releases').update({ status: 'sent' }).in('id', offReleases).select('id');
     const { data: rows } = await admin.from('lien_releases').select('status').in('id', offReleases);
