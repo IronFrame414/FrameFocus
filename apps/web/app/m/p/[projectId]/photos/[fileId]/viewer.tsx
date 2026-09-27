@@ -430,16 +430,9 @@ export function PhotoViewer({
               role="menu"
               className="absolute right-0 top-[48px] z-50 w-[190px] overflow-hidden rounded-[12px] border border-white/15 bg-[#161d2f]"
             >
-              {canMarkup ? (
-                <Link
-                  href={`/m/p/${projectId}/photos/${photo.id}/markup`}
-                  data-testid="m-viewer-markup"
-                  role="menuitem"
-                  className="flex min-h-[44px] items-center px-[14px] text-[15px] font-semibold text-white"
-                >
-                  {t('photos.viewer.markup')}
-                </Link>
-              ) : null}
+              {/* [S113 B-10, RULED Josh] Markup moved to the bottom action bar
+                  (it replaced the dead Comments tile). The overflow menu keeps
+                  only the not-yet-built items. */}
               <button
                 type="button"
                 role="menuitem"
@@ -762,7 +755,20 @@ export function PhotoViewer({
           onClick={share}
           busy={exporting !== null}
         />
-        <ActionTile testId="m-action-comment" label={t('photos.viewer.comment')} disabled />
+        {/* [S113 B-10, RULED Josh] Markup lives in the bar now, replacing the
+            dead Comments tile (B-8: comments are unbuilt and deferred, so the
+            disabled tile is removed rather than shown). canMarkup is false for a
+            receipt (photo-only act), which renders the absent span so
+            `m-viewer-markup` stays count 0 there. */}
+        {canMarkup ? (
+          <ActionTile
+            testId="m-viewer-markup"
+            label={t('photos.viewer.markup')}
+            onClick={() => router.push(`/m/p/${projectId}/photos/${photo.id}/markup`)}
+          />
+        ) : (
+          <span data-testid="m-action-markup-absent" className="hidden" />
+        )}
         {/* A-25d — absent entirely for a role files_delete_owner_admin refuses. */}
         {canDelete ? (
           <ActionTile

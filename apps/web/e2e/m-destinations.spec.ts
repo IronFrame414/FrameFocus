@@ -705,13 +705,14 @@ test.describe('M-26 · Expenses', () => {
     await expect(page.getByTestId('m-viewer-actions')).toBeVisible({ timeout: COLD_COMPILE_MS });
     await expect(page.getByTestId('m-stage-image')).toBeVisible({ timeout: COLD_COMPILE_MS });
 
-    // MARKUP IS NOT OFFERED ON A RECEIPT. The item lives INSIDE the overflow
-    // menu, which only renders when open — asserting its absence against a
-    // closed menu would pass even if markup were fully available, which is the
-    // same shape of vacuous check this test just replaced. So: open, then look.
-    await page.getByTestId('m-viewer-overflow').click();
-    await expect(page.getByTestId('m-viewer-menu')).toBeVisible();
+    // MARKUP IS NOT OFFERED ON A RECEIPT. Since S113 B-10 the markup control is
+    // a bottom-bar tile (`m-viewer-markup`), rendered only when canMarkup; a
+    // receipt renders `m-action-markup-absent` in its place. The bar is always
+    // visible (no menu to open), so assert BOTH that the markup tile is gone AND
+    // that the absent span is present — not a vacuous check against a closed menu.
+    await expect(page.getByTestId('m-viewer-actions')).toBeVisible();
     expect(await page.getByTestId('m-viewer-markup').count()).toBe(0);
+    await expect(page.getByTestId('m-action-markup-absent')).toHaveCount(1);
   });
 });
 

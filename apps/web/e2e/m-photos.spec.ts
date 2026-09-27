@@ -338,7 +338,8 @@ test.describe('M-9 · viewer', () => {
     await page.goto(viewer(px.plain.id));
     await expect(page.getByTestId('m-tabbar')).toHaveCount(0);
     await expect(page.getByTestId('m-viewer-actions')).toBeVisible();
-    for (const id of ['m-action-save', 'm-action-share', 'm-action-comment']) {
+    // [S113 B-10] Markup replaced the dead Comments tile in the bar.
+    for (const id of ['m-action-save', 'm-action-share', 'm-viewer-markup']) {
       await expect(page.getByTestId(id)).toBeVisible();
     }
   });
@@ -916,8 +917,7 @@ test.describe('[S112] the markup save, by taps', () => {
     const viewerFirstSeen = Date.now();
     await expect(page.getByTestId('m-viewer-markup-indicator')).toHaveCount(0);
 
-    // ⋮ → Markup, by tap.
-    await page.getByTestId('m-viewer-overflow').click();
+    // Markup, by tap — now a bottom-bar tile (S113 B-10), not the ⋮ menu.
     await page.getByTestId('m-viewer-markup').click();
     await expect(page).toHaveURL(new RegExp(`/photos/${target.id}/markup$`));
     const svg = page.getByTestId('m-markup-svg');

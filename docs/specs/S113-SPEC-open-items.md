@@ -155,6 +155,14 @@ Branch: `feature/s113-photo-viewer-ui`. All three MEASURED; none built yet — e
 recorded below. The `/m` viewer is `apps/web/app/m/p/[projectId]/photos/[fileId]/viewer.tsx`.
 
 **B-8 (Josh's #3, the priority) — the Comments button does nothing.**
+**✅ RULED [Josh, S180]: option B — the dead tile is REMOVED (done in B-10); comments become their own
+scoped item. This does NOT deliver comments — it stops pretending to.** A disabled button that looks
+like a feature reads as broken, and a comment system built inside a viewer refactor would arrive with
+no permission model, which in this app is not a detail. **Comments is filed here as its own item, to
+be designed before any build, answering FIRST:** who may comment (staff only, or subs and clients
+too); who can see each comment; does it reach the client portal; does it notify anyone; and ⚠️ **does
+the Financial Visibility Floor apply** — a comment is free text and someone will type a price into it,
+exactly as with change-order titles (`#1-cosum`). Until designed, there is no Comments control.
 **FILL-A1 — MEASURED: it is a HALF-BUILT feature, not a wiring bug, and NO data is at risk.**
 - **What it's bound to:** `viewer.tsx:765` — `<ActionTile testId="m-action-comment"
   label={t('photos.viewer.comment')} disabled />`. It is rendered **`disabled` with no `onClick` and
@@ -169,7 +177,27 @@ recorded below. The `/m` viewer is `apps/web/app/m/p/[projectId]/photos/[fileId]
   one, who sees it, does it notify, does it reach the client portal) before it is built. Until then it
   correctly stays `disabled`.
 
-**B-9 (Josh's #2) — Markup on site-visit photos. ⚠️ THE FREEZE BLOCKS IT ON A SENT ESTIMATE — Josh's ruling.**
+**B-9 (Josh's #2) — Markup on site-visit photos.**
+**✅ RULED [Josh, S180]: option A — build markup for UNSENT visits only; the sent/frozen case shows a
+notice explaining WHY (not a dead control), and is filed as a scoped item to be ALLOWED eventually.**
+Reasoning kept because this is NOT "blocked, settled": markup never alters the original image, so the
+client's copy is unchanged by definition; a GC annotating an old site photo to show pre-existing damage
+is legitimate and matters most during a dispute. Blocking it permanently has a real cost. What stops it
+today is that doing it safely needs a derivative that provably never contaminates the sent record — a
+freeze carve-out deserving its own design, not a rush.
+
+> ⚠️ **BUT — MEASUREMENT FINDING THAT RE-TARGETS THIS ITEM [S180, before building]:** this viewer
+> (`/m/p/[projectId]/photos/[fileId]`) **cannot show a frozen site-visit photo at all.** Its gallery is
+> `getFiles({ project_id, category:'photos' })` — a frozen site-visit capture has `project_id` NULL /
+> `estimate_id` set, and **conversion (which sets `project_id`) also nulls `estimate_id`, which
+> un-freezes the photo** (the freeze keys on `site_visits WHERE estimate_id = OLD.estimate_id`). So every
+> site-visit-origin photo reachable here is converted and un-frozen, and **already markup-able** (it now
+> has the bar tile from B-10). **The unsent-markup and frozen-notice work therefore does NOT belong in
+> this viewer — it belongs in the site-visit RECORD view** (`/m/site-visits/[id]` and the desktop
+> `site-visit-record.tsx`), where photos are seen *before* conversion. That surface has **no markup
+> entry point today** (no `/markup` route under `site-visits`; the detail page renders no photo/markup).
+> **Not built, pending Josh's confirmation of the target surface** (see the question in the S180 report).
+
 **FILL-B1 — MEASURED against `enforce_site_visit_file_freeze`.**
 - The freeze trigger `files_z_site_visit_freeze` is **`BEFORE UPDATE ON files`**
   (`20261730000000:266`); the function `enforce_site_visit_file_freeze` (`20261770000000:347`) lists
@@ -186,7 +214,13 @@ recorded below. The `/m` viewer is `apps/web/app/m/p/[projectId]/photos/[fileId]
   conversion re-point, and is a Floor/record-integrity decision). **Unsent markup is uncontroversial
   and buildable** once the entry point knows to enable only when `frozen_at IS NULL`.
 
-**B-10 (Josh's #1) — Move Markup to the bottom action bar. FILL-C1 — MEASURED (placement).**
+**B-10 (Josh's #1) — Move Markup to the bottom action bar. ✅ RULED option A + BUILT [S180].**
+Markup is now a bottom-bar `ActionTile` (`testId="m-viewer-markup"`, `onClick` → the `/markup` route),
+**replacing the dead Comments tile** (B-8); it is removed from the ⋮ overflow menu. Gated by `canMarkup`,
+so a receipt renders `m-action-markup-absent` and `m-viewer-markup` stays count 0 there. Four e2e specs
+that encoded the old "markup in the ⋮ menu / Comments in the bar" behaviour were updated in place
+(`m-photos`, `m-s112-r1-measure`, `m-destinations`). tsc 0. On the branch, awaiting CI.
+**FILL-C1 — MEASURED (placement).**
 - **Bottom bar today** (`viewer.tsx` `m-viewer-actions`, a `grid-cols-4`): **Save · Share · Comment
   (disabled) · Delete** (Delete is absent for a role `files_delete_owner_admin` refuses, replaced by a
   hidden span). **Markup is NOT in the bar** — it lives in the **⋮ overflow menu** (`viewer.tsx:434`,

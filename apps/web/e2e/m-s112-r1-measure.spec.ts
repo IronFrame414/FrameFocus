@@ -125,7 +125,7 @@ for (const c of CONDITIONS) {
     const { id, path } = await seed();
     await page.goto(`/m/p/${PROJECT}/photos/${id}`);
     await expect(page.getByTestId('m-stage-image')).toBeVisible();
-    await page.getByTestId('m-viewer-overflow').click();
+    // Markup is a bottom-bar tile since S113 B-10 (was the ⋮ menu).
     await page.getByTestId('m-viewer-markup').click();
     const svg = page.getByTestId('m-markup-svg');
     await expect(svg).toBeVisible({ timeout: 60_000 });
