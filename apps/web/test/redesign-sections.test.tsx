@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
+import { DASHBOARD_ROLES } from '@framefocus/shared/constants/roles';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 
@@ -60,7 +61,10 @@ const SECTION_IDS = [
 ];
 
 describe('the six sections render for every dashboard role', () => {
-  for (const role of ['owner', 'admin', 'project_manager', 'foreman', 'crew_member']) {
+  // [S112 queue 3] The constant, not a hand copy of it: the test's claim IS
+  // "every dashboard role", so a role added to DASHBOARD_ROLES is covered here
+  // automatically. _Superseded:_ a literal list of five.
+  for (const role of DASHBOARD_ROLES) {
     it(`${role} sees all six section headers`, () => {
       const html = markup(role, '');
       for (const id of SECTION_IDS) expect(html).toContain(`data-testid="${id}"`);

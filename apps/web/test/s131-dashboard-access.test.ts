@@ -11,6 +11,7 @@ import {
   CLIENT_PLACEHOLDER_PATH,
 } from '@/lib/dashboard-access';
 import { defaultSignedInPath, landingPathFor } from '@/lib/device';
+import { forEveryRole, JUNK_ROLES } from '@/test-support/role-matrix';
 
 // ============================================================================
 // RULING A [Josh, S131] — DASHBOARD_ROLES, enforced.
@@ -18,6 +19,31 @@ import { defaultSignedInPath, landingPathFor } from '@/lib/device';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const read = (rel: string) => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), 'utf8');
+
+describe('[S112 queue 3] every role\'s answer, stated — not derived from the constant under test', () => {
+  // Iterating DASHBOARD_ROLES (below) proves the predicate AGREES with the
+  // constant; it cannot catch a role added to both by mistake. This map states
+  // the intended answer independently, and a new CompanyRole will not compile
+  // until it is answered here.
+  it('dashboard access and the denied destination, per role', () => {
+    forEveryRole(
+      {
+        owner: { admitted: true, redirect: null },
+        admin: { admitted: true, redirect: null },
+        project_manager: { admitted: true, redirect: null },
+        foreman: { admitted: true, redirect: null },
+        crew_member: { admitted: true, redirect: null },
+        subcontractor: { admitted: false, redirect: SUBCONTRACTOR_HOME_PATH },
+        client: { admitted: false, redirect: CLIENT_PLACEHOLDER_PATH },
+      },
+      (role, want) => {
+        expect(isDashboardRole(role), role).toBe(want.admitted);
+        expect(dashboardDeniedRedirect(role), role).toBe(want.redirect);
+      }
+    );
+    for (const junk of JUNK_ROLES) expect(isDashboardRole(junk), `junk '${junk}'`).toBe(false);
+  });
+});
 
 describe('the predicate agrees with the constant', () => {
   it('admits exactly the five dashboard roles', () => {

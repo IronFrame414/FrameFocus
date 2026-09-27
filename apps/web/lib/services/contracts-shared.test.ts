@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { forEveryRole, JUNK_ROLES } from '@/test-support/role-matrix';
 import {
   CONTRACT_VALUE_CATALOG,
   canManageContracts,
@@ -96,11 +97,20 @@ describe('§5.2 — the two-level toggle', () => {
 
 describe('§8 — Owner/Admin only', () => {
   it('admits Owner and Admin, refuses everyone else', () => {
-    expect(canManageContracts('owner')).toBe(true);
-    expect(canManageContracts('admin')).toBe(true);
-    for (const role of ['project_manager', 'foreman', 'crew_member', 'subcontractor', 'client']) {
-      expect(canManageContracts(role), `${role} was admitted`).toBe(false);
-    }
+    // [S112 queue 3] Total map; _superseded:_ owner, admin, then a hand list of five.
+    forEveryRole(
+      {
+        owner: true,
+        admin: true,
+        project_manager: false,
+        foreman: false,
+        crew_member: false,
+        subcontractor: false,
+        client: false,
+      },
+      (role, allowed) => expect(canManageContracts(role), `${role}`).toBe(allowed)
+    );
+    for (const junk of JUNK_ROLES) expect(canManageContracts(junk), `junk '${junk}'`).toBe(false);
   });
 
   it('a PM cannot void, whatever the reason', () => {

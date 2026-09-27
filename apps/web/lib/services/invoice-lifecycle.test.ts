@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { forEveryRole, JUNK_ROLES } from '@/test-support/role-matrix';
 import {
   canVoidInvoice,
   companyDay,
@@ -19,9 +20,21 @@ import {
 describe('§9 — who may void, and when', () => {
   const base = { hasPayment: false, paymentSyncedToQuickBooks: false, status: 'sent' as const };
 
-  it('UNPAID: Owner and Admin may void; PM may not', () => {
-    expect(canVoidInvoice({ ...base, role: 'owner' }).allowed).toBe(true);
-    expect(canVoidInvoice({ ...base, role: 'admin' }).allowed).toBe(true);
+  it('UNPAID: Owner and Admin may void; PM may not — every role answered', () => {
+    // [S112 queue 3] Total map; _superseded:_ owner, admin and PM by hand.
+    forEveryRole(
+      {
+        owner: true,
+        admin: true,
+        project_manager: false,
+        foreman: false,
+        crew_member: false,
+        subcontractor: false,
+        client: false,
+      },
+      (role, allowed) => expect(canVoidInvoice({ ...base, role }).allowed, role).toBe(allowed)
+    );
+    for (const junk of JUNK_ROLES) expect(canVoidInvoice({ ...base, role: junk }).allowed).toBe(false);
     const pm = canVoidInvoice({ ...base, role: 'project_manager' });
     expect(pm.allowed).toBe(false);
     expect(pm.allowed === false && pm.reason).toContain('Owner or Admin');
@@ -31,6 +44,19 @@ describe('§9 — who may void, and when', () => {
     // Superseded [S103], quoted not deleted: "PARTIALLY PAID, not yet in
     // QuickBooks: Owner ONLY, and it warns." The money moved — a paid invoice
     // cannot be voided at all, Owner included, whether or not it reached QB.
+    // [S112 queue 3] NOBODY means every role — so the map is total and all false.
+    forEveryRole(
+      {
+        owner: false,
+        admin: false,
+        project_manager: false,
+        foreman: false,
+        crew_member: false,
+        subcontractor: false,
+        client: false,
+      },
+      (role, allowed) => expect(canVoidInvoice({ ...base, hasPayment: true, role }).allowed, role).toBe(allowed)
+    );
     for (const role of ['owner', 'admin', 'project_manager'] as const) {
       const decision = canVoidInvoice({ ...base, hasPayment: true, role });
       expect(decision.allowed).toBe(false);

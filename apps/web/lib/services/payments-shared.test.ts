@@ -1,5 +1,6 @@
 import { DUE_ON_RECEIPT_LABEL, paymentTermsLabel } from '@/lib/services/invoices-shared';
 import { describe, it, expect } from 'vitest';
+import { forEveryRole, JUNK_ROLES } from '@/test-support/role-matrix';
 import {
   ageReceivables,
   agingBucketFor,
@@ -74,11 +75,22 @@ describe('§9-A — payment arrives and is applied', () => {
     expect(pairing.difference).toBe(2600);
   });
 
-  it('a PM cannot record a payment; Owner and Admin can (§8)', () => {
-    expect(canRecordPayment('owner')).toBe(true);
-    expect(canRecordPayment('admin')).toBe(true);
-    expect(canRecordPayment('project_manager')).toBe(false);
-    expect(canRecordPayment('foreman')).toBe(false);
+  // [S112 queue 3] A TOTAL map: a new role fails to compile until it is answered.
+  // _Superseded:_ four hand-written asserts (owner, admin, PM, foreman).
+  it('a PM cannot record a payment; Owner and Admin can (§8) — every role answered', () => {
+    forEveryRole(
+      {
+        owner: true,
+        admin: true,
+        project_manager: false,
+        foreman: false,
+        crew_member: false,
+        subcontractor: false,
+        client: false,
+      },
+      (role, allowed) => expect(canRecordPayment(role), role).toBe(allowed)
+    );
+    for (const junk of JUNK_ROLES) expect(canRecordPayment(junk), `junk '${junk}'`).toBe(false);
   });
 });
 
@@ -136,16 +148,50 @@ describe('§9-C — overpayment, mid-job then final', () => {
     expect(creditAvailableOnPayment(4300, [live(4000)])).toBe(300);
     // With no invoice left to credit against this becomes a REFUND (§5) —
     // a RefundReceipt, cash leaving, not a CreditMemo.
-    expect(canIssueRefund('owner')).toBe(true);
-    expect(canIssueRefund('admin')).toBe(true);
-    expect(canIssueRefund('project_manager')).toBe(false);
+    // [S112 queue 3] Total map — this is the assert that let a Project
+    // Executive's refund authority go unnoticed while it listed three roles.
+    forEveryRole(
+      {
+        owner: true,
+        admin: true,
+        project_manager: false,
+        foreman: false,
+        crew_member: false,
+        subcontractor: false,
+        client: false,
+      },
+      (role, allowed) => expect(canIssueRefund(role), role).toBe(allowed)
+    );
+    for (const junk of JUNK_ROLES) expect(canIssueRefund(junk), `junk '${junk}'`).toBe(false);
   });
 
   it('an ADMIN-initiated refund needs OWNER approval (§5)', () => {
-    expect(refundNeedsOwnerApproval('admin')).toBe(true);
-    expect(refundNeedsOwnerApproval('owner')).toBe(false);
-    expect(canApproveRefund('owner')).toBe(true);
-    expect(canApproveRefund('admin')).toBe(false);
+    // [S112 queue 3] Total maps for both.
+    forEveryRole(
+      {
+        owner: false,
+        admin: true,
+        project_manager: false,
+        foreman: false,
+        crew_member: false,
+        subcontractor: false,
+        client: false,
+      },
+      (role, needs) => expect(refundNeedsOwnerApproval(role), role).toBe(needs)
+    );
+    forEveryRole(
+      {
+        owner: true,
+        admin: false,
+        project_manager: false,
+        foreman: false,
+        crew_member: false,
+        subcontractor: false,
+        client: false,
+      },
+      (role, allowed) => expect(canApproveRefund(role), role).toBe(allowed)
+    );
+    for (const junk of JUNK_ROLES) expect(canApproveRefund(junk), `junk '${junk}'`).toBe(false);
   });
 
   it('a soft-deleted payment removes its own credit — derivation self-corrects', () => {
