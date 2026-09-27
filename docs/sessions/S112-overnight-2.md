@@ -261,6 +261,44 @@ entry. The re-measure at about 20 signed COs is filed as `#1-cosum`.
   `canIssueRefund` is **false**. That is the refund negative this whole item exists for, and it can
   no longer be forgotten.
 
+### Queue 5 — Summary with Descriptions SHOWS its descriptions; payload trimmed to the corrected page (`feature/s112-proposal-payload` @ `2daf0d13`)
+
+- **The defect, confirmed at the source.** Both renderers drew a line's description only inside the
+  `plan.showLines` loop:
+  - `proposal-html.tsx`, the signing page;
+  - `proposal-template.tsx`, the PDF.
+
+  "Summary with Descriptions" has `showLines: false, descriptions: true`
+  (`packages/shared/utils/proposal-format.ts:123`), so **its descriptions were drawn nowhere**. The
+  client signed a page without the text the format is named for.
+- **Fixed the page first, in both renderers (PARITY).** In the category layout, when the plan says
+  `descriptions`, each line **that has a description** is drawn with its name and description, and
+  **no price**, because the format prices categories only.
+
+  ⚠️ **A judgement inside the ruling:** the line **name** is drawn beside its description so the
+  text has context. An undescribed line is not drawn. If you want descriptions without names,
+  it's a one-line change.
+- **Then the payload, trimmed to the corrected page.** The branch's own proof (signing-page markup
+  from trimmed data must equal markup from full data) **went red on exactly this format** as soon
+  as the page changed. That is the ruled order, enforced mechanically. The trim's `category` case
+  now carries described lines only, name and description, with `total`, `originalTotal`, `cost`,
+  `markupPercent` and `discountLabel` all null, and no rows. Plain "Summary" is unchanged:
+  category names and subtotals only.
+- **Tests** (`test/s112-client-proposal.test.tsx`, **23/23**):
+  - the old "summary_with_descriptions carries no lines" assert is **inverted in place**, because it
+    encoded the broken page;
+  - descriptions drawn from full **and** trimmed data;
+  - **CONTROL:** plain Summary draws none;
+  - an undescribed line is neither drawn nor carried;
+  - no line price drawn, **with a control.** That control caught my first draft, which asserted the
+    absence of `4,321.09`, a figure no page draws. The Walls line is discounted, so its drawn price
+    is `4,500.01`, and the test now uses that.
+  - **Sabotage** (the page block switched off) → red.
+- **Gate:** rebased onto main `80e15bad`. Suite 123 files / 1,728; tsc 0; eslint 0.
+- **Commit order, stated plainly:** the original trim commit (`4c6f8655`) precedes the page fix
+  (`2daf0d13`) in history. The **final state** is a trim derived from the corrected page, and the
+  proof test keeps it that way.
+
 ## BUILT BUT UNTESTED
 
 - **Queue 2a in a browser.** The desktop Files and `/m` Files pages have not been loaded against
@@ -319,7 +357,9 @@ _(none yet)_
 | --- | --- | --- |
 | `main` @ `80e15bad` | post-merge run **36278907305 ✅**: 590 passed, 1 flaky (`desktop-chat-switcher` ND-34, the known chat flake, while a duplicate PR-triggered run shared rebuild-test), 21 skipped | — |
 | `feature/s112-wave2-integration` @ `ac3a9680` | run **36282031683**: running | **No.** Needs green CI **and** Josh's runbook step 8. |
-| `feature/s112-files-and-upload` @ `243221d1` | not run yet (one slot; wave 2 holds it) | 2a done; 2b in progress. |
+| `feature/s112-files-and-upload` @ `3dec2b85` | not run yet (one slot) | 2a + 2b done; needs CI + N1/N2/N3. No migration. |
+| `feature/s112-role-permission-maps` @ `5fae3896` | not run yet | Tests only. Needs CI. |
+| `feature/s112-proposal-payload` @ `2daf0d13` | not run yet | Needs CI. No migration. |
 
 ## Log
 
@@ -328,3 +368,4 @@ _(none yet)_
 - 00:28Z (logged at the time as '~00:45Z', an estimate, not a clock read) — queue 2a built and proven at unit level (`243221d1`); N1, N2 raised. Starting 2b.
 - 00:36Z (logged at the time as '~01:05Z', same mistake; every entry from here uses `date -u`) — 2b built (`3dec2b85`), unit-proven; N3 raised. 10-file timing + 2a live proof wait for CI 36282031683 to free rebuild-test. Starting queue 3 (code only).
 - 00:43Z — queue 3 done (`5fae3896`). Found and fixed: the BUILT BUT UNTESTED heading had been dropped by the 2b edit. CI 36282031683 still in E2E (started 00:17Z). Next: queue 5 code while CI runs; 10-file timing + 2a live proof once rebuild-test is free.
+- 00:46Z — queue 5 done (`2daf0d13`). CI 36282031683 still in E2E. Next: queue 6 audit table (docs only) while waiting; then CI queue: m-loading (queue 4) and the three new branches, one at a time.
