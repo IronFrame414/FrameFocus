@@ -10,6 +10,68 @@ service key. Nothing was merged to main.
 
 ## NEEDS A RULING
 
+### N3 — Which of the 37 file inputs get `multiple`? (queue 2b)
+
+**The question in full.** You asked for a proposal: which upload controls take several files at
+once, and which stay single, with a reason for each.
+
+**The inventory, re-measured tonight.** The S111 command is
+`grep -rn -E "type=[\"'{]*file|type: *['\"]file['\"]|\.type *= *['\"]file['\"]" apps/web packages --include=*.ts --include=*.tsx --exclude-dir=node_modules --exclude-dir=.next`.
+It now returns **50 hits: 13 in tests, 37 source inputs** (S111 counted 36). Of those, **13 already
+have `multiple` and 24 are single**. Each was classified from its own `<input … />` element, not
+from the lines around it.
+
+**Built tonight (the unambiguous two):** the desktop Files upload, and the desktop Photos "Add
+photos" (moved onto the shared queue).
+
+**Proposed to GET `multiple`**, all through the shared queue:
+
+| Control | Reason |
+| --- | --- |
+| `estimate-files-tab.tsx:137` (estimate Files tab) | Same job as project Files: plans, specs and photos arrive in sets. |
+| `bid-reply-client.tsx:245` (sub's bid reply, **logged out**) | A sub attaches a quote *and* plans. ⚠️ It is the anon token route, so the queue's limit matters most here. **Recommend yes, but after the bid-token branch lands**, since it reworks this route. |
+| `/m` library siblings: `logs/new/log-form.tsx:381`, `safety/new/incident-form.tsx:361`, `punch/[itemId]/punch-actions.tsx:196` | A crew member picks several photos from the roll. **Only if** each form stores more than one photo per entry. The daily log and incident do (arrays); **punch completion stores ONE photo** (`completion photo`), so punch stays single. |
+| `/m` damage photos, `deliveries/check-in/check-in-form.tsx:362` | Per damaged line, several angles are normal. Its desktop twin (`field-ops/.../check-in-form.tsx:358`) is already `multiple`, so this is a **PARITY fix**. |
+
+**Proposed to STAY single:**
+
+| Control | Reason |
+| --- | --- |
+| The 6 `capture="environment"` camera inputs (`mobile-shell.tsx:645`, `capture-screen.tsx:326`, `log-form.tsx:361`, `punch-actions.tsx:172`, `incident-form.tsx:341`, `check-in-form.tsx:335`) | One shutter press is one photo. `multiple` means nothing to a camera, and D-8's one-tap camera is ruled. |
+| `punch-actions.tsx:196` (punch library) | Punch completion is one completion photo. |
+| `settings-form.tsx:427` logo, `:486` signature | Exactly one of each. |
+| `lien-release-settings-form.tsx:294`, `contract-settings-form.tsx:458` | One template PDF each. |
+| `lien-releases/sub-releases-section.tsx:198`, `releases-panel.tsx:280` | One signed release document per release. |
+| `expenses/bills-tab.tsx:282` ("Attach bill", per row) | One bill document per bill row. |
+| `subcontractors/[id]/compliance-section.tsx:265` | One certificate per compliance item. |
+| `estimates/[id]/bidding-tab.tsx:699`, `:1079` | A per-request scope document. **Could** be `multiple`; recommend single until the bid-docs-by-line work (`#2-bidtok`) decides how documents attach to a line. |
+| `selections/[selectionId]/selection-sheet.tsx:309` | The option's single image. |
+
+**Already `multiple`, and should move onto the shared queue** (they loop sequentially or in
+parallel with no limit):
+
+- `portal-writes-ui.tsx:405`
+- desktop `check-in-form.tsx:358/407`
+- `selection-sheet.tsx:493`
+- `field-ops/.../daily-logs/log-form.tsx:280`
+- `delivery-edit-form.tsx:270/325`
+- `components/field/incident-form.tsx:460`
+- `site-visit-record.tsx:453`
+- `expense-capture-form.tsx:324`
+- `/m` `mobile-shell.tsx:661` and `capture-screen.tsx:335`: these go through `/m`'s capture/offline
+  pipeline, which is a separate question.
+
+**Options:**
+- **(a)** Apply the table as proposed.
+- **(b)** Apply only the PARITY fix (`/m` damage photos) plus moving the existing `multiple` inputs
+  onto the shared queue.
+- **(c)** Leave everything but the two built tonight.
+- **(d)** Also add a real per-file BYTE progress bar. That needs an XHR upload transport beside
+  supabase-js, a second upload path, which the PARITY rule warns against.
+
+**Recommendation: (a) without (d).** Move the existing `multiple` inputs onto the queue first. They
+are where unbounded parallelism already lives today.
+
 ### N1 — Daily-log and safety IMAGES: stay in Documents → Files, or leave it too? (queue 2a)
 
 **The question in full.** Queue 2a removes `category = 'photos'` rows from Projects → Documents →
@@ -123,7 +185,39 @@ entry. The re-measure at about 20 signed COs is filed as `#1-cosum`.
   **Sabotage** (the exclusion removed from the function) → **red**, then restored. Full suite 123
   files / 1,710. tsc 0, eslint 0.
 
-## BUILT BUT UNTESTED
+### Queue 2b — multi-file upload: ONE shared queue (`feature/s112-files-and-upload` @ `3dec2b85`)
+
+- **The mechanism**, `lib/uploads/upload-batch.ts`, is shared because it lives in `lib/`:
+  - **≤ 3 uploads in flight** by default. Unbounded per-file parallelism is the S111 Storage-exhaustion
+    shape: one file is a Storage PUT, a `files` INSERT and, for images, an auto-tag call.
+  - **Per-file status:** `queued → uploading → done / failed / skipped`.
+  - **Failures named**, e.g. "2 of 5 could not be uploaded: f1.pdf, f3.pdf.", never just a count.
+  - **Retry re-sends only the failed and skipped files.** Done files are not uploaded twice, and rows
+    keep their place.
+  - **A storage-limit refusal stops the queue.** The files after it are "Not attempted", with the
+    reason, not "Failed".
+  - **The auto-tag call runs inside the queue slot**, so the AI calls are bounded by the same limit.
+- **The list**, `components/uploads/upload-batch-list.tsx`: a row per file with its status, the
+  named-failure message, and a "Retry the N failed files" button.
+- **Applied to:**
+  - **Desktop Files upload**: now `multiple`, one category per batch.
+  - **Desktop Photos "Add photos"**. _Superseded:_ a sequential loop reporting only "3 of 10 photos
+    could not be uploaded", with no retry.
+  - Every other control is **proposal only**, below (N3).
+- **Proof:** `test/s112-upload-batch.test.ts`, **8/8**:
+  - 10 files → **max in flight = 3**; **CONTROL**: with the limit raised to 10 → **max = 10**, so the
+    3 comes from the limiter, not from timing;
+  - concurrency 1 → strictly sequential;
+  - failures named in the message;
+  - a retry calls **exactly** the 2 failed files;
+  - a worker that throws becomes a `failed` item, and the batch does not crash;
+  - storage-limited on file 2 of 6 → **2 calls made**, 5 marked "not attempted";
+  - progress snapshots are exactly `uploading,queued → done,queued → done,uploading → done,done`.
+- **Full gate:** suite 124 files / 1,718; tsc 0; eslint 0; `next build` 0.
+- **Per-file progress is per-FILE STATE, not a byte bar.** `uploadFile()` goes through supabase-js
+  Storage, which exposes no upload progress events. A byte bar would need an XHR upload path, a
+  second transport (N3 item d).
+
 
 - **Queue 2a in a browser.** The desktop Files and `/m` Files pages have not been loaded against
   real rows tonight, because CI run 36282031683 holds rebuild-test. The query is proven at the
@@ -188,3 +282,4 @@ _(none yet)_
 - 00:20Z: started. Plan recorded verbatim (`5b30616e`). main `80e15bad` verified. 36278907305
   green. 36282031683 running. Queue 1 done (runbook written 2026-09-27 ~00:10Z, not run).
 - ~00:45Z — queue 2a built and proven at unit level (`243221d1`); N1, N2 raised. Starting 2b.
+- ~01:05Z — 2b built (`3dec2b85`), unit-proven; N3 raised. 10-file timing + 2a live proof wait for CI 36282031683 to free rebuild-test. Starting queue 3 (code only).
