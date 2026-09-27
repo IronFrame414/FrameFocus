@@ -10,15 +10,24 @@ import {
 } from '@/lib/services/file-categories-client';
 import { getStorageStatus, type StorageStatus } from '@/lib/services/storage-status-client';
 import { StorageLimitNotice } from '@/components/storage/storage-limit-notice';
+import { UploadBatchList } from '@/components/uploads/upload-batch-list';
+import {
+  requeueUnfinished,
+  runUploadBatch,
+  toUploadItems,
+  type UploadItem,
+} from '@/lib/uploads/upload-batch';
 
 // Redesign 6.1 — the picker now reads per-company `file_categories` (labels
-// renameable, keys stable). MANUAL_KEYS is unchanged from the old hardcoded
-// list and still deliberately excludes the app-written categories (safety,
-// deliveries, compliance, lien_releases, selections — see files.ts: a manual
-// upload into 'selections' would be hard-removed by the next spec-sheet
-// generation). Custom rows are per-job and always offered.
+// renameable, keys stable). MANUAL_KEYS deliberately excludes the app-written
+// categories (safety, deliveries, compliance, lien_releases, selections — see
+// files.ts: a manual upload into 'selections' would be hard-removed by the next
+// spec-sheet generation). Custom rows are per-job and always offered.
+// [S112 N2, RULED Josh] 'photos' is ALSO excluded now: after 2a a file uploaded
+// here as "Photos" would not appear in Files (it lands on the Photos page),
+// which surprises the uploader. Photos are added from the Photos page ("Add
+// photos", S111 Q16), so the Files upload no longer offers the category.
 const MANUAL_KEYS = new Set([
-  'photos',
   'contracts',
   'plans',
   'permits',
@@ -37,7 +46,10 @@ export default function UploadForm({
   canEmptyTrash?: boolean;
 }) {
   const router = useRouter();
-  const [file, setFile] = useState<File | null>(null);
+  // [S112 2b] Several files, one category for the batch. The queue runs through
+  // lib/uploads/upload-batch.ts: ≤ 3 in flight, failures named, retry only those.
+  const [files, setFiles] = useState<File[]>([]);
+  const [items, setItems] = useState<UploadItem[]>([]);
   const [category, setCategory] = useState<string>('other');
   const [categories, setCategories] = useState<FileCategoryRow[]>([]);
   const [addingCategory, setAddingCategory] = useState(false);
@@ -68,44 +80,45 @@ export default function UploadForm({
     if (result.key) setCategory(result.key);
   }
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!file) {
-      setError('Please choose a file.');
-      return;
-    }
-    setUploading(true);
-    setError(null);
-
-    const result = await uploadFile(file, {
+  // One file through the shared pipeline, then the image auto-tag — inside the
+  // queue slot, so the AI call is bounded by the same concurrency as the upload.
+  async function uploadOne(f: File) {
+    const result = await uploadFile(f, {
       project_id: projectId,
       category,
     });
-
-    setUploading(false);
-
-    if (!result.success) {
-      if (result.storageLimited) {
-        setLimited(await getStorageStatus());
-        setError(null);
-        setUploading(false);
-        return;
-      }
-      setError(result.error ?? 'Upload failed.');
-      return;
-    }
-
-    // Fire-and-forget: auto-tag images via AI
-    if (result.id && file.type.startsWith('image/')) {
+    if (result.success && result.id && f.type.startsWith('image/')) {
       fetch('/api/files/auto-tag', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ fileId: result.id }),
       }).catch(() => {});
     }
+    return result;
+  }
 
-    router.push(`/dashboard/projects/${projectId}/files`);
+  async function run(batch: UploadItem[]) {
+    setUploading(true);
+    setError(null);
+    const out = await runUploadBatch(batch, uploadOne, { onChange: setItems });
+    setItems(out);
+    setUploading(false);
+    if (out.some((i) => i.status === 'skipped')) {
+      setLimited(await getStorageStatus());
+    }
+    if (out.every((i) => i.status === 'done')) {
+      router.push(`/dashboard/projects/${projectId}/files`);
+    }
     router.refresh();
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (files.length === 0) {
+      setError('Please choose a file.');
+      return;
+    }
+    await run(toUploadItems(files));
   }
 
   return (
@@ -116,7 +129,12 @@ export default function UploadForm({
         </label>
         <input
           type="file"
-          onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+          multiple
+          data-testid="files-upload-input"
+          onChange={(e) => {
+            setFiles(Array.from(e.target.files ?? []));
+            setItems([]);
+          }}
           disabled={uploading}
         />
       </div>
@@ -193,11 +211,17 @@ export default function UploadForm({
       {error && (
         <p style={{ color: 'red', fontSize: '0.875rem', margin: 0 }}>{error}</p>
       )}
+      <UploadBatchList
+        items={items}
+        busy={uploading}
+        onRetry={() => void run(requeueUnfinished(items))}
+        testId="files-upload"
+      />
 
       <div style={{ display: 'flex', gap: '0.5rem' }}>
         <button
           type="submit"
-          disabled={uploading || !file}
+          disabled={uploading || files.length === 0 || items.length > 0}
           style={{
             padding: '0.5rem 1rem',
             background: '#000',
@@ -207,7 +231,7 @@ export default function UploadForm({
             cursor: uploading ? 'wait' : 'pointer',
           }}
         >
-          {uploading ? 'Uploading...' : 'Upload'}
+          {uploading ? 'Uploading...' : files.length > 1 ? `Upload ${files.length} files` : 'Upload'}
         </button>
         <button
           type="button"

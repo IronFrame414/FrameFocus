@@ -111,6 +111,8 @@ export async function getFiles(filters?: {
    * wants fixes both.
    */
   only_deleted?: boolean;
+  /** Leave one category out, IN THE QUERY — see getDocumentFiles(). */
+  exclude_category?: FileCategory;
   limit?: number;
   offset?: number;
 }): Promise<FileRecord[]> {
@@ -140,10 +142,36 @@ export async function getFiles(filters?: {
   if (filters?.category) {
     query = query.eq('category', filters.category);
   }
+  if (filters?.exclude_category) {
+    // `category` is NOT NULL, so `neq` cannot silently drop a null row.
+    query = query.neq('category', filters.exclude_category);
+  }
 
   const { data, error } = await query;
   if (error) return [];
   return (data ?? []) as FileRecord[];
+}
+
+/**
+ * [S112] A project's DOCUMENTS — every file except the `photos` category.
+ * Projects → Documents → Files (desktop) and /m's Files tile both read this,
+ * so the two surfaces answer "is this a document?" the same way (PARITY).
+ *
+ * ⚠️ BY CATEGORY, NEVER BY MIME [RULED Josh]. A scanned plan or a permit
+ * photographed on site is an image and a DOCUMENT; it stays here unless
+ * someone filed it under Photos. Category is chosen by the uploader (the Files
+ * upload defaults to 'other'), never derived from the file type.
+ *
+ * ⚠️ IN THE QUERY, not in memory. /m used to filter after getFiles()'
+ * 500-row ceiling, so on a large project photos could fill the page and push
+ * documents out of it entirely.
+ *
+ * Daily-log and safety images keep their own categories, so they STAY in this
+ * list (and also appear on the Photos page, which widened its query to them in
+ * S111 Q18). That is unchanged by this function and is Josh's to rule.
+ */
+export function getDocumentFiles(projectId: string): Promise<FileRecord[]> {
+  return getFiles({ project_id: projectId, exclude_category: 'photos' });
 }
 
 // Trash-bin pattern (single-row fetch): intentionally does NOT filter is_deleted so a
