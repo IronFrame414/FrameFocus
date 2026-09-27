@@ -112,7 +112,14 @@ Josh's. Full text: [`rules.md`](docs/claude/rules.md).
 
 Narrows "merging is Josh's call", and only that. CC merges a feature branch to `main` without a
 round-trip when **all three** hold, else it stays Josh's explicit call: (1) **CI green on the branch
-rebased onto CURRENT `main`** — a green run on a stale base does not count; (2) **every agreed check
+rebased onto CURRENT `main`** — a green run on a stale base does not count. **Tree-identity
+exemption:** a green run PLUS a proof the rebased tree is byte-identical to the tested tree *outside a
+delta that build, tests and runtime never read* also satisfies (1). The delta is defined by
+**EXCLUSION, not intuition**: it may touch ONLY `docs/` and root-level `*.md`; any path under `apps/`,
+`packages/`, `scripts/`, `supabase/` or `.github/` disqualifies it (`.github/` especially — a workflow
+change IS a change to what CI does). The merge message AND the report must state the proof — the full
+changed-path list and the command used — because "it's docs-only" is a claim and the file list is the
+evidence. (2) **every agreed check
 passed, with its measurement stated** (the number, not an assertion); (3) **⚠️ every migration the
 branch carries is ALREADY on production, verified by object — never waived** (deploying code ahead of
 its migration errors real users). Only the approval round-trip changed; **applying a migration to

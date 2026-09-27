@@ -102,6 +102,27 @@ the following hold. Fewer than three → it is still Josh's explicit call.
 1. **CI is green on the branch rebased onto CURRENT `main`** — not an older one. A green run on a
    stale base does not count; rebase (or confirm current `main` is already an ancestor) and read the
    run on that exact tree.
+
+   **Tree-identity exemption to (1) — RULED [Josh, S180].** Condition 1 is ALSO satisfied by a green
+   run PLUS a proof that the rebased tree is byte-identical to the tested tree **outside a delta that
+   the build, the tests and the runtime never read.** A byte-identical code tree is stronger evidence
+   than a re-run, which would add flake risk and rebuild-test drift without testing different bytes.
+
+   ⚠️ **The delta is defined by EXCLUSION, not by intuition.** It may touch **ONLY `docs/` and
+   root-level `*.md` files.** Any delta touching `apps/`, `packages/`, `scripts/`, `supabase/` or
+   `.github/` **disqualifies** the exemption — `.github/` especially, since a workflow change is
+   precisely a change to what CI does. A migration-bearing delta is disqualified by `supabase/` and by
+   condition 3 both.
+
+   **The proof MUST be stated in the merge message AND the report:** the **full list of changed paths**
+   in the delta, and the **command** used to establish tree identity (e.g.
+   `git diff --name-only <tested-sha> <rebased-tip>`). "It's docs-only" is a claim; the file list is
+   the evidence. This exemption is why a docs-only branch (`docs/` + root `*.md` only) may merge by
+   proof rather than by a run — it is the same standard, defined by path exclusion.
+
+   _First use: S112 R7 heic-conversion (`3bde33d0` green; rebased-tip `ad739e2c`; delta = `CLAUDE.md`
+   plus `docs/claude/*.md` plus `docs/specs/S113-SPEC-open-items.md` — all under `docs/` or root
+   `*.md`), merged to main `32570857`._
 2. **Every check agreed in session has passed, and its measurement is stated** — the pass is written
    down with its number (test tally, row count, exit line), not asserted.
 3. **⚠️ Every migration the branch carries is ALREADY on production and verified by object.** This
