@@ -2180,6 +2180,52 @@ non-role portal identity; then build the sub-facing surface that issues these in
 
   **What would make this a real item:** a caller appearing that passes user-controlled keys into `updates`, or the **#82** DB trigger landing (at which point the service-layer guard becomes belt-and-braces and the question changes shape). **Cross-ref #82** — that entry's deferred DB backstop is the piece still genuinely owed; this one is not. Verified S123.
 
+## `#1-s180u` — dead SECURITY DEFINER duplicate of `create_safety_incident` (drop it)
+
+**Provisional branch-scoped id** (`feature/s180-unattended`), per CLAUDE.md → "Tech-debt numbering";
+converts to a real number from this file's authority when the branch lands.
+
+**Found:** S180 unattended, during the item-2b audit of authenticated-reachable SECURITY DEFINER
+writers. `create_safety_incident` has TWO overloads in `public`:
+
+- **6-arg, SECURITY DEFINER** — `(p_project_id uuid, p_incident_date date, p_incident_type text,
+  p_description text, p_injuries jsonb, p_witnesses jsonb)`. Sets `company_id`/`reported_by_member_id`
+  itself; self-protecting (verified). **No caller.**
+- **7-arg, SECURITY INVOKER** — same plus `p_prevention_notes text`. **This is the live path:** the only
+  caller, `apps/web/app/api/safety-incidents/route.ts`, passes `p_prevention_notes`, which PostgREST
+  resolves to this overload. Safe via RLS + NOT-NULL defaults on `safety_incidents`.
+
+**Why it matters (the hazard, not a security hole):** two overloads with *different security models*
+(one DEFINER, one INVOKER) is exactly how an audit checks one signature and misses the other — an
+`secdef`-only enumeration lands on the dead 6-arg version and never sees the live 7-arg one. No tenancy
+gap exists today (both are safe), so this is cleanup, not a defect.
+
+**Proposed fix:** drop the dead overload —
+`DROP FUNCTION public.create_safety_incident(uuid, date, text, text, jsonb, jsonb);` — in a migration,
+after a final confirm that no test/`/m` path calls the 6-arg form. Migration + production apply are
+Josh's action; **not applied this session** (unattended, no production).
+
+## `#2-s180u` — N3: move the 8 existing-`multiple` upload inputs onto the shared queue
+
+**Provisional branch-scoped id** (`feature/s112-files-and-upload`), per CLAUDE.md → "Tech-debt
+numbering". **RULED Option A [Josh, S180]:** deferred to a focused build; `files-and-upload` ships
+2a+2b+N2 first (that increment adds no new parallelism, so it does **not** breach the N3 sequencing).
+
+**The build, when it happens — the order is ruled and stands [Josh, S180]:**
+
+1. **FIRST**, move the **8 existing-`multiple`** inputs onto the shared queue `lib/uploads/upload-batch.ts`
+   (`runUploadBatch`, ≤3 in flight) + the `upload-batch-list` UI. They are, with their own per-component
+   `fileId`-threading to preserve: `app/m/write-ui`→`portal-writes-ui.tsx`, desktop
+   `field-ops/[projectId]/deliveries/check-in/check-in-form.tsx`, `selections/[selectionId]/selection-sheet.tsx`,
+   field-ops `daily-logs/log-form.tsx`, `delivery-edit-form.tsx`, `components/field/incident-form.tsx`,
+   `site-visit-record.tsx`, `expense-capture-form.tsx`. Each currently runs its own upload loop; this is
+   **bespoke per component**, not a mechanical swap — eight independent chances for a silent break.
+2. **ONLY THEN** add `multiple` to the NEW inputs: estimate Files tab, `/m` daily-log & incident
+   pickers, damage photos, delivery check-in, and the sub's bid reply **after `bid-token-status` lands**.
+
+**⚠️ Per-component verification = a test PER SURFACE**, not one test over the batch: **8 components, 8
+proofs, each stating what it uploaded and what landed.** A single batch test is not acceptance.
+
 ## Process notes
 
 When closing an item:
