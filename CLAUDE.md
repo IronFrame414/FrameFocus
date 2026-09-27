@@ -108,6 +108,28 @@ box. **Attended: Josh commits and CC never pushes. Unattended: CC commits and pu
 branch.** In both: never push to `main`, never `git add -A` over an unrelated tree, and merging is
 Josh's. Full text: [`rules.md`](docs/claude/rules.md).
 
+### CC may merge to `main` without approval when three conditions hold — **RULED [Josh, S180]**
+
+Narrows "merging is Josh's call", and only that. CC merges a feature branch to `main` without a
+round-trip when **all three** hold, else it stays Josh's explicit call: (1) **CI green on the branch
+rebased onto CURRENT `main`** — a green run on a stale base does not count; (2) **every agreed check
+passed, with its measurement stated** (the number, not an assertion); (3) **⚠️ every migration the
+branch carries is ALREADY on production, verified by object — never waived** (deploying code ahead of
+its migration errors real users). Only the approval round-trip changed; **applying a migration to
+production is still Josh's action**, so a migration-bearing branch cannot merge until he has. Full
+text: [`rules.md`](docs/claude/rules.md).
+
+### Questions are asked in plain text, never the interactive picker — **MANDATORY [Josh, S180]**
+
+Every question to Josh goes in the FINAL message of a turn, as plain text, then the turn ends. Never
+`AskUserQuestion`, never a one-answer-at-a-time chooser. Why: the picker delivers one question per
+turn (six questions → six round-trips); Josh is notified only when a turn ENDS, so it leaves the
+session idle; its options are not quotable, so a conditional ruling flattens to a bare choice; and the
+returned ruling loses the question ("Q3: option A" is useless later). Shape: `Qn. [ASK-n] <question in
+full, assume no memory> / Options: A) … B) … / My recommendation: <which, why>`. State EVERY question
+in full, ask all of a turn's at once, then end the turn. Full text:
+[`rules.md`](docs/claude/rules.md).
+
 ### The thing inspected must be the thing being judged — **MANDATORY [S108/S122]**
 
 Before stating a result, name what produced the evidence and confirm it is the thing in question. The
@@ -129,6 +151,17 @@ The exit-status rules:
 
 In CI a masked failure ships red as green. `ci.yml` sets `bash -euo pipefail`, but nothing closes the
 trailing-command case except not writing it. Full text: [`rules.md`](docs/claude/rules.md).
+
+### Audit by what is CALLED, not by what matches a catalog filter — **MANDATORY [Josh, S180]**
+
+Same family as above. A catalog query (`prosecdef`, a name pattern, a schema, a table list) defines a
+set by a property, which is **not** the set of things that run. Two overloads share a name; one is
+live, one is dead, and the filter cannot tell you which. **Cross-reference every enumeration against
+actual call sites**, and ask what the filter EXCLUDED that shares a name or job with what it included.
+Instance: the S180 `authenticated`-writer audit read all 39 `prosecdef` functions; `create_safety_incident`'s
+live 7-arg SECURITY INVOKER path was outside the filter and never read — RLS-safe by luck, not method.
+Report the excluded set as a stated residual, never as covered. Full text:
+[`rules.md`](docs/claude/rules.md).
 
 ### A fix session sweeps for EXISTING tests of the behaviour it overturns — **MANDATORY [Josh, S157]**
 

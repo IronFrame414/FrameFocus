@@ -91,6 +91,56 @@ push rule.
 spec amendment land together — not that a half-built feature is committed to bank progress. The
 unit is what would still be worth having if the next step never ran.
 
+### CC may merge to `main` without a separate approval when three conditions all hold — **RULED [Josh, S180]**
+
+_This narrows "merging to `main` remains Josh's call" (above), and only that. It does not touch the
+push rule, the path-scoping rule, or Josh's ownership of applying a migration to production._
+
+CC may merge a feature branch to `main` **without a round-trip for approval** when **all three** of
+the following hold. Fewer than three → it is still Josh's explicit call.
+
+1. **CI is green on the branch rebased onto CURRENT `main`** — not an older one. A green run on a
+   stale base does not count; rebase (or confirm current `main` is already an ancestor) and read the
+   run on that exact tree.
+2. **Every check agreed in session has passed, and its measurement is stated** — the pass is written
+   down with its number (test tally, row count, exit line), not asserted.
+3. **⚠️ Every migration the branch carries is ALREADY on production and verified by object.** This
+   point is **never waived.** Deploying code ahead of its migration means the app calls a function or
+   column that does not exist and real users get errors. "Verified by object" means the object was
+   confirmed present on production (e.g. the runbook's Step-8 catalog read), not merely that a
+   migration file exists in the branch.
+
+**What changed is only the approval round-trip.** **Applying a migration to production is still
+Josh's action** — CC never runs it. So in practice CC still cannot merge a migration-bearing branch
+until Josh has applied and confirmed that migration; condition 3 is the gate that enforces this.
+
+### Questions are asked in plain text, never the interactive picker — **MANDATORY [Josh, S180]**
+
+**Every question to Josh goes in the FINAL message of a turn, as plain text, then the turn ends.**
+Never the interactive picker (`AskUserQuestion`), and never a numbered chooser that takes one answer
+at a time. This governs Phase 2 of the run protocol and every other ask.
+
+**Why — recorded so nobody reverts it as a style preference:**
+
+- **The picker delivers one question per turn.** A session with six questions becomes six round-trips.
+- **Josh is notified when a turn ENDS.** The picker does not end the turn, so he does not know it is
+  waiting and the session sits idle.
+- **The picker's options are not quotable.** He cannot paste one back with an amendment, so every
+  conditional ruling gets flattened into a bare choice.
+- ⚠️ **The ruling that comes back loses the question.** "Q3: option A" is useless to a future session,
+  and this campaign has already lost time to exactly that.
+
+**The required shape:**
+
+```
+Q1. [ASK-n] <the question, stated in full — assume the reader has no memory of the spec>
+    Options: A) ...  B) ...
+    My recommendation: <which, and why, in one line>
+```
+
+**State EVERY question in full**, including ones you think are obvious. **Ask all of a turn's
+questions in one message** rather than trickling them. Then **end the turn.**
+
 ### The thing inspected must be the thing being judged — exit statuses first — **MANDATORY [moved from TECH_DEBT #137, S122; generalised S108, Josh ASK-D3 → C]**
 
 _Previous heading, quoted: "Reading the exit status of a command"._ The exit-status rules below are
@@ -138,6 +188,29 @@ Playwright runs reported `0` while 89 and 91 tests had actually failed.
 `.github/workflows/ci.yml` it **ships red as green**. The workflow sets
 `defaults.run.shell: bash -euo pipefail {0}`, which closes the pipe case for every `run:` step —
 but **nothing closes the trailing-command case except not writing it**.
+
+### Audit by what is CALLED, not by what matches a catalog filter — **MANDATORY [Josh, S180]**
+
+_Same family as "the thing inspected must be the thing being judged": here the evidence read belonged
+to a set defined by a **property**, not to the set of things that actually **run**._
+
+**A catalog query defines a set by a property — `prosecdef`, a name pattern, a schema, a table list.
+That set is NOT the set of things that execute.** Two overloads share a name; one is live and one is
+dead, and the filter cannot tell you which. **Cross-reference every enumeration against actual call
+sites before drawing a conclusion from it.** An audit that reads every member of a filtered set has
+still not audited the system if the live code path was outside the filter.
+
+**The instance.** The S180 `authenticated`-writer audit enumerated **39** SECURITY DEFINER functions
+(`prosecdef = true`) and read all 39. `create_safety_incident`'s **6-arg SECURITY DEFINER** overload
+was in that set — and has **no caller**. The **7-arg SECURITY INVOKER** overload — the one every safety
+incident on production actually goes through — was **outside the `prosecdef` filter and was never
+read**. It turned out to be RLS-safe; **that was luck, not method.** The audit had read the dead
+overload and called the function reviewed.
+
+**In practice:** after any catalog-driven enumeration (functions, policies, columns, routes), grep the
+codebase and the DB for who actually calls/uses each member — and, just as important, ask what the
+filter **excluded** that shares a name or a job with what it included. Report the excluded set as a
+stated residual, never as covered.
 
 ### A fix session must sweep for EXISTING tests that encode the behaviour it is overturning — **MANDATORY [Josh, S157]**
 
