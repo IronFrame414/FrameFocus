@@ -89,3 +89,18 @@ describe('S112 2a — both surfaces read the same function (PARITY)', () => {
     expect(code).not.toMatch(/files\.filter\(\(f\) => f\.category !== 'photos'\)/);
   });
 });
+
+describe('S112 N2 — the Files upload no longer offers the Photos category', () => {
+  it('MANUAL_KEYS excludes photos, but still lists the real manual categories (not vacuous)', () => {
+    const code = read('app/dashboard/projects/[id]/files/upload/upload-form.tsx');
+    const start = code.indexOf('const MANUAL_KEYS');
+    const manual = code.slice(start, code.indexOf(']', start));
+    // N2 [RULED Josh]: after 2a, a file uploaded here as "Photos" would not
+    // appear in Files (it lands on the Photos page). So the category is dropped.
+    expect(manual).not.toContain("'photos'");
+    // Control: the set is still populated, so this is not passing on an empty
+    // or renamed set.
+    expect(manual).toContain("'contracts'");
+    expect(manual).toContain("'other'");
+  });
+});

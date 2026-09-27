@@ -19,13 +19,15 @@ import {
 } from '@/lib/uploads/upload-batch';
 
 // Redesign 6.1 — the picker now reads per-company `file_categories` (labels
-// renameable, keys stable). MANUAL_KEYS is unchanged from the old hardcoded
-// list and still deliberately excludes the app-written categories (safety,
-// deliveries, compliance, lien_releases, selections — see files.ts: a manual
-// upload into 'selections' would be hard-removed by the next spec-sheet
-// generation). Custom rows are per-job and always offered.
+// renameable, keys stable). MANUAL_KEYS deliberately excludes the app-written
+// categories (safety, deliveries, compliance, lien_releases, selections — see
+// files.ts: a manual upload into 'selections' would be hard-removed by the next
+// spec-sheet generation). Custom rows are per-job and always offered.
+// [S112 N2, RULED Josh] 'photos' is ALSO excluded now: after 2a a file uploaded
+// here as "Photos" would not appear in Files (it lands on the Photos page),
+// which surprises the uploader. Photos are added from the Photos page ("Add
+// photos", S111 Q16), so the Files upload no longer offers the category.
 const MANUAL_KEYS = new Set([
-  'photos',
   'contracts',
   'plans',
   'permits',
