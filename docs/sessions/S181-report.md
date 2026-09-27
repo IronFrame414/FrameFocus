@@ -155,3 +155,26 @@ Production is not readable from here; the `m1910_*` columns of Josh's pasted row
 The whole `CREATE OR REPLACE FUNCTION enforce_contract_void_authority()` block was removed (its only change was the PE
 clause, 1 occurrence) and replaced by a comment quoting what it did. The header's "NOT GRANTED" list now names it.
 TS already agrees: `contracts/page.tsx:39` `canManage` = owner/admin/PM, and `canManageContracts` = owner/admin (total map: PE false).
+
+## Step C-1 — the money UI (increment 1) — built, DB migration NOT YET APPLIED
+
+**What the branch already had (S111 commits, rebased):** desktop Budget & Cost (`budgetColumnsFor` → full), Overview money
+(`page.tsx:95 seesProjectMoney`), Invoices tab + builder + PDF route, Payments (record-new only: `canRecordNew`), Profitability,
+CO list/detail money (`isFinanceRole = seesProjectMoney`), contract schedule amounts, rate renegotiate.
+
+**Found and fixed this session:**
+- ⚠️ **PARITY defect:** `/m` `readsChangeOrders()` (`app/m/detail-access.ts`) omitted the PE. The database returns every CO on its
+  project and desktop lists them, but `/m` showed the PE the "office only" notice. Fixed (+PE). New `test/s181-m-co-access.test.ts`
+  has total maps for `readsChangeOrders` and `canWriteCo`: **red before the fix (1 failed / 1 passed), green after (2/2)**.
+- **Q4 — `20261920000000_s181_pe_expense_and_money_file_reads.sql`** (written, not applied): read-only PE arms on `expenses`,
+  `expense_allocations` (scoped to BOTH the expense's and the budget item's project; rebuild-test had 0/29 cross-project
+  allocations, but nothing enforces that), `expense_payments`, plus `files` categories `invoices`/`change_orders` on its project
+  (the stored PDFs of rows it already reads). `contracts` files are NOT included (visibility unruled). Desktop Budget & Cost
+  already fetches `getExpenses` + `getPayablesSummary` for the PE (`seesPayables = seesCommitted`), so the data renders once this migration is applied.
+
+**Surface facts (PARITY):** `/m` has no Budget, Invoices, Payments, Profitability or Lien section **for any role**, and `/m`
+Overview shows no money to anyone. `/m`'s only money-adjacent surface is Change Orders (no amounts on the list, for every role,
+by M6M D-26; the detail page's `MONEY_ROLES` already includes the PE). That is a pre-existing surface split, not a PE divergence.
+
+**Deliberately left alone:** `/dashboard/projects` list `canSeeFinancials` = O/A — the portfolio list is company-level money
+(FILL-2: "portfolio money: none"); the PE sees its projects' figures inside each project.

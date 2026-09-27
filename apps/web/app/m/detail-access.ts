@@ -208,8 +208,12 @@ export function canWriteCo(role: string | null | undefined): boolean {
  * summary that widened the read for foreman and crew is a separate projection
  * with its own role list: `readsCoSummaries()` in lib/change-orders/summaries.ts.
  */
+// [S181 FILL-C-1, PARITY] + a Project Executive. `change_orders_select_project_executive`
+// (20261830000000) hands it EVERY CO on its assigned projects, and desktop's
+// Change Orders tab already lists them; without it here, /m told the role it
+// could not read change orders the database had just returned.
 export function readsChangeOrders(role: string | null | undefined): boolean {
-  return ['owner', 'admin', 'project_manager'].includes(role ?? '');
+  return ['owner', 'admin', 'project_executive', 'project_manager'].includes(role ?? '');
 }
 
 // ===========================================================================
