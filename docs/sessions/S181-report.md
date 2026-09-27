@@ -267,3 +267,18 @@ policies 410, triggers 285, functions 325, constraints 1012, latest 202619300000
 also carries 20261850/1860/1890/1900 (unmerged), so the policy and function counts include their objects. The committed
 branch baseline was wrong the other way (it lacked this branch's). Committed as generated, with this caveat; the
 cron route that imports it will compare production against a baseline that includes those four until they merge.
+
+## Step 5 — production runbook, spec FILLs, full local gate — DONE
+
+- `docs/sessions/S181-PRODUCTION-RUNBOOK.md`: five sections in apply order (1820 → 1830 → 1910 → 1920 → 1930). Each section
+  isolates its own file (the others held in `/tmp/s181-hold`), requires a dry run of exactly one file, pushes, then verifies by object.
+  The Step 0 pre-check stops on `pe_profiles_now > 0` (Q3). It also requires production's current bodies of the five functions these
+  migrations replace to hash to the values computed from the migration files. **The method was validated on rebuild-test**: its post-migration bodies
+  hash exactly to the values the files predict (5/5: 3 trigger bodies + `time_role_rank` + `record_client_payment`).
+  Residual, stated: the 3 policies 1820 DROP/CREATEs cannot be hash-checked from files (Postgres normalises `qual`); each
+  replacement only adds `project_executive` to a deny-list.
+- `docs/specs/S113-SPEC-open-items.md` FILL-C-1 … C-4 filled in place.
+- Local gate: **vitest 131 files / 1815 tests passed**, exit 0. `next lint` exit 0 (5 pre-existing warnings, none in a file this
+  branch touches). ⚠️ **`next build` first FAILED (exit 1)** on a type error in the new live test's helper; the earlier tsc run predated that file.
+  Fixed (`one()` returns a plain row) → `tsc` exit 0 / 0 errors → lien live test re-run 14/14 → **`next build` exit 0,
+  133/133 pages**.

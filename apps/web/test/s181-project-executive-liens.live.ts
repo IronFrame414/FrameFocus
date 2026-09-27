@@ -99,10 +99,14 @@ async function sweep() {
   await admin.from('contacts').delete().eq('last_name', `${MARKER} Client`);
 }
 
-async function one<T>(label: string, q: PromiseLike<{ data: T | null; error: { message: string } | null }>): Promise<T> {
+/** One row or throw, naming the step. Callers cast the fields they read. */
+async function one(
+  label: string,
+  q: PromiseLike<{ data: unknown; error: { message: string } | null }>
+): Promise<Record<string, unknown>> {
   const { data, error } = await q;
-  if (error || data === null) throw new Error(`${label}: ${error?.message ?? 'no row'}`);
-  return data;
+  if (error || data === null || data === undefined) throw new Error(`${label}: ${error?.message ?? 'no row'}`);
+  return data as Record<string, unknown>;
 }
 
 async function makeSide(side: Side, seq: number) {
