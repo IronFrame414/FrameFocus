@@ -1,5 +1,5 @@
 import { createClient } from '@/lib/supabase-server';
-import { getFileCategories, getFiles } from '@/lib/services/files';
+import { getDocumentFiles, getFileCategories } from '@/lib/services/files';
 import { getActiveTags } from '@/lib/services/tag-options';
 import FilesList from './files-list';
 import { ArchivePanel } from './archive-panel';
@@ -27,7 +27,8 @@ export default async function ProjectFilesPage({ params }: { params: Promise<{ i
   // so the page paid two round trips end to end for work that takes one. Same
   // shape as M1-03 (five sequential reads for one row), smaller.
   const [files, activeTags, categories] = await Promise.all([
-    getFiles({ project_id: projectId }),
+    // [S112] Documents only: photos live on the Photos tab (by category).
+    getDocumentFiles(projectId),
     getActiveTags(),
     getFileCategories(projectId),
   ]);

@@ -1,4 +1,4 @@
-import { getFiles } from '@/lib/services/files';
+import { getDocumentFiles } from '@/lib/services/files';
 import { getMyProfile } from '@/lib/services/profiles';
 import { canReachDetail } from '@/app/m/detail-access';
 import { SectionHeader } from '../section-header';
@@ -31,7 +31,7 @@ export default async function ProjectFilesPage({
   // NOTE: the filter key is `project_id`, not `projectId` — §4.11.6 writes it
   // as `getFiles({ projectId })` in prose; the real signature is snake_case.
   const [files, profile, t] = await Promise.all([
-    getFiles({ project_id: params.projectId }),
+    getDocumentFiles(params.projectId),
     getMyProfile(),
     getMobileT(),
   ]);
@@ -43,7 +43,10 @@ export default async function ProjectFilesPage({
   const canOpen = canReachDetail(profile?.role);
 
   // The ONLY filter, and it is a category split rather than a role check.
-  const docs = files.filter((f) => f.category !== 'photos');
+  // [S112] Now done IN THE QUERY by getDocumentFiles(), shared with desktop.
+  // _Superseded:_ `files.filter((f) => f.category !== 'photos')` after a
+  // 500-row limit, which let photos crowd documents off the page.
+  const docs = files;
 
   return (
     <div className="px-[18px] pb-[18px] pt-[14px]">
