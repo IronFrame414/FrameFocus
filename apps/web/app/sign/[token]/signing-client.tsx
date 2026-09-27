@@ -2,7 +2,7 @@
 
 import { useRef, useState } from 'react';
 import SignatureCanvas from 'react-signature-canvas';
-import type { ProposalData } from '@/lib/proposal/proposal-data';
+import type { ClientProposalData } from '@/lib/proposal/client-proposal';
 import { ProposalHtml } from '@/lib/proposal/proposal-html';
 import { CONSENT_TEXT } from '@/lib/proposal/proposal-defaults';
 import { declineReasonCodes } from '@framefocus/shared/validation/estimate';
@@ -23,7 +23,7 @@ const REASON_LABELS: Record<(typeof declineReasonCodes)[number], string> = {
 
 interface SigningClientProps {
   token: string;
-  proposal: ProposalData;
+  proposal: ClientProposalData;
   recipientName: string | null;
 }
 

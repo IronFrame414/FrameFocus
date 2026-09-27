@@ -433,6 +433,21 @@ export function ProposalDocument({ data }: { data: ProposalData }) {
                     )}
                   </View>
                 ))}
+              {/* [S112, RULED Josh] Same fix as proposal-html.tsx (PARITY): a
+                  "Summary with Descriptions" PDF shows each described line's
+                  name and description, no price — matching the signing page. */}
+              {!plan.showLines &&
+                plan.descriptions &&
+                cat.lines
+                  .filter((line) => line.description)
+                  .map((line, j) => (
+                    <View key={`d${j}`} style={[styles.row, { borderBottomWidth: 0 }]} wrap={false}>
+                      <View style={{ flex: 1, paddingRight: 12 }}>
+                        <Text>{line.name}</Text>
+                        <Text style={{ fontSize: 8, color: '#6b7280' }}>{line.description}</Text>
+                      </View>
+                    </View>
+                  ))}
             </View>
           ));
         })()}
