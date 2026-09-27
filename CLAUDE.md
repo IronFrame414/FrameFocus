@@ -13,7 +13,7 @@ client experience → business intelligence. 11 modules; live status in [STATE.m
 
 **Owner:** Josh Bishop (jsbishop14@gmail.com) · **Repo:** github.com/IronFrame414/FrameFocus (private)
 · **Live:** https://frame-focus-eight.vercel.app · Module designs: [`CLAUDE_MODULES.md`](CLAUDE_MODULES.md),
-[`docs/module4-architecture.md`](docs/module4-architecture.md). Full text: [`platform.md`](docs/claude/platform.md).
+[`docs/specs/module4-architecture.md`](docs/specs/module4-architecture.md). Full text: [`platform.md`](docs/claude/platform.md).
 
 ## MCP servers
 
