@@ -177,14 +177,27 @@ describe('S112 client proposal — PAYLOAD: withheld money is not in the data', 
   });
 
   it('summary / category formats — category subtotals at most, never a line or row figure', () => {
-    for (const f of [
-      'summary',
-      'summary_with_descriptions',
-      'category_with_price',
-      'category_no_price',
-    ] as const) {
+    for (const f of ['summary', 'category_with_price', 'category_no_price'] as const) {
       const t = trimProposalForClient(fixture(f));
       for (const c of t.categories) expect(c.lines, f).toEqual([]);
+    }
+    // [S112, RULED Josh] _Superseded:_ summary_with_descriptions was in the list
+    // above ("carries no lines") — that encoded the page that wrongly hid its
+    // descriptions. It now carries each DESCRIBED line: name + description,
+    // and still no line or row FIGURE, which is this test's actual claim.
+    const swd = trimProposalForClient(fixture('summary_with_descriptions'));
+    const lines = swd.categories.flatMap((c) => c.lines);
+    expect(lines.length, 'described lines must be carried').toBeGreaterThan(0);
+    for (const l of lines) {
+      expect(l.description, 'only described lines').toBeTruthy();
+      expect([l.total, l.originalTotal, l.cost, l.markupPercent, l.discountLabel]).toEqual([
+        null,
+        null,
+        null,
+        null,
+        null,
+      ]);
+      expect(l.rows).toEqual([]);
     }
     expect(
       trimProposalForClient(fixture('category_no_price')).categories.every(
@@ -225,5 +238,39 @@ describe('S112 client proposal — PAYLOAD: withheld money is not in the data', 
     const full = fixture('lump_sum');
     expect(JSON.stringify(full)).toContain('4321.09');
     expect(treeMoney(trimProposalForClient(full))).toEqual([]);
+  });
+});
+
+describe('[S112, RULED Josh] Summary with Descriptions SHOWS its line descriptions — the client signs what they see', () => {
+  it('the signing page draws each description, from full AND trimmed data', () => {
+    for (const d of [fixture('summary_with_descriptions'), trimProposalForClient(fixture('summary_with_descriptions'))]) {
+      const page = html(d);
+      expect(page).toContain('Frame the new walls');
+      expect(page).toContain('Level 4 finish');
+      // Names give the description its context…
+      expect(page).toContain('Walls');
+      // …but the format prices CATEGORIES only: no line total is drawn.
+      expect(page).not.toContain('4,500.01');
+    }
+    // CONTROL for the line above: the itemized page DOES draw that line price
+    // (Walls is discounted, so the drawn figure is its original, 4,500.01) — so
+    // the not.toContain is testing something. It first used 4,321.09, which no
+    // page draws; this control is what caught that.
+    expect(html(fixture('itemized'))).toContain('4,500.01');
+  });
+
+  it('CONTROL — plain Summary draws no description (the block keys on the plan, not on the data)', () => {
+    const page = html(fixture('summary'));
+    expect(page).not.toContain('Frame the new walls');
+    expect(page).not.toContain('Level 4 finish');
+  });
+
+  it('a line WITHOUT a description is neither drawn nor carried', () => {
+    const f = fixture('summary_with_descriptions');
+    f.categories[0].lines.push({ ...f.categories[0].lines[0], name: 'Undescribed extra', description: null });
+    expect(html(f)).not.toContain('Undescribed extra');
+    const carried = trimProposalForClient(f).categories.flatMap((c) => c.lines.map((l) => l.name));
+    expect(carried).not.toContain('Undescribed extra');
+    expect(carried).toContain('Walls');
   });
 });

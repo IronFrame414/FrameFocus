@@ -397,6 +397,25 @@ export function ProposalHtml({ data }: { data: ProposalData | ClientProposalData
                   )}
                 </div>
               ))}
+            {/* [S112, RULED Josh] "Summary with Descriptions" SHOWS its line
+                descriptions — the client signs what they see. Category layout
+                draws no lines, so the descriptions were never reached above
+                (they sit inside `plan.showLines`). Each described line: its name
+                and description, NO price (the format prices categories only). */}
+            {!plan.showLines &&
+              plan.descriptions &&
+              cat.lines
+                .filter((line) => line.description)
+                .map((line, j) => (
+                  <div key={`d${j}`} data-testid="proposal-line-description" style={row}>
+                    <span style={{ flex: 1 }}>
+                      {line.name}
+                      <span style={{ display: 'block', fontSize: '0.75rem', color: '#6b7280' }}>
+                        {line.description}
+                      </span>
+                    </span>
+                  </div>
+                ))}
           </div>
         ));
       })()}

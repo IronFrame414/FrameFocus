@@ -71,6 +71,9 @@ type Shape = {
   descriptions: boolean;
   rows: 'none' | 'names' | 'names_prices' | 'time_and_materials';
   openBook: boolean;
+  /** [S112] Carry only lines that have a description — the category layout
+   *  draws a line ONLY to show its description (Summary with Descriptions). */
+  onlyDescribedLines?: boolean;
 };
 
 function shapeFor(stored: string): Shape {
@@ -136,14 +139,29 @@ function shapeFor(stored: string): Shape {
         openBook: false,
       };
     case 'category':
-      return {
-        categories: 'names',
-        subtotals: true,
-        linePrices: false,
-        descriptions: false,
-        rows: 'none',
-        openBook: false,
-      };
+      // [S112, RULED Josh] Summary with Descriptions SHOWS its line
+      // descriptions, so the payload carries them: each described line's name
+      // and description, never its price. _Superseded:_ this case dropped every
+      // line, trimming to a page that wrongly hid them. Summary (no
+      // descriptions) still carries category names and subtotals only.
+      return plan.descriptions
+        ? {
+            categories: 'full',
+            subtotals: true,
+            linePrices: false,
+            descriptions: true,
+            rows: 'none',
+            openBook: false,
+            onlyDescribedLines: true,
+          }
+        : {
+            categories: 'names',
+            subtotals: true,
+            linePrices: false,
+            descriptions: false,
+            rows: 'none',
+            openBook: false,
+          };
     case 'itemized':
       return {
         categories: 'full',
@@ -210,7 +228,10 @@ export function trimProposalForClient(data: ProposalData): ClientProposalData {
       : data.categories.map((c) => ({
           name: tm ? '' : c.name,
           subtotal: s.subtotals ? c.subtotal : null,
-          lines: s.categories === 'full' ? c.lines.map((l) => trimLine(l, s)) : [],
+          lines:
+            s.categories === 'full'
+              ? c.lines.filter((l) => !s.onlyDescribedLines || l.description).map((l) => trimLine(l, s))
+              : [],
         }));
   return {
     ...data,
