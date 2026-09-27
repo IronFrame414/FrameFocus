@@ -1,0 +1,298 @@
+# S112 R7 — legacy HEIC/HEIF → stored JPEG
+
+> # ⛔ PREPARED, NOT RUN ON PRODUCTION.
+>
+> Nothing in this file has been run against production **or rebuild-test**. The script was written and
+> unit-tested only (`apps/web/test/s112-heic-convert.test.ts`, plus the parity cases added to
+> `apps/web/test/s111-thumbnail-path.test.ts`). Josh proves it on rebuild-test first.
+
+**Ruling R7 [Josh]:** convert legacy HEIC/HEIF photos ONCE to a stored JPEG, **keeping the original**.
+They display blank everywhere but Safari because Storage serves them as `application/octet-stream`.
+New uploads already convert in the browser (`lib/services/files-client.ts` `prepareImageForUpload` →
+heic2any).
+
+Script: `scripts/s112-heic-convert.cjs`. Project refs: **production = `jwkcknyuyvcwcdeskrmz`**,
+**rebuild-test = `nmyphyhmfttxkdoposvf`**.
+
+---
+
+## 0. ⚠️ THE CONVERTER CHANGED [S112 Q3] — capture time and GPS are evidence
+
+**RULED [Josh, S112 Q3]:** _"A jobsite photo's capture time and GPS are evidence ... carry at least
+capture time and GPS onto the converted JPEG. If /render/image/ strips EXIF and cannot preserve it,
+convert with a tool that can. If neither is possible, STOP and report."_
+
+**Measured, three real iPhone HEICs on rebuild-test, read with ImageMagick `identify -verbose`:**
+
+| | DateTimeOriginal | GPS lat / long | Make / Model | Size |
+| --- | --- | --- | --- | --- |
+| Source HEIC | 2019:07:29 12:18:34 | 26°27′22.70″ N / 80°7′45.90″ W | Apple / iPhone XR | 3024×4032 |
+| Storage `/render/image/` JPEG (the first build) | **absent** | **absent** | absent | **3000×4000 — resized** |
+| ImageMagick `magick - -quality 90 jpg:-` | 2019:07:29 12:18:34 | identical | identical | 3024×4032 |
+
+The first build's step-2 claim "no width or height, so nothing is resized" was also false: the
+transform capped the photo at 3000×4000. Orientation checked: all three read `TopLeft` and the
+ImageMagick JPEG matches the render's pixels (RMSE 0.8%; the same image rotated 90° scores 25%), so
+nothing is rotated twice.
+
+**So the script now converts with ImageMagick and FAILS a row** unless the JPEG has the source's
+exact pixel size and every evidence field the source carries (`DateTimeOriginal`, `GPSLatitude`,
+`GPSLatitudeRef`, `GPSLongitude`, `GPSLongitudeRef`). Pure rule `conversionDefect()`, unit-tested
+with a control reproducing what `/render/image/` did.
+
+**It needs ImageMagick 7 with HEIC read support** on the machine that runs it. This Codespace has it
+(`ImageMagick 7.1.1-43`, HEIC `r--` via libheif 1.19.8). The script refuses to start — dry run
+included — if `magick -list format` shows no readable HEIC. A rebuilt Codespace may not have it; if
+the preflight refuses, stop and report rather than installing something different.
+
+### Frozen site-visit HEIC photos — SKIPPED, never converted [RULED Josh, S112 Q2]
+
+No exception to the freeze. Count them on production so Josh can rule on the number:
+
+```sql
+-- Read-only. Mirrors enforce_site_visit_file_freeze(): captured on site, the estimate's site visit
+-- is frozen, and the photo predates the freeze. (A photo whose estimate became a project has
+-- estimate_id NULL and is no longer frozen — the trigger looks the freeze up by OLD.estimate_id.)
+SELECT count(*) AS frozen_heic,
+       coalesce(pg_size_pretty(sum(f.file_size)::bigint), '0') AS size,
+       count(DISTINCT f.estimate_id) AS estimates
+FROM files f
+JOIN site_visits sv ON sv.estimate_id = f.estimate_id
+WHERE NOT f.is_deleted AND f.site_visit_capture
+  AND sv.frozen_at IS NOT NULL AND f.created_at <= sv.frozen_at
+  AND (f.mime_type IN ('image/heic','image/heif') OR f.file_name ~* '\.(heic|heif)$');
+```
+
+On rebuild-test this returns 0 — and so does its control without the HEIC filter, because
+rebuild-test holds **no site visits at all**. So the query is checked against the trigger's text,
+not against a positive row. If material, the ruled direction is a sibling derivative (served bytes
+change, `file_path` and the frozen original do not), not a hole in the freeze.
+
+## 1. How many — read-only count (SQL editor)
+
+Every query here is a `SELECT`. None changes anything.
+
+```sql
+-- Q1. Candidates by category and mime, live vs trashed, with size and markup.
+SELECT
+  CASE WHEN lower(mime_type) IN ('image/heic','image/heif','image/heic-sequence','image/heif-sequence')
+       THEN 'mime' ELSE 'name_only' END                            AS category,
+  mime_type,
+  is_deleted,
+  count(*)                                                         AS n,
+  pg_size_pretty(sum(file_size))                                   AS total_size,
+  sum(file_size)                                                   AS total_bytes,
+  count(*) FILTER (WHERE CASE WHEN jsonb_typeof(markup_data -> 'shapes') = 'array'
+                              THEN jsonb_array_length(markup_data -> 'shapes') > 0 ELSE false END)
+                                                                   AS with_markup,
+  count(*) FILTER (WHERE site_visit_capture)                       AS site_visit_captures
+FROM files
+WHERE lower(mime_type) IN ('image/heic','image/heif','image/heic-sequence','image/heif-sequence')
+   OR file_name ~* '\.(heic|heif)$'
+GROUP BY 1, 2, 3
+ORDER BY 3, 1, 2;
+```
+
+- **Only `is_deleted = false` rows are converted.** Trashed rows are counted by the dry run and left
+  alone.
+- **How many have thumbnails is not knowable from `files`.** A thumbnail has no row. It is only a
+  Storage object whose name is the photo's path plus a suffix. **The dry run is the real count**: it
+  lists the folder for every row and prints each side object it will copy. If you want an SQL cross-check,
+  `storage.objects` is readable in the dashboard's SQL editor (read-only):
+
+```sql
+-- Q2 (optional). Side objects that exist today for the live candidates.
+SELECT
+  count(*) FILTER (WHERE o.name ~ '\.thumb\.webp$')  AS thumbnails,
+  count(*) FILTER (WHERE o.name LIKE '%.markup.jpg')  AS derivatives
+FROM files f
+JOIN storage.objects o
+  ON o.bucket_id = 'project-files'
+ AND (o.name = f.file_path || '.markup.jpg'
+      OR o.name ~ ('^' || regexp_replace(f.file_path, '([.^$*+?()\[\]{}|\\])', '\\\1', 'g')
+                   || '(\.m[0-9a-f]{8})?\.thumb\.webp$'))
+WHERE f.is_deleted = false
+  AND (lower(f.mime_type) IN ('image/heic','image/heif','image/heic-sequence','image/heif-sequence')
+       OR f.file_name ~* '\.(heic|heif)$');
+```
+
+```sql
+-- Q3. Rows the script will SKIP: a site-visit capture frozen at estimate send.
+-- files_z_site_visit_freeze raises on a file_path/mime/name/size change for these,
+-- EVEN FOR THE SERVICE ROLE (its freeze branch has no auth.uid() bypass).
+SELECT f.id, f.file_path, f.created_at, sv.frozen_at
+FROM files f
+JOIN site_visits sv ON sv.estimate_id = f.estimate_id
+WHERE f.is_deleted = false
+  AND f.site_visit_capture
+  AND sv.frozen_at IS NOT NULL
+  AND f.created_at <= sv.frozen_at
+  AND (lower(f.mime_type) IN ('image/heic','image/heif','image/heic-sequence','image/heif-sequence')
+       OR f.file_name ~* '\.(heic|heif)$');
+```
+
+```sql
+-- Q4. Rows the script will SKIP: a file_path shared by more than one files row.
+SELECT file_path, count(*) FROM files
+WHERE file_path IN (
+  SELECT file_path FROM files
+  WHERE is_deleted = false
+    AND (lower(mime_type) IN ('image/heic','image/heif','image/heic-sequence','image/heif-sequence')
+         OR file_name ~* '\.(heic|heif)$'))
+GROUP BY file_path HAVING count(*) > 1;
+```
+
+---
+
+## 2. The commands
+
+Terminal, in `/workspaces/FrameFocus`. The key goes in an environment variable, never on the command
+line history twice (the S111 runbook's Step 35 pattern: `read -s FF_PROD_SERVICE_KEY`, then `unset` it
+at the end). Shown for **rebuild-test**. For production, swap in both the URL and the ref. **The
+script refuses if the two disagree.**
+
+```bash
+# DRY RUN: zero writes. Prints the per-row plan, the skips, and a summary.
+NEXT_PUBLIC_SUPABASE_URL=https://nmyphyhmfttxkdoposvf.supabase.co SUPABASE_SERVICE_ROLE_KEY="$FF_SERVICE_KEY" \
+  node scripts/s112-heic-convert.cjs --project-ref nmyphyhmfttxkdoposvf
+
+# CANARY: one row, then look at it in the app (desktop grid, /m grid, viewer, markup).
+# --only-ids <id>[,<id>] picks WHICH row (e.g. one you can find in the app); --limit 1 takes the first.
+NEXT_PUBLIC_SUPABASE_URL=https://nmyphyhmfttxkdoposvf.supabase.co SUPABASE_SERVICE_ROLE_KEY="$FF_SERVICE_KEY" \
+  node scripts/s112-heic-convert.cjs --project-ref nmyphyhmfttxkdoposvf --apply --undo-file s112-heic-undo.jsonl --limit 1
+
+# APPLY: the rest. Re-running is safe; converted rows no longer match.
+NEXT_PUBLIC_SUPABASE_URL=https://nmyphyhmfttxkdoposvf.supabase.co SUPABASE_SERVICE_ROLE_KEY="$FF_SERVICE_KEY" \
+  node scripts/s112-heic-convert.cjs --project-ref nmyphyhmfttxkdoposvf --apply --undo-file s112-heic-undo.jsonl
+
+# VERIFY (read-only): every `done` row in the undo file.
+NEXT_PUBLIC_SUPABASE_URL=https://nmyphyhmfttxkdoposvf.supabase.co SUPABASE_SERVICE_ROLE_KEY="$FF_SERVICE_KEY" \
+  node scripts/s112-heic-convert.cjs --project-ref nmyphyhmfttxkdoposvf --verify s112-heic-undo.jsonl
+
+# UNDO: dry run first (prints what it would restore and remove), then --apply.
+NEXT_PUBLIC_SUPABASE_URL=https://nmyphyhmfttxkdoposvf.supabase.co SUPABASE_SERVICE_ROLE_KEY="$FF_SERVICE_KEY" \
+  node scripts/s112-heic-convert.cjs --project-ref nmyphyhmfttxkdoposvf --undo s112-heic-undo.jsonl
+NEXT_PUBLIC_SUPABASE_URL=https://nmyphyhmfttxkdoposvf.supabase.co SUPABASE_SERVICE_ROLE_KEY="$FF_SERVICE_KEY" \
+  node scripts/s112-heic-convert.cjs --project-ref nmyphyhmfttxkdoposvf --undo s112-heic-undo.jsonl --apply
+
+# AFTER A CRASH mid-row: undo only the rows that never reached `done`, then re-run APPLY.
+... --undo s112-heic-undo.jsonl --only-incomplete [--apply]
+```
+
+**Keep the undo file.** It is the only record of which original each row came from. Copy it
+somewhere durable (commit it to a branch, or download it). The Codespace has eaten work before.
+
+Flags: `--concurrency` defaults to 1 and is capped at 2. Storage's connection pool is small (S111
+runbook item 6). **Run after hours.** Each row renders a full-resolution JPEG.
+
+Exit code: `1` if any row failed (apply), any row was refused (undo), or any check failed (verify).
+Read the printed summary rather than trusting a wrapper's status.
+
+---
+
+## 3. What each row goes through
+
+For each live row where `mime_type` is HEIC/HEIF **or** `file_name` ends `.heic`/`.heif`:
+
+| # | Step | Guard |
+|---|---|---|
+| 1 | new path = `{file_path}.jpg` | row is **skipped** if the new path, or any side-object target, already exists |
+| 2 | JPEG from `/render/image/` on the **original**. Service-role signed with `{ quality: 85 }` and **no width/height**, so there is no resize. Fetched with `Accept: image/jpeg` | row **fails** unless `content-type` is `image/jpeg` **and** the bytes start `FF D8 FF`. Dimensions are read from the JPEG and printed, so a shrink would show |
+| 3 | upload to the new path, `image/jpeg`, `upsert: false` | never overwrites |
+| 4 | Storage `copy` (server-side) of every thumbnail and the derivative to the new names | only objects that exist are copied |
+| 5 | `UPDATE files SET file_path, mime_type='image/jpeg', file_name='<stem>.jpg', file_size=<jpeg bytes> WHERE id=… AND file_path=<old>` | must match exactly 1 row |
+| 6 | undo record: `pending` line **before** any write, `done` after the UPDATE (appended, fsync'd) | on failure: objects this row created are removed, and a `rolled_back` line is written |
+
+**The original, its thumbnails and its derivative are never modified, moved or deleted.** That is
+what makes undo lossless. Undo restores the four columns (guarded on `file_path = new`) **first**,
+then removes the new JPEG, the copied objects, and any thumbnail the app generated for the new path
+afterwards. The row never points at a missing object, in either direction.
+
+Skipped, and listed with a reason: already converted · `file_path` shared by another `files` row ·
+frozen site-visit capture (Q3) · original object missing · target name exists.
+
+---
+
+## 3a. PROVEN on rebuild-test [S112, attended session] — `apps/web/test/s112-heic-convert.live.ts`
+
+Its own two rows only (`--only-ids`), made from a copy of a real iPhone HEIC's bytes, stored as
+`application/octet-stream` like the legacy uploads: one on a project path, one marked photo on an
+`estimates/` path. The reader is an assigned **subcontractor**, who can only read a thumbnail
+through `20261810000000`'s `regexp_replace` lookup of the parent row.
+
+| Step | Result |
+| --- | --- |
+| Before: sub reads each thumbnail | 1, 1 (control) |
+| Dry run | exit 0; rows unchanged; no `.jpg` object created |
+| Apply | exit 0; both rows → `{path}.jpg`, `image/jpeg`, `.jpg` name; bytes start `FF D8 FF`; served `Content-Type: image/jpeg`. **Re-proven with the ImageMagick converter [S112 Q3]:** 1,511,118 B from a 1,030,142 B HEIC, **3024×4032 (full size)**, and the JPEG's evidence is **identical** to the HEIC's — DateTimeOriginal 2019:07:29 12:18:34, GPS 26/1,27/1,2270/100 N · 80/1,7/1,4590/100 W. _Superseded (the first, /render/image/ build):_ 1,002,021 B, 3000×4000, no capture time or GPS. |
+| **The trap:** sub reads the thumbnail at the NEW name | **1, 1** — the copies |
+| The OLD thumbnail name, for the sub | **sign 0, download 0** on both path shapes — orphaned, exactly as Josh predicted |
+| Marked photo's derivative at the new name | present |
+| Originals | untouched |
+| `--verify` | exit 0 |
+| `--undo --apply` | exit 0; rows restored; every new object gone; sub reads the old thumbnail again |
+
+**Found by this re-run and fixed:** the evidence read-out joined ImageMagick fields with `\t`, which `identify -format` prints as a literal `t` — every field parsed as NaN and the script **refused both rows** ("resized NaNxNaN", nothing created): failed closed, as designed. Now `|`.
+
+**Control that must fire:** with the side-object copy removed from the script, the same proof went
+red on 4 checks — both new thumbnails unreadable (0), the derivative missing, and the script's own
+`--verify` exit 1. Restored byte-for-byte (`cmp`), green again 17/17. Fixture teardown: 0 files,
+0 objects, 0 projects left; the 9 real HEIC rows on rebuild-test untouched.
+
+⚠️ **A measurement trap found on the way, recorded so nobody repeats it.** The first version probed
+with `download()` and read the OLD thumbnail as **1** after the repoint — because the "before" step
+had already GOT the same object and the repeat GET was answered from a cache, not by the policy.
+Probing by signing (an RLS decision every call) read 0, and with no earlier GET, download read 0 too.
+
+---
+
+## 4. Why thumbnails and derivatives are copied, not regenerated or abandoned
+
+`files.file_path` names **three** kinds of object. Only one of them has a row:
+
+| Object | Name | How the policy finds its parent row |
+|---|---|---|
+| original | `{file_path}` | `f.file_path = objects.name` |
+| grid thumbnail | `{file_path}.thumb.webp` or `{file_path}.m{fp8}.thumb.webp` | `regexp_replace(name, '(\.m[0-9a-f]{8})?\.thumb\.webp$', '') = f.file_path` (20261810000000) |
+| markup derivative | `{file_path}.markup.jpg` | `left(name, length(name) - 11) = f.file_path` (20261780/90/800, and the client arm in 20261019) |
+
+**If only `file_path` changes, both side objects are orphaned.** The app looks for
+`thumbPathFor(new, markup)` and `derivativePathFor(new)`, and neither exists. For a plain photo that
+is only a slow grid tile. **For an annotated photo it is #129's silent loss:** the viewer and the
+portal fall back to the unmarked JPEG, and nothing says the marks exist. The policies would also stop
+matching the old side objects, because no row names their parent any more.
+
+**Why copying gives the right names.** `markupFingerprint()` hashes `JSON.stringify(markup_data)`
+and nothing else. The path is not an input. So `{old}.m{fp}.thumb.webp` → `{new}.m{fp}.thumb.webp` is
+exactly `thumbPathFor(new, markup_data)`. The unit test asserts this by computing both names.
+
+**Why not regenerate.** A thumbnail of a marked photo is rendered from the **derivative**, not the
+original. The derivative is a canvas flatten made in the browser. Nothing server-side can reproduce
+it, so it has to be copied.
+
+**Parity.** The script re-implements `hasMarkup`, `markupFingerprint`, `thumbPathFor` and
+`derivativePathFor`, because a `.cjs` cannot import TypeScript. `test/s111-thumbnail-path.test.ts`
+now asserts all three copies agree: `markup.ts`, the S111 backfill, and this script.
+
+---
+
+## 5. Things Josh should know before running it
+
+1. **`updated_by` becomes NULL on every converted row.** The `files_set_updated_by` trigger sets it to
+   `auth.uid()`, which is NULL under the service role. `updated_at` moves to the run time. Undo does
+   the same again. The other two triggers: `files_column_scope` returns early when `auth.uid()` is
+   NULL, and the site-visit freeze blocks frozen captures (Q3, skipped).
+2. **The storage number goes up.** `company_storage_used_bytes()` is `SUM(files.file_size)`. The JPEG
+   is usually larger than the HEIC (a prior measurement: 3000×4000 → 2.88 MB). The kept original, and
+   the copied side objects, are **not counted anywhere**, because no row names them.
+3. **After conversion the original is readable only through folder-level (owner/admin) access.** The
+   policies that key on `f.file_path = objects.name` no longer match it. That is intended: it is kept
+   for undo, not for display.
+4. **"The set is closed" is not strictly true.** `convertHeicToJpeg()` returns `null` on any heic2any
+   failure, and the upload then **falls back to storing the HEIC bytes**. So a new HEIC row can still
+   appear. The script can be re-run later and only picks up rows that still match.
+5. **Storage transformation limits.** A render the service refuses (too large, unsupported) fails that
+   row with the service's message, and nothing is written for it. Rows that still fail after a re-run
+   stay HEIC. Send the list.
+6. **EXIF.** The rendered JPEG is a transcode. Orientation is applied by the renderer, and the EXIF
+   metadata (GPS, capture time) may not be carried over. The original keeps it.
