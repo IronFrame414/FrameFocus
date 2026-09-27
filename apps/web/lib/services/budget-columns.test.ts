@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { budgetColumnsFor } from '@/lib/services/invoices-shared';
+import { forEveryRole, JUNK_ROLES } from '@/test-support/role-matrix';
 
 // §7.1 — Budget & Cost column counts per role. These sat "verified by reading
 // the mount" for three sessions because the rule was inline in a server
@@ -7,6 +8,24 @@ import { budgetColumnsFor } from '@/lib/services/invoices-shared';
 // this asserts it exhaustively, for every role the platform gates on.
 
 describe('§7.1 — Budget & Cost columns per role', () => {
+  // [S112 queue 3] EVERY role's column set, stated. A new CompanyRole fails to
+  // compile here until someone decides what it sees on Budget & Cost.
+  it('every role is answered: the Financial Visibility Floor, as a total map', () => {
+    forEveryRole(
+      {
+        owner: 'full',
+        admin: 'full',
+        project_manager: 'committed',
+        foreman: 'actual_only',
+        crew_member: 'none',
+        subcontractor: 'none',
+        client: 'none',
+      },
+      (role, set) => expect(budgetColumnsFor(role).set, role).toBe(set)
+    );
+    for (const junk of JUNK_ROLES) expect(budgetColumnsFor(junk).set, `junk '${junk}'`).toBe('none');
+  });
+
   it('Owner and Admin get the full 7 columns, budgeted included', () => {
     for (const role of ['owner', 'admin']) {
       const plan = budgetColumnsFor(role);

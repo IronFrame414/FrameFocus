@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { forEveryRole } from '@/test-support/role-matrix';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dashboardDeniedRedirect } from '@/lib/dashboard-access';
@@ -55,8 +56,18 @@ describe('S109 #162 — one password check, one form, both surfaces', () => {
     expect(form, 'the page calls updateUser from the browser again').not.toMatch(/updateUser/);
     expect(action).toMatch(/verifyCurrentPassword\(user\.email, current\)/);
     // And the helper's answers — the destinations the page now uses.
-    expect(dashboardDeniedRedirect('subcontractor')).toBe('/m/projects');
-    expect(dashboardDeniedRedirect('client')).toBe('/portal');
-    expect(dashboardDeniedRedirect('foreman')).toBeNull();
+    // [S112 queue 3] Every role, stated; _superseded:_ sub, client, foreman by hand.
+    forEveryRole(
+      {
+        owner: null,
+        admin: null,
+        project_manager: null,
+        foreman: null,
+        crew_member: null,
+        subcontractor: '/m/projects',
+        client: '/portal',
+      },
+      (role, dest) => expect(dashboardDeniedRedirect(role), role).toBe(dest)
+    );
   });
 });
