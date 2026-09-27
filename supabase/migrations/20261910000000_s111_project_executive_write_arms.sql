@@ -27,7 +27,9 @@
 --   - client_payments / applications direct writes: the role records through
 --     record_client_payment() (20261830000000), which enforces Q9 whole.
 --   - lien_releases: no read arm either; whether it may bind the company is
---     unruled (7F §8.2).
+--     unruled (7F §8.2). [S181: RULED included — its own migration, 20261930000000.]
+--   - contract void (client_contracts, contract_documents, subcontract): [S181
+--     Q2, RULED Josh] NO contract authority. See the end of section 4.
 --   - supersede_instrument_rate(): Owner-only by §7.3, for every role.
 --   - change_orders DELETE: Owner/Admin by S168's conservative default.
 --   - apply_change_order_budget() retry, setup_payment_schedule(), expense
@@ -256,37 +258,12 @@ BEGIN
 END;
 $function$;
 
-CREATE OR REPLACE FUNCTION public.enforce_contract_void_authority()
- RETURNS trigger
- LANGUAGE plpgsql
- SECURITY DEFINER
- SET search_path TO 'public'
-AS $function$
-BEGIN
-  -- Only a transition INTO a voided state is this function's business.
-  IF NEW.status IS NOT DISTINCT FROM OLD.status THEN
-    RETURN NEW;
-  END IF;
-  IF NEW.status <> ALL (ARRAY['void'::text, 'voided'::text]) THEN
-    RETURN NEW;
-  END IF;
-
-  -- Service-role paths carry no auth context and are not a role decision.
-  IF auth.uid() IS NULL THEN
-    RETURN NEW;
-  END IF;
-
-  -- [S111] A Project Executive, on its own project (FILL-5's boundary: the
-  -- contract carries a project_id). All three tables this fires on have one
-  -- (client_contracts, contract_documents, subcontractor_contracts — measured).
-  IF public.pe_on_project(NEW.project_id) THEN
-    RETURN NEW;
-  END IF;
-
-  IF public.get_my_role() <> ALL (ARRAY['owner'::text, 'admin'::text]) THEN
-    RAISE EXCEPTION 'Voiding a contract is Owner/Admin only (7I 8).';
-  END IF;
-
-  RETURN NEW;
-END;
-$function$;
+-- [S181 Q2, RULED Josh 2026-09-27] enforce_contract_void_authority() is NOT
+-- replaced here. _Superseded, quoted in substance:_ this section re-created it
+-- with one clause — `IF public.pe_on_project(NEW.project_id) THEN RETURN NEW;`
+-- — admitting a Project Executive to void client contracts, contract documents
+-- and subcontracts on its own projects. Josh ruled NO contract authority for
+-- this role. Removed by editing this file, which is legitimate ONLY because
+-- 20261910000000 had been applied nowhere (rebuild-test verified by object
+-- 2026-09-27 18:57 UTC: 0 schema_migrations rows, 0 PE write policies, trigger
+-- without the clause; it has never existed outside this branch).

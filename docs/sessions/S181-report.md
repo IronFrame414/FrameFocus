@@ -146,3 +146,12 @@ validity of types", "✓ Generating static pages (133/133)" (a real build, not a
 - `e2e/desktop-team.spec.ts` invite-options assertion inverted in place (five → four; the S111 five quoted). **e2e not run
   locally** — CI runs it.
 - Unit run of the 7 touched files: 120 tests, all passing after the guard fix. `tsc` exit 0.
+
+## Step Q2 — contract clause out of `20261910000000` — DONE
+
+Re-checked at edit time, rebuild-test 2026-09-27 18:57 UTC: `schema_migrations` has 0 rows for 20261910000000, there are 0 PE write
+policies, and `enforce_contract_void_authority` carries no `pe_on_project`. 1910 has never existed outside this branch.
+Production is not readable from here; the `m1910_*` columns of Josh's pasted row confirm it.
+The whole `CREATE OR REPLACE FUNCTION enforce_contract_void_authority()` block was removed (its only change was the PE
+clause, 1 occurrence) and replaced by a comment quoting what it did. The header's "NOT GRANTED" list now names it.
+TS already agrees: `contracts/page.tsx:39` `canManage` = owner/admin/PM, and `canManageContracts` = owner/admin (total map: PE false).
