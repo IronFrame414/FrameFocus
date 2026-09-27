@@ -218,6 +218,50 @@ entry. The re-measure at about 20 signed COs is filed as `#1-cosum`.
   Storage, which exposes no upload progress events. A byte bar would need an XHR upload path, a
   second transport (N3 item d).
 
+### Queue 3 — role-permission tests are TOTAL maps (`feature/s112-role-permission-maps` @ `5fae3896`)
+
+- **The mechanism**, `apps/web/test-support/role-matrix.ts`:
+  - `forEveryRole(expected: Record<CompanyRole, T>, check)` iterates every key;
+  - `JUNK_ROLES` holds strings that must fail closed (`''`, `'OWNER'`, `'Owner'`, `'superadmin'`,
+    `'owner '`).
+  - Test files are type-checked in CI: `apps/web/tsconfig.json` includes `**/*.ts`, and the
+    "Lint & Type Check" job runs `tsc --noEmit`. So a missing role is a **CI failure**.
+- **How many files the shape applies to, with the command.** From `apps/web`, over
+  `git ls-files '*.test.ts' '*.test.tsx'`, which is **124 unit test files**, with
+  `R="owner|admin|project_executive|project_manager|foreman|crew_member|subcontractor|client"`:
+
+  | Shape | Pattern | Files |
+  | --- | --- | --- |
+  | A: predicate called with a role literal | `grep -lE "expect\(\s*[A-Za-z_][A-Za-z0-9_.]*\(\s*'($R)'"` | 5 |
+  | B: role passed as a field | `grep -lE "[A-Za-z_]\(\{[^}]*role: '($R)'"` | 1 |
+  | C: a loop over a hand-written list | `grep -lE "for \(const \w+ of \[\s*'($R)'"` | 4 |
+  | **Union, distinct files** | | **7 of 124** |
+
+  **6** are permission decisions, and all 6 are converted:
+  - `payments-shared.test.ts`: `canRecordPayment`, `canIssueRefund`, `refundNeedsOwnerApproval`,
+    `canApproveRefund` (the refund near-miss file)
+  - `invoice-lifecycle.test.ts`: `canVoidInvoice` unpaid, and paid → nobody
+  - `contracts-shared.test.ts`: `canManageContracts`
+  - `budget-columns.test.ts`: `budgetColumnsFor` column set
+  - `s131-dashboard-access.test.ts`: `isDashboardRole` plus the denied destination
+  - `s109-password-wiring.test.ts`: `dashboardDeniedRedirect`
+
+  The **7th**, `redesign-sections.test.tsx`, renders markup rather than deciding a permission. It
+  now iterates `DASHBOARD_ROLES` instead of a hand copy of it.
+- **Result: 10 total maps in 6 files.** Hand-written asserts were **inverted in place** with the
+  superseded list quoted, not deleted.
+- **PROOF that adding a role fails to compile.** I added `'project_executive'` to `CompanyRole`:
+  - `tsc` → **exit 2, with exactly 10 errors in those 6 test files**: payments-shared 4,
+    invoice-lifecycle 2, and 1 each in the other four. It also flagged app code such as
+    `app/m/settings/page.tsx:33`.
+  - Reverted: `roles.ts` shows no diff, and `tsc` → 0.
+- **Suite** 122 files / 1,707; tsc 0; eslint 0.
+- **⚠️ Consequence for `feature/s111-project-role` (item 5, deferred).** When it rebases onto this,
+  every map needs the Project Executive's answer. `canRecordPayment` is **true** and
+  `canIssueRefund` is **false**. That is the refund negative this whole item exists for, and it can
+  no longer be forgotten.
+
+## BUILT BUT UNTESTED
 
 - **Queue 2a in a browser.** The desktop Files and `/m` Files pages have not been loaded against
   real rows tonight, because CI run 36282031683 holds rebuild-test. The query is proven at the
@@ -281,5 +325,6 @@ _(none yet)_
 
 - 00:20Z: started. Plan recorded verbatim (`5b30616e`). main `80e15bad` verified. 36278907305
   green. 36282031683 running. Queue 1 done (runbook written 2026-09-27 ~00:10Z, not run).
-- ~00:45Z — queue 2a built and proven at unit level (`243221d1`); N1, N2 raised. Starting 2b.
-- ~01:05Z — 2b built (`3dec2b85`), unit-proven; N3 raised. 10-file timing + 2a live proof wait for CI 36282031683 to free rebuild-test. Starting queue 3 (code only).
+- 00:28Z (logged at the time as '~00:45Z', an estimate, not a clock read) — queue 2a built and proven at unit level (`243221d1`); N1, N2 raised. Starting 2b.
+- 00:36Z (logged at the time as '~01:05Z', same mistake; every entry from here uses `date -u`) — 2b built (`3dec2b85`), unit-proven; N3 raised. 10-file timing + 2a live proof wait for CI 36282031683 to free rebuild-test. Starting queue 3 (code only).
+- 00:43Z — queue 3 done (`5fae3896`). Found and fixed: the BUILT BUT UNTESTED heading had been dropped by the 2b edit. CI 36282031683 still in E2E (started 00:17Z). Next: queue 5 code while CI runs; 10-file timing + 2a live proof once rebuild-test is free.
