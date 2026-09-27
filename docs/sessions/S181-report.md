@@ -86,3 +86,40 @@ The four trigger bodies 1910 replaces were diffed against their latest `main` de
 - Route `api/lien-releases/generate` gates O/A at `:50`, and reads the template **with the user's client**, so
   PE also needs a read on `lien_release_templates` + boxes (company settings), or a definer path.
 - UI: desktop only (`projects/[id]/lien-releases/page.tsx:42` O/A). **No `/m` surface exists for any role.**
+
+## Phase 2 — rulings [Josh, 2026-09-27], recorded verbatim in substance
+
+- **Q1 A** — no refunds: the PE can neither issue nor approve; assert both denials.
+- **Q2 A** — no contract authority; the PE clause comes out of `20261910000000` before it is applied (re-confirm unapplied at edit time).
+- **Q3 A** — money pieces only; operational arms on a follow-up branch. Hide the role from the invite and edit-role pickers,
+  from ONE source of truth; it stays in the DB CHECK. ⚠️ If production `pe_profiles_now` > 0, STOP.
+- **Q4 A** — read-only, project-scoped PE arms on `expenses`, `expense_allocations`, `expense_payments`, in this build.
+- **Q5 B** — lien releases in both directions, plus a negative test for another project's release.
+- **Q6 A** — read-only PE arm on `lien_release_templates` and `lien_release_template_boxes`.
+- **Q7 A** — that order, those conditions; condition 3 (on production, verified by object) is not waived.
+- The production query gates the merge, not the build.
+
+## Step 0 — rebase onto `cc53bbc3` — DONE
+
+Branch 17 ahead / 0 behind `origin/main`. Conflicts (all in `ad9c9184`), each resolved as ruled:
+- `changes/page.tsx` — **both behaviours kept**: main's S112 R5b `approvedSummaries` block, then the branch's
+  `canManage` with `project_executive`. `readsCoSummaries` excludes the PE, which is correct: it reads every CO on its project in full.
+- `invoice-lifecycle.test.ts`, `payments-shared.test.ts` — **resolved TOWARD main's `Record<CompanyRole,T>` maps**; the
+  branch's PE answers folded in as keys (void unpaid `true`, void paid `false`, record payment `true`). The branch's hand
+  lists were not taken back. Titles inverted in place, old title quoted.
+
+Commit `b42e3ba8` answers the four mechanical maps: budget `'full'`, contracts `false` (Q2), and dashboard admitted (×2).
+`tsc --noEmit -p apps/web` then printed exactly 3 errors (7 before; 10 at the trial) — the refund maps, left for FILL-C-3.
+
+## Step 1 — FILL-C-3, the refund near-miss — DONE
+
+- Negative block written first: `payments-shared.test.ts` "a Project Executive can NEITHER issue NOR approve a refund —
+  though it records payments". It asserts `canIssueRefund`, `refundNeedsOwnerApproval` and `canApproveRefund` all `false` for PE,
+  `canRecordPayment` `true`, and that the two differ.
+- Then the three total maps gained `project_executive: false`.
+- `vitest run lib/services/payments-shared.test.ts` → **35 passed / 35**, exit 0.
+- **Control that must fire:** `canIssueRefund` body replaced with `seesProjectMoney(role)` (the near-miss replayed) →
+  **2 failed / 33 passed**, exit 1 (the total map AND the new negative block). Restored → 35/35, and `git diff` on
+  `payments-shared.ts` is empty.
+- DB side (rebuild-test): `client_refunds` has PE **SELECT only** (`client_refunds_select_project_executive`); INSERT/UPDATE
+  are O/A. A live negative is added in C-2.
