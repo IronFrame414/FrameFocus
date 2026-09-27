@@ -1,936 +1,349 @@
 # CLAUDE.md — FrameFocus Development Guide
 
-> **Last updated:** August 18, 2026 (Session 150 — **Financial Visibility Floor: FOREMAN sees ACTUAL COST ONLY, RULED [Josh], `#1-m7cpl` resolved in favour of the shipped code.** A deliberate ruling change, narrowing `7h1-spec.md` §7H.2 #10's S97 grant — not a discovered drift. The S140 banner's attribution to money-rep P9 is corrected in the same pass: P9 widens the PM only. `7h1-spec.md` amended at nine sites, argument withdrawn as well as conclusion; `#1-m7cpl` CLOSED.)
-> **Previously:** August 2, 2026 (Session 97 — Financial Visibility Floor enforcement status corrected: contract value, budgeted amount and instrument rates are DB-enforced; `change_orders.net_delta` is UI-only by ruling, filed as TECH_DEBT #117)
-> **Purpose:** This file is the single source of truth for all development conversations. Read this before every session.
-
----
-
-## Project Overview
-
-**FrameFocus** is a subscription-based construction management SaaS platform for residential and commercial contractors. It covers the full business lifecycle: lead capture → estimating → project management → field operations → job finances → inventory & tools → client experience → business intelligence.
-
-**Owner:** Josh Bishop (jsbishop14@gmail.com)
-**Repo:** github.com/IronFrame414/FrameFocus (private)
-**Live URL:** https://frame-focus-eight.vercel.app
-**Status:** Modules 1, 2, and 3 complete. Platform has 11 modules total. See STATE.md for live build status.
-
-> **See also:** [`CLAUDE_MODULES.md`](CLAUDE_MODULES.md) — Detailed module designs (Modules 3, 6, 8, 9), QuickBooks integration strategy, and change order workflow. [`docs/module4-architecture.md`](docs/module4-architecture.md) — Module 4 (Sales & Estimating) architecture (separate file due to size).
-
-## Claude Code MCP Servers
-
-Two MCP servers are standard for this repo:
-
-- **Context7** — fetches live, version-specific docs at query time. **Trigger:** before writing or modifying code that touches Next.js, Supabase, Stripe, Tailwind, or Turborepo APIs. Solves training-cutoff hallucinations on the stack.
-- **Serena** — symbol-level code navigation (find_symbol, find_referencing_symbols, insert_after_symbol). **Trigger:** before reading whole files for cross-file refactors, renames, or "where is this used" lookups. Cuts token use; catches references whole-file reads miss.
-
-## Install commands and Codespace rebuild behavior: see STATE.md → "Claude Code MCP setup."
-
-## Technology Stack
-
-| Layer             | Technology                                                         | Notes                                                           |
-| ----------------- | ------------------------------------------------------------------ | --------------------------------------------------------------- |
-| Web Frontend      | Next.js 14 + React + TypeScript + Tailwind CSS + shadcn/ui         | Office users (estimators, PMs, owners)                          |
-| Mobile Frontend   | **PWA (the Next.js web app, installed to the home screen)**        | Field crew (techs, foremen) — **RULED [S97, 2026-08-03]**       |
-| Shared Logic      | TypeScript packages in monorepo                                    | Types, validation, business logic shared across web + mobile    |
-| Backend / DB      | Supabase (PostgreSQL + Auth + Storage + Realtime + Edge Functions) | Multi-tenant with RLS                                           |
-| AI                | OpenAI API (GPT-4o vision + text) + Supabase pgvector              | Estimating, photo auto-tagging, reporting, summaries, marketing |
-| Payments          | Stripe Billing + Stripe Connect                                    | Subscriptions + contractor-to-client payments                   |
-| Accounting        | QuickBooks Online API (OAuth 2.0)                                  | Sync only — FrameFocus runs operations, QB runs the books       |
-| Web Hosting       | Vercel                                                             | Auto-deploy from main branch                                    |
-| ~~Mobile Builds~~ | ~~Expo EAS~~ — **SUPERSEDED [S97]**                                | No app-store build pipeline. See the PWA ruling below.          |
-| CI/CD             | GitHub Actions                                                     | Lint, test, build verification                                  |
-| Monorepo          | Turborepo                                                          | Multi-package management                                        |
-| Email             | Resend                                                             | Transactional emails                                            |
-| E-Signatures      | DocuSign API or BoldSign                                           | Proposals, change orders, lien releases                         |
-| Doc Generation    | React-PDF or Puppeteer                                             | PDF estimates, invoices, reports                                |
-
-**Language:** TypeScript everywhere — web, mobile, backend, shared.
-
-### MOBILE IS A PWA, NOT REACT NATIVE — **RULED [Josh, S97, 2026-08-03]**
-
-_Superseded rows, quoted rather than silently rewritten:_
-_`| Mobile Frontend | React Native + Expo | Field crew (techs, foremen) |`_
-_`| Mobile Builds   | Expo EAS            | Cloud iOS/Android builds + OTA updates |`_
-
-**The mobile experience is the existing Next.js web app, delivered as a PWA and installed to the
-home screen.** There is no React Native app and no app-store presence.
-
-**Josh's reasons, as given:**
-
-1. **He does not want to deal with the app store at this time.** No review cycles, no store listings,
-   no separate release train.
-2. **iOS requires a home-screen install for Web Push anyway** (Safari 16.4+ delivers push only to an
-   installed PWA). So the PWA path is not merely an alternative to React Native — it is the
-   **precondition for notifications on iPhone**, which is the next project after the mobile UI.
-
-**What this changes:** `apps/mobile/` (Expo skeleton) is **PARKED, not deleted** — see
-`apps/mobile/README.md`. The "React Native (Mobile — Expo)" conventions section below is superseded
-and retained only as a record of the abandoned direction. Anything a spec previously deferred to
-"the mobile app" now belongs to the web app's responsive/offline work.
-
-**What is NOT decided by this ruling:** whether the mobile UI is a **repair of the existing
-dashboard shell** or a **separate route tree for phones**. TECH_DEBT #101 assumed repair. That is
-Josh's next decision and is recorded as OPEN in #101.
-
-### PARITY: ONE FEATURE, BOTH SURFACES, SAME BEHAVIOUR — **RULED [Josh, S122]**
-
-**Everything viewable from both desktop and mobile behaves the same way on both.**
-
-A feature that exists on both surfaces is ONE feature with two presentations. Layout, spacing and
-input affordances may differ — a phone is not a desktop. **What must not differ is behaviour:** what
-gets written, what the rules are, what an error means, and what the user ends up with.
-
-**Why this is a rule and not a preference.** It was ruled after TECH_DEBT #129, where the two
-markup editors quietly disagreed about what a save produces. Mobile wrote a flattened derivative;
-desktop wrote only `markup_data`. Both "worked". The result was that a photo annotated on desktop
-displayed on mobile as an **unannotated original with no indication the markup existed** — silent
-loss, discovered by reading the save path rather than by anything failing. Divergent behaviour
-between surfaces does not announce itself; it presents as data that is simply wrong somewhere else.
-
-**In practice, when building or reviewing anything that both surfaces reach:**
-
-- **Share the mechanism, not just the intent.** #129's fix was to call the SAME `saveMarkup()` with
-  the SAME `drawShapes()` rasteriser, moved to `lib/` so neither surface owns the format. A second
-  implementation that "does the same thing" is the divergence, written in a form that looks like
-  agreement.
-- **A helper under `app/m/` or `app/dashboard/` implies that surface owns it.** If both need it, it
-  belongs in `lib/`. Location is a claim about ownership.
-- **The rules live below the UI** — in RLS, a service function, or a shared util — so neither
-  surface can enforce a different version of them.
-- **When the surfaces must genuinely differ, say so where the code is** and give the reason. The
-  ruled exceptions are recorded, e.g. `/m` opens files INLINE while desktop appends `?download=`
-  (M6M §4.11.16) — a deliberate difference in a delivery affordance, not in what is stored.
-
----
-
-## Monorepo Structure
-
-```
-framefocus/
-├── apps/
-│   ├── web/                  # Next.js 14 web application
-│   │   ├── app/              # App router pages and layouts
-│   │   │   ├── dashboard/
-│   │   │   │   ├── billing/       # Billing pages (Owner only)
-│   │   │   │   ├── contacts/      # Contacts CRUD (leads & clients)
-│   │   │   │   ├── settings/      # Company settings
-│   │   │   │   ├── subcontractors/ # Subs & vendors CRUD
-│   │   │   │   └── team/          # Team management & invites
-│   │   │   ├── auth/              # Auth callback
-│   │   │   └── invite/            # Invite acceptance
-│   │   ├── components/       # Web-specific UI components
-│   │   ├── lib/              # Web-specific utilities
-│   │   │   ├── services/     # Data access layer (server + client pairs)
-│   │   │   ├── stripe.ts     # Stripe client (lazy init via getStripe())
-│   │   │   ├── supabase-browser.ts  # Client-side Supabase
-│   │   │   └── supabase-server.ts   # Server-side Supabase
-│   │   └── public/           # Static assets
-│   └── mobile/               # PARKED [S97] — Expo skeleton, superseded by the PWA ruling
-├── packages/
-│   ├── shared/               # Shared across web + mobile
-│   │   ├── types/            # TypeScript type definitions (roles.ts)
-│   │   ├── validation/       # Zod schemas
-│   │   ├── constants/        # Role hierarchy, labels, descriptions (roles.ts)
-│   │   └── utils/            # Pure business logic functions
-│   ├── supabase/             # Supabase-specific package
-│   │   ├── functions/        # Edge Functions
-│   │   ├── seed/             # Seed data
-│   │   └── types/            # Auto-generated database types
-│   └── ui/                   # Shared UI primitives (placeholder)
-├── docs/                     # Reference documentation (added Session 8)
-│   ├── roadmap/              # Platform roadmap docs (.docx, .xlsx)
-│   │   ├── FrameFocus_Development_Roadmap.docx
-│   │   ├── FrameFocus_Platform_Roadmap.docx
-│   │   ├── FrameFocus_Platform_Roadmap.xlsx
-│   │   └── FrameFocus_Quick_Reference.docx
-│   └── sessions/             # One file per session (contextN.md)
-├── scripts/                  # Dev utility scripts
-├── supabase/
-│   └── migrations/           # Supabase migrations — 14-digit timestamp format required by CLI
-├── STATE.md                  # Live repo state dashboard (added Session 8)
-├── .devcontainer/            # GitHub Codespaces configuration
-├── turbo.json
-├── package.json
-├── CLAUDE.md                 # This file
-└── README.md
-```
-
----
-
-## Development Environment
-
-**Primary:** GitHub Codespaces (browser-based VS Code)
-**No local dev environment required.** Everything runs in the cloud.
-
-The `.devcontainer/devcontainer.json` pre-configures:
-
-- Node.js 20 LTS
-- Required VS Code extensions: ESLint, Prettier, Tailwind IntelliSense, Prisma (for Supabase types)
-- Automatic `npm install` on Codespace creation
-- Port forwarding for Next.js dev server (3000) and Expo (8081)
-
-**Supabase:** Managed via Supabase Dashboard (app.supabase.com) + CLI in Codespaces for migrations.
-**Vercel:** Connected to repo, auto-deploys `apps/web` on push to `main`.
-**Expo EAS:** Cloud builds triggered from Codespaces terminal.
-
-### Known Codespaces Gotchas
-
-- `.env.local` is gitignored and does NOT persist across Codespace rebuilds. Recreate from Vercel env vars if rebuilt.
-- Shell heredocs (`cat << 'EOF'`) eat `<a` tags from JSX. Use Node.js `fs.writeFileSync()` or create files directly in the Codespace editor instead.
-- Long file replacements via GitHub's web editor frequently truncate. Use a two-part paste strategy for long files.
-- The Supabase anon key uses `sb_publishable_...` format.
-- **RLS inside SECURITY DEFINER triggers:** `SET row_security TO 'off'` at the function level is silently ignored in Postgres unless the executing role is a superuser or table owner. Inside a `SECURITY DEFINER` trigger on `auth.users`, it does NOT bypass RLS. The working pattern is to put the RLS-protected query inside a separate `SECURITY DEFINER` **SQL** function (not plpgsql) and call that from the trigger. See `get_invitation_for_signup()` in Migration 015 for the reference implementation.
-- **Context files describe intent, git describes state.** Never trust `context-N.md` files for "is X committed?" — always run `git log --oneline -15` at the start of a session to ground truth the repo. Session 8 wasted ~30 minutes chasing phantom work because context8.md said migrations were uncommitted when git log showed they were already in.
-- **VS Code browser drag-and-drop targets are finicky.** Drop zones are ambiguous — files can end up at filesystem root (`/`) instead of the intended folder. If uploading fails with "Insufficient permissions" errors referencing `\filename.md`, the drop missed the target folder. Right-click the destination folder → "Upload..." is more reliable when available.
-- **Supabase Storage rejects `<` and `>` in object keys.** Storage paths inherit any URL segment that flows into them. If you test a route by typing a literal placeholder like `<some-uuid>` into the URL, the upload will fail with "Invalid key" and the cause is not obvious. For testing routes that need a `project_id` before Module 5 ships, use a real UUID format like `11111111-1111-1111-1111-111111111111`.
-- **Supabase signed URLs default to inline disposition.** A signed URL serves the file with `Content-Disposition: inline` by default — images and PDFs render in-browser, they don't download. To force a download with a chosen filename, append `?download=<filename>` to the signed URL. This is not in Supabase's primary docs. Check this whenever a "download" feature seems to "preview" instead.
-- **Claude Chat strips `<` characters when code is pasted into the Codespace editor.** Pasting `Pick<Database['public']['Tables']...>` will reliably drop the `<` and produce broken TypeScript. For any code containing `<`, use Claude Code, or write the file via `node -e "require('fs').writeFileSync(...)"` with single-quoted contents. Do not paste through the chat editor and assume it round-tripped.
-- **Bash history expansion eats `!` even inside double-quoted strings.** A `node -e "..."` command containing `!user` or any `!`-prefixed token triggers `event not found` and kills the command. Workarounds: use `printf '...'` with single quotes (no expansion), or run the command through Claude Code, or `set +H` first to disable history expansion for the session.
-- **⚠️ Dev-mode first-hit page timings are NOT a latency signal — they are Next.js on-demand compilation.** `next dev` compiles each route the first time it is requested, and `/dashboard/projects` compiles **3,111 modules** on that first hit. A curl/browser first-load of that page measured **~11s in dev**; the same page in production is **337ms cold, 231ms warm**. The 11s was the compiler, not the app. **Any latency claim in this project must be measured against production or a production build (`next build && next start`), never against `next dev` first-hit.** This trap burned **four sessions** chasing `/dashboard/projects` — the full closed record and the four ruled-out causes are in **`GATED.md` → "CLOSED — `/dashboard/projects` '11s' was dev-mode compilation"**. RULED CLOSED [Josh, S179].
-
----
-
-## Database Patterns
-
-**RLS-bypassing helper functions for triggers.** When a trigger on `auth.users` (or any table) needs to query an RLS-protected table, the trigger runs in a context where `get_my_company_id()` and similar helpers return NULL — meaning RLS filters out every row. The working pattern:
-
-1. Create a `SECURITY DEFINER` **SQL** function (not plpgsql) that does the query
-2. Call that function from the trigger
-
-SQL functions with `SECURITY DEFINER` reliably bypass RLS in this context. See `get_invitation_for_signup()` (Migration 015) and `get_invitation_by_token()` (used by the invite acceptance page) for working examples.
-
-**Why SQL and not plpgsql:** plpgsql `SECURITY DEFINER` functions still hit RLS in some trigger contexts. SQL `SECURITY DEFINER` functions bypass reliably. When in doubt, use SQL.
-
----
-
-## Claude Code — run protocol
-
-LAUNCH REQUIREMENT: start CC with `claude --dangerously-skip-permissions`
-(set at launch, NOT mid-session). Permissions also come from `.claude/settings.json`.
-
-Phase 0 — BRANCH: run `git branch --show-current`. If on `main`, create and switch
-to a new feature branch (`git checkout -b feature/<short-task-name>`) BEFORE any
-edit. Never edit, create, or migrate on `main` — `main` auto-deploys to production.
-Merging to `main` is Josh's call, done manually.
-Phase 1 — ANALYZE: read the prompt and every file it references; build full
-understanding. No edits in this phase.
-Phase 2 — QUESTIONS: surface ALL questions / ambiguities / spec↔schema conflicts
-at once, then STOP and wait. If none, say so and continue.
-Phase 3 — BUILD: perform all reads/edits/creates autonomously; show diffs at the
-end; never commit — Josh commits manually. **In an UNATTENDED run this last
-clause is superseded — see the rule immediately below.**
-
-### UNATTENDED RUNS COMMIT AFTER EACH DISCRETE STEP, NOT AT THE END — **RULED [Josh, S173]**
-
-**A step is one finding, one fix, one battery check — the smallest independently-meaningful unit of
-the session. Commit it path-scoped before starting the next.**
-
-**Rationale, recorded here so nobody tidies it into one clean commit later: this Codespace has
-destroyed unattended work three times.** The S166 and S168 battery logs survived precisely because
-they were committed step by step; **an entire S173 follow-up session was lost** because its commits
-were batched to the end. A branch holding one commit written at the finish is exactly what a
-restart takes.
-
-**⚠️ THIS SUPERSEDES "never commit" IN PHASE 3 ABOVE, AND ONLY FOR UNATTENDED RUNS.** The two
-rules were written for different situations and the contradiction is deliberate rather than an
-oversight:
-
-|             | attended                                      | unattended                                                    |
-| ----------- | --------------------------------------------- | ------------------------------------------------------------- |
-| who commits | **Josh**, path-scoped by concern              | **CC**, path-scoped, after every discrete step                |
-| why         | he is watching the diffs and owns the history | nobody is watching, and the box eats work                     |
-| pushing     | **never CC's**                                | **CC pushes the feature branch to origin after every commit** |
-
-**⚠️ WHY THE PUSH RULE CHANGED [S105, Josh].** A twelfth Codespace restart destroyed 11 unpushed
-commits — the S105 spec, three list screens, burst capture, and the TECH_DEBT classification.
-Committing step by step is not enough: a local branch dies with the box. Pushing a FEATURE BRANCH
-to origin is not a merge and risks nothing — `main` is protected by the merge rule, not by the
-push rule.
-
-**What does NOT change:** CC never pushes to `main`; commits stay path-scoped rather than
-`git add -A` over an unrelated working tree; and merging to `main` remains Josh's call.
-
-**And the reason a step is small rather than tidy.** "One finding" means the fix, its tests and its
-spec amendment land together — not that a half-built feature is committed to bank progress. The
-unit is what would still be worth having if the next step never ran.
-
-### The thing inspected must be the thing being judged — exit statuses first — **MANDATORY [moved from TECH_DEBT #137, S122; generalised S108, Josh ASK-D3 → C]**
-
-_Previous heading, quoted: "Reading the exit status of a command"._ The exit-status rules below are
-the most frequent case of a wider class, which this campaign hit well over six times: **the evidence
-read belonged to something other than what was being judged.** An exit status is one instrument;
-every instrument can be pointed at the wrong thing. Before stating a result, name what produced the
-evidence and confirm it is the thing in question:
-
-- **A wrapper's status** — `tail`, `echo`, `/usr/bin/time`, a task-notification summary. Rules 1–2
-  below. (S108: a notification reported "exit code 0" twice over printed lines reading
-  `BUILD_EXIT_LINE=127` — `time` was not installed, no build ran — and `BUILD_EXIT_LINE=1`.)
-- **Truncated output** — a grep through `head -20` that stopped before the line contradicting it
-  (`#2-deliv`). Count, or read to the end.
-- **A script that threw and fell through** to a conclusion printed by the code after the failure.
-- **An absent tool** — `dig`, `gh`, `time`. "No output" from a missing command is not "no result".
-- **A cached result** — a Turbo cache hit reported as a build; a cached `download()`. A cache hit
-  is not a run.
-- **The wrong scope** — Prettier run on a copy in `/tmp`, outside the repo, where `.prettierrc` does
-  not apply; an env-var sweep that included `.next` build output (42 names instead of 28). S108.
-- **A probe that cannot fail** — a test passing on zero rows, or a regex that matches everything
-  (`'[^']*--` reported 80/80 bodies; the quote-parity truth was 1). **State row counts, and run a
-  control that must fire.**
-
-**A status is only evidence if it belongs to the process being judged.** Five instances in two
-sessions (S106–S107) all had one root cause: the status read belonged to a _different_ process than
-the one under test. A build that failed lint was reported clean and **committed on that basis**; two
-Playwright runs reported `0` while 89 and 91 tests had actually failed.
-
-1. **Never judge a command through a pipe.** `npx next build | tail -20` reports **`tail`'s** status,
-   which is always `0`. Redirect to a file and inspect that instead:
-   `cmd > log 2>&1; echo $?` — **immediately**, before anything else runs. If a pipe is unavoidable,
-   `set -o pipefail` first, or read `${PIPESTATUS[0]}` rather than `$?`.
-2. **Print the real code into the output and read _that line_.** Not a wrapper's status, not a
-   summary. `cmd; echo "exit: $?"` is itself the trap — the compound command's status is the
-   **`echo`'s**, so the shell _and_ any task-notification summary report `0` over a run that exited
-   `1`. Print the code and read the printed line.
-3. **Corroborate with an independent signal.** A `✘` count, a test tally, a connection-error count.
-   A status can be masked; a tally cannot.
-4. **Never `pkill -f <pattern>`.** It matches **any** process whose command line contains the
-   string — **including the shell running the pkill**, which is why such commands return exit `144`
-   and why servers appear to die for no reason. List the processes and `kill <PID>`, excluding `$$`.
-   Reference: `scripts/e2e-preflight.sh` (#138).
-
-**In CI this is worse, not equal.** Locally a masked failure costs a re-run; in
-`.github/workflows/ci.yml` it **ships red as green**. The workflow sets
-`defaults.run.shell: bash -euo pipefail {0}`, which closes the pipe case for every `run:` step —
-but **nothing closes the trailing-command case except not writing it**.
-
-### A fix session must sweep for EXISTING tests that encode the behaviour it is overturning — **MANDATORY [Josh, S157]**
-
-**When a session changes a rule — an RLS policy, a role floor, a constraint, a ruling — it is not
-done when its own probes are updated. It must go looking for OLDER tests that assert the behaviour
-it just overturned.**
-
-**Why this is a rule and not a nicety.** S154 floored `contact_addresses` SELECT for
-`subcontractor` and `client`, because the open policy was leaking every client's home address to
-subs. It inverted the probes **it had written** and stopped there.
-`s121-contact-addresses-floor.live.ts` had a describe block titled **"contact_addresses SELECT is
-NOT floored"**, written at S121 to protect the _old_ rule, asserting that crew, foreman **and
-subcontractor** could all read an address.
-
-**Only the subcontractor case went red.** Crew and foreman still read company-wide by design, so
-two of the three cases kept passing and **the file read as healthy while its title asserted the
-opposite of a shipped ruling.** It sat that way through two audit passes.
-
-> **A test that passes while contradicting a shipped rule is worse than a failing one, because
-> nothing surfaces it.** A red test is a task. A green test that encodes the wrong rule is a
-> statement — and the next person to read it will believe it.
-
-**In practice, before a fix session ends:**
-
-- **Grep for the table, column, policy or function you changed** across `apps/web/test/`,
-  `apps/web/e2e/` and the specs — not just the files you touched.
-- **Read the describe/it TITLES, not only the assertions.** The defect above was fully visible in
-  the title and invisible in the diff.
-- **Assume the suite is still green.** A partially-stale file is the normal case, not the edge
-  case: any test whose cases span several roles will go red only on the roles you changed.
-- **Invert, do not delete.** A test asserting the old behaviour names what changed; rewritten to
-  the new rule it becomes the regression guard for the fix. Deleting it discards the record. (Same
-  reason `TECH_DEBT.md` entries are closed rather than removed — the repo lost one to deletion at
-  `53c7353`.)
-
-**A closely related trap, from the same session.** `s145-contracts` asserted a _column default_ by
-reading a row anyone can toggle, and `s140-lien-releases` asserted that a _supported action_ could
-never happen. Both describe the freshly-seeded world and then test it forever against live, shared,
-mutable data. **If an assertion's name says "default", "none" or "never", check that it is reading
-the schema and not a row.**
-
-### A `.limit(1)` must be ORDERED, or SCOPED to the property the caller depends on — **MANDATORY [Josh, S165]**
-
-**A `.limit(1)` with no `ORDER BY` returns a heap-order row — whichever the storage engine hands
-back — and that order shifts the moment any row in the table is updated.** So the query passes for
-several runs and then fails, with nothing in the diff to explain why. `context100` §6 named this
-class; it has recurred roughly eight or nine times across the campaign (`s143-void-authority`,
-`s162` F1, `s163` D3, and the S165 sweep among them) and has outlived every individual fix.
-
-**Every `.limit(1)` is one of three things. Decide which before you leave it:**
-
-1. **Ordering fixes it** — the caller wants _a_ deterministic row and any stable one will do (the
-   latest, the oldest, the highest `sort_order`). Add `.order('<col>', …)`. Reference:
-   `invoices-client.ts:202`/`:292` (append after the last line), which document exactly this.
-2. **Ordering does NOT fix it** — the caller depends on the row having a property the query never
-   filtered for. `s143-void-authority` wanted _the PM's_ assignment and took the first in the
-   company; `s163` D3 wanted a segment the owner did **not** author; the S165 sweep found
-   `s143-qb-scaffolding` Q4 taking any company invoice when it needed one the PM could _see_.
-   **Ordering would only make the wrong pick stable.** Scope the query with the `.eq`/`.in`/`.not`
-   the dependency actually names. **This is the important category and the one that keeps
-   recurring** — the tell is that code _downstream of the fetch_ asserts or relies on something
-   (a role, an author, an assignment, a status) the `select` did not constrain. A silent early-out
-   (`if (!readable?.length) return`) on a wrong pick is not a pass; it is an untested run wearing a
-   green tick.
-3. **Genuinely arbitrary** — any matching row is fine and nothing downstream depends on which
-   (an existence probe reading only `(data ?? []).length > 0`, a schema/column-exists probe, or a
-   query guaranteed to return exactly one row by RLS). Leave it, and **add a one-line comment
-   saying so**, so the next sweep does not re-examine it.
-
-**This is not test-only.** A service that takes an unordered first row (`reminders.ts`,
-`email-service.ts`'s owner fallback, existence probes in `client-portal.ts`) has the same defect
-with worse consequences. When sweeping, read `app/` and `lib/` too, not just `test/` and the
-fixtures. Comment lines that merely _mention_ `.limit(1)` are not call sites — judge the query, not
-the grep hit.
-
-## Generated Types Workflow
-
-`packages/shared/types/database.ts` is auto-generated from the live Supabase schema. All service files import from this — never hand-write database type shapes. After every migration that adds, removes, or renames a column or table, run:
-
-```bash
-npm run db:push
-```
-
-This chains `supabase db push`, `npm run db:types`, and `npm run type-check`. Commit the updated `database.ts` alongside the migration.
-
-**Two patterns for service types:**
-
-- **`Pick<>`** when the query selects specific columns (`select('col1, col2')`). Reference: `apps/web/lib/services/company.ts`.
-- **`Omit<Row> + intersection`** when `select('*')` AND the table has CHECK-constrained columns (e.g., `status`, `contact_type`, `sub_type`, `role`). The intersection re-narrows the loose `string` from the generator back to a string literal union. References: `apps/web/lib/services/contacts.ts`, `subcontractors.ts`.
-
-**Rule:** always preserve string literal unions on CHECK-constrained columns. The Supabase generator can't see CHECK constraints; it emits `string`. Restore the union via intersection rather than using the loose `string`.
-
-**Client files re-export, never redefine.** In `*-client.ts` files, use `import type { Foo } from '@/lib/services/foo'; export type { Foo };`. Never redefine types already in the server service file. Reference: `apps/web/lib/services/company-client.ts`.
-
----
-
-## Platform Modules
-
-11 modules total, built in a strict dependency chain. **Module 8 (Inventory & Tools) was inserted in Session 6 planning, bumping the previous 8/9/10 to 9/10/11.**
-
-Status → [STATE.md](STATE.md). Module list and details → [CLAUDE_MODULES.md](CLAUDE_MODULES.md), [docs/module4-architecture.md](docs/module4-architecture.md), [docs/roadmap/FrameFocus_Quick_Reference.docx](docs/roadmap/FrameFocus_Quick_Reference.docx).
-
-**Cross-cutting:** AI Layer (see AI Integration Rules below), Workflow Engine (Supabase Webhooks + Edge Functions, Phase 2+), QuickBooks Integration (Modules 6 & 7 — see CLAUDE_MODULES.md).
-
-**Spec completeness rule (added 2026-07-20, Session 86).** Every module spec must include a UI section — screens, roles, entry points, nav placement — before the spec is considered complete. No UI build proceeds from a schema/service-only spec. UI gaps discovered at build time (the S85/S86 6A experience: interim nav links, a nav reindex owed against a stale handoff, screens specced after the schema shipped) are the failure this prevents.
-
-## Database Conventions
-
-**Multi-tenancy:** Every table has a `company_id` column. All queries are filtered by company via RLS policies.
-
-**Row-Level Security:** Enabled on ALL tables. No exceptions. Every policy uses a `get_my_company_id()` helper function that reads company_id from the user's profile.
-
-**Storage RLS policies: use inline subqueries, not helper functions.** `get_my_company_id()` works correctly in RLS policies on regular tables in the `public` schema. It does NOT work in `storage.objects` policies — in that context the helper silently returns NULL, which makes the policy match nothing and causes uploads/reads to fail with permission errors that appear unrelated to the policy logic.
-
-Use an inline subquery against `profiles` instead:
-
-```sql
-(storage.foldername(name))[1]::uuid = (SELECT company_id FROM profiles WHERE id = auth.uid())
-```
-
-`(storage.foldername(name))[1]` extracts the first folder segment of the object path, which by convention is the `company_id` (e.g., `{company_id}/project-id/filename`). Reference implementations: migration 013 (company-logos bucket) and migration 017 (project-files bucket, Session 11) both use this pattern.
-
-**Naming conventions:**
-
-- Tables: `snake_case`, plural (e.g., `contacts`, `estimates`, `line_items`)
-- Columns: `snake_case` (e.g., `company_id`, `created_at`, `updated_by`)
-- Foreign keys: `{referenced_table_singular}_id` (e.g., `contact_id`, `project_id`)
-- Indexes: `idx_{table}_{column}` (e.g., `idx_contacts_company_id`)
-- RLS policies: `{table}_{action}_{role}` (e.g., `contacts_select_authenticated`)
-
-**Standard columns on every table:**
-
-```sql
-id              UUID PRIMARY KEY DEFAULT gen_random_uuid()
-company_id      UUID NOT NULL REFERENCES companies(id)
-created_at      TIMESTAMPTZ DEFAULT now()
-updated_at      TIMESTAMPTZ DEFAULT now()
-created_by      UUID REFERENCES auth.users(id)
-updated_by      UUID REFERENCES auth.users(id)
-is_deleted      BOOLEAN DEFAULT false        -- soft delete, never hard delete
-deleted_at      TIMESTAMPTZ
-```
-
-**Per-tenant table column-defaults checklist.** Every new per-tenant table migration must include three column defaults so client-side INSERTs pass RLS without the caller manually setting these fields:
-
-```sql
-ALTER TABLE {table_name} ALTER COLUMN company_id SET DEFAULT get_my_company_id();
-ALTER TABLE {table_name} ALTER COLUMN created_by SET DEFAULT auth.uid();
-ALTER TABLE {table_name} ALTER COLUMN updated_by SET DEFAULT auth.uid();
-```
-
-Without these, the client INSERT sends `company_id = NULL`, RLS checks `NULL = get_my_company_id()` → false, and the insert fails with a 403 that doesn't obviously point to the missing default. Migration 022 (`tag_options`) was a fix for this exact miss on first attempt; Migration 018 (`files`) caught it during build. Get the defaults in on the first migration that creates the table.
-
-**Standard triggers on every per-tenant table.** Every per-tenant table needs two BEFORE UPDATE triggers so `updated_at` and `updated_by` advance correctly on every UPDATE. Both must be installed in the same migration that creates the table, not added later.
-
-```sql
--- 1. updated_at — reuses the shared function from Migration 001. Do NOT redefine it.
-CREATE TRIGGER {table_name}_updated_at
-  BEFORE UPDATE ON {table_name}
-  FOR EACH ROW EXECUTE FUNCTION update_updated_at();
-
--- 2. updated_by — per-table function, created in the same migration as the table.
-CREATE OR REPLACE FUNCTION set_{table_name}_updated_by()
-RETURNS TRIGGER AS $$
-BEGIN
-  NEW.updated_by = auth.uid();
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
-
-CREATE TRIGGER {table_name}_set_updated_by
-  BEFORE UPDATE ON {table_name}
-  FOR EACH ROW EXECUTE FUNCTION set_{table_name}_updated_by();
-```
-
-**Naming convention:** trigger names are `{table_name}_updated_at` and `{table_name}_set_updated_by`. The per-table function is `set_{table_name}_updated_by()`. Confirmed across `tag_options`, `companies`, `profiles`, `files`, `contacts`, `subcontractors`, `contact_addresses`.
-
-**Service-layer contract:** because these triggers exist, service code MUST NOT set `updated_at` or `updated_by` explicitly in update payloads. Mirror the comment style used in `contacts-client.ts`:
-
-```typescript
-// BEFORE UPDATE trigger `{table}_set_updated_by` handles updated_by.
-// updated_at is handled by the existing updated_at trigger.
-const { error } = await supabase.from('{table}').update(updates).eq('id', id);
-```
-
-Without the triggers, `updated_at` and `updated_by` never advance after the original INSERT — a silent data-quality bug that won't surface until an audit needs the timestamps.
-
-**Reference implementations:** Migration 018 (`files`), Migration 023 (`tag_options`), Migration 028 (`contact_addresses`).
-
-**Known holdover:** `companies` table is missing `companies_set_updated_by` and `company-client.ts` sets `updated_at` explicitly. Pre-trigger pattern. Tracked in TECH_DEBT.md — do not copy this file's pattern when building new tables.
-
-**Append-only audit log exception.** A narrow category of tables are pure append-only logs — rows are written once and never updated or deleted. These tables intentionally OMIT the following standard columns: `updated_at`, `created_by`, `updated_by`, `is_deleted`, `deleted_at`. They also have NO UPDATE or DELETE RLS policies — only SELECT (scoped appropriately) and INSERT.
-
-Columns present on an append-only log: `id`, `company_id` (where per-tenant), `created_at`, plus whatever domain-specific fields the log captures.
-
-Current examples:
-
-- `ai_tag_logs` — per-call cost tracking for GPT-4o vision auto-tagging (Module 3H, Session 30).
-- `trial_emails` — one row per email address that has used a free trial.
-
-Use this pattern for any future table that is a pure event log or audit trail. If the table ever needs to be edited or soft-deleted after insert, it is NOT an append-only log — use the standard columns above instead.
-**Cost-column precision and audit-log FK behavior.** Two conventions for any table that stores money or references rows that may be deleted later:
-
-- **Cost columns use `NUMERIC(10,6)`.** Six decimal places preserves sub-cent values like a $0.00382 GPT-4o call. `NUMERIC(10,2)` rounds to zero and silently destroys cost-tracking data. Reference: `ai_tag_logs.estimated_cost` (Migration 023).
-- **Audit-log FKs to deletable rows use `ON DELETE SET NULL`, not `ON DELETE CASCADE`.** When an audit log references a row that can be permanently deleted (e.g., `ai_tag_logs.file_id` references `files.id`, and files have a permanent-delete path for owner/admin), `CASCADE` would erase the cost record along with the file. `SET NULL` preserves the cost row with the FK nulled out, keeping the financial trail intact. Default to `SET NULL` for any append-only log FK; only use `CASCADE` when the log row genuinely makes no sense without the parent.
-
-**Trash-bin pattern.** Soft deletes only. Never hard delete records.
-
-- RLS policies do not filter on `is_deleted`. Filtering is enforced in the service layer, not in RLS. This is deliberate: a restore-from-trash flow must be able to read soft-deleted rows without requiring a separate RLS policy to expose them.
-- `get{Entity}s()` (the list function) filters `is_deleted = false` by default so deleted rows never appear in normal listings.
-- `get{Entity}(id)` (single-row fetch by id) does **not** filter `is_deleted`. It must return soft-deleted rows so a restore flow can fetch a deleted record by id before un-deleting it.
-- A separate `getTrash()` (or `listDeleted()`) function filters `is_deleted = true` to power the trash UI.
-
-Reference implementation: `apps/web/lib/services/files.ts` (Module 3, Session 13) is the canonical example of all three functions.
-
----
-
-## Service Layer Pattern
-
-Server and client Supabase clients must be in separate files to avoid Next.js build errors (`next/headers` cannot be imported in client components).
-
-**Pattern for each data entity:**
-
-- `lib/services/{entity}.ts` — Server-side functions (imports from `@/lib/supabase-server`). Used in server components and page.tsx files. Contains read operations (getAll, getById).
-- `lib/services/{entity}-client.ts` — Client-side functions (imports from `@/lib/supabase-browser`). Used in `'use client'` form components. Contains write operations (create, update, delete).
-- Client components must use `import type { ... }` when importing interfaces from server service files.
-
-**Current service files:** see [STATE.md](STATE.md) → "Codebase State" for the annotated active list. Convention: future add-on flags (e.g., `ai_marketing_enabled`) belong in `add-ons.ts`, not `company.ts`.
-
-**Lazy initialization:** Stripe client (`getStripe()`) and Supabase admin client (`getSupabaseAdmin()`) use lazy init to prevent build-time crashes. All API routes must use these.
-
----
-
-## Code Conventions
-
-### TypeScript
-
-- Strict mode enabled (`"strict": true` in tsconfig)
-- No `any` types — use `unknown` and narrow
-- Interfaces for data shapes, types for unions/aliases
-- Zod schemas in `packages/shared/validation/` for all form and API validation
-- Use `import type { ... }` when importing types across server/client boundaries
-
-### React (Web — Next.js)
-
-- App Router (not Pages Router)
-- Server Components by default; `"use client"` only when state/interactivity needed
-- shadcn/ui components as the base; customize via Tailwind
-- File naming: `kebab-case.tsx` for components, `kebab-case.ts` for utilities
-- Colocate component-specific files: `components/estimate-builder/estimate-builder.tsx`
-
-### ~~React Native (Mobile — Expo)~~ — **SUPERSEDED [S97, 2026-08-03]**
-
-**Mobile is a PWA** (see the ruling under Technology Stack). Nothing below is in force; it is kept
-as a record of the direction that was abandoned, so a future reader does not reconstruct it by
-accident.
-
-- ~~Expo Router for navigation~~
-- ~~Expo SDK managed workflow (no bare workflow)~~
-- ~~NativeWind (Tailwind for React Native) for styling consistency with web~~
-- ~~Offline-first for field operations using Expo SQLite with sync queue~~ — **the requirement
-  survives, the mechanism does not.** Offline field capture is now a web problem (service worker +
-  a browser-side queue), not an Expo SQLite one. See TECH_DEBT #118 for the one seam that already
-  exists in the web code.
-
-### API / Data Layer
-
-- Supabase client initialized once per app in a shared provider
-- All database calls go through service modules: `services/contacts.ts`, `services/estimates.ts`, etc.
-- Never call Supabase directly from components — always through a service function
-- Edge Functions for server-side logic that can't run on client (webhook handlers, AI calls, PDF generation)
-- API errors never name a cause that hasn't been verified. Auth and permission failures return 401/403 with their own message — never fall
-  through to a "not found" path. A "not found" response means auth passed and the record genuinely doesn't exist.
-- Every error response logs the real cause server-side with the route and the failing check. The client message may be generic; the log never is.
-
-### Git Workflow
-
-- `main` branch is production (auto-deploys to Vercel)
-- `dev` branch for integration
-- Feature branches: `feature/{module}-{description}` (e.g., `feature/contacts-csv-import`)
-- Commit messages: `[Module] Description` (e.g., `[Contacts] Add CSV import with field mapping`)
-
----
-
-## User & Role Architecture
-
-There are two completely separate layers of users. They use different auth systems and should never be confused.
-
-### Layer 1: Platform Admins (FrameFocus internal team)
-
-These users manage the FrameFocus platform itself. They are NOT tied to any company tenant.
-
-| Role           | Description                                                                                                                                            |
-| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Platform Admin | Full access to all companies, subscriptions, support tools, platform analytics, and system configuration. Josh and any future FrameFocus team members. |
-
-**Implementation:** Platform Admins are stored in a separate `platform_admins` table (not the company `profiles` table). They access a separate admin dashboard route (`/admin`). They do NOT have a `company_id`.
-
-### Layer 2: Company Users (contractor customers)
-
-Each subscribing company is an isolated tenant. Within that company, there are 6 roles with descending access levels. The Owner is always the billing contact.
-
-| Role            | DB Value          | Web Access                           | Mobile Access     | Key Permissions                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
-| --------------- | ----------------- | ------------------------------------ | ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Owner           | `owner`           | Full                                 | Full              | All features, billing/subscription management, user invitations, approval authority on change orders/payments/AI content, company settings, QuickBooks connection — [SUPERSEDED for COs — Owner-final-approval gate removed; see module5-architecture.md §5.7c AMENDMENT (Session 55). Owner/Admin/PM all create+send.]                                                                                                                                                                                                      |
-| Admin           | `admin`           | Full                                 | Full              | Everything Owner can do EXCEPT items in the owner-only list below                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
-| Project Manager | `project_manager` | Full (scoped to assigned projects)   | Full              | Create/manage estimates, manage assigned projects, assign tasks, create change orders, **view job ACTUAL AND COMMITTED COSTS — NOT contract value, budgeted/sell amounts, or CO dollar amounts** (Financial Visibility Floor, added 2026-07-20; **"actual only" corrected to "actual and committed" [S140]** per money-rep P9 — `budgetColumnsFor()` has shipped `seesCommitted: true` for a PM since S97. **The same widening for FOREMAN is OVERTURNED [Josh, S150] — see the Floor below.**), manage client communication |
-| Foreman         | `foreman`         | Limited                              | Full              | Manage assigned field crews, daily logs, schedule crew tasks, review Crew Member submissions, punch lists, quality control                                                                                                                                                                                                                                                                                                                                                                                                   |
-| Crew Member     | `crew_member`     | Minimal                              | Full              | Clock in/out with GPS, daily log entries, photo capture, task status updates, view assigned tasks and schedule                                                                                                                                                                                                                                                                                                                                                                                                               |
-| Client          | `client`          | Portal only — **see the note below** | No (future phase) | View project timeline, photo gallery, approve selections, sign documents, make payments, message PM, view AI weekly summaries                                                                                                                                                                                                                                                                                                                                                                                                |
-
-### Roster Visibility Floor — **RULED [Josh, S131]**, and `DASHBOARD_ROLES` is now enforced
-
-**"Portal only" in the Client row above described an intention, not a mechanism, until S131.**
-`DASHBOARD_ROLES` (`packages/shared/constants/roles.ts`) excluded `subcontractor` and `client`
-from the day it was written and **no code consulted it**. Measured on rebuild-test in S130 as the
-real QA identities: a subcontractor and a client each signed in to `/dashboard` and read the
-company's **full contacts list, sub roster and team roster — 6 / 4 / 7 rows, identical to the
-Owner's.** There was also no portal route tree for a client to be "only" in.
-
-Two separate changes, because one is routing and one is data:
-
-- **Ruling A — the route.** `middleware.ts` and `app/dashboard/layout.tsx` both guard `/dashboard`
-  via `apps/web/lib/dashboard-access.ts` (M6M D-54: hidden **and** route-guarded). A
-  `subcontractor` goes to `/m/projects`; a `client` goes to a **placeholder** that Module 9
-  replaces. ⚠️ ~~**The Pre-Module 9 gate — hosted portal vs. email plus magic-link tokenised pages —
-  is OPEN and untouched.**~~ **RESOLVED [Josh, S164]: FrameFocus hosts the portal, with accounts**
-  (R1); outbound webhooks become **Module 12**. See "Pre-Module 9 Decision Gate" in `STATE.md`.
-  **The placeholder itself is still a placeholder** — that half of the sentence stands until M9
-  stage 1 replaces it. A placeholder is not a portal.
-- **Ruling B — the data.** `20260911000000_roster_visibility_floor.sql`. **A redirect protects no
-  data**, since `/m`, every API route and any direct PostgREST call bypass routing entirely.
-
-| Role                       | Team roster (`profiles` **and** `company_members`) | `contacts` | `subcontractors` |
-| -------------------------- | -------------------------------------------------- | ---------- | ---------------- |
-| `subcontractor`            | Owner, Admin, PM **only**                          | **none**   | **none**         |
-| `client`                   | **none**                                           | **none**   | **none**         |
-| the five `DASHBOARD_ROLES` | unchanged, company-wide                            | unchanged  | unchanged        |
-
-**Own row is always readable, for every role.** Not a softening of the ruling — a precondition for
-it. There are 94 direct `from('profiles')` reads keyed on `user_id = auth.uid()`, including both
-layouts; a client who cannot read their own row cannot load the placeholder they were just
-redirected to.
-
-**Two traps recorded for whoever edits these policies next:**
-
-1. **The roster is TWO tables.** `/dashboard/team` reads `profiles`; `/m/team` reads
-   `company_members` via `getMembers()`. Flooring one closes one surface.
-2. **`profiles` carried TWO permissive SELECT policies**, and permissive policies are **OR**'d.
-   Adding a third, narrower one changes nothing — the widest always wins. Both were replaced by one.
-
-### Financial Visibility Floor (authoritative — added 2026-07-20)
-
-**Only Owner and Admin may see contract/budget/sell/CO dollar figures. Project Manager sees ACTUAL AND COMMITTED COST. Foreman and Crew see ACTUAL COST ONLY.** — **RULED [Josh, S150]**
-
-> ## ⚠️ THIS IS A DELIBERATE RULING CHANGE. IT IS NOT A DISCOVERED DRIFT.
->
-> **Read this before concluding the floor was quietly weakened.** Most of S150's other
-> corrections to this file went the other way — the document was stale, the code was
-> right, and the document was brought to the code as record-keeping. **This one is
-> different.** Foreman's access was **decided** at S150, and the decision **narrows**
-> what the S97 ruling in `7h1-spec.md` §7H.2 #10 had granted. That the code already
-> matches is the outcome, not the argument.
->
-> ### What was decided
->
-> **`#1-m7cpl` is RESOLVED IN FAVOUR OF THE SHIPPED CODE. Foreman stays `actual_only`
-> — 3 columns, `seesCommitted: false`.** `budgetColumnsFor()`
-> (`apps/web/lib/services/invoices-shared.ts:460-472`) is correct as it stands and is
-> not to be changed to admit committed cost for a foreman.
->
-> ### What it supersedes
->
-> _Superseded text, quoted rather than rewritten:_ _"Only Owner and Admin may see
-> contract/budget/sell/CO dollar figures. **Project Manager and Foreman see ACTUAL AND
-> COMMITTED COST ONLY.** Crew sees ACTUAL COST ONLY."_ — the S140 correction, itself
-> quoting and superseding an older _"Project Manager, Foreman, and Crew see ACTUAL AND
-> COMMITTED COST ONLY."_ All three generations are kept so the direction of travel stays
-> legible: the grant to foreman was widened at S97 and is **narrowed again here**.
->
-> The S140 banner that stood in this place is retired. It read, in part: _"⚠️ **THE
-> SHIPPED CODE DOES NOT MATCH THIS ROW FOR FOREMAN, and the code is not obviously
-> wrong.** … **This needs a ruling, and it is filed as `#1-m7cpl`**"_. This is that
-> ruling.
->
-> ### ⚠️ AND THE S140 BANNER MIS-ATTRIBUTED ITS OWN AUTHORITY — corrected here
->
-> _Superseded claim, quoted rather than deleted:_ _"money-rep **P9** is the source of
-> the widening"_, and _"narrowing the ruling to match the code would discard a decision
-> money-rep P9 made on purpose."_ **Both are false, and `TECH_DEBT.md` #1-m7cpl repeated
-> the error by listing the authority as one column headed "money-rep P9, 7h1 #10".**
->
-> **money-rep P9 widens the PM and says nothing whatever about foreman**
-> (`docs/specs/money-representation.md:113` — _"Owner/Admin see everything. PM sees
-> **actual AND committed** (widens today's actual-only floor)"_). And
-> `money-representation.md` **puts foreman at actual-only in two other places, explicitly**:
->
-> - `:863` — _"**Foreman — actual only**, matching today's gated reflow
->   (`budget/page.tsx:57-88`)."_
-> - `:1046` — §7.3's per-screen role matrix, row _"S-1 committed (remaining)"_: Foreman
->   is **—**, while _"S-1 actual / cost to date"_ (`:1047`) is **✓**.
->
-> The extension to foreman is **`7h1-spec.md` §7H.2 #10's own**, and that document says
-> so in its own words: _"Ruled [S97]: **P9's widening stands, and extends to foreman.**"_
-> — an extension **beyond** P9, not a restatement of it.
->
-> **This matters for how the S150 ruling should be read.** It does not overturn the money
-> model of record; it **restores agreement with it.** `money-representation.md` and the
-> shipped code have said the same thing about foreman all along, and this section is now
-> the third to agree.
->
-> ### The floor as ruled
->
-> | Role            | Sees               | `budgetColumnsFor()`                                             |
-> | --------------- | ------------------ | ---------------------------------------------------------------- |
-> | Owner / Admin   | everything         | `full`, 7 columns                                                |
-> | Project Manager | actual + committed | `committed`, 5 columns                                           |
-> | **Foreman**     | **actual only**    | **`actual_only`, 3 columns, `seesCommitted: false`**             |
-> | Crew            | actual only        | `none` — redirected off the screen entirely, i.e. stricter still |
->
-> `ui-05` §7.1's per-role column counts (Owner/Admin 7, PM 5, Foreman 3),
-> `s97ct-budget-floor.live.ts`, and `money-representation.md` §7.3 all already assert this
-> shape and need no change.
->
-> ### ✅ Every document now agrees — `#1-m7cpl` is CLOSED
->
-> **`7h1-spec.md` §7H.2 #10 was amended at S150**, at all nine sites that stated or relied
-> on the foreman grant, with the superseded text quoted rather than deleted. **Its argument
-> was withdrawn, not just its conclusion** — including §7H.12 A.1's warning at `:199` that
-> an un-corrected `CLAUDE.md` _"would gate committed cost from the two roles that are
-> supposed to see it"_. That warning was **right for the PM and inverted for the foreman**:
-> on foreman the un-corrected `CLAUDE.md` agreed with P9, with `money-representation.md`
-> §7.3, and with the code that had already shipped.
->
-> **The lesson recorded there, because it is the one that generalises:** §7H.12 A.1 is what
-> _changed_ this file at S140, on a citation nobody checked. An obliged amendment to
-> `CLAUDE.md` is only as good as the citation behind it.
->
-> Document set as of S150 — **`CLAUDE.md`, `money-representation.md`, `7h1-spec.md`,
-> `ui-05` §7.1, `s97ct-budget-floor.live.ts` and `budgetColumnsFor()` all agree.**
-> `#1-m7cpl` closed; see `TECH_DEBT.md`.
-
-- **Gated from PM/foreman/crew:** contract value (`project_financials.contract_value`), original/revised contract, budgeted and sell/price amounts (`project_budget_amounts.budgeted_amount` and any future sell column), labor/burden rates (`instrument_rates`), variance, projected margin, and **change-order dollar amounts** (`change_orders.net_delta` and any `$` sum derived from it). Both money columns moved to 1:1 side tables to get this enforced — see the status table below; the old `projects.contract_value` and `project_budget_items.budgeted_amount` no longer exist.
-- **Visible to all roles:** actual and committed cost (`project_budget_items.actual_amount` and `committed_amount`), and non-dollar facts — CO counts/statuses, project status, dates, punch counts, schedule. **This is deliberate, not an oversight:** the budgeted figure was split off onto `project_budget_amounts` precisely so actual and committed could stay on a row Foreman and Crew can still read. A role floor on `project_budget_items` itself would over-reach — `s97ct-roles.live.ts` **8b-ii** and `s97ct-budget-floor.live.ts` **7-foreman/7-crew_member** exist to fail loudly if anyone adds one.
-
-  > **⚠️ This bullet is about the DATABASE, and it does NOT contradict the foreman ruling above.** `project_budget_items` deliberately has **no role floor**, so `committed_amount` is readable at the DB by every role and must stay that way — the two live tests named above fail loudly if anyone floors it. **A foreman not seeing committed cost is a UI gate, in `budgetColumnsFor()`, not a policy.** Read "visible to all roles" here as "not floored in RLS", never as "rendered for every role". [Clarified S150 alongside the `#1-m7cpl` ruling.]
-
-- ~~**Named carve-out [S97, 2026-08-01]**~~ — ⚠️ **OVERTURNED [Josh — the invoice floor, `2ff9966` + `20261038000000_invoice_payment_floor.sql`; recorded here at A20 close-out].** _Superseded text, quoted not rewritten:_ _"a **PM may see the amounts ON an invoice they can reach** (7D client invoicing) — derived lines, draws, discounts, credits, invoice totals and retainage."_ **The live rule:** a PM sees **only invoices they AUTHORED** — `invoices_select_visible` keys on `author_member_id = get_my_member_id()` (not `created_by`, NULL on most legacy rows) — and **Payments plus every AR aggregate (collected to date, aging, retainage held, total outstanding) are Owner/Admin**. Why it was overturned: Josh signed in as a PM and read the Payments tab; the premise "a PM who cannot see whether their invoice was paid cannot do the job" was rejected. Full banner: [`docs/specs/7d1-spec.md`](docs/specs/7d1-spec.md) §12a. The negative half of the old text (no contract value, budget/sell, CO dollars for a PM) survives a fortiori — the floor got narrower, not wider.
-- **Why:** this narrows the previous blanket "PM views job finances" grant (PM row above) to actual cost, and extends the same floor to foreman/crew. Foreman/crew are "Limited/Minimal" web roles; they had no business reason to see contract/margin figures, but nothing enforced it.
-- **Current enforcement status [corrected 2026-08-02, S97]:** the UI-refresh specs (ui-01 §11, applied across ui-02–ui-06) gate these figures at the UI layer, and **three of the four figure families are now DB-enforced as well**. The previous text here — "the DB-level floor is NOT yet in place" — is superseded. Verify against the cited migrations rather than trusting this prose:
-
-| Figure                      | Where it lives now                                                        | Enforcement                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| --------------------------- | ------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Contract value              | `project_financials.contract_value` (1:1 off `projects`)                  | **DB-enforced, Owner/Admin.** Table + `project_financials_{select,insert,update}_owner_admin`: `20260811000000_project_financials.sql`. Writer retargeted: `20260811010000_convert_estimate_project_financials.sql`. Old column dropped: `20260812000000_drop_projects_contract_value.sql`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| Budgeted amount             | `project_budget_amounts.budgeted_amount` (1:1 off `project_budget_items`) | **DB-enforced, Owner/Admin.** Table + `project_budget_amounts_{select,insert,update}_owner_admin` + backfill: `20260816000000_budget_amounts.sql`. Transitional sync trigger: `20260816010000_budget_amounts_sync.sql`. Old column dropped, sync trigger removed, all four SQL writers retargeted in one transaction: `20260817000000_drop_budgeted_amount.sql`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| Labor/burden rates          | `instrument_rates`                                                        | **DB-enforced, Owner/Admin SELECT floor.** `20260806000000_financial_rls_floor.sql` §1 replaces `instrument_rates_select_company` with `instrument_rates_select_owner_admin`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| Change-order dollar amounts | `change_orders.net_delta` — still on the parent row, not split            | **PARTLY DB-ENFORCED — corrected 2026-08-09 [S123] against the live policy.** _Superseded text, quoted not rewritten: "**UI-ONLY, and deliberately so.** `change_orders_select_visible` is `company_id = get_my_company_id() AND can_view_project(project_id)` — no role floor, no author scoping."_ **That is not what the policy says.** The live `change_orders_select_visible` is `company_id = get_my_company_id() AND can_view_project(project_id) AND (get_my_role() = ANY (ARRAY['owner','admin']) OR (get_my_role() = 'project_manager' AND created_by = auth.uid()))` — the S121 read floor, applied by `20260830000000_change_order_read_floor.sql` (which replaced the S89-era policy from `20260704215000_module5_5d_change_orders.sql` that the superseded text describes). So foreman, crew and subcontractor **cannot SELECT a change order at all**, and a PM sees **only the ones they authored**. What remains UI-only is narrow and is the deliberate part: a PM sees `net_delta` on their **own** COs, because they must be able to author them and see what they wrote. Rationale, residual risk and the open scoping question: **[TECH_DEBT.md #117](TECH_DEBT.md)**. |
-
-Both split tables carry SELECT/INSERT/UPDATE for Owner/Admin and **no DELETE policy at all**, so DELETE is denied to every role. `can_view_project()` still has no role floor of its own — the gating comes from the side tables, which is why the columns were moved rather than the helper changed.
-
-**Do not "finish" this by flooring `change_orders`** without reading #117 first — the obvious fix breaks CO authoring for PMs.
-
-### ⚠️ THE FLOOR GOVERNS STAFF. A CLIENT IS A COUNTERPARTY. — **RULED [Josh, S164]**
-
-**Everything above this line is about the internal hierarchy. A client is not in it.** The Floor was
-written to answer "which of my own people may see this", and it never contemplated the person paying
-the bill. Module 9 forced the question and it is ruled here.
-
-**A client sees MORE than a Project Manager on cost-plus and T&M, and LESS on lump sum.** Josh:
-_"client can see more than a PM except for lump sum contracts. During the interview I broke down what
-the client can see with each form of billing."_
-
-| Instrument    | The client sees                                                                                                                | Note                                                                                                                    |
-| ------------- | ------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------- |
-| **Cost-plus** | budgeted, actual, **markup %**, **hourly rate**, line total with markup, category totals, project total to date, expected      | `committed` is REMOVED — it derives from `purchase_orders` / `subcontractor_contracts`, which clients are excluded from |
-| **T&M**       | what the company paid, the agreed **markup %**, the total billed — **the pre-markup figure IS shown beside the marked-up one** | one row per labor type, one row per material line                                                                       |
-| **Lump sum**  | the total billed, sectioned by bill; **no line-level price and no cost basis**                                                 | the only opaque instrument                                                                                              |
-
-**Why this is not a hole in the Floor.** The client pays against actuals on cost-plus and T&M, so
-the cost basis is _theirs_. On lump sum they agreed a price and the cost basis is not. The Floor's
-own doctrine already says this: **sell derives per instrument, then aggregates.**
-
-> ### ⚠️ AND THE CONSEQUENCE THAT SHAPES THE BUILD
->
-> **A lump-sum contract can carry a T&M change order.** Josh: _"that means sometimes the original
-> contract will be different from COs."_ One project then renders **two visibility rules at once**,
-> and **the CO's rule follows the CO, not the contract.**
->
-> **Any derivation that assumes one visibility setting per project is wrong**, and it will be wrong
-> in a way that looks right on every single-instrument project you test it against. The mechanism
-> already exists and is per-bill: **`invoices.presentation_level`** (`full_detail` / `by_section` /
-> `lump_sum`), shipped before M9 and needing no new column.
-
-**The rule that makes this simple to reason about, and it resolves a class of questions rather than
-one** — Josh, S164 Q3:
-
-> **"The easy way to understand what a client will see is that they see what is on the invoice. In
-> the portal, they see all of it on one page and totals added."**
-
-The portal shows what the invoice shows. `presentation_level` is the single source of truth for
-detail; the portal aggregates those per-bill decisions and adds totals. **It does not apply a
-second, separate visibility model on top.**
-
-**Enforced in the DATABASE, not the renderer** [Josh, S164 Q3]: the client's `invoice_lines` arm is
-gated on the parent invoice's `presentation_level = 'full_detail'`. `invoice_lines` has no role or
-project check of its own — it is safe purely by RLS containment on `invoices` — so a client arm on
-`invoices` opens the lines **automatically and silently**, and hiding prices in the UI would leave
-the whole lump-sum rule defeatable with one PostgREST call.
-
-### The Admin Role Principle (authoritative)
-
-**Admin is defined as "Owner minus money minus Admin promotion."** Anywhere in the platform where the rule for an action is not explicitly owner-only, Admin has the same access as Owner. When in doubt during implementation, Admin can do it.
-
-**Owner-only actions (Admin is NOT allowed):**
-
-1. **Billing and subscription management** — viewing/changing the subscription plan, updating payment methods, canceling the subscription, viewing billing history. Admin cannot see the Billing page at all.
-2. **Promoting a user to the Admin role** — Admin cannot create more Admins. Only Owner can invite at the Admin level or promote an existing user to Admin.
-3. **Transferring ownership** — only the current Owner can transfer ownership to another user. Admin cannot initiate ownership transfer.
-4. **Connecting or disconnecting QuickBooks** — QB connection is treated as billing-adjacent because it controls financial data flow out of FrameFocus. Owner-only.
-5. **Releasing final sub payments (money out the door)** — Admin can review, adjust, and approve sub pay applications, but the final "release payment" click that actually records payment and triggers the QB sync is Owner-only.
-6. **Approving client-facing AI weekly summaries** — before an AI-drafted weekly project summary is shown to the client, it must be approved by the Owner specifically. Admin cannot approve these.
-7. **Approving marketing content for publishing** — AI-generated social posts, review request emails, and any marketing content going out under the company name must be Owner-approved before publishing. Admin cannot approve these.
-8. **Deleting the company account** — only Owner can close the company account (this is a billing-adjacent action).
-
-### Role Permissions Quick Reference (By Action)
-
-For any action not listed in the owner-only section above, assume Admin has access. When building a new feature, if a permission decision needs to be made, default to "Owner + Admin can do it" unless there is a specific reason (financial sign-off, billing, or client-facing owner-approval) to restrict it to Owner only.
-
-**Who can approve what (summary):**
-
-| Approval                           | Owner | Admin | PM  | Foreman |
-| ---------------------------------- | ----- | ----- | --- | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Billing changes                    | ✓     | —     | —   | —       |
-| Promote to Admin                   | ✓     | —     | —   | —       |
-| Connect QuickBooks                 | ✓     | —     | —   | —       |
-| Release sub payments               | ✓     | —     | —   | —       |
-| Approve AI weekly summaries        | ✓     | —     | —   | —       |
-| Approve marketing content          | ✓     | —     | —   | —       |
-| Approve change orders (final)      | ✓     | —     | —   | —       | — [SUPERSEDED for COs — Owner-final-approval gate removed; see module5-architecture.md §5.7c AMENDMENT (Session 55). Owner/Admin/PM all create+send.] |
-| Approve sub pay apps (review step) | ✓     | ✓     | ✓   | —       |
-| Approve estimates for sending      | ✓     | ✓     | ✓   | —       |
-| Approve foreman timesheets         | ✓     | ✓     | ✓   | —       |
-| Approve crew timesheets            | ✓     | ✓     | ✓   | ✓       |
-| Invite users (non-Admin)           | ✓     | ✓     | —   | —       |
-| Delete files                       | ✓     | ✓     | ✓   | —       |
-| Edit company settings              | ✓     | ✓     | —   | —       |
-
----
-
-## Built-In Workflow Automations
-
-See [docs/roadmap/FrameFocus_Quick_Reference.docx](docs/roadmap/FrameFocus_Quick_Reference.docx) → "Automated Workflows" for the full list.
-
-## **Admin role in workflows:** Admin matches Owner throughout EXCEPT (a) final payment release, (b) owner-only approval of client-facing AI content, (c) billing/subscription actions. Admin receives all Owner notifications and can act on Owner's behalf for operational matters.
-
-## AI Integration Rules
-
-1. **AI drafts, humans approve.** Nothing client-facing or financially significant ships without human review.
-2. **Owner-only approvals:** AI weekly client summaries, marketing content for publishing, and AI-drafted financial narratives that affect billing require **Owner** approval specifically. Admin cannot approve these.
-3. **Admin-or-Owner approvals:** AI line item suggestions in estimates, AI-drafted daily log summaries, AI punch list proposals, and AI anomaly flags can be reviewed and approved by **Owner or Admin**.
-4. **Exception: AI photo auto-tags apply instantly.** Auto-tagging is internal organization, not client-facing. Tags are editable by any team member who can view the file. No approval queue needed.
-5. **Historical data powers suggestions.** Estimating AI uses pgvector embeddings of completed job line items.
-6. **Company context included in all prompts.** Trade type, region, typical project size, approved brand voice.
-7. **Approval queue for all AI outputs.** Weekly summaries, social posts, report narratives all go through a review step before anything reaches a client.
-
----
-
-**Reference Implementation — `apps/web/lib/services/ai-tagging.ts`**
-
-Module 3H patterns for every future AI feature (Module 4 estimating, 9 client summaries, 10 NL queries, 11 marketing):
-
-1. Lazy client via `getOpenAI()` — never instantiate at module load (build crash if env var missing).
-2. Cost log on every call (success and failure) into `ai_*_logs` — failed calls still cost money.
-3. Bail-early pre-flight ordered cheapest → most expensive: auth → DB row → MIME → add-on flag → config → OpenAI.
-4. Validate LLM output against a known allowed set; discard anything else (security property — prevents prompt-injection-style pollution).
-5. Log `response.model` (the resolved version like `gpt-4o-2024-08-06`), not the request alias.
-6. No retry logic in v1 — risk of double-charging. Use a manual retry button or background queue if needed.
-
-**Testing AI features.** GPT-4o is non-deterministic even at temperature 0.2. Tests assert structure (well-formed, validation discarded unknowns, output ≤ cap, cost row inserted), not exact content.
-
-## Tech-debt numbering — **RULED [Josh, S136]**
-
-**Never allocate a bare `#N` on a branch.** `TECH_DEBT.md` lives in the working tree, so every
-branch appends to its own copy and two branches filing on the same day both "take" the same
-number. There is no allocator, and there cannot be one while the file is versioned alongside code.
-
-**On a branch, file with a provisional branch-scoped id: `#N-<branch-tag>`** — `#12-notif`,
-`#3-m6m`. Numbered from 1 within the branch; the tag is short and names the branch, not the
-session. **Convert to a real number when the branch lands**, taking the next free number from
-**main's** `TECH_DEBT.md` at that moment, and update any cross-references in the same commit.
-
-**Why not "just take the next number from main":** that was the previous rule, it was written into
-`TECH_DEBT.md`'s own header as "main's file is the assignment authority", and it still failed.
-`feat/notifications` and `feature/m6m-mobile` each independently allocated `#147`–`#149` for
-**four different items**, colliding with main and with each other. Reserving from main only works
-if a branch merges before the next one files, which is not how these branches run.
-
-A provisional id is ugly on purpose: `#12-notif` in a commit message or a code comment reads as
-"this is not final yet", which a bare `#149` does not. **The reconciliation table for the current
-collision is in `TECH_DEBT.md`'s header** and is applied at merge, not now.
-
----
-
-## Instruction Preferences
-
-When generating code, migrations, or instructions for Josh:
-
-- **Step-by-step, click-level guidance.** Don't assume familiarity with dev tooling.
-- **Explicit file paths.** Always state exactly which file to create/edit and where.
-- **One thing at a time.** Don't bundle multiple changes into a single instruction block. Break them into numbered steps.
-- **Paste-ready code.** Code blocks should be complete and copy-pasteable, not fragments requiring assembly.
-- **Browser-based workflow.** All instructions assume GitHub Codespaces. Never reference local terminal, VS Code desktop, or local file system.
-- **Avoid shell heredocs for any multi-line file content.** Known failure cases: JSX files (heredocs eat `<a` tags and cause build failures) and SQL migration files (a multi-line SQL heredoc was silently mangled on a migration in Session 12). Use Node.js fs.writeFileSync() or create files directly in the Codespace editor instead.
-
----
-
-## Environment & Accounts
-
-## See [STATE.md](STATE.md) → "Environment Variables" and "Infrastructure" / "Test Data" sections. Single source of truth lives there.
-
-## Reference Documents
-
-- `docs/roadmap/FrameFocus_Platform_Roadmap.docx` — primary roadmap (all 11 modules, workflows, AI, roles, dependencies)
-- `docs/roadmap/FrameFocus_Quick_Reference.docx` — scannable summary of features and workflows
-- `docs/roadmap/FrameFocus_Platform_Roadmap.xlsx` — planning spreadsheet
-- `docs/sessions/contextN.md` — one per session; read the most recent at session start
-- `STATE.md` — live repo state; tech debt is split across `TECH_DEBT.md` (OPEN — owed work, and the numbering authority), `TECH_DEBT_CLOSED.md` (closed), and `TECH_DEBT_IDEAS.md` (deferred decisions). A number lives in exactly one; each file cross-links the other two.
-- `GATED.md` — register of gated/blocked work: what is blocked, behind what, and what unblocks it (Pre-M9 gate, test identities, 7D–7H readiness, deferred-by-decision, standing rulings)
-
-```
-
-```
+> **Read this before every session.** It holds the rules in their operative form. Each section links
+> to its **full, verbatim text** in [`docs/claude/`](docs/claude/): the rationale, the incidents, the
+> superseded wording. Restructured S112 (936 → under 350 lines); nothing was deleted. The audit:
+> [`docs/claude/AUDIT-S112.md`](docs/claude/AUDIT-S112.md). Update history: [`history.md`](docs/claude/history.md).
+
+## Project
+
+**FrameFocus**: subscription construction-management SaaS for residential and commercial contractors.
+It covers lead capture → estimating → project management → field ops → job finances → inventory →
+client experience → business intelligence. 11 modules; live status in [STATE.md](STATE.md).
+
+**Owner:** Josh Bishop (jsbishop14@gmail.com) · **Repo:** github.com/IronFrame414/FrameFocus (private)
+· **Live:** https://frame-focus-eight.vercel.app · Module designs: [`CLAUDE_MODULES.md`](CLAUDE_MODULES.md),
+[`docs/module4-architecture.md`](docs/module4-architecture.md). Full text: [`platform.md`](docs/claude/platform.md).
+
+## MCP servers
+
+**Context7** (live docs): use it **before code touching Next.js, Supabase, Stripe, Tailwind or
+Turborepo APIs**. **Serena** (symbols): use it **before whole-file reads for refactors, renames, and
+"where is this used"**. Setup: STATE.md → "Claude Code MCP setup."
+
+## Stack
+
+TypeScript everywhere:
+- **Web:** Next.js 14 (App Router) + Tailwind + shadcn/ui. **Mobile: a PWA** (below).
+- **Shared:** `packages/shared` (types, Zod, pure logic).
+- **Backend:** Supabase (Postgres, Auth, Storage, Realtime, Edge Functions; RLS multi-tenant).
+- **AI:** OpenAI GPT-4o + pgvector.
+- **Money:** Stripe Billing + Connect. QuickBooks Online is **sync only** (FrameFocus runs
+  operations; QB runs the books).
+- **Delivery:** Vercel (auto-deploys `main`), GitHub Actions, Turborepo.
+- **Services:** Resend; DocuSign or BoldSign; React-PDF or Puppeteer.
+
+### Mobile is a PWA, not React Native — **RULED [Josh, S97]**
+
+The mobile experience is the Next.js app, installed to the home screen. There is no React Native app
+and no app-store presence. The two reasons: Josh does not want to deal with the app store, and **iOS
+delivers Web Push only to an installed PWA.** `apps/mobile/` is **parked, not deleted**. OPEN: the
+mobile UI is either a repair of the dashboard shell or a separate route tree (#101). Full text and the
+superseded rows: [`platform.md`](docs/claude/platform.md), [`superseded.md`](docs/claude/superseded.md).
+
+## PARITY: one feature, both surfaces, same behaviour — **RULED [Josh, S122]**
+
+Anything viewable on desktop and mobile **behaves the same on both**. Layout may differ; what gets
+written, the rules, what an error means, and what the user ends up with may not. (#129: two markup
+editors disagreed about what a save produces, and an annotated photo showed unannotated elsewhere,
+silently.)
+
+- **Share the mechanism, not just the intent.** A second implementation that "does the same thing"
+  *is* the divergence.
+- **A helper under `app/m/` or `app/dashboard/` claims that surface owns it.** If both need it, it
+  belongs in `lib/`.
+- **The rules live below the UI**, in RLS, a service function, or a shared util.
+- **When surfaces must genuinely differ, say so where the code is**, with the reason (e.g. `/m`
+  opens files inline; desktop appends `?download=`, M6M §4.11.16).
+
+Full text: [`rules.md`](docs/claude/rules.md).
+
+## Environment
+
+GitHub Codespaces only; no local environment. Node 20. Supabase via the dashboard plus the CLI.
+Vercel auto-deploys `apps/web` from `main`. Monorepo layout: `apps/web` (Next.js), `apps/mobile`
+(parked), `packages/shared` (types, validation, constants, utils), `packages/supabase`,
+`supabase/migrations` (14-digit timestamps), `docs/`, `scripts/`. Full tree:
+[`platform.md`](docs/claude/platform.md).
+
+### Codespaces gotchas (full text: [`gotchas.md`](docs/claude/gotchas.md))
+
+- `.env.local` is gitignored and **does not survive a rebuild**. Recreate it from the Vercel env vars.
+- **Heredocs eat `<a` in JSX and have mangled a SQL migration.** Write files with Claude Code or
+  `fs.writeFileSync`.
+- **Claude Chat strips `<` when code is pasted.** Bash history expansion eats `!`, even inside double
+  quotes; use `set +H` or single quotes.
+- The web editor truncates long pastes (paste in two parts). Browser drag-drop misses (use
+  right-click → Upload). The anon key is `sb_publishable_…`. Storage rejects `<` and `>` in keys.
+  **Signed URLs are inline**; append `?download=<name>` to force a download.
+- **`SET row_security TO 'off'` inside a SECURITY DEFINER trigger is silently ignored.** Put the
+  RLS-protected query in a separate **SQL** (not plpgsql) SECURITY DEFINER function and call that.
+  Reference: `get_invitation_for_signup()` (Migration 015).
+- **Context files describe intent; git describes state.** Run `git log --oneline -15` at session
+  start.
+- ⚠️ **Dev-mode first-hit timings are Next.js compilation, not latency.** Measure only against
+  production or `next build && next start`. That trap burned four sessions; it is RULED CLOSED
+  (S179, `GATED.md`).
+
+## Run protocol
+
+**Launch:** `claude --dangerously-skip-permissions`, set at launch. Permissions also come from
+`.claude/settings.json`.
+
+- **Phase 0, BRANCH:** `git branch --show-current`. If it says `main`, create
+  `feature/<short-task-name>` **before any edit**. Never edit, create or migrate on `main`, because it
+  auto-deploys to production. Merging to `main` is Josh's call.
+- **Phase 1, ANALYZE:** read the prompt and every file it references. No edits.
+- **Phase 2, QUESTIONS:** surface every question and spec↔schema conflict at once, then STOP and wait.
+  If there are none, say so and continue.
+- **Phase 3, BUILD:** do all the reads and edits autonomously and show the diffs. **Attended: never
+  commit; Josh commits.** Unattended: see below.
+
+### Unattended runs commit after each discrete step — **RULED [Josh, S173]**
+
+A step is one finding, one fix, or one battery check: the smallest unit still worth having if the next
+step never ran. **Commit it path-scoped, then push the FEATURE branch to origin, after every commit.**
+The Codespace has destroyed unattended work at least twelve times, and a local branch dies with the
+box. **Attended: Josh commits and CC never pushes. Unattended: CC commits and pushes the feature
+branch.** In both: never push to `main`, never `git add -A` over an unrelated tree, and merging is
+Josh's. Full text: [`rules.md`](docs/claude/rules.md).
+
+### The thing inspected must be the thing being judged — **MANDATORY [S108/S122]**
+
+Before stating a result, name what produced the evidence and confirm it is the thing in question. The
+instruments that have lied here:
+
+a **wrapper's status** (`tail`, `echo`, `time`, a task summary); **truncated output** (a grep through
+`head`); a **script that threw** and fell through to a conclusion; an **absent tool** ("no output" is
+not "no result"); a **cached result** (a Turbo hit is not a run); the **wrong scope** (Prettier on a
+`/tmp` copy); a **probe that cannot fail**. **State row counts, and run a control that must fire.**
+
+The exit-status rules:
+
+1. **Never judge through a pipe.** Use `cmd > log 2>&1; echo $?` immediately, or `set -o pipefail`,
+   or read `${PIPESTATUS[0]}`.
+2. **Print the real code and read that line.** `cmd; echo "exit: $?"` reports the echo's status.
+3. **Corroborate with an independent tally**: a `✘` count or a test total.
+4. **Never `pkill -f <pattern>`.** It can match its own shell. List the PIDs and `kill <PID>`,
+   excluding `$$` (`scripts/e2e-preflight.sh`).
+
+In CI a masked failure ships red as green. `ci.yml` sets `bash -euo pipefail`, but nothing closes the
+trailing-command case except not writing it. Full text: [`rules.md`](docs/claude/rules.md).
+
+### A fix session sweeps for EXISTING tests of the behaviour it overturns — **MANDATORY [Josh, S157]**
+
+Changing a rule (a policy, a floor, a constraint, a ruling) is not finished when your own probes are
+updated. **Grep the table, column, policy or function across `apps/web/test/`, `apps/web/e2e/` and
+the specs. Read the describe and it TITLES.** Assume a partially-stale file is still green (it goes
+red only on the roles you changed). **Invert, do not delete.** And check any assertion named
+"default", "none" or "never": it must read the schema, not a mutable row. (S154/S121: a file titled
+"contact_addresses SELECT is NOT floored" stayed green through two audits.) Full text:
+[`rules.md`](docs/claude/rules.md).
+
+### A `.limit(1)` is ORDERED, or SCOPED to what the caller depends on — **MANDATORY [Josh, S165]**
+
+An unordered `.limit(1)` returns heap order, which shifts on any update. Every one is one of three:
+
+1. **Ordering fixes it.** Any stable row will do, so add `.order(…)`.
+2. **Ordering does NOT fix it.** Downstream code relies on a property (a role, an author, an
+   assignment, a status) the query never filtered for. **Scope it** with that `.eq`/`.in`/`.not`. This
+   is the category that keeps recurring. A silent early-out on a wrong pick is an untested run.
+3. **Genuinely arbitrary.** Leave it, **with a one-line comment saying so**.
+
+This applies to `app/` and `lib/`, not only tests. Full text: [`rules.md`](docs/claude/rules.md).
+
+### Never reformat a file the repo does not already format — **MANDATORY [Josh, S112]**
+
+**Run a formatter only on files already formatted on main, and only on the lines you changed.**
+First run `npx prettier --check` on the file **as it is on main**. If that fails, match its style by
+hand. **An unreviewable diff is where authority errors hide.** At S112, `prettier --write` buried
+about 40 real lines in about 1,300 lines of reflow. The cleanup then used zero-context patches, which
+moved `canRecordPayment`'s body into `canIssueRefund`, **giving the Project Executive refund
+authority**. It compiled, and no test failed. Only checking every file against the intended change
+caught it.
+
+- If a file's changed-line count is far larger than your edit, **stop**.
+- **Never apply `--unidiff-zero` patches to code.** Rebuild from the pre-edit file against anchors
+  that must match exactly once.
+- **An authority change needs its negative asserted** (see the next rule).
+
+Full incident: [`rules.md`](docs/claude/rules.md).
+
+### Role-permission tests are TOTAL maps — **MANDATORY [Josh, S112]**
+
+A test deciding a role's permission states the answer for **every** role, as a
+`Record<CompanyRole, T>` through `forEveryRole()` (`apps/web/test-support/role-matrix.ts`), plus
+`JUNK_ROLES`, which must fail closed. Test files are type-checked in CI, so **adding a role fails to
+compile until every permission states its answer.** Assert the deny as well as the allow. (The
+hand-listed `canIssueRefund` test said nothing about the Project Executive.) Full text:
+[`rules.md`](docs/claude/rules.md).
+
+### Tech-debt numbering — **RULED [Josh, S136]**
+
+**Never allocate a bare `#N` on a branch.** File as `#N-<branch-tag>` (`#12-notif`), numbered from 1
+within the branch. Convert to a real number **when the branch lands**, taking the next free number
+from main's `TECH_DEBT.md`, and update its cross-references in the same commit. Full text:
+[`rules.md`](docs/claude/rules.md).
+
+## Database (full text and SQL templates: [`database.md`](docs/claude/database.md))
+
+- **Every table has `company_id`; RLS is on every table, no exceptions.** Policies use
+  `get_my_company_id()`.
+- **Storage policies must use an inline subquery, not the helper.** In `storage.objects` the helper
+  silently returns NULL:
+  `(storage.foldername(name))[1]::uuid = (SELECT company_id FROM profiles WHERE id = auth.uid())`
+  (migrations 013 and 017).
+- **Naming:** plural snake_case tables; `{singular}_id` FKs; `idx_{table}_{column}`;
+  policies `{table}_{action}_{role}`.
+- **Standard columns:** `id`, `company_id`, `created_at`, `updated_at`, `created_by`, `updated_by`,
+  `is_deleted`, `deleted_at`. **Soft delete only.**
+- **Every new per-tenant table, in its creating migration:** defaults `company_id =
+  get_my_company_id()`, `created_by`/`updated_by = auth.uid()` (without them client INSERTs fail RLS
+  with a 403), plus the `{table}_updated_at` trigger and `{table}_set_updated_by` /
+  `set_{table}_updated_by()`.
+- **Service code never sets `updated_at` or `updated_by`.** The triggers do. Known holdover:
+  `companies`.
+- **Append-only logs** (`ai_tag_logs`, `trial_emails`) omit `updated_*`, `created_by` and the
+  soft-delete columns, and have SELECT and INSERT policies only.
+- **Cost columns are `NUMERIC(10,6)`.** Audit-log FKs to deletable rows are `ON DELETE SET NULL`.
+- **Trash bin:** RLS does not filter `is_deleted`. `get{Entity}s()` filters it out, `get{Entity}(id)`
+  does not, and `getTrash()` returns only deleted rows. Reference: `lib/services/files.ts`.
+- **Generated types** (`packages/shared/types/database.ts`): after any column or table change, run
+  `npm run db:push` and commit `database.ts` with the migration. Never hand-write DB shapes. Use
+  `Pick<>` for column selects and `Omit<Row> +` intersection to restore CHECK literal unions (the
+  generator emits `string`). `*-client.ts` files **re-export** types, never redefine them.
+- **Service layer:** server reads live in `lib/services/{entity}.ts`, client writes in
+  `{entity}-client.ts`. `next/headers` can never reach a client component; use `import type` across
+  the boundary. `getStripe()` and `getSupabaseAdmin()` are lazy.
+
+## Code conventions
+
+- **TypeScript:** strict; no `any` (use `unknown` and narrow); interfaces for shapes; Zod schemas in
+  `packages/shared/validation/`; `import type` across the server/client boundary.
+- **React:** App Router; Server Components by default and `"use client"` only for interactivity;
+  shadcn/ui + Tailwind; kebab-case files; colocate component files.
+- **Data:** every DB call goes through a service module, never from a component. Edge Functions for
+  server-only logic.
+- **Errors:** an error never names an unverified cause. Auth/permission failures are 401/403 with
+  their own message and never fall through to "not found". **Every error response logs the real
+  cause server-side** with the route and the failing check.
+- **Git:** `main` is production. Feature branches are `feature/{module}-{description}`. Commits are
+  `[Module] Description`.
+
+## Roles (full text, every banner and history: [`roles.md`](docs/claude/roles.md))
+
+**Two separate layers.** **Platform admins** live in `platform_admins`, reach `/admin`, and have no
+company. **Company users** are tenant-scoped:
+
+| Role | DB value | Web | Key permissions |
+| --- | --- | --- | --- |
+| Owner | `owner` | Full | Everything, including billing and the owner-only list below |
+| Admin | `admin` | Full | Owner minus money-out/billing minus promoting Admins |
+| Project Manager | `project_manager` | Assigned projects | Estimates, projects, COs, client comms; **actual + committed cost only** |
+| Foreman | `foreman` | Limited | Crews, daily logs, crew scheduling, punch, QC; **actual cost only** |
+| Crew Member | `crew_member` | Minimal | Clock in/out, logs, photos, tasks |
+| Client | `client` | Portal only | Timeline, photos, selections, signing, payments |
+
+### Roster Visibility Floor — **RULED [Josh, S131]**
+
+`DASHBOARD_ROLES` is enforced by `lib/dashboard-access.ts` in both `middleware.ts` and the
+`/dashboard` layout. A `subcontractor` goes to `/m/projects`; a `client` goes to the portal
+placeholder. **A redirect protects no data**, so the data floor is RLS
+(`20260911000000_roster_visibility_floor.sql`):
+
+| Role | Team roster | `contacts` | `subcontractors` |
+| --- | --- | --- | --- |
+| subcontractor | Owner, Admin, PM only | none | none |
+| client | none | none | none |
+| the 5 dashboard roles | unchanged | unchanged | unchanged |
+
+**Every role can always read its own row.** Traps: **the roster is TWO tables** (`profiles` and
+`company_members`); **permissive policies OR together**, so a narrower third policy changes nothing.
+
+### Financial Visibility Floor — **RULED [Josh, S150]**
+
+**Owner and Admin see contract, budget, sell and CO dollar figures. A Project Manager sees actual and
+committed cost. Foreman and crew see actual cost only.** The S150 decision narrowed foreman
+deliberately. It is not a drift: `#1-m7cpl` is CLOSED, and `budgetColumnsFor()` gives full 7 /
+committed 5 / actual_only 3 / none.
+
+- **Gated from PM, foreman and crew:** contract value (`project_financials.contract_value`),
+  budgeted/sell (`project_budget_amounts.budgeted_amount`), rates (`instrument_rates`), variance,
+  margin, and CO dollars (`change_orders.net_delta`).
+- **Visible to all:** actual and committed cost (`project_budget_items`, which has **no role floor
+  in RLS, and must keep none**), and non-dollar facts.
+- **A PM sees only invoices they AUTHORED** (`author_member_id`). Payments and every AR aggregate are
+  Owner/Admin. That overturned the S97 carve-out.
+
+| Figure | Enforcement |
+| --- | --- |
+| Contract value | **DB**, Owner/Admin: `project_financials` (20260811…, 20260812…) |
+| Budgeted amount | **DB**, Owner/Admin: `project_budget_amounts` (20260816…, 20260817…) |
+| Rates | **DB**, Owner/Admin SELECT (20260806…) |
+| CO dollars | **Partly DB.** `change_orders_select_visible` admits Owner/Admin plus a PM on **their own** COs only (20260830…); foreman, crew and subs read none. A PM seeing `net_delta` on their own CO is deliberate (#117). |
+
+**Do not "finish" this by flooring `change_orders`** without reading #117. The obvious fix breaks CO
+authoring for PMs.
+
+### A client is a counterparty, not staff — **RULED [Josh, S164]**
+
+The Floor governs staff. A client sees **more** than a PM on cost-plus and T&M, and **less** on lump
+sum:
+
+| Instrument | The client sees |
+| --- | --- |
+| Cost-plus | Budgeted, actual, markup %, hourly rate, line totals, category and project totals. **Not** committed. |
+| T&M | What the company paid, the markup %, and the total billed, with the pre-markup figure beside it |
+| Lump sum | The total billed, by bill. No line prices, no cost basis. |
+
+**A lump-sum job can carry a T&M change order, and the CO's rule follows the CO**, so never assume one
+visibility setting per project. **"They see what is on the invoice"**: `invoices.presentation_level`
+is the single source of truth, and the portal aggregates it. **Enforced in the DB:** the client's
+`invoice_lines` arm requires `presentation_level = 'full_detail'`.
+
+### The Admin Role Principle
+
+**Admin = Owner minus money minus Admin promotion.** Unless an action is on this list, Admin can do
+it. Owner-only:
+
+(1) billing and subscription; (2) promoting to Admin; (3) transferring ownership; (4) connecting or
+disconnecting QuickBooks; (5) releasing final sub payments; (6) approving client-facing AI weekly
+summaries; (7) approving marketing content; (8) deleting the company.
+
+When unsure, the default is "Owner + Admin".
+
+| Approval | Owner | Admin | PM | Foreman |
+| --- | --- | --- | --- | --- |
+| Billing · Promote to Admin · Connect QB · Release sub payments · AI weekly summaries · Marketing | ✓ | — | — | — |
+| Sub pay apps (review) · Estimates for sending · Foreman timesheets | ✓ | ✓ | ✓ | — |
+| Crew timesheets | ✓ | ✓ | ✓ | ✓ |
+| Invite users (non-Admin) · Edit company settings | ✓ | ✓ | — | — |
+| Delete files | ✓ | ✓ | ✓ | — |
+
+The old "CO final approval: Owner" row is **superseded**: Owner, Admin and PM all create and send COs
+(module5 §5.7c, S55). In workflows, Admin matches Owner except final payment release, owner-only AI
+approvals, and billing. The automated workflows are listed in `docs/roadmap/FrameFocus_Quick_Reference.docx`.
+
+## AI rules (full text: [`platform.md`](docs/claude/platform.md))
+
+**AI drafts, humans approve.** **Owner only:** weekly client summaries, marketing, and billing
+narratives. **Owner or Admin:** estimate line suggestions, daily-log summaries, punch proposals and
+anomaly flags. **Photo auto-tags apply instantly.** Every prompt carries company context; every output
+goes through an approval queue.
+
+The reference implementation is `lib/services/ai-tagging.ts`: a lazy `getOpenAI()`; a cost log on
+success **and** failure; a bail-early order (auth → row → MIME → add-on → config → OpenAI); validation
+against an allowed set; `response.model` logged; no auto-retry. Tests assert structure, not content.
+
+## Instructions for Josh
+
+Step-by-step, click-level guidance with explicit file paths, one thing at a time, and paste-ready
+code, assuming Codespaces in a browser. **No heredocs for multi-line file content.**
+
+## References
+
+Env, infrastructure and test data: [STATE.md](STATE.md). Tech debt: `TECH_DEBT.md` (open, and the
+numbering authority), `TECH_DEBT_CLOSED.md`, `TECH_DEBT_IDEAS.md`. Gated work: `GATED.md`. Roadmap:
+`docs/roadmap/`. Sessions: `docs/sessions/contextN.md` (read the latest). **Full rules and history:**
+[`docs/claude/`](docs/claude/) (`rules.md`, `roles.md`, `database.md`, `platform.md`, `gotchas.md`,
+`conventions.md`, `superseded.md`).
