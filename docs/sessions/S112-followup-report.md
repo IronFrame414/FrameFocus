@@ -358,36 +358,61 @@ one parenthesised `return` in `photos/page.tsx`. They are semantically identical
 are recorded rather than reverted. On the guard branch, `schema-drift.ts` has two reflowed
 signature lines besides the real change.
 
-## 9. The change-order money-in-text query: production, read-only [blocks s112-co-summary]
+## 9. The change-order money-in-text question: RULED, and why the query is NOT the reason
 
-**What it gates.** `20261840000000` (R5b) shows every staff role the title, description and date of
-**signed** change orders, and never a money column. But `title` and `description` are free text, and
-the database cannot keep typed money out of prose. So before it ships, production says how often
-money has actually been typed there. That one answer unblocks a chain:
-`s112-co-summary` → `s112-audit-rulings` (contained in it) → `s112-amber-sweep` (built on it).
+**RULED [Josh, S112 follow-up]: R5b ships title + description + date, as built.**
 
-**Why this version.** The earlier query (`S112-rulings-report.md:253-258`) checked descriptions for
-both "$" amounts and thousands-separated numbers, but titles for "$" only. That would miss a title
-like "Upgrade to 12,500 sq ft — 18,400". This version applies the same three patterns to **both**
-fields, and **counts them separately**. The split matters for the decision: if money sits in
-**titles**, the fallback (title + date) leaks as well.
+**⚠️ The measurement did not establish it.** Production returned **`all_statuses_total = 0`**: there
+are no change orders on production at all, of any status. "0 carry money" was a **pass on zero rows**,
+which is a failure by CLAUDE.md's own rule ("a probe that cannot fail"). Rebuild-test's 11 signed COs
+are fixtures, and they say nothing about how a person writes a title.
 
-**Patterns**, each tested with a control on rebuild-test:
+**What actually justifies shipping:** there is no existing text to leak, and the editor hint lands
+**before the first real change order exists**. _"The guardrail precedes the habit."_
 
-| Pattern | Catches | Example |
+**Required with it, and done:**
+
+- **a) The hint is on the TITLE field as well as the description**, on every surface change-order
+  text is written:
+  - desktop create (`changes-panel.tsx`): title
+  - desktop edit (`co-builder.tsx`): one hint under both fields, `aria-describedby` on each
+  - `/m` create and `/m` edit: title and description, through `write-ui.tsx`'s new optional `hint`
+    prop
+
+  It's one i18n key, `project.coEditor.noPriceHint`:
+  - en "Crew and foremen can read this. Keep prices and amounts out of it."
+  - es "El personal de obra puede leer esto. No incluyas precios ni montos."
+
+  Guard: `s112-co-price-hint.test.ts`, 8/8, and removing a hint turns it red. Pushed on
+  `feature/s112-co-summary` @ `b7816868`.
+- **b) Follow-up filed as `#1-cosum`** (`TECH_DEBT.md` on that branch): re-run the query once
+  production has about **20 signed change orders**, and rule again on evidence. **Use the instrument
+  below, unchanged**, so the second measurement is comparable with the first.
+
+### The corrected instrument
+
+Two patterns were added beyond the version given earlier, because each misses something the others
+don't:
+
+| Pattern | Catches | Missed before |
 | --- | --- | --- |
-| `\$\s?\d` | a dollar sign before a number | `$2,400`, `$ 75` |
-| `\d{1,3}(,\d{3})+(\.\d\d)?` | thousands-separated amounts | `1,850.00` |
-| `\m\d[\d,.]*\s*(dollars?\|usd\|bucks)\M` (case-insensitive) | a number followed by the word | `300 dollars` |
+| `\$\s?\d` | `$2,400`, `$ 75`, `US$1200` | |
+| `\d{1,3}(,\d{3})+(\.\d\d)?` | `1,850.00`, `2,400` | |
+| `\m\d+\.\d\d\M` **(bare decimal)** | `Extra labor 2400.00` | **yes** |
+| `\m\d[\d,.]*\s*(dollars?\|usd\|bucks)\M` | `300 dollars` | |
+| `\m(usd\|us\$\|dollars?)\s*\$?\d` **(currency word first)** | `USD 2,400`, `dollars 300` | **yes** (`dollars 300`) |
 
-**Stays quiet on:** `Move 2 outlets, 3 ft left`, `Replace 36" door with 42"`, `Room 2400 north wall`.
+**Controls, run on rebuild-test:**
 
-**Known false positive, in the safe direction:** `Install 1,200 sq ft`. Query B lists every flagged
-row so a false positive can be read and dismissed.
+- **Fires on all 8:** `Add outlet — $2,400` · `credit of 300 dollars` · `$ 75 per hour` ·
+  `Upgrade for 1,850.00` · `Extra labor 2400.00` · `USD 2,400 for the upgrade` ·
+  `dollars 300 back to client` · `US$1200 allowance`
+- **Quiet on all 4:** `Move 2 outlets, 3 ft left` · `Replace 36" door with 42"` ·
+  `Room 2400 north wall` · `Model AB-2400 fan`
+- **False positives, in the safe direction:** `Install 1,200 sq ft` and `2.50 hours extra`. Query B
+  lists the flagged rows so these can be read and dismissed.
 
-**Measured on rebuild-test:** 11 signed, **0** title, **0** description (27 across all statuses, 0 / 0).
-
-### Query A: the counts
+**Query A: counts**, with title and description counted separately:
 
 ```sql
 WITH co AS (
@@ -395,8 +420,10 @@ WITH co AS (
   FROM change_orders WHERE is_deleted = false
 ), flagged AS (
   SELECT co.*,
-    (title ~ '\$\s?\d' OR title ~ '\d{1,3}(,\d{3})+(\.\d\d)?' OR title ~* '\m\d[\d,.]*\s*(dollars?|usd|bucks)\M') AS title_money,
-    (description ~ '\$\s?\d' OR description ~ '\d{1,3}(,\d{3})+(\.\d\d)?' OR description ~* '\m\d[\d,.]*\s*(dollars?|usd|bucks)\M') AS desc_money
+    (title ~ '\$\s?\d' OR title ~ '\d{1,3}(,\d{3})+(\.\d\d)?' OR title ~ '\m\d+\.\d\d\M'
+     OR title ~* '\m\d[\d,.]*\s*(dollars?|usd|bucks)\M' OR title ~* '\m(usd|us\$|dollars?)\s*\$?\d') AS title_money,
+    (description ~ '\$\s?\d' OR description ~ '\d{1,3}(,\d{3})+(\.\d\d)?' OR description ~ '\m\d+\.\d\d\M'
+     OR description ~* '\m\d[\d,.]*\s*(dollars?|usd|bucks)\M' OR description ~* '\m(usd|us\$|dollars?)\s*\$?\d') AS desc_money
   FROM co
 )
 SELECT
@@ -409,30 +436,34 @@ SELECT
 FROM flagged;
 ```
 
-### Query B: only if A shows any non-zero money count; lists the flagged rows to judge false positives
+**Query B: the flagged rows**, to judge false positives:
 
 ```sql
-SELECT co_number, status,
-  (title ~ '\$\s?\d' OR title ~ '\d{1,3}(,\d{3})+(\.\d\d)?' OR title ~* '\m\d[\d,.]*\s*(dollars?|usd|bucks)\M') AS title_money,
-  (coalesce(description,'') ~ '\$\s?\d' OR coalesce(description,'') ~ '\d{1,3}(,\d{3})+(\.\d\d)?' OR coalesce(description,'') ~* '\m\d[\d,.]*\s*(dollars?|usd|bucks)\M') AS desc_money,
-  title, left(description, 200) AS description_start
-FROM change_orders
-WHERE is_deleted = false
-  AND (title ~ '\$\s?\d' OR title ~ '\d{1,3}(,\d{3})+(\.\d\d)?' OR title ~* '\m\d[\d,.]*\s*(dollars?|usd|bucks)\M'
-    OR coalesce(description,'') ~ '\$\s?\d' OR coalesce(description,'') ~ '\d{1,3}(,\d{3})+(\.\d\d)?' OR coalesce(description,'') ~* '\m\d[\d,.]*\s*(dollars?|usd|bucks)\M')
+WITH co AS (
+  SELECT co_number, status, title, coalesce(description, '') AS description
+  FROM change_orders WHERE is_deleted = false
+), flagged AS (
+  SELECT co.*,
+    (title ~ '\$\s?\d' OR title ~ '\d{1,3}(,\d{3})+(\.\d\d)?' OR title ~ '\m\d+\.\d\d\M'
+     OR title ~* '\m\d[\d,.]*\s*(dollars?|usd|bucks)\M' OR title ~* '\m(usd|us\$|dollars?)\s*\$?\d') AS title_money,
+    (description ~ '\$\s?\d' OR description ~ '\d{1,3}(,\d{3})+(\.\d\d)?' OR description ~ '\m\d+\.\d\d\M'
+     OR description ~* '\m\d[\d,.]*\s*(dollars?|usd|bucks)\M' OR description ~* '\m(usd|us\$|dollars?)\s*\$?\d') AS desc_money
+  FROM co
+)
+SELECT co_number, status, title_money, desc_money, title, left(description, 200) AS description_start
+FROM flagged WHERE title_money OR desc_money
 ORDER BY status = 'signed' DESC, co_number;
 ```
 
-### The decision rule
+### The decision rule, for when it has rows to decide on
 
-Read the **signed** columns first. They are exactly what the function returns.
+**A result is valid only if `signed_total` ≥ 20.** Below that, it's the same vacuous pass as today.
+Read the **signed** columns, which are what the function returns:
 
-| `signed_title_money` | `signed_description_money` | Ship |
+| `signed_title_money` | `signed_description_money` | Then |
 | --- | --- | --- |
-| **0** | **0** | **Title + description + date**, as built. |
-| **0** | **1 or more** (real, per Query B) | **Fall back to title + date.** Drop `description` from the function's SELECT and the UI. |
-| **1 or more** (real, per Query B) | any | **Neither is safe as built.** Title + date leaks too. Stop and rule, e.g. CO number + date only, or clean those titles first. |
+| **0** | **0** | Title + description + date stays. |
+| **0** | **1 or more** (real, per Query B) | Fall back to **title + date**: drop `description` from the function's SELECT and the UI. |
+| **1 or more** (real, per Query B) | any | **Neither is safe.** Title + date leaks too. Rule, e.g. CO number + date only, or clean those titles first. |
 
-**Treat the all-status columns as a warning, not a gate.** Drafts and sent COs become signed later,
-so a non-zero there means the habit exists even if no signed CO shows it yet. Worth a word to whoever
-writes COs.
+Treat the all-status columns as a warning, not a gate. Drafts become signed.
