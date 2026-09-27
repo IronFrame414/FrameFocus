@@ -1,6 +1,6 @@
 'use server';
 
-import { isOwnerOnlyGrant } from '@framefocus/shared';
+import { isOwnerOnlyGrant, isWithheldRole } from '@framefocus/shared';
 import { createClient } from '@/lib/supabase-server';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@framefocus/shared/types/database';
@@ -76,6 +76,12 @@ export async function updateTeamMemberAction(
 
   if (profile.role === 'admin' && isOwnerOnlyGrant(updates.role)) {
     throw new Error('Admins cannot promote users to Owner, Admin or Project Executive');
+  }
+  // [S181 Q3, RULED Josh] A withheld role is not GRANTED here — the picker does
+  // not offer it, and a hand-built call gets the same answer. Keeping a role the
+  // target already holds is not a grant, so it passes.
+  if (isWithheldRole(updates.role) && updates.role !== target.role) {
+    throw new Error('That role is not available yet.');
   }
 
   await updateTeamMember(supabase, targetId, updates);

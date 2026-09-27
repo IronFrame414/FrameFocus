@@ -112,6 +112,32 @@ export function isOwnerOnlyGrant(role: string | null | undefined): boolean {
 }
 
 /**
+ * Roles that EXIST — in `CompanyRole`, in `profiles_role_check` and
+ * `invitations_role_check` — but are NOT OFFERED to anyone granting a role.
+ * [S181 Q3, RULED Josh]
+ *
+ * `project_executive` sees its projects' money (S111 Part One), but its
+ * operational arms — files, tasks, schedule, POs, roster — are on a follow-up
+ * branch. Until they land, an Owner is not offered a role that cannot upload a
+ * photo. **The schema keeps it**: this removes it from the OFFER, not the
+ * database. Remove it from here when the operational arms merge.
+ *
+ * ⚠️ THE ONE SOURCE. The invite form, the Team edit form (both option lists)
+ * and the two grant paths (`POST /api/invites`, `updateTeamMemberAction`) all
+ * read `OFFERED_ROLES` / `isWithheldRole` — never a second hand-edited list.
+ */
+export const WITHHELD_ROLES: readonly CompanyRole[] = ['project_executive'];
+
+export function isWithheldRole(role: string | null | undefined): boolean {
+  return !!role && (WITHHELD_ROLES as readonly string[]).includes(role);
+}
+
+/** What a grant UI offers: `INVITABLE_ROLES` minus `WITHHELD_ROLES`, in order. */
+export const OFFERED_ROLES: readonly InvitableRole[] = INVITABLE_ROLES.filter(
+  (role) => !isWithheldRole(role)
+);
+
+/**
  * Check if roleA outranks roleB in the hierarchy.
  * Example: canManage('owner', 'admin') → true
  */

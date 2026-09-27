@@ -123,3 +123,26 @@ Commit `b42e3ba8` answers the four mechanical maps: budget `'full'`, contracts `
   `payments-shared.ts` is empty.
 - DB side (rebuild-test): `client_refunds` has PE **SELECT only** (`client_refunds_select_project_executive`); INSERT/UPDATE
   are O/A. A live negative is added in C-2.
+
+## Build gate after rebase — PASSED
+
+`tsc --noEmit -p apps/web` exit 0, 0 errors. `next build` exit 0: "✓ Compiled successfully", "Linting and checking
+validity of types", "✓ Generating static pages (133/133)" (a real build, not a cache hit — `next build` has no Turbo cache).
+
+## Step Q3 — Project Executive withheld from every grant UI — DONE
+
+- **One source:** `packages/shared/constants/roles.ts` → `WITHHELD_ROLES = ['project_executive']`, `isWithheldRole()`,
+  `OFFERED_ROLES = INVITABLE_ROLES − WITHHELD_ROLES`.
+- Invite form renders `OFFERED_ROLES`. The Team edit form's two hand-written option lists are **replaced** by derivations
+  (`OWNER = OFFERED_ROLES`, `ADMIN = OWNER − owner-only grants`); both old lists are quoted in place.
+- The grant paths refuse a withheld role from a hand-built request: `POST /api/invites` → 400 plus a server log; `updateTeamMemberAction`
+  throws unless the target **already holds** that role (keeping a role is not a grant).
+- `/m` has no role picker (grep over `app/m/team`: 0 role option lists).
+- **Schema untouched**: both role CHECKs still carry `project_executive` (asserted against the 1820 migration file).
+- Tests: `s111-role-caps.test.ts` +7 (total maps for `seesProjectMoney`/`seesCompanyMoney`/`isWithheldRole`, the offered list,
+  one-source guard, grant-path guard, CHECK kept) → **10/10**. Control: a literal `{ value: 'project_executive', label }` re-added
+  to edit-form → **1 failed / 9 passed**; restored. The first version of the guard fired on a *quoted comment*; it now ignores comment lines, and
+  a sub-assert proves the filter leaves the code in.
+- `e2e/desktop-team.spec.ts` invite-options assertion inverted in place (five → four; the S111 five quoted). **e2e not run
+  locally** — CI runs it.
+- Unit run of the 7 touched files: 120 tests, all passing after the guard fix. `tsc` exit 0.

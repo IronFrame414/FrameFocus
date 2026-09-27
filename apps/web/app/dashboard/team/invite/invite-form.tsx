@@ -6,7 +6,7 @@ import { useState } from 'react';
 // read below still uses this client, and because deleting a service function is
 // a wider change than this defect warrants.
 import { createClient } from '@/lib/supabase-browser';
-import { INVITABLE_ROLES, ROLE_DESCRIPTIONS, ROLE_LABELS, isOwnerOnlyGrant } from '@framefocus/shared';
+import { OFFERED_ROLES, ROLE_DESCRIPTIONS, ROLE_LABELS, isOwnerOnlyGrant } from '@framefocus/shared';
 
 /**
  * ⚠️ THE LOCAL LIST IS GONE. [#1-s168, S175 item 6]
@@ -27,8 +27,12 @@ import { INVITABLE_ROLES, ROLE_DESCRIPTIONS, ROLE_LABELS, isOwnerOnlyGrant } fro
  * on this screen changes except that `Client` is no longer offered. A client is
  * invited from the PROJECT's Contacts tab (M9 B.4) — a portal account is created
  * against a contact and a project, neither of which this form knows about.
+ *
+ * [S181 Q3, RULED Josh] _Superseded:_ `INVITABLE_ROLES.map(...)`. The form now
+ * renders `OFFERED_ROLES` — the same list minus `WITHHELD_ROLES` (the Project
+ * Executive, until its operational arms land). One source; see roles.ts.
  */
-const INVITE_OPTIONS = INVITABLE_ROLES.map((value) => ({
+const INVITE_OPTIONS = OFFERED_ROLES.map((value) => ({
   value,
   label: ROLE_LABELS[value],
   description: ROLE_DESCRIPTIONS[value],
