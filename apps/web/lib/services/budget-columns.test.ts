@@ -15,6 +15,8 @@ describe('§7.1 — Budget & Cost columns per role', () => {
       {
         owner: 'full',
         admin: 'full',
+        // [S111 RULED 2] the Owner's visibility, on its own projects only (RLS).
+        project_executive: 'full',
         project_manager: 'committed',
         foreman: 'actual_only',
         crew_member: 'none',

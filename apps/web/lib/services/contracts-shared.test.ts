@@ -102,6 +102,8 @@ describe('§8 — Owner/Admin only', () => {
       {
         owner: true,
         admin: true,
+        // [S181 Q2, RULED Josh] NO contract authority for a Project Executive.
+        project_executive: false,
         project_manager: false,
         foreman: false,
         crew_member: false,

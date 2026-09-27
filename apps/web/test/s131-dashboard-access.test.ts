@@ -30,6 +30,7 @@ describe('[S112 queue 3] every role\'s answer, stated — not derived from the c
       {
         owner: { admitted: true, redirect: null },
         admin: { admitted: true, redirect: null },
+        project_executive: { admitted: true, redirect: null },
         project_manager: { admitted: true, redirect: null },
         foreman: { admitted: true, redirect: null },
         crew_member: { admitted: true, redirect: null },
