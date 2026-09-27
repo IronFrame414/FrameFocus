@@ -140,6 +140,7 @@ export function CoCreateForm({
         testId="m-co-title"
         required
         placeholder={t('project.coCreate.titlePlaceholder')}
+        hint={t('project.coEditor.noPriceHint')}
       />
 
       <div className="mt-[14px]">
@@ -159,6 +160,7 @@ export function CoCreateForm({
         value={description}
         onChange={setDescription}
         testId="m-co-description"
+        hint={t('project.coEditor.noPriceHint')}
       />
 
       <TextField

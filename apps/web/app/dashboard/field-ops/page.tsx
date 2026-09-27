@@ -97,7 +97,7 @@ export default async function FieldOpsHubPage() {
               >
                 <div>
                   <div className="text-[15px] font-semibold text-[#0f1729]">{project.name}</div>
-                  <div className="mt-[2px] text-[12px] text-[#8792a8]">
+                  <div className="mt-[2px] text-[12px] text-[#687081]">
                     {summary
                       ? `${summary.log_count} daily log${summary.log_count === 1 ? '' : 's'} · latest ${fmtYmd(summary.latest_log_date)}`
                       : 'No daily logs yet'}

@@ -396,6 +396,8 @@ test.describe('M-3 · Project sections hub', () => {
     const text = (await line.innerText()).trim();
     expect(text.length).toBeGreaterThan(0);
     expect(text).toContain(fx.dates.plus3);
+    // [S112 Q5] Amber text on the white card was 2.15:1; the text shade is 4.89:1.
+    expect(await line.evaluate((el) => getComputedStyle(el).color)).toBe('rgb(157, 101, 6)');
   });
 
   test('A-11j · a crew member\'s "Up next" reflects only the schedule rows RLS grants them', async ({
@@ -435,11 +437,14 @@ test.describe('M-3 · Project sections hub', () => {
     // The rendered colour, for the badges that have something to show.
     const punchBadge = page.getByTestId('m-tile-punch').getByTestId('m-tile-badge');
     expect(await punchBadge.evaluate((el) => getComputedStyle(el).color)).toBe(
-      'rgb(245, 158, 11)'
+      // #9d6506 — m6m.amber-text, RULED [Josh, S112 R6]: amber badge TEXT must
+      // clear AA on the white tile. Was rgb(245, 158, 11) #f59e0b (2.15:1).
+      'rgb(157, 101, 6)'
     );
     const photoBadge = page.getByTestId('m-tile-photos').getByTestId('m-tile-badge');
     expect(await photoBadge.evaluate((el) => getComputedStyle(el).color)).toBe(
-      'rgb(135, 146, 168)' // #8792a8 — m6m.muted, README ramp
+      // #687081 — m6m.muted, RULED [Josh, S112 R4]; was rgb(135, 146, 168) #8792a8
+      'rgb(104, 112, 129)'
     );
   });
 

@@ -569,7 +569,7 @@ function OnTheClock({
       <Link
         href="/m/timeclock/switch"
         data-testid="m-switch-link"
-        className="mt-[12px] flex min-h-[52px] w-full items-center justify-center rounded-[14px] border border-m6m-amber text-[15px] font-bold text-m6m-amber"
+        className="mt-[12px] flex min-h-[52px] w-full items-center justify-center rounded-[14px] border border-m6m-amber text-[15px] font-bold text-m6m-amber-text"
       >
         {t('field.clock.switch')}
       </Link>
@@ -603,7 +603,7 @@ function OnTheClock({
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
                 rows={2}
-                className="w-full rounded-[10px] border border-m6m-border px-[12px] py-[8px] text-[15px] text-m6m-navy"
+                className="w-full rounded-[10px] border border-m6m-border px-[12px] py-[8px] text-[16px] text-m6m-navy"
               />
             </>
           ) : null}
@@ -777,7 +777,7 @@ function QueuedOnTheClock({
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
                 rows={2}
-                className="w-full rounded-[10px] border border-m6m-border px-[12px] py-[8px] text-[15px] text-m6m-navy"
+                className="w-full rounded-[10px] border border-m6m-border px-[12px] py-[8px] text-[16px] text-m6m-navy"
               />
             </>
           ) : null}

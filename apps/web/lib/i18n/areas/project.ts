@@ -36,6 +36,9 @@ export const en = {
   'project.hub.punchMineOne': '{n} mine',
   'project.hub.punchOpen': '{n} open',
   'project.hub.punchOpenOne': '{n} open',
+  // [S112 audit F11] The hub's app-bar title — the screen, not the project
+  // name, which the hero directly beneath already shows.
+  'project.hub.title': 'Project',
   'project.hub.daysLeft': 'Days left',
   'project.hub.punch': 'Punch',
   'project.hub.nothingScheduled': 'Nothing scheduled',
@@ -70,6 +73,21 @@ export const en = {
   'project.coStatus.voided': 'Voided',
   'project.changes.new': 'New change order',
   'project.changes.empty': 'No change orders.',
+  // [S112 R5a] Foreman/crew/sub read no COs (S121 read floor) — "No change
+  // orders." would be false for them. Worded by role, like shell.denied.coRead.
+  'project.changes.officeOnly':
+    'Change orders are handled by the office. Your project manager can tell you what changed.',
+  // [S112 R5b] The no-money summary of an APPROVED change order. The two notes
+  // say out loud why the figure is missing, so the boundary reads as deliberate
+  // rather than as a bug (Josh: "legible ... rather than missing data").
+  'project.changes.approvedHeading': 'Approved changes',
+  'project.changes.summaryNoteCrew':
+    'Only approved change orders are listed: what changed, never the price. Pricing stays with the office.',
+  'project.changes.summaryNotePm':
+    'Approved change orders written by someone else. You see what changed; pricing is for the owner, the admin and the author.',
+  'project.changes.noApproved': 'No approved change orders yet.',
+  'project.changes.scopeOnly': 'Scope only',
+  'project.approvedOn': 'approved {date}',
   'project.co.title': 'Change Order',
   'project.co.titleField': 'Title',
   'project.co.description': 'Description',
@@ -164,6 +182,8 @@ export const en = {
   'project.coEditor.saveRow': 'Save row',
   'project.coEditor.unit': 'Unit',
   'project.coEditor.creditHint': 'A negative value records a credit.',
+  // [S112 R5b] On the title AND description, on both surfaces — see co-editor.tsx.
+  'project.coEditor.noPriceHint': 'Crew and foremen can read this. Keep prices and amounts out of it.',
   'project.coEditor.addRow': 'Add row',
   // ── contacts ──
   'project.contacts.empty': 'No contacts on this project.',
@@ -291,6 +311,7 @@ export const es: Record<keyof typeof en, string> = {
   'project.hub.punchMineOne': '{n} mío',
   'project.hub.punchOpen': '{n} abiertos',
   'project.hub.punchOpenOne': '{n} abierto',
+  'project.hub.title': 'Proyecto',
   'project.hub.daysLeft': 'Días restantes',
   'project.hub.punch': 'Pendientes',
   'project.hub.nothingScheduled': 'Nada programado',
@@ -321,6 +342,16 @@ export const es: Record<keyof typeof en, string> = {
   'project.coStatus.voided': 'Anulada',
   'project.changes.new': 'Nueva orden de cambio',
   'project.changes.empty': 'No hay órdenes de cambio.',
+  'project.changes.officeOnly':
+    'La oficina se encarga de las órdenes de cambio. Tu gerente de proyecto te puede decir qué cambió.',
+  'project.changes.approvedHeading': 'Cambios aprobados',
+  'project.changes.summaryNoteCrew':
+    'Solo se muestran las órdenes de cambio aprobadas: qué cambió, nunca el precio. Los precios los maneja la oficina.',
+  'project.changes.summaryNotePm':
+    'Órdenes de cambio aprobadas que escribió otra persona. Ves qué cambió; el precio es para el dueño, el administrador y quien la escribió.',
+  'project.changes.noApproved': 'Todavía no hay órdenes de cambio aprobadas.',
+  'project.changes.scopeOnly': 'Solo alcance',
+  'project.approvedOn': 'aprobada {date}',
   'project.co.title': 'Orden de cambio',
   'project.co.titleField': 'Título',
   'project.co.description': 'Descripción',
@@ -365,7 +396,8 @@ export const es: Record<keyof typeof en, string> = {
   'project.coActions.reissuing': 'Emitiendo…',
   'project.coActions.voided': 'Anulada.',
   'project.coActions.deletePermanently': 'Eliminar para siempre',
-  'project.coActions.deleteNote': 'Eliminarla no deja ningún registro. Para conservarlo, mejor anúlala.',
+  'project.coActions.deleteNote':
+    'Eliminarla no deja ningún registro. Para conservarlo, mejor anúlala.',
   'project.coCreate.typeFixed': 'Precio fijo',
   'project.coCreate.typeFixedSub': 'una suma global acordada',
   'project.coCreate.typeCostPlus': 'Costo más margen',
@@ -393,7 +425,8 @@ export const es: Record<keyof typeof en, string> = {
   'project.coEditor.notEditable':
     'Esta orden de cambio ya se envió y no se puede editar. Anúlala y haz una nueva para corregirla.',
   'project.coEditor.saveDetails': 'Guardar detalles',
-  'project.coEditor.noLines': 'Todavía no hay partidas — una orden de cambio sin partidas no vale nada.',
+  'project.coEditor.noLines':
+    'Todavía no hay partidas — una orden de cambio sin partidas no vale nada.',
   'project.coEditor.newLinePlaceholder': 'Nueva partida',
   'project.coEditor.add': 'Agregar',
   'project.coEditor.done': 'Listo — revisar y enviar',
@@ -412,6 +445,7 @@ export const es: Record<keyof typeof en, string> = {
   'project.coEditor.saveRow': 'Guardar fila',
   'project.coEditor.unit': 'Unidad',
   'project.coEditor.creditHint': 'Un valor negativo registra un crédito.',
+  'project.coEditor.noPriceHint': 'El personal de obra puede leer esto. No incluyas precios ni montos.',
   'project.coEditor.addRow': 'Agregar fila',
   'project.contacts.empty': 'No hay contactos en este proyecto.',
   'project.contacts.unnamed': 'Contacto sin nombre',

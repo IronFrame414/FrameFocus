@@ -2,6 +2,7 @@
 
 import { NotEnglishWarning } from '@/components/language-check/not-english-warning';
 import { useEffect, useState } from 'react';
+import { useT } from '@/components/i18n/language-provider';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useConfirm } from '@/components/confirm/confirm-provider';
@@ -932,6 +933,7 @@ function HeaderDetails({
     schedule_impact_days?: number | null;
   }) => Promise<boolean>;
 }) {
+  const t = useT();
   const [title, setTitle] = useState(co.title);
   const [description, setDescription] = useState(co.description ?? '');
   const [impact, setImpact] = useState(
@@ -948,6 +950,7 @@ function HeaderDetails({
       <input
         value={title}
         onChange={(e) => setTitle(e.target.value)}
+        aria-describedby="co-edit-text-hint"
         style={{ ...inputStyle, fontWeight: 600, maxWidth: '420px' }}
       />
       <textarea
@@ -955,8 +958,13 @@ function HeaderDetails({
         onChange={(e) => setDescription(e.target.value)}
         rows={2}
         placeholder="Description (optional)"
+        aria-describedby="co-edit-text-hint"
         style={{ ...inputStyle, maxWidth: '420px', resize: 'vertical' }}
       />
+      {/* [S112 R5b] One hint covering both fields, same key as /m (PARITY). */}
+      <p id="co-edit-text-hint" data-testid="co-edit-text-hint" style={{ fontSize: '12px', color: '#6b7280', margin: '4px 0 0' }}>
+        {t('project.coEditor.noPriceHint')}
+      </p>
       <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-end' }}>
         <div>
           <label style={smallLabelStyle}>Schedule impact (days)</label>

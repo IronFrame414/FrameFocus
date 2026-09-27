@@ -25,53 +25,54 @@ import { CoActions } from './co-actions';
 // THREE distinct audiences now share this file, and conflating any two of them
 // is the defect:
 //
-//   1. WHO REACHES THE SCREEN — everyone except subcontractors (D-53).
-//      requireDetailAccess(). UI-only; see detail-access.ts.
-//   2. WHO SEES THE MONEY — Owner/Admin/PM (D-51). UI-only, #117.
-//   3. WHO GETS THE WRITE CONTROLS — Owner/Admin/PM (D-51). **DB-enforced**,
-//      and the only one of the three that is.
+// ⚠️ [S112 R5a] CORRECTED against the live policy. Everything below that
+// describes CO READS as UI-only predates the S121 read floor
+// (20260830000000_change_order_read_floor.sql) and is false now. The
+// superseded sentences are quoted, not deleted, so the direction is legible.
+//
+//   1. WHO REACHES THE SCREEN — owner, admin, and a PM on a CO they created.
+//      DB-enforced: change_orders_select_visible (and both line tables, via
+//      EXISTS on the parent) admit exactly those. requireDetailAccess() still
+//      bounces a subcontractor first (D-54, belt and braces); a foreman or crew
+//      member gets null from getChangeOrder() and is sent back to the list with
+//      ?denied=co-read (below).
+//      _Superseded:_ "everyone except subcontractors (D-53).
+//      requireDetailAccess(). UI-only; see detail-access.ts."
+//   2. WHO SEES THE MONEY — Owner/Admin/PM (D-51). Of the roles that can now
+//      read a CO at all, that is everyone, so the showMoney branch no longer
+//      hides anything from anyone who can load this page. It stays: the rule
+//      is separate from gate 1 and must not silently widen with it.
+//   3. WHO GETS THE WRITE CONTROLS — Owner/Admin/PM (D-51). **DB-enforced**
+//      (change_orders_insert_authorized / _update_authorized).
 //
 // 2 and 3 share a role list and NOTHING else. Deriving one from the other would
 // be right today and wrong the moment either rule moves — so `showMoney` and
 // `canWrite` are computed separately from the same profile, deliberately, even
 // though the expressions currently agree.
 //
-// ===========================================================================
-// TWO GATES, AND ONLY ONE OF THEM IS A ROUTE GUARD
-// ===========================================================================
-//   1. WHO REACHES THE SCREEN — everyone except subcontractors (D-53).
-//      requireDetailAccess() below. See detail-access.ts for why that is the
-//      entire enforcement.
-//   2. WHO SEES THE MONEY — Owner/Admin/PM only (D-51). NOT a route guard: a
-//      foreman and a crew member legitimately reach this screen and must simply
-//      not see the amounts.
+// ---------------------------------------------------------------------------
+// SUPERSEDED READ-SIDE TEXT, quoted rather than deleted [S112 R5a]
+// ---------------------------------------------------------------------------
+//   "2. WHO SEES THE MONEY — Owner/Admin/PM only (D-51). NOT a route guard: a
+//    foreman and a crew member legitimately reach this screen and must simply
+//    not see the amounts."
+//   "⚠️ THE MONEY GATE IS UI-ONLY AND RLS WILL NOT CATCH A LEAK. TECH_DEBT #117,
+//    accepted by D-56.
+//      change_orders_select_visible            = company_id + can_view_project()
+//      change_order_line_items_select_visible  = the same, no role arm
+//      change_order_line_rows_select_visible   = the same, no role arm
+//    So `getChangeOrder()` returns net_delta, and every line row's total, rate,
+//    unit_cost and amount, TO A FOREMAN AND A CREW MEMBER."
+//   "MEASURED [S115] … signed in as the QA subcontractor, both change orders on
+//    an assigned project came back at full value — net_delta 1410 and 21385.91."
+//   "THE ASYMMETRY THAT MAKES THIS TOLERABLE … WRITING is DB-enforced and
+//    READING is not."
+//   "⚠️ DO NOT "TIDY" THIS INTO A ROUTE GUARD. Bouncing foreman/crew off M-31
+//    would contradict D-53, which keeps CO reading open to everyone but subs."
 //
-// ⚠️ THE MONEY GATE IS UI-ONLY AND RLS WILL NOT CATCH A LEAK. TECH_DEBT #117,
-// accepted by D-56.
-//   change_orders_select_visible            = company_id + can_view_project()
-//   change_order_line_items_select_visible  = the same, no role arm (:355-364)
-//   change_order_line_rows_select_visible   = the same, no role arm (:389-399)
-//
-// So `getChangeOrder()` returns net_delta, and every line row's total, rate,
-// unit_cost and amount, TO A FOREMAN AND A CREW MEMBER. They are in the payload
-// of this very page. The only thing keeping them off the screen is the
-// `showMoney` branch below.
-//
-// MEASURED [S115], because "the database would hand it over" deserves a number
-// rather than a claim: signed in as the QA subcontractor, both change orders on
-// an assigned project came back at full value — net_delta 1410 and 21385.91.
-// A foreman reads the same rows; the sub is merely also bounced by gate 1.
-//
-// THE ASYMMETRY THAT MAKES THIS TOLERABLE, and it is worth stating because it
-// is not obvious: WRITING is DB-enforced and READING is not.
-// change_orders_insert_authorized / _update_authorized both carry
-// get_my_role() = ANY (owner, admin, project_manager) — exactly D-51's three
-// roles, already in the database. A foreman cannot author, alter or void a CO
-// no matter what this file does. What is unenforced is reading a number.
-//
-// ⚠️ DO NOT "TIDY" THIS INTO A ROUTE GUARD. Bouncing foreman/crew off M-31
-// would contradict D-53, which keeps CO reading open to everyone but subs, and
-// would be Option C — rejected in §4.11.10a for exactly that reason.
+// All true when written; the S121 floor made them false — the S115 figure no
+// longer reproduces (detail-access.ts header, re-measured at S162). What #117
+// still covers is narrow: a PM AUTHOR sees net_delta on their own CO.
 
 const MONEY_ROLES = ['owner', 'admin', 'project_manager'];
 
@@ -107,10 +108,7 @@ export default async function ChangeOrderDetailPage({
     // null genuinely means "no such CO", and app/m/not-found.tsx renders it
     // inside the shell.
     //
-    // ⚠️ This supersedes part of the header above, which predates the S121
-    // floor: foreman and crew no longer "legitimately reach this screen" — the
-    // database stopped handing them the row. The header's money-gate
-    // reasoning still holds for a PM author.
+    // The header above was corrected to match [S112 R5a].
     if (profile?.role === 'owner' || profile?.role === 'admin') notFound();
     redirect(`${backTo}?denied=co-read`);
   }

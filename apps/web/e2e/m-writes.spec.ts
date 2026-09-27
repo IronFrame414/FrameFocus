@@ -303,8 +303,23 @@ test.describe('D-54 step 1 · the CO create control is hidden from the roles the
     // (outside `m-content`), so the EMPTY STATE is the screen's own evidence
     // that it rendered — "No change orders." is a screen; a 404 or a redirect
     // is not.
-    await expect(page.getByTestId('m-empty')).toBeVisible();
-    await expect(page.getByTestId('m-empty')).toContainText(/no change orders/i);
+    //
+    // [S112 R5a, RULED Josh] _Superseded assertions, quoted:_
+    // _"await expect(page.getByTestId('m-empty')).toBeVisible();
+    //   await expect(page.getByTestId('m-empty')).toContainText(/no change orders/i);"_
+    // "No change orders." was FALSE for a foreman — the project may have many;
+    // the floor just hides them. The screen now proves it rendered with a
+    // role-worded notice instead, and must NOT claim the project has none.
+    // [S112 R5b] SUPERSEDED the same day, quoted not deleted:
+    //   "await expect(page.getByTestId('m-co-office-only')).toBeVisible();
+    //    await expect(page.getByTestId('m-co-office-only')).toContainText(/handled by the office/i);
+    //    await expect(page.getByTestId('m-empty')).toHaveCount(0);"
+    // Josh ruled that field roles SHOULD learn approved change orders exist and
+    // what changed. The foreman now gets the scope-only section, never a figure.
+    await expect(page.getByTestId('m-co-summaries')).toBeVisible();
+    await expect(page.getByTestId('m-co-summary-note')).toContainText(/never the price/i);
+    await expect(page.getByTestId('m-co-office-only')).toHaveCount(0);
+    await expect(page.getByTestId('m-co-summaries')).not.toContainText('$');
     await expect(page.getByTestId('m-co-row')).toHaveCount(0);
   });
 

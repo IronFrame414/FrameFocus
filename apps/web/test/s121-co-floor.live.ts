@@ -79,6 +79,12 @@ beforeAll(async () => {
 // ---------------------------------------------------------------------------
 // THE FLOOR — foreman, crew, subcontractor read nothing.
 // ---------------------------------------------------------------------------
+// [S112 R5b] Still true OF THE TABLE, and must stay true: this block is the
+// regression guard that get_approved_change_order_summaries() (20261840000000)
+// did not widen the row floor. Foreman and crew now LEARN that approved COs
+// exist — title, description, date, no figure — through that function only.
+// Proven in s112-co-summaries.live.ts §3. Do not read this title as "field
+// roles learn nothing about change orders"; since S112 they do.
 describe('#117 · foreman, crew and subcontractor read no change order', () => {
   for (const [role] of FLOORED) {
     it(`${role} — change_orders is empty`, async () => {

@@ -46,11 +46,14 @@ const INCIDENT_TYPE_KEY: Record<IncidentType, MsgKey> = {
 export function IncidentForm({
   projectId,
   projectName,
+  subLine,
   roster,
   initialDate,
 }: {
   projectId: string;
   projectName: string;
+  /** §4.11's `PRJ-### · {client}` app-bar sub-line (section-header.tsx). */
+  subLine: string | null;
   roster: RosterMember[];
   initialDate: string;
 }) {
@@ -118,7 +121,13 @@ export function IncidentForm({
 
   return (
     <div className="pb-[18px]">
-      <SetMobileHeader title={t('project.incident.title')} sub={projectName} />
+      {/* [S112 audit F22, RULED Josh] The app bar names the SECTION, as every
+          safety screen's does (SectionHeader: section name + `PRJ-### ·
+          {client}`). _Superseded, quoted not deleted:_
+          `title={t('project.incident.title')} sub={projectName}` — the exact
+          title and project the red header directly beneath repeats. The red
+          header keeps both: it is 7e's identity. */}
+      <SetMobileHeader title={t('project.safety.title')} sub={subLine} />
 
       {/* The red header block — 7e's identity. */}
       <header
@@ -229,7 +238,7 @@ export function IncidentForm({
                   value={outsiderName}
                   onChange={(e) => setOutsiderName(e.target.value)}
                   placeholder={t('project.incident.namePlaceholder')}
-                  className="h-11 min-w-0 flex-1 rounded-[10px] border border-m6m-border px-[12px] text-[15px]"
+                  className="h-11 min-w-0 flex-1 rounded-[10px] border border-m6m-border px-[12px] text-[16px]"
                 />
                 <button
                   type="button"
@@ -269,7 +278,7 @@ export function IncidentForm({
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             rows={4}
-            className="w-full rounded-[14px] border border-m6m-border bg-m6m-card px-[14px] py-[10px] text-[15px] text-m6m-navy"
+            className="w-full rounded-[14px] border border-m6m-border bg-m6m-card px-[14px] py-[10px] text-[16px] text-m6m-navy"
           />
         </section>
 
@@ -299,7 +308,7 @@ export function IncidentForm({
                 onChange={(e) => setTreatmentNotes(e.target.value)}
                 rows={2}
                 placeholder={t('project.incident.treatmentPlaceholder')}
-                className="mt-[8px] w-full rounded-[10px] border border-m6m-border px-[12px] py-[8px] text-[15px]"
+                className="mt-[8px] w-full rounded-[10px] border border-m6m-border px-[12px] py-[8px] text-[16px]"
               />
             ) : null}
           </Row>

@@ -436,8 +436,17 @@ duplicate data access is written for mobile.
 | danger      | `#c0362c`                             | sign out, damage/blocking badges                           |
 | surface     | `#f4f6f9`                             | page background                                            |
 | card        | `#ffffff`, border `#e6e9ef`           | all cards and tiles                                        |
-| muted       | `#8a919c` on light, `#8fa0c4` on navy | inactive tab, captions                                     |
+| muted       | `#687081` on light, `#8fa0c4` on navy | inactive tab, captions — **RULED [Josh, S112 R4]**, below  |
 | dark canvas | `#0d1220`                             | photo viewer and markup only                               |
+
+**muted on light — RULED [Josh, S112 R4]: `#687081` (4.97:1 on cards, 4.60:1 on page); may be tuned,
+never below 4.5.** _Superseded values, quoted rather than deleted:_ this row read _"`#8a919c` on
+light"_ as written, and the shipped token had since moved to _"`#8792a8`"_ with the desktop README
+ramp (desktop-redesign R6 — `desktop-redesign-build-log.md` Entry 4). `#8792a8` measured **3.13:1 on
+the card (`#ffffff`) and 2.89:1 on the page (`#f4f6fa`)** — under WCAG AA 4.5:1 for the captions it
+carries. `tailwind.config.ts` `m6m.muted` and `lib/theme.ts` `mutedAlt` move together (R6: they track
+each other), and the hard-coded `#8792a8` copies in app code moved with them. The navy variant is
+unchanged.
 
 **Type.** Barlow for UI. **IBM Plex Mono for every number, ID, timestamp, and micro-label.** Body ≥15px
 (≥14px on the dark photo screens). Captions ≥11px, mono, captions only.
@@ -653,6 +662,13 @@ Search filters live. Tap a card → M-3.
 
 Navy header: back chevron, project name 21px/800, mono `PRJ-### · {client}`, status pill, and a
 **2-stat strip** — **Days left / Punch** (mono 19px; **Punch amber when non-zero**, muted at zero).
+
+> **AMENDED [Josh, S112 audit F11]:** the app bar's title is the screen name (**"Project"**, i18n
+> `project.hub.title`), not the project name. As built, the name rendered twice — app bar title and the
+> 21px hero directly beneath it. The hero keeps the name; the mono `PRJ-### · {client}` stays in the bar's
+> sub-line, as on every section screen. The Punch List tile badge's text uses `m6m.amber-text`
+> (`#9d6506`, 4.89:1 on the white tile) rather than `amber` (2.15:1) and wraps instead of truncating
+> [S112 R6]; the navy-header Punch stat keeps `amber`.
 
 > **AMENDED [S98, D-19]:** the strip was **3 stats — Progress / Days left / Punch — divided by two 1px
 > rules**. **Progress is cut** (no project-level percentage exists; see §8a). **Respec, not a gap:** the
@@ -1487,7 +1503,7 @@ opens a desktop page. Common rules, stated once so the nine subsections below st
 > | M-14 / M-33 / M-34 | Punch items: **create and complete** | **EVERY role, subcontractors included** _(corrected S110)_ | D-52 |
 > | M-34 | Punch items: **verify** | **Foreman+** — crew and subs excluded, as on desktop _(corrected S110)_ | D-52 |
 > | M-14 / M-34 | Punch items: **what a SUBCONTRACTOR sees** | **Assignee or author only** — narrower than today | **D-57** |
-> | M-31, M-35, M-36, M-16 | Detail views (read) | Everyone **except subcontractors** | D-53 — **⚠️ NARROWED FOR M-31 ONLY [S121]: `change_orders` now carries a DB read floor (`20260830000000`, #117 closed). Owner/Admin see all; a PM sees change orders they AUTHORED; foreman, crew and subcontractor see none. D-53's grant stands unchanged for M-35, M-36 and M-16.** |
+> | M-31, M-35, M-36, M-16 | Detail views (read) | Everyone **except subcontractors** | D-53 — **⚠️ NARROWED FOR M-31 ONLY [S121]: `change_orders` now carries a DB read floor (`20260830000000`, #117 closed). Owner/Admin see all; a PM sees change orders they AUTHORED; foreman, crew and subcontractor see none. D-53's grant stands unchanged for M-35, M-36 and M-16.** **[S112 R5b, RULED Josh] The M-13 LIST, not M-31, widens: every staff role on the project sees APPROVED (`signed`) change orders as scope only — number, title, description, approval date, NO figure — via `get_approved_change_order_summaries()` (`20261840000000`). The row floor above is unchanged; M-31 stays refused.** |
 > | M-8 / M-9 / M-10 | Photos: view, capture, annotate | **EVERY role, subcontractors included** _(corrected S110)_ | D-53 / §7a |
 >
 > **⚠️ THREE ROWS ABOVE WERE CORRECTED AT [S110] and the original ruling text is superseded** — see

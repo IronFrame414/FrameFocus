@@ -269,7 +269,7 @@ export function LogForm({
             data-testid="m-log-project"
             value={projectId ?? ''}
             onChange={(e) => setProjectId(e.target.value || null)}
-            className="h-[52px] w-full rounded-[12px] border border-m6m-border bg-m6m-card px-[12px] text-[15px] text-m6m-navy"
+            className="h-[52px] w-full rounded-[12px] border border-m6m-border bg-m6m-card px-[12px] text-[16px] text-m6m-navy"
           >
             <option value="">{t('field.log.chooseProject')}</option>
             {projects.map((p) => (
@@ -297,7 +297,7 @@ export function LogForm({
           onChange={(e) => setWorkPerformed(e.target.value)}
           rows={3}
           placeholder={t('field.log.workPlaceholder')}
-          className="mt-[8px] w-full rounded-[10px] border border-m6m-border px-[12px] py-[8px] text-[15px] text-m6m-navy"
+          className="mt-[8px] w-full rounded-[10px] border border-m6m-border px-[12px] py-[8px] text-[16px] text-m6m-navy"
         />
       </section>
 
@@ -407,7 +407,7 @@ export function LogForm({
             onChange={(e) => setMaterials(e.target.value)}
             rows={2}
             placeholder={t('field.log.materialsUsed')}
-            className="w-full rounded-[10px] border border-m6m-border px-[12px] py-[8px] text-[15px]"
+            className="w-full rounded-[10px] border border-m6m-border px-[12px] py-[8px] text-[16px]"
           />
           <textarea
             data-testid="m-equipment"
@@ -415,7 +415,7 @@ export function LogForm({
             onChange={(e) => setEquipment(e.target.value)}
             rows={2}
             placeholder={t('field.log.equipmentUsed')}
-            className="mt-[8px] w-full rounded-[10px] border border-m6m-border px-[12px] py-[8px] text-[15px]"
+            className="mt-[8px] w-full rounded-[10px] border border-m6m-border px-[12px] py-[8px] text-[16px]"
           />
         </Disclosure>
         <Disclosure
@@ -453,7 +453,7 @@ export function LogForm({
                         cur.map((s, j) => (j === i ? { ...s, member_id: e.target.value } : s))
                       )
                     }
-                    className="h-[44px] min-w-0 flex-1 rounded-[10px] border border-m6m-border px-[8px] text-[14px]"
+                    className="h-[44px] min-w-0 flex-1 rounded-[10px] border border-m6m-border px-[8px] text-[16px]"
                   >
                     {subs.map((s) => (
                       <option key={s.id} value={s.id}>
@@ -479,7 +479,7 @@ export function LogForm({
                         cur.map((s, j) => (j === i ? { ...s, hours: Number(e.target.value) } : s))
                       )
                     }
-                    className="h-[44px] w-[76px] rounded-[10px] border border-m6m-border px-[8px] text-right font-mono text-[14px]"
+                    className="h-[44px] w-[76px] rounded-[10px] border border-m6m-border px-[8px] text-right font-mono text-[16px]"
                   />
                 </div>
               ))}
@@ -508,7 +508,7 @@ export function LogForm({
             value={tomorrow}
             onChange={(e) => setTomorrow(e.target.value)}
             rows={2}
-            className="w-full rounded-[10px] border border-m6m-border px-[12px] py-[8px] text-[15px]"
+            className="w-full rounded-[10px] border border-m6m-border px-[12px] py-[8px] text-[16px]"
           />
         </Disclosure>
       </section>
@@ -537,7 +537,7 @@ export function LogForm({
             onChange={(e) => setHazardNotes(e.target.value)}
             rows={2}
             placeholder={t('field.log.hazardPlaceholder')}
-            className="mt-[8px] w-full rounded-[10px] border border-m6m-border px-[12px] py-[8px] text-[15px]"
+            className="mt-[8px] w-full rounded-[10px] border border-m6m-border px-[12px] py-[8px] text-[16px]"
           />
         ) : null}
       </section>
