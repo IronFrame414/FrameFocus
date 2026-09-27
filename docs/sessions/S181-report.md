@@ -282,3 +282,62 @@ cron route that imports it will compare production against a baseline that inclu
   branch touches). ⚠️ **`next build` first FAILED (exit 1)** on a type error in the new live test's helper; the earlier tsc run predated that file.
   Fixed (`one()` returns a plain row) → `tsc` exit 0 / 0 errors → lien live test re-run 14/14 → **`next build` exit 0,
   133/133 pages**.
+
+---
+
+# S181b — audit of the S181 report, by measurement (2026-09-27, fresh session after a Codespace restart)
+
+Instruments: every test count below is the vitest summary line read from a log written with `cmd > log 2>&1; echo $?`
+(never through a pipe); every database fact is MCP `execute_sql` after `get_project_url` returned
+`nmyphyhmfttxkdoposvf` (rebuild-test). The live tests' env was checked the same way: `NEXT_PUBLIC_SUPABASE_URL` ref and the
+service key's JWT `ref` both decode to `nmyphyhmfttxkdoposvf`, role `service_role` (keys not printed).
+`supabase/.temp/project-ref` reads `nmyphyhmfttxkdoposvf`; it was read, never written. No `supabase link` was run.
+
+| # | Claim in the S181 report | Measured (command → result) | Verdict |
+|---|---|---|---|
+| 1 | Work committed and pushed | `git status` clean; `git rev-parse HEAD origin/feature/s111-project-role` both `487db131`; `origin/main` `cc53bbc3` | **Agree** |
+| 1b | CI green | `gh run view 36353398976` → headSha `487db131…`, conclusion success; jobs "E2E (Playwright)" success, "Lint & Type Check" success | **Agree** |
+| 2a | 1910 exists; 17 PE write policies; PE contract-void clause removed (Q2) | `supabase/migrations/20261910000000_s111_project_executive_write_arms.sql` tracked; `grep -c '^CREATE POLICY'` → 17; 2 `ALTER POLICY` (invoices insert/update); 3 `CREATE OR REPLACE FUNCTION` (invoice void, invoices column scope, CO void); `enforce_contract_void_authority` present only as the quoted removal comment | **Agree** |
+| 2b | 1920: 4 read arms + `pe_on_expense` | file tracked; 4 `CREATE POLICY` (expenses, expense_allocations, expense_payments, files money); 1 function, anon revoked | **Agree** |
+| 2c | 1930: 8 arms + 3 functions | file tracked; 8 `CREATE POLICY` (lien_releases S/I/U, templates S, boxes S, files S/I, storage I); 3 functions, each `REVOKE … FROM anon` | **Agree** |
+| 2d | 1820, 1830 on the branch | both files tracked | **Agree** |
+| 2e | Rebuild-test by object | ledger holds all five versions; `enforce_{invoice_void,change_order_void,invoices_column_scope}` contain `pe_on_project`, `enforce_contract_void_authority` does not | **Agree** |
+| 2f | "19 non-SELECT `*_project_executive` policies" | `pg_policies` non-SELECT with `project_executive` in the name → **21**; ending in `_project_executive` → **19**. The 2 others are `files_insert_project_executive_lien` and storage `project_files_insert_project_executive_lien`, which the report counts under "1930 arms 8/8" | **Agree** (the pattern it names gives 19) |
+| 3a | `payments-shared` 35/35 | `vitest run lib/services/payments-shared.test.ts` → exit 0, **35 passed (35)** | **Agree** |
+| 3b | `s111-role-caps` 10/10 | → exit 0, **10 passed (10)** | **Agree** |
+| 3c | `s181-m-co-access` 2/2 | → exit 0, **2 passed (2)** | **Agree** |
+| 3d | lien live 14/14 | `vitest run --config test/live.vitest.config.ts test/s181-project-executive-liens.live.ts` → exit 0, **14 passed (14)**. Row counts are asserted, not printed: N1 control `toBe(3)` / PE `toBe(0)`; N4 `{expenses:[0,1],allocations:[0,1],payments:[0,1]}`; Y1 template count `> 0` and equal to the service role's | **Agree** |
+| 3e | writes live 11/11 | → exit 0, **11 passed (11)** | **Agree** |
+| 3f | floor live 7/7 | → exit 0, **7 passed (7)** | **Agree** |
+| 3g | full sweep 131 files / 1815 tests | `vitest run` (apps/web) → exit 0, **131 passed (131) / 1815 passed (1815)**, `×` count 0 | **Agree** |
+| 4a | Sabotage: `canIssueRefund` → `seesProjectMoney` goes red | line 331 replaced → exit 1, **2 failed / 33 passed** ("FINAL: $4,000…", which holds the `canIssueRefund` total map, and the PE negative block). `git checkout` → `git diff --quiet` exit 0 → 35/35 | **Agree** |
+| 4b | Sabotage: widen `lien_releases_select_project_executive` + `expenses_select_project_executive` to company scope goes red | `ALTER POLICY … USING (company_id = get_my_company_id() AND get_my_role() = 'project_executive')` → lien live exit 1, **2 failed / 12 passed**: N1 "expected 3 to be +0", N4 `expenses: [1, 1]` vs `[0, 1]`. Restored with the migration text; `qual` read back **identical** to the pre-sabotage read; re-run → **14/14**. `git status` clean | **Agree** |
+| 5a | PE withheld from every grant surface, one source | `WITHHELD_ROLES`/`OFFERED_ROLES` in `packages/shared/constants/roles.ts` only; invite form and team edit form derive from `OFFERED_ROLES`; `POST /api/invites` and `updateTeamMemberAction` refuse it. Other writers of a role: `lib/services/team.ts` `updateTeamMember` / `createInvitation` are called only from those two guarded paths. `role_on_project` is free text, not a role. `/m/team` has no picker. No `/admin` role writer | **Agree** |
+| 5b | Role still in both DB CHECKs | rebuild-test `profiles_role_check` and `invitations_role_check` both list `project_executive` (`company_members` has no role CHECK) | **Agree** |
+| 5c | (not claimed) DB-level grant authority | 1820's policies stop an **Admin** granting the role (`role <> ALL (… 'project_executive')`, lines 57–80). An **Owner** writing `profiles.role` directly through the API is not stopped by the DB. Q3 withholds it from the UI and the two grant routes, not the schema, and Q11 already lets the Owner grant it. **Stated residual, not a defect** | n/a |
+| 6 | `next build` passes | `rm -rf .next && npx next build` → **exit 0**, "✓ Compiled successfully", "✓ Generating static pages (133/133)" | **Agree** |
+| 7 | "`the m1910_*` columns of Josh's pasted row confirm it" (Step Q2) | That line was written at the Q2 edit (rebuild-test check at 18:57 UTC = 14:57 ET). Production was first measured by object at **18:15 ET**. The evidence it cites did not exist when it was written | **Disagree**: corrected in place below (Phase 3 step 4) |
+
+**Rebuild-test ≠ production.** Everything above that touches the database is rebuild-test. Production (`jwkcknyuyvcwcdeskrmz`)
+is not reachable from this session. Josh measured it at 18:15 ET: none of the five migrations applied, `pe_profiles_now = 0`,
+newest `20261880000000`, Step 0 hash gate passed.
+
+**What the report does NOT claim as done:**
+- **Production:** none of 1820/1830/1910/1920/1930 is applied. That is Josh's runbook, and the merge is blocked on it (condition 3).
+- **The operational arms** (98 PM-shaped policies naming no PE: files/photo upload, tasks, phases, schedule, POs, inspections,
+  selections, safety read, roster read Q2, assignments Q8, catalog read Q3). A follow-up branch, by ruling Q3.
+- **e2e not run locally.** CI ran it green on `487db131`.
+- **`contracts` files for the PE:** left out of 1920, and their visibility is unruled. This fails closed.
+- **`/m` money surfaces:** none exist for any role. The report correctly calls this a pre-existing split, not a PE gap.
+- **"Increment 1" of the money UI:** measured against what the database grants the PE, exactly one gap remains: **the
+  retainage-release panel** (`payments-view.tsx:400`, gated `canRecord` = O/A, while 1910 grants the PE INSERT/UPDATE on
+  `retainage_releases`). That is FILL-R-2, filed as a follow-up by ruling. Every other `canRecord`-gated control on Payments
+  (unapply, void payment, apply credit, refunds, reminder settings) matches a database that refuses the PE (Q1/Q9), so it is
+  correct as is. **No further money-UI increment is needed beyond FILL-R-2.**
+- **1910's header comment** still says `client_refunds` is "Unruled for this role" (line 23–24). Q1 has since ruled it (no refunds),
+  but 1910 is applied on rebuild-test and ruled not to be edited again. The ruling lives in this report, in S113 FILL-C-3, and in
+  the tests. Left as is, deliberately.
+- **Types/fingerprint caveat `#1-s112f`** (the baseline includes 1850/1860/1890/1900 from unmerged branches). Stated in S181, still true.
+
+**Nothing in the audit needs a ruling.** No claim was disproved except the citation line, which the prompt already rules on.
+Going to Phase 3.
