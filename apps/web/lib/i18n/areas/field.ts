@@ -142,8 +142,15 @@ export const en = {
   'field.capture.expiresMany': 'Expires in {n} days',
   'field.capture.retry': 'Retry',
   'field.capture.discard': 'Discard',
+  // [S114 C-4] the DELETION is the headline. _Superseded, quoted:_ "These photos
+  // are saved on this device until you choose a project. They stay here if you
+  // close the app." — true only for 7 days, which it did not say.
   'field.capture.heldNotice':
-    'These photos are saved on this device until you choose a project. They stay here if you close the app.',
+    'Photos with no project are DELETED from this phone 7 days after they are taken. Choose a project to keep them.',
+  'field.capture.deleteTodayOne': '{n} photo with no project will be DELETED from this phone today. Tap to choose a project.',
+  'field.capture.deleteTodayMany': '{n} photos with no project will be DELETED from this phone today. Tap to choose a project.',
+  'field.capture.deleteSoonOne': '{n} photo with no project will be DELETED from this phone in {d} day(s). Tap to choose a project.',
+  'field.capture.deleteSoonMany': '{n} photos with no project will be DELETED from this phone in {d} day(s). Tap to choose a project.',
   'field.capture.noProjects': 'No active projects to file these against.',
   'field.capture.saveOne': 'Save {n} photo',
   'field.capture.saveMany': 'Save {n} photos',
@@ -334,8 +341,13 @@ export const es: Record<keyof typeof en, string> = {
   'field.capture.expiresMany': 'Vence en {n} días',
   'field.capture.retry': 'Reintentar',
   'field.capture.discard': 'Descartar',
+  // [S114 C-4] Superseded: 'Estas fotos se guardan en este dispositivo hasta que elijas un proyecto. Se quedan aquí aunque cierres la app.'
   'field.capture.heldNotice':
-    'Estas fotos se guardan en este dispositivo hasta que elijas un proyecto. Se quedan aquí aunque cierres la app.',
+    'Las fotos sin proyecto se BORRAN de este teléfono 7 días después de tomarlas. Elige un proyecto para conservarlas.',
+  'field.capture.deleteTodayOne': '{n} foto sin proyecto se BORRARÁ de este teléfono hoy. Toca para elegir un proyecto.',
+  'field.capture.deleteTodayMany': '{n} fotos sin proyecto se BORRARÁN de este teléfono hoy. Toca para elegir un proyecto.',
+  'field.capture.deleteSoonOne': '{n} foto sin proyecto se BORRARÁ de este teléfono en {d} día(s). Toca para elegir un proyecto.',
+  'field.capture.deleteSoonMany': '{n} fotos sin proyecto se BORRARÁN de este teléfono en {d} día(s). Toca para elegir un proyecto.',
   'field.capture.noProjects': 'No hay proyectos activos para archivarlas.',
   'field.capture.saveOne': 'Guardar {n} foto',
   'field.capture.saveMany': 'Guardar {n} fotos',
