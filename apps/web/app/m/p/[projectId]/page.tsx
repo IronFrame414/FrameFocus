@@ -97,7 +97,8 @@ export default async function MobileProjectHubPage({
       getProjectAssignments(params.projectId),
       // §8a writes this as `getFiles({ projectId, category: 'photos' })`; the
       // real signature is snake_case, the same correction M-16 already carries.
-      getFiles({ project_id: params.projectId, category: 'photos' }),
+      // [S114 C-2] the Photos view's own filter, so this badge matches the screen.
+      getFiles({ project_id: params.projectId, photo_view: true }),
     ]);
 
   const today = companyToday(timeSettings0.timezone);

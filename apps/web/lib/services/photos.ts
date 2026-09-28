@@ -6,7 +6,7 @@ import {
   markupFingerprint,
 } from '@framefocus/shared/utils/markup';
 import type { MarkupData } from '@framefocus/shared/types/markup';
-import { getFiles, getSignedUrls, type FileRecord } from './files';
+import { getFiles, getSignedUrls, PHOTO_VIEW_FILTER, type FileRecord } from './files';
 
 // M6M §4.8 / §4.9 — server reads for M-8 (gallery), M-9 (viewer) and M-10.
 //
@@ -183,7 +183,8 @@ export async function getProjectPhotos(
   opts: { thumbnails?: boolean } = {}
 ): Promise<PhotoRecord[]> {
   const [files, punchIds] = await Promise.all([
-    getFiles({ project_id: projectId, category: 'photos' }),
+    // [S114 C-2] + daily-log and safety images (PHOTO_VIEW_FILTER). Was `category: 'photos'`.
+    getFiles({ project_id: projectId, photo_view: true }),
     getPunchPhotoIds(projectId),
   ]);
 
@@ -266,7 +267,10 @@ export async function getPhoto(fileId: string, projectId: string): Promise<Photo
     // Same clause, same position as `getReceiptFile()` below: the two photo
     // resolvers now scope identically, and neither can be handed a file from
     // another project by any caller, present or future.
-    .eq('category', 'photos')
+    // [S114 C-2] a photo is what the Photos view shows — PHOTO_VIEW_FILTER,
+    // which still excludes receipts, contracts and every non-image. Was
+    // `.eq('category', 'photos')`.
+    .or(PHOTO_VIEW_FILTER)
     .eq('project_id', projectId)
     .eq('is_deleted', false)
     .maybeSingle();

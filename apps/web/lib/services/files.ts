@@ -113,6 +113,8 @@ export async function getFiles(filters?: {
   only_deleted?: boolean;
   /** Leave one category out, IN THE QUERY — see getDocumentFiles(). */
   exclude_category?: FileCategory;
+  /** [S114 C-2] The Photos view's row set — see PHOTO_VIEW_FILTER. */
+  photo_view?: boolean;
   limit?: number;
   offset?: number;
 }): Promise<FileRecord[]> {
@@ -142,6 +144,9 @@ export async function getFiles(filters?: {
   if (filters?.category) {
     query = query.eq('category', filters.category);
   }
+  if (filters?.photo_view) {
+    query = query.or(PHOTO_VIEW_FILTER);
+  }
   if (filters?.exclude_category) {
     // `category` is NOT NULL, so `neq` cannot silently drop a null row.
     query = query.neq('category', filters.exclude_category);
@@ -151,6 +156,21 @@ export async function getFiles(filters?: {
   if (error) return [];
   return (data ?? []) as FileRecord[];
 }
+
+/**
+ * [S114 C-2, RULED Josh 2026-09-28] WHAT THE PHOTOS VIEW SHOWS — the ONE
+ * definition, used by the gallery (getProjectPhotos), the viewer/markup
+ * resolver (getPhoto) and the /m overview and field badges, so a badge and the
+ * screen behind it can never disagree. Both surfaces read it.
+ *
+ * `category = 'photos'`, plus IMAGES filed under `daily_logs` or `safety`.
+ * The MIME test applies only to those two categories, and only on this side:
+ * a PDF filed under `daily_logs` stays in Files (R7 — Files never filters by
+ * MIME) and simply is not a photo. `photos` itself is taken whole, as before.
+ * _Superseded, quoted:_ `category: 'photos'` at every reader.
+ */
+export const PHOTO_VIEW_FILTER =
+  'category.eq.photos,and(category.in.(daily_logs,safety),mime_type.like.image/*)';
 
 /**
  * [S112] A project's DOCUMENTS — every file except the `photos` category.
@@ -167,8 +187,13 @@ export async function getFiles(filters?: {
  * documents out of it entirely.
  *
  * Daily-log and safety images keep their own categories, so they STAY in this
- * list (and also appear on the Photos page, which widened its query to them in
- * S111 Q18). That is unchanged by this function and is Josh's to rule.
+ * list [RULED Josh, S114 C-2, 2026-09-28] — AND, since S114, also appear on the
+ * Photos page (PHOTO_VIEW_FILTER), so they can be marked up. Nothing
+ * establishes those categories hold images only, and hiding a scanned document
+ * to tidy a list is the wrong trade. _Superseded, quoted:_ "(and also appear on
+ * the Photos page, which widened its query to them in S111 Q18)" — FALSE when
+ * written: Q18 was stopped, and the Photos query read `category = 'photos'`
+ * only until S114.
  */
 export function getDocumentFiles(projectId: string): Promise<FileRecord[]> {
   return getFiles({ project_id: projectId, exclude_category: 'photos' });
