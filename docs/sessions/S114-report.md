@@ -128,3 +128,5 @@ Teardown after every round: 0 projects left. Clean final: carve-outs **15/15**, 
   `s97ct-floor3` 19/19.
 - Full committed unit suite: **132 files, 1837 tests, exit 0**. In-progress CI before any run: 0.
 - Requesting CI on this HEAD (no `[skip ci]`).
+
+## Step 8 — CI on the build: run 36364688797 on 763667b2 — **success** (Lint & Type Check success, E2E (Playwright) success)
