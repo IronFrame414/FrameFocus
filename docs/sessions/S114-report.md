@@ -182,3 +182,20 @@ pattern) · `contract_amount_arms 2` · `upload_helper 0` · `fn_md5_before` = t
 | named_arms (profiles / company_members / cost_catalog SELECT) | 3 | 3 |
 | pe_read_arms | 27 | 27 (24+3) |
 | pe_profiles_now | 0 | 0 |
+
+**§5 `20261980000000_s114_pe_contract_amount_drops.sql` — APPLIED, VERIFIED.** Dry run exit 0, exactly one line. Push exit 0.
+| column | measured | expected |
+| --- | --- | --- |
+| ledger_row | 1 | 1 |
+| contract_amount_arms (PE insert/update) | 0 | 0 (Q2 B) |
+| contract_amount_read_arm | 1 | 1 |
+| pe_write_arms | 59 | 59 (61−2) |
+| pe_read_arms | 27 | 27 |
+| carveout_write_arms_with_pe (refunds, client/sub contracts, contract_documents) | 0 | 0 |
+| s114_ledger_rows | 5 | 5 |
+| newest_migration | 20261980000000 | 20261980000000 |
+| pe_profiles_now | 0 | 0 |
+
+Final `db push --dry-run` exit 0: **"Remote database is up to date."** Nothing written to production but the five migrations (no rows, no
+grants, no backfill; no `migration repair`). Hold dir empty; `git status supabase/migrations` clean.
+**Relinked:** `supabase link --project-ref nmyphyhmfttxkdoposvf` exit 0; `supabase/.temp/project-ref` reads **`nmyphyhmfttxkdoposvf`**.
