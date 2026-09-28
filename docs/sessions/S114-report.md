@@ -138,3 +138,13 @@ Teardown after every round: 0 projects left. Clean final: carve-outs **15/15**, 
 `pe_profiles_now 0` · `newest_migration 20261930000000` · `s114_ledger_rows 0` · `pe_read_arms 19` · `pe_write_arms 19` (ends-with
 pattern) · `contract_amount_arms 2` · `upload_helper 0` · `fn_md5_before` = the 1960 header exactly (c420c2c3 / ac7cfdfb / 42b561a9 /
 28969ada / 9fcbda5e / 030fa292 / 7c596d84) · `pe_on_project` 97c8c884 and `is_assigned_to_project` e105a6c0 = rebuild-test.
+
+**§1 `20261940000000_s114_pe_operational_arms.sql` — APPLIED, VERIFIED.** Dry run exit 0, exactly one line. Push exit 0:
+`Applying migration 20261940000000_s114_pe_operational_arms.sql...` → `Finished supabase db push.`
+| column | measured | expected |
+| --- | --- | --- |
+| ledger_row | 1 | 1 |
+| pe_read_arms | 24 | 24 (19+5) |
+| pe_write_arms | 60 | 60 (19+41) |
+| named_arms (the 46) | 46 | 46 |
+| pe_profiles_now | 0 | 0 |
