@@ -332,3 +332,33 @@ Following the prompt:
   - ASK-9 B: per visit, the narrower of the two.
   - ASK-13 A: dropping an arm narrows. It needs your production run in any case.
 - I stop at every migration's production step, at ASK-3b (moving rows), and at PART B's design (ASK-15/16/17), where I write up the decision and stop.
+
+## RULINGS [Josh, 2026-09-28] — recorded verbatim in substance
+
+- **Q6 (ASK-5) A — FIRST, own commit, own shipment,** merged as soon as CI is green; not bundled with C-1 or anything.
+  ⚠️ **P6 is now the most urgent production query**: which live tokens exist and what they could reach decides whether anyone
+  has to be told.
+- **Q1 A** — C-branch 1 merges under R8; C-branch 2 and PART B wait for Josh's runbook.
+- **Q2 A** — merge on CI + unit tests; C-1 marked **"deployed, unproven"** until the real email is walked on a second device.
+  ⚠️ Production auth redirect settings are left alone — a build session does not change production configuration. The
+  allow-list finding is recorded as a separate config item for Josh.
+- **Q3 A, per category, gated on P1.** `daily_logs` and `safety` evaluated separately: a category joins Photos and leaves Files
+  only if P1 shows it holds images only. A mixed category appears in both lists.
+- **Q4 A** — Josh runs P2, then the backfill's STEP 2 himself (stop rule 3).
+- **Q5 A** — close C-4; add the /m notice with **the deletion as the headline**.
+- **Q7 A** — as listed; time a 10-image batch including thumbnails.
+- **Q8 A** — close C-6 on a test re-run; Josh's look at a real proposal goes on the click list.
+- **Q9 A** — photo comments filed with all four questions unresolved. **Josh asked for this; it is deferred, not delivered.**
+- **Q10 A** — per photo.
+- **Q11 A, three conditions:** the access check is one shared function, not inline route logic; a negative test proves an
+  unassigned caller is refused; the freeze trigger is asserted still firing behind it. ⚠️ Record why #136 was not applied:
+  widening the policies would also let those roles overwrite the original photo, which the freeze trigger does not guard — the
+  route is the narrower instrument, not the lazier one.
+- **Q12 A** — (i)–(v), no CHECK.
+- **Q13 A** — PARITY with /m, Edit behind one shared Owner/Admin/PM rule, total role-map test.
+- **Q14 A** — drop both PE write arms on `project_financials`, keep the read, no-RETURNING negative + its own sabotage.
+- **Q15 A** — PE equal to PM. ⚠️ File the `setup_payment_schedule()` side effect **loudly** — a live defect for Josh today.
+- **Q16 A** — separate table; Admin gets the read-only line.
+- **Q17 A** — all five; (d) push a client payment only if every invoice it covers is on a non-excluded project.
+- **Q18 A** — only while connected.
+- **Q19 A** — with Q6's change: the C-3 hotfix is its own shipment, not the first item of a branch.

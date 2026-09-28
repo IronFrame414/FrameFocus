@@ -172,3 +172,7 @@ Move to Trash O/A. **The PE sees this section** — the new control must be rend
 ### Step 4 — Phase 2: questions sent to Josh; STOPPED (2026-09-28)
 Nothing built. No migration written. Questions ASK-1 … ASK-18 are in the chat message of this date and repeated in full in
 `docs/sessions/S114-C-questions.md`. Production queries P1–P6 are in the same file.
+
+### Step 5 — Rulings received (Josh, 2026-09-28)
+All 19 answered; recorded in `docs/sessions/S114-C-questions.md` § RULINGS. Build begins. Order: C-3 hotfix (own branch, own
+shipment) → C-branch 1 (C-1, C-10, C-9 app, C-2 per P1, C-8, C-5, C-4 notice, filings) → C-branch 2 → PART B.
