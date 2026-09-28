@@ -222,7 +222,7 @@ companies → Q18 reversed (control always shown); Q17 (a)–(e) will be "built 
   behind the predicate), `[id]/edit`, `new`, list `canEdit`, trash `canRestore`, and `/m` `canEdit('sub')` (its hand list quoted
   as superseded). DB agrees (I/U O/A/PM; SELECT refuses only sub/client). No money on the page.
 - `test/s114-sub-directory.test.ts` **5/5** (total map; junk incl. `constructor` fail closed; /m == desktop for all 8 roles;
-  source pins for both gates). ⚠️ Correction: the commit message `9f…`/C-10 says "7/7"; the file has **5** tests (the sabotage run
+  source pins for both gates). ⚠️ Correction: the C-10 commit message (`75ea1049`) says "7/7"; the file has **5** tests (the sabotage run
   printed `1 failed | 4 passed (5)`). With neighbours (`s114-project-operations`, `s181-m-co-access`, `s159-subs-sheet`): 41/41.
 - Sabotage: PE → true → 1 red; restored, md5 OK. S157 sweep: no test pinned the PE redirect.
 - PARITY: /m sub detail (read, all dashboard roles) == desktop profile (read, all dashboard roles); edit O/A/PM on both via one predicate.
