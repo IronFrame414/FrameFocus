@@ -205,21 +205,143 @@ does. This is a recorded trap.
 array. The total maps fail to compile until the role answers; the hand-written arrays do not, and they
 are where the near-miss lived.
 
+> **FILLED [S114, grep/rg over `apps/web` + `packages/shared`, excluding `node_modules`, `.next` and
+> `types/database.ts`; no `head`, full counts].** Spot-checked by hand at 6 sites; the 96 re-counted.
+> - **Total maps.** `Record<CompanyRole,…>`: 4 (`ROLE_HIERARCHY` 80, `ROLE_LABELS`, `ROLE_DESCRIPTIONS`,
+>   `/m` `ROLE_KEY`), all answer the PE. `forEveryRole()`: 14 calls in 9 files, all answer it. The
+>   carve-outs are pinned there: `canIssueRefund` **false**, `canApproveRefund` **false**,
+>   `refundNeedsOwnerApproval` false, `canManageContracts` **false**, `canMarkSubContractComplete`
+>   **false**. **No operational predicate** (tasks, punch, POs, selections, schedule, team, timeclock)
+>   has a total map; they are all hand lists.
+> - **Hand lists.** `rg -n "['\"]project_manager['\"]"`: **178** hits, 96 in source (17 already name
+>   the PE on the same line, 79 do not) and 82 in tests. `switch` on role: 0. The 79, by R1:
+>   - **Add the PE (i):** schedule `canManage` (tasks/phases/inspections UI); punch `FOREMAN_PLUS`
+>     ×3 (`lib/services/punch-client.ts:6`, `punch-panel.tsx:30`, `/m punch-actions.tsx:92`); POs ×7
+>     (`canCreatePo` ×2, `new`/`edit` redirects, `canEditPo`, the PO-line assignee `.in('profile.role')`,
+>     `api/pos/[id]/send`); selections ×6 (`MANAGER` ×3, `NOTES_ROLES`, `api/selections/link-thumbnail`,
+>     `spec-sheet`); project team `canManage`; project contacts `canManage`; project `canTransition`;
+>     expenses ×4 (`SEES_BILLS`, `seesBills`, `canEnterBills`, `budget-split-editor canCreateLine`);
+>     timeclock ×3 (`isSupervisor` and two redirects; `TIME_ROLE_RANK` already ranks the PE with the PM, so
+>     today it may approve but cannot reach the page); chat sub-thread (`lib/chat/threads.ts:170`);
+>     project PM notifications (`lib/notify/recipients.ts:86`, 4 consumers, plus `check-in/route.ts:261`);
+>     `lib/device.ts:100` `SURFACE_TOGGLE_ROLES`; `api/translate/route.ts:15` `READERS`.
+>   - **Must not (ii):** contracts `canManage` (`projects/[id]/contracts/page.tsx:39`) and the
+>     `contracts-panel` authoring it gates; the catalog management pages (Q3 read-only); client portal
+>     `canManagePortal`.
+>   - **Company level by S111 ruling, no (Q6/Q7/Q4):** create project ×3; estimates ×10; site visits ×3
+>     (+`site_visit_notify`); contact and subcontractor create/edit/trash ×9 and `/m EDIT_ROLES`.
+>   - **Ruled reads the UI does not yet offer:** catalog nav + list (Q3 read-only); the subcontractor
+>     detail page, which **redirects** the PE (`subcontractors/[id]/page.tsx:43`) although Q4 rules the
+>     directory readable.
+>   - **Already correct:** `SUMMARY_READER_ROLES` (the PE has full COs); `inviteUserSchema` is dead code.
+>   - **Exclusion checks that already admit the PE:** 17 sites (`requireDetailAccess`, `canReachDetail`,
+>     photos `isStaff`, crew-thread eligibility, `dashboardDeniedRedirect`, `isTeamRole`, the rank helpers,
+>     the unassigned project tabs).
+> - **Refund and contract gates in TS:** refunds 8 sites, contracts 8 sites, the PE excluded at every one.
+>   ⚠️ `createClientContract` / `updateClientContract` / `createSubcontractorContract` /
+>   `updateSubcontractorContract` (`contracts-client.ts:82/101/120/142`) have **no TS role gate**; RLS is
+>   the only barrier. That is correct by `#136`, and it is why FILL-A-4 N3–N6 must exist.
+> - **Missing label:** `app/invite/accept/accept-invite.tsx:7` `ROLE_LABELS` has no PE key and falls back to
+>   the raw `project_executive`. Fixed in FILL-A-6.
+> - **Tests that pin today's lists (the S157 sweep; invert, do not delete):** `s130-ffnav.test.ts:111,138`,
+>   `s123-incident-notify.live.ts:144-165`, `s126-chat-ui.test.ts:149`,
+>   `s123-daily-log-missing.test.ts:89`, `s123-delivery-discrepancy.test.ts:102`,
+>   `s111-role-caps.test.ts:88-134`, `e2e/desktop-team.spec.ts:125-128`, `s97ct-roles.live.ts:718,773,795`.
+> - **PARITY consequence:** each list that exists in more than one copy (punch ×3, selections `MANAGER`
+>   ×3 + 2 API sets, PO ×7, CO write lists) is **moved into one `lib/` predicate** with a `forEveryRole`
+>   total map, rather than getting a fourth `'project_executive'` pasted in. The hand copy is the defect
+>   shape.
+
 **FILL-A-4** — ⚠️ **The two carve-outs, proven negatively.** Refunds and contract authority each get a
 live negative on the PE's **own** project, where the read arm admits the row, so the write arm is what
 refuses. **Write without returning rows** — an off-project negative written with `.insert().select()`
 measures the READ policy, not the write policy. Each with its own sabotage that must go red.
 
+> **FILLED — the plan (Phase 1). Execution and numbers are Phase 3's.** Measured today: `client_refunds`
+> I/U and `contract_documents` I/U are Owner/Admin-only; the PE **reads** `client_refunds` on its projects
+> (`client_refunds_select_project_executive`), `client_contracts` and `subcontractor_contracts` (the
+> `<> ALL('subcontractor','client') AND can_view_project` SELECTs), and does **not** read
+> `contract_documents`. `enforce_contract_void_authority` has no PE clause (1910 §4, by ruling).
+> Already on `main` (`s111-project-executive-writes.live.ts:512`): an S181 refund INSERT **with** `.select()`,
+> a refund approve, and a client-contract void. None has its own sabotage.
+>
+> New file `apps/web/test/s114-pe-carveouts.live.ts`. A fresh disposable project (`PEC ON`) the PE is
+> assigned to, holding one valid row of each kind made by the service role. Every probe: a service-role
+> tally, a PE write **without RETURNING**, a second tally; UPDATE probes compare the column value read by
+> the service role. Every sabotage is a temporary `CREATE POLICY …_s114_sabotage` scoped
+> `pe_on_project()` on rebuild-test, dropped afterwards, with the table's `pg_policies` rows read back
+> identical to the pre-sabotage snapshot.
+> | # | Write, on its OWN project | Isolated because | Sabotage (must go red) |
+> | --- | --- | --- | --- |
+> | N1 | `client_refunds` INSERT (issue) | no RETURNING | INSERT arm → tally 0→1 |
+> | N2 | `client_refunds` UPDATE `status='approved'` (approve) | PE's SELECT arm admits the row | UPDATE arm → status changes |
+> | N3 | `client_contracts` INSERT | no RETURNING | INSERT arm → 0→1 |
+> | N4 | `client_contracts` UPDATE `notes` (manage) | SELECT admits | UPDATE arm → notes change |
+> | N4v | `client_contracts` UPDATE `status='void'` | SELECT admits | UPDATE arm alone must stay **green** (the trigger is the second line: it proves `enforce_contract_void_authority`); UPDATE arm + a trigger-function sabotage → red, the function restored and its `md5(prosrc)` read back |
+> | N5 | `subcontractor_contracts` INSERT | no RETURNING | INSERT arm → 0→1 |
+> | N6 | `subcontractor_contracts` UPDATE `contract_value` | SELECT admits | UPDATE arm → value changes |
+> | N7 | `contract_documents` INSERT | no RETURNING | INSERT arm → 0→1 |
+> | N8 | `setup_payment_schedule()` RPC on its project's subcontract | raises | ruling-dependent (ASK-A-1 d) |
+>
+> ⚠️ **Stated limit:** `contract_documents` UPDATE **cannot** be isolated: the PE has no SELECT on it, so
+> the SELECT policy refuses first. That arm stays bounded by the SELECT arm, whose absence N7's fixture
+> confirms (PE reads 0 of 1).
+
 **FILL-A-5** — PARITY. Every surface the role now reaches, on `/m` **and** desktop. ⚠️ Every item in this
 program that shipped one surface came back as a defect; `/m`'s `readsChangeOrders()` omitted the PE while
 desktop listed them.
+
+> **FILLED — today's state, measured from source (/m vs desktop).**
+> | Decision | /m | Desktop | Agree for the PE today |
+> | --- | --- | --- | --- |
+> | CO read / write / money | `readsChangeOrders`, `CO_WRITE_ROLES`, `MONEY_ROLES` (`app/m/detail-access.ts`) | `changes/*`, `layout.tsx:40`, 4 APIs | **Yes** (S181 fixed `readsChangeOrders`, pinned by `s181-m-co-access.test.ts`), but the write lists are hand duplicates |
+> | Punch verify / delete | `punch-actions.tsx:92` | `punch-panel.tsx:30` + `lib/punch-client.ts:6` | Agree: all **deny**. Three copies |
+> | Photos: upload | `/m` capture → `files` + storage insert | desktop Add Photos (`isStaff`) | Both **admit in UI, refused by RLS** (FILL-A-1 G5 `files`, FILL-A-2): the defect the PE hits first |
+> | Photo delete | Owner/Admin | Owner/Admin | Agree |
+> | Selections | **no /m surface** | 3 × `MANAGER` + 2 API sets | Desktop only; stated, not a divergence |
+> | Tasks / schedule | `/m` task list (reads by RLS) | `schedule/page.tsx:38 canManage` | Desktop write gate denies; `/m` has no task write. Build keeps it that way |
+> | Sub / contact edit, team edit | `EDIT_ROLES` | directory + team pages | Agree (deny); company level, stays |
+> | Site visit "office" | RPC `site_visit_access` | page list | Agree (deny); Q7 |
+>
+> **Every surface PART A opens, both surfaces, one mechanism:** photo/file upload (`/m` capture, `/m`
+> files, desktop Files, desktop Photos); tasks and phases (desktop schedule; `/m` task view reads);
+> punch verify/delete (`/m` + desktop through one `lib/` predicate); POs (desktop; `/m` deliveries
+> check-in already admits via `can_view_project`); selections (desktop only); project team and contacts
+> (desktop; `/m` project team reads); expenses entry (`/m` capture + desktop expenses through one
+> predicate); timesheets (desktop). Each gets a live check per surface in Phase 3, or a line saying why
+> that surface does not exist.
 
 **FILL-A-6** — **Last step.** Remove `project_executive` from `WITHHELD_ROLES`, invert the
 `desktop-team.spec.ts` invite-options assertion in place with the old count quoted, and confirm both
 grant routes now accept it.
 
+> **FILLED — measured, not yet done (last step by R2).** `WITHHELD_ROLES = ['project_executive']` at
+> `packages/shared/constants/roles.ts:129`. Source consumers 5: `invite-form.tsx:35`, `team/[id]/edit-form.tsx:28`
+> (Admin options at `:30` derive from it), `team/[id]/actions.ts:83` (grant refusal),
+> `api/invites/route.ts:53` (400). Tests to invert in place: `s111-role-caps.test.ts:88-134`
+> (`toEqual(['project_executive'])` and the 4-role `OFFERED_ROLES`) and `e2e/desktop-team.spec.ts:125-128`
+> (old set quoted at `:124`). The database already limits the grant to the Owner (S111 Q11:
+> `profiles_update_admin`, `invitations_*_owner_admin`, verified on production in S181d). Plus the
+> `accept-invite.tsx:7` label.
+
 **ASK-A-1** — Any table where "complete access" does not obviously answer read-versus-write. Propose,
 do not decide.
+
+> **FILLED — the open points, asked in Phase 2 (rulings recorded here when given):**
+> - **a. ⚠️ Possible contradiction with R1 carve-out 2 (STOP-and-report).** `client_contract_amounts`
+>   INSERT/UPDATE `_project_executive` arms exist (1910, on production): a PE can set the dollar value of
+>   a client contract on its project. R1 says no contract authority.
+> - **b.** `projects` UPDATE on its projects (hold / complete / cancel; archive and trash stay
+>   Owner/Admin in code).
+> - **c.** `expenses` INSERT clauses the PM alone has: committed cost, subcontractor category, a
+>   subcontract/PO link, awaiting paper. Recording a sub's cost is not changing the subcontract.
+> - **d.** `setup_payment_schedule()`: builds a subcontract's payment stages and retainage terms.
+> - **e.** `schedule_entries`: the PM reads the whole company schedule, including project-less rows.
+> - **f.** Timesheets: the DB already lets the PE approve foreman and crew company-wide by rank (S111
+>   Q13), but it cannot reach the pages.
+> - **g.** Notifications: the project-PM audience (CO signed, PO missing, daily log missing, delivery
+>   discrepancy) and the safety-incident supervisory audience.
+> - **h.** Client chat threads (`may_enter_client_thread`).
 
 ---
 
