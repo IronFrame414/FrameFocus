@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
 import { deliveryCheckInSchema } from '@framefocus/shared/validation/deliveries';
+import { receivesAssignedProjectAlerts } from '@framefocus/shared/constants/roles';
 import { regenerateDeliveryPdf } from '@/lib/services/delivery-pdf-service';
 import type { Database } from '@framefocus/shared/types/database';
 import {
@@ -240,7 +241,9 @@ export async function POST(request: NextRequest) {
       // Owner + Admin (service-role read, same helper as CO notifications).
       const managers = await getManagerRecipients(admin, project.company_id);
 
-      // Project-assigned PMs only (Phase 3 Q4) — an unassigned PM cannot
+      // Project-assigned PMs only (Phase 3 Q4) — and assigned Project
+      // Executives (S114 Q8 A), the same predicate as getProjectPmNotifyRecipients.
+      // An unassigned PM cannot
       // open the link under can_view_project.
       const { data: assignments } = await admin
         .from('project_assignments')
@@ -258,7 +261,7 @@ export async function POST(request: NextRequest) {
         )
         .filter(
           (p): p is { email: string; first_name: string; role: string; is_deleted: boolean } =>
-            p != null && !p.is_deleted && p.role === 'project_manager'
+            p != null && !p.is_deleted && receivesAssignedProjectAlerts(p.role)
         );
 
       const recipients = new Map<string, string>();

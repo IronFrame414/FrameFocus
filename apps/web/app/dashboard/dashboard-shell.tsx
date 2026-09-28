@@ -154,7 +154,10 @@ const NAV_ITEMS: {
     href: '/dashboard/catalog',
     label: 'Cost Catalog',
     icon: List,
-    roles: ['owner', 'admin', 'project_manager'],
+    // [S114] + project_executive: READ only (S111 Q3). The page's manage
+    // controls stay O/A/PM (`catalog/page.tsx` canManage); the write floor is
+    // cost_catalog RLS (O/A/PM), the read arm 20261970000000.
+    roles: ['owner', 'admin', 'project_executive', 'project_manager'],
     section: 'reference',
   },
 

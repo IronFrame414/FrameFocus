@@ -1,5 +1,6 @@
 'use client';
 
+import { supervisesProjectWork } from '@framefocus/shared/constants/roles';
 import { useState } from 'react';
 import { useAssigneePicker } from '@/lib/assignee-picker';
 import { useRouter } from 'next/navigation';
@@ -27,7 +28,6 @@ interface PunchPanelProps {
   role: string;
 }
 
-const FOREMAN_PLUS = ['owner', 'admin', 'project_manager', 'foreman'];
 
 const cardStyle: React.CSSProperties = {
   backgroundColor: '#fff',
@@ -76,7 +76,7 @@ export function PunchPanel({
 }: PunchPanelProps) {
   const router = useRouter();
   const confirm = useConfirm();
-  const canForeman = FOREMAN_PLUS.includes(role);
+  const canForeman = supervisesProjectWork(role);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [newListName, setNewListName] = useState('');

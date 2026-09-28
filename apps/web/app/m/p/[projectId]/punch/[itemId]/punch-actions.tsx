@@ -1,5 +1,6 @@
 'use client';
 
+import { supervisesProjectWork } from '@framefocus/shared/constants/roles';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { Image as ImageIcon } from 'lucide-react';
@@ -89,7 +90,7 @@ export function PunchActions({
   // Foreman+ — mirrors `verifyPunchItem`'s own FOREMAN_PLUS. Duplicated here
   // ONLY to hide the control; the service function is what refuses. D-54's
   // shape, applied to a button instead of a route.
-  const canVerify = ['owner', 'admin', 'project_manager', 'foreman'].includes(userRole);
+  const canVerify = supervisesProjectWork(userRole);
 
   const needsPhoto = item.requires_completion_photo && !photoId;
 

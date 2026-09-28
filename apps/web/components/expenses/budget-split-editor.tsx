@@ -10,7 +10,7 @@
 // roles — line names/cost codes only (§7.1; the floor is UI-gated, §5.4).
 
 import { useEffect, useState } from 'react';
-import { seesProjectMoney } from '@framefocus/shared/constants/roles';
+import { seesProjectMoney, managesProjectOperations } from '@framefocus/shared/constants/roles';
 import {
   createBudgetLineAtCapture,
   getOrCreateMiscBudgetLine,
@@ -198,8 +198,7 @@ export function BudgetSplitEditor({
 
   // [S111] + a Project Executive (project_budget_amounts PE arm, own projects).
   const showBudgeted = seesProjectMoney(callerRole);
-  const canCreateLine =
-    callerRole === 'owner' || callerRole === 'admin' || callerRole === 'project_manager';
+  const canCreateLine = managesProjectOperations(callerRole);
 
   async function handleCreateLine() {
     if (!newLineName.trim()) {

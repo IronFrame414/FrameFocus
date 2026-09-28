@@ -2,6 +2,7 @@ import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@framefocus/shared/types/database';
 import type { CompanyRole } from '@framefocus/shared';
+import { receivesAssignedProjectAlerts } from '@framefocus/shared/constants/roles';
 import type { NotifyRecipient } from '@/lib/notify/notify';
 
 /**
@@ -47,7 +48,8 @@ export async function getManagerNotifyRecipients(
 }
 
 /**
- * Project managers ASSIGNED TO one project.
+ * Project managers ASSIGNED TO one project — and, since S114 Q8 A, Project
+ * Executives assigned to it (`receivesAssignedProjectAlerts`).
  *
  * The hop is `project_assignments.member_id → company_members.profile_id →
  * profiles`, because assignment is keyed on members and notification identity is
@@ -83,7 +85,7 @@ export async function getProjectPmNotifyRecipients(
     .map((r) => r.member?.profile)
     .filter(
       (p): p is NonNullable<typeof p> =>
-        Boolean(p) && p!.role === 'project_manager' && p!.is_deleted !== true
+        Boolean(p) && receivesAssignedProjectAlerts(p!.role) && p!.is_deleted !== true
     )
     .map((p) => ({
       profileId: p.id,

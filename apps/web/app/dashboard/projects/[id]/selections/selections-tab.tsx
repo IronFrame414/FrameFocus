@@ -1,4 +1,5 @@
 "use client";
+import { managesProjectOperations } from '@framefocus/shared/constants/roles';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -33,7 +34,6 @@ export interface TabArea {
   selections: TabSelection[];
 }
 
-const MANAGER = ['owner', 'admin', 'project_manager'];
 
 export const STATUS_LABELS: Record<string, string> = {
   draft: 'Draft',
@@ -88,7 +88,7 @@ export function OptionThumb({ fileId, size = 56 }: { fileId: string | null; size
 
 export function SelectionsTab({ projectId, role, areas }: { projectId: string; role: string; areas: TabArea[] }) {
   const router = useRouter();
-  const canManage = MANAGER.includes(role);
+  const canManage = managesProjectOperations(role);
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState('');
   const [areaId, setAreaId] = useState<string>('');

@@ -1,9 +1,9 @@
+import { supervisesProjectWork } from '@framefocus/shared/constants/roles';
 import { createClient } from '@/lib/supabase-browser';
 import type { PunchItem, PunchItemPriority, PunchItemStatus, PunchList } from '@/lib/services/punch';
 import { applied, DISCARDED } from '@/lib/services/mutation-result';
 export type { PunchItem, PunchItemPriority, PunchItemStatus, PunchList };
 
-const FOREMAN_PLUS = ['owner', 'admin', 'project_manager', 'foreman'];
 
 async function myMemberId(): Promise<string | null> {
   const supabase = createClient();
@@ -79,7 +79,7 @@ export async function deletePunchList(
   id: string,
   userRole: string
 ): Promise<{ success: boolean; error?: string }> {
-  if (!FOREMAN_PLUS.includes(userRole)) {
+  if (!supervisesProjectWork(userRole)) {
     return { success: false, error: 'Only Foreman and above can delete punch lists.' };
   }
   const supabase = createClient();
@@ -202,7 +202,7 @@ export async function setRequirementToggles(
   userRole: string,
   toggles: { requires_completion_photo?: boolean; requires_verification?: boolean }
 ): Promise<{ success: boolean; error?: string }> {
-  if (!FOREMAN_PLUS.includes(userRole)) {
+  if (!supervisesProjectWork(userRole)) {
     return { success: false, error: 'Only Foreman and above can change item requirements.' };
   }
   const supabase = createClient();
@@ -263,7 +263,7 @@ export async function verifyPunchItem(
   item: Pick<PunchItem, 'id' | 'status' | 'requires_verification' | 'completed_by'>,
   userRole: string
 ): Promise<{ success: boolean; error?: string }> {
-  if (!FOREMAN_PLUS.includes(userRole)) {
+  if (!supervisesProjectWork(userRole)) {
     return { success: false, error: 'Only Foreman and above can verify punch items.' };
   }
   if (!item.requires_verification) {
@@ -299,7 +299,7 @@ export async function deletePunchItem(
   id: string,
   userRole: string
 ): Promise<{ success: boolean; error?: string }> {
-  if (!FOREMAN_PLUS.includes(userRole)) {
+  if (!supervisesProjectWork(userRole)) {
     return { success: false, error: 'Only Foreman and above can delete punch items.' };
   }
   const supabase = createClient();

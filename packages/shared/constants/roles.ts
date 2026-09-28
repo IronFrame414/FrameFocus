@@ -211,6 +211,69 @@ export function seesProjectMoney(role: string | null | undefined): boolean {
   return !!role && (PROJECT_MONEY_ROLES as readonly string[]).includes(role);
 }
 
+/**
+ * [S114 PART A] WHO RUNS A PROJECT'S OPERATIONS — the one answer every UI gate
+ * and route reads for project work, desktop and /m alike (PARITY).
+ *
+ *   'manage'    — POs, selections, the project team and contacts, project
+ *                 status, bills and commitments, budget lines at capture.
+ *   'supervise' — 'manage' plus the field layer only: tasks/phases/inspections
+ *                 in the schedule panel, punch verify/delete, selection notes.
+ *   'none'      — neither.
+ *
+ * ⚠️ A TOTAL MAP: adding a role to `CompanyRole` fails to compile until it
+ * answers here. It replaced 3–7 hand-written copies of
+ * `['owner','admin','project_manager'(,'foreman')]` that each omitted the
+ * Project Executive — the shape `/m`'s `readsChangeOrders()` shipped in S181.
+ *
+ * ⚠️ THIS IS NOT THE FLOOR. The database decides which PROJECTS: a Project
+ * Executive manages only the projects it is assigned to
+ * (`pe_on_project()`, 20261940000000); a PM, as ever, by assignment where the
+ * policy says so. This only decides whether a control is OFFERED.
+ *
+ * ⚠️ NOT FOR the carve-outs (refunds: `canIssueRefund`; contracts:
+ * `canManageContracts`) nor company-level surfaces (catalog management,
+ * directories, estimates, timesheets) — each keeps its own predicate.
+ */
+export const PROJECT_OPERATIONS: Record<CompanyRole, 'manage' | 'supervise' | 'none'> = {
+  owner: 'manage',
+  admin: 'manage',
+  project_executive: 'manage',
+  project_manager: 'manage',
+  foreman: 'supervise',
+  crew_member: 'none',
+  subcontractor: 'none',
+  client: 'none',
+};
+
+function projectOperationsOf(role: string | null | undefined): 'manage' | 'supervise' | 'none' {
+  // hasOwnProperty, not `in`: 'constructor' is `in` every object literal.
+  return role && Object.prototype.hasOwnProperty.call(PROJECT_OPERATIONS, role)
+    ? PROJECT_OPERATIONS[role as CompanyRole]
+    : 'none';
+}
+
+/** POs, selections, project team/contacts, project status, bills. See PROJECT_OPERATIONS. */
+export function managesProjectOperations(role: string | null | undefined): boolean {
+  return projectOperationsOf(role) === 'manage';
+}
+
+/** 'manage' plus the field layer: schedule panel, punch verify/delete, selection notes. */
+export function supervisesProjectWork(role: string | null | undefined): boolean {
+  return projectOperationsOf(role) !== 'none';
+}
+
+/**
+ * [S114 Q8 A] Who gets a project's alerts BY ASSIGNMENT (CO signed, PO line
+ * missing, daily log missing, delivery discrepancy): the managers of project
+ * operations who are not Owner/Admin — those two get them by role, company-wide.
+ * The caller supplies only people ASSIGNED to the project, so a Project
+ * Executive hears about its own projects and no others.
+ */
+export function receivesAssignedProjectAlerts(role: string | null | undefined): boolean {
+  return managesProjectOperations(role) && role !== 'owner' && role !== 'admin';
+}
+
 /** Company-level money: portfolio totals, margin target, cross-project cost. Owner/Admin only. */
 export function seesCompanyMoney(role: string | null | undefined): boolean {
   return role === 'owner' || role === 'admin';

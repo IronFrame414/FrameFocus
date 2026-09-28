@@ -1,3 +1,4 @@
+import { managesProjectOperations } from '@framefocus/shared/constants/roles';
 import { createClient } from '@/lib/supabase-server';
 import { redirect } from 'next/navigation';
 import { getProjectContacts } from '@/lib/services/project-contacts';
@@ -33,7 +34,7 @@ export default async function ProjectContactsPage({ params }: { params: { id: st
   const currentClientContactId =
     (projectRow.data as { contact_id: string | null } | null)?.contact_id ?? null;
 
-  const canManage = ['owner', 'admin', 'project_manager'].includes(profile.role);
+  const canManage = managesProjectOperations(profile.role);
   // ⚠️ NARROWER THAN `canManage`, on purpose. Attaching a contact is a PM job;
   // inviting a client and changing R17 state are Owner/Admin, enforced by
   // `invitations_insert_owner_admin` and by `profiles` having no PM update arm.

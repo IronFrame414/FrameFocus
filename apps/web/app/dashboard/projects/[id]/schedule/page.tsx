@@ -1,3 +1,4 @@
+import { supervisesProjectWork } from '@framefocus/shared/constants/roles';
 import { createClient } from '@/lib/supabase-server';
 import { redirect } from 'next/navigation';
 import { getTasks, getPhases, getDependencies } from '@/lib/services/tasks';
@@ -35,7 +36,7 @@ export default async function ProjectSchedulePage({ params }: { params: { id: st
     getCalendarEvents({ projectId: params.id, ownMemberId: myMember?.id }),
   ]);
 
-  const canManage = ['owner', 'admin', 'project_manager', 'foreman'].includes(profile.role);
+  const canManage = supervisesProjectWork(profile.role);
 
   return (
     <SchedulePanel

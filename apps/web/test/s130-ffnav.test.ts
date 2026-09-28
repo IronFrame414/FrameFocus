@@ -106,10 +106,16 @@ describe('A-N6 — this work changed NO gate', () => {
   // widened gate is invisible until someone sees a page they should not.
   const gateFor = (label: string) => entries().find((e) => e.label === label)?.roles ?? null;
 
-  it('Estimates and Cost Catalog stay owner/admin/project_manager', () => {
-    for (const label of ['Estimates', 'Cost Catalog']) {
-      expect(gateFor(label), label).toBe("'owner', 'admin', 'project_manager'");
-    }
+  it('Estimates stays owner/admin/project_manager; Cost Catalog adds project_executive (S114, read only)', () => {
+    // ⚠️ WAS: 'Estimates and Cost Catalog stay owner/admin/project_manager', with
+    // both labels expected to equal "'owner', 'admin', 'project_manager'".
+    // [S114 PART A] S111 Q3 RULED the Project Executive READS the catalog (no
+    // write); the nav now offers it. Estimates is unchanged (S111 Q7: no
+    // sales-stage access).
+    expect(gateFor('Estimates'), 'Estimates').toBe("'owner', 'admin', 'project_manager'");
+    expect(gateFor('Cost Catalog'), 'Cost Catalog').toBe(
+      "'owner', 'admin', 'project_executive', 'project_manager'"
+    );
   });
 
   it('Settings stays owner/admin; Billing owner-only gate MOVED to the Settings tab', () => {

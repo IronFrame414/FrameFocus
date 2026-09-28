@@ -1,4 +1,5 @@
 "use client";
+import { managesProjectOperations, supervisesProjectWork } from '@framefocus/shared/constants/roles';
 import { useCallback, useEffect, useRef, useState, type ClipboardEvent, type DragEvent } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -40,8 +41,6 @@ import { SelectionLifecycle } from './selection-lifecycle';
 // file_id` columns, so the tab and the portal read one shape.
 // ============================================================================
 
-const MANAGER = ['owner', 'admin', 'project_manager'];
-const NOTES_ROLES = ['owner', 'admin', 'project_manager', 'foreman'];
 
 const card: React.CSSProperties = { backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: '0.5rem', padding: '1rem', marginBottom: '1rem' };
 const label: React.CSSProperties = { display: 'block', fontSize: '0.6875rem', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', marginBottom: '0.25rem' };
@@ -81,8 +80,8 @@ export function SelectionSheet({ projectId, role, myProfileId, selection, areas,
       live = false;
     };
   }, [selection.id, selection.options]);
-  const canManage = MANAGER.includes(role);
-  const canNotes = NOTES_ROLES.includes(role) && selection.notes !== null;
+  const canManage = managesProjectOperations(role);
+  const canNotes = supervisesProjectWork(role) && selection.notes !== null;
   const editable = canManage && (selection.status === 'draft' || selection.status === 'in_discussion');
   const [error, setError] = useState<string | null>(null);
   const reload = useCallback(() => router.refresh(), [router]);

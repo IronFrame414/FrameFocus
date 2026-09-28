@@ -1,3 +1,4 @@
+import { managesProjectOperations } from '@framefocus/shared/constants/roles';
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase-server';
@@ -54,7 +55,7 @@ export default async function PurchaseOrderDetailPage({
   if (po.project_id !== params.projectId) notFound();
 
   const isAdminRole = profile.role === 'owner' || profile.role === 'admin';
-  const canEditPo = isAdminRole || profile.role === 'project_manager';
+  const canEditPo = managesProjectOperations(profile.role);
 
   // ── PO module 18b — the line panel's reads ────────────────────────────────
   // Caller-RLS-scoped throughout. Budgeted figures ride the Owner/Admin-only

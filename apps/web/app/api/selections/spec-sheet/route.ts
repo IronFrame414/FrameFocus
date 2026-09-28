@@ -1,3 +1,4 @@
+import { managesProjectOperations } from '@framefocus/shared/constants/roles';
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { createClient } from '@/lib/supabase-server';
@@ -37,8 +38,6 @@ import {
 
 const BodySchema = z.object({ projectId: z.string().uuid() });
 
-const GENERATORS = ['owner', 'admin', 'project_manager'];
-
 export async function POST(req: NextRequest) {
   const supabase = await createClient();
   const {
@@ -66,7 +65,7 @@ export async function POST(req: NextRequest) {
     .maybeSingle();
   // 403 with its own message, never a fall-through to "not found" — a
   // permission failure must not be reported as a missing record (CLAUDE.md).
-  if (!profile || !GENERATORS.includes(profile.role)) {
+  if (!profile || !managesProjectOperations(profile.role)) {
     return NextResponse.json(
       { error: 'Only an owner, admin or project manager can send a specifications sheet.' },
       { status: 403 }

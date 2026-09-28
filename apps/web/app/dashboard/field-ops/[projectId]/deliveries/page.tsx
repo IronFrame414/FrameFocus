@@ -1,3 +1,4 @@
+import { managesProjectOperations } from '@framefocus/shared/constants/roles';
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase-server';
@@ -40,7 +41,7 @@ export default async function DeliveriesListPage({
     getOrderlessDeliveries(project.id),
   ]);
 
-  const canCreatePo = ['owner', 'admin', 'project_manager'].includes(profile.role);
+  const canCreatePo = managesProjectOperations(profile.role);
 
   return (
     <div>

@@ -81,7 +81,8 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     profile.company_id,
     reporterRole,
     reporterProfile?.email ?? null,
-    reporterProfile?.id ?? null
+    reporterProfile?.id ?? null,
+    incident.project_id
   );
   const failedEmails = new Set(failed.map((f) => f.email));
   const retryTargets = allRecipients.filter((r) => failedEmails.has(r.email));

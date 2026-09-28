@@ -6,6 +6,7 @@
 // receipts, edit/soft-delete own PENDING rows (Q8), rejection note visible.
 // RLS already scopes the data; this component only shapes it.
 
+import { managesProjectOperations, supervisesProjectWork } from '@framefocus/shared/constants/roles';
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -82,8 +83,8 @@ export function ExpensesPageClient({
   const isReviewer = role === 'owner' || role === 'admin';
   // §4 roles: Bills tab for Owner/Admin/PM/Foreman (Foreman read-only); Crew
   // has nothing in 7C — receipts only.
-  const seesBills = ['owner', 'admin', 'project_manager', 'foreman'].includes(role);
-  const canEnterBills = ['owner', 'admin', 'project_manager'].includes(role);
+  const seesBills = supervisesProjectWork(role);
+  const canEnterBills = managesProjectOperations(role);
 
   const [tab, setTab] = useState<Tab>('receipts');
   const [projectFilter, setProjectFilter] = useState('');
