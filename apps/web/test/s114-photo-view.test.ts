@@ -63,9 +63,24 @@ describe('S114 C-2 — every Photos-view reader uses the one filter (PARITY)', (
   it('gallery (getProjectPhotos) and viewer/markup resolver (getPhoto)', () => {
     const src = code('lib/services/photos.ts');
     expect(src).toContain('getFiles({ project_id: projectId, photo_view: true })');
+    // [S114] opt-in: chat keeps category 'photos' only (see getProjectPhotos).
+    expect(src).toContain("getFiles({ project_id: projectId, category: 'photos' })");
     expect(src).toContain('.or(PHOTO_VIEW_FILTER)');
-    expect(src).not.toContain("category: 'photos'");
+    // (category: 'photos' now survives as chat's branch — asserted above.)
     expect(src).not.toContain(".eq('category', 'photos')");
+  });
+
+  it('the three Photos SCREENS opt in; chat does not', () => {
+    expect(code('app/m/p/[projectId]/photos/page.tsx')).toContain('photoView: true');
+    expect(code('app/m/p/[projectId]/photos/[fileId]/page.tsx')).toContain('photoView: true');
+    expect(code('app/dashboard/projects/[id]/photos/page.tsx')).toContain('photoView: true');
+    for (const f of [
+      'app/api/chat/photos/route.ts',
+      'app/api/chat/messages/route.ts',
+      'app/api/chat/threads/route.ts',
+    ]) {
+      expect(code(f), f).not.toContain('photoView');
+    }
   });
 
   it('/m project overview and /m field badges', () => {
