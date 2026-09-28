@@ -148,3 +148,14 @@ pattern) · `contract_amount_arms 2` · `upload_helper 0` · `fn_md5_before` = t
 | pe_write_arms | 60 | 60 (19+41) |
 | named_arms (the 46) | 46 | 46 |
 | pe_profiles_now | 0 | 0 |
+
+**§2 `20261950000000_s114_pe_storage_upload_arm.sql` — APPLIED, VERIFIED.** Dry run exit 0, exactly one line. Push exit 0,
+`Applying migration …` → `Finished supabase db push.`
+| column | measured | expected |
+| --- | --- | --- |
+| ledger_row | 1 | 1 |
+| storage_arm | 1 | 1 |
+| pe_write_arms | 61 | 61 |
+| helper_md5 | f72520ec11555bb6d74a47c258dce771 | f72520ec11555bb6d74a47c258dce771 |
+| anon_can_run | false | false |
+| pe_profiles_now | 0 | 0 |
