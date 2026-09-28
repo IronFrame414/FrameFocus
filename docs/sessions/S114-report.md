@@ -159,3 +159,18 @@ pattern) · `contract_amount_arms 2` · `upload_helper 0` · `fn_md5_before` = t
 | helper_md5 | f72520ec11555bb6d74a47c258dce771 | f72520ec11555bb6d74a47c258dce771 |
 | anon_can_run | false | false |
 | pe_profiles_now | 0 | 0 |
+
+**§3 `20261960000000_s114_pe_functions.sql` — APPLIED, VERIFIED.** Dry run exit 0, exactly one line. Push exit 0.
+| column | measured | expected |
+| --- | --- | --- |
+| ledger_row | 1 | 1 |
+| chat_can_post | c576b7fa8c622e9584e3313101a3446a | same |
+| create_budget_line_at_capture | b499b0085c4d58a70a7e70ed41b081b6 | same |
+| flag_po_item_missing | f8b4fb4b5800a7e371ca64b2057274a4 | same |
+| get_approved_change_order_summaries | dcbc9ccf9d85c41e62dc4472e9ed14fa | same |
+| issue_po_lines | d88f4fa6ee180b515abd451aef11aea1 | same |
+| may_enter_client_thread | e3bf9066e29aa705094db89b3129461b | same |
+| set_po_total_amount | ccfe85c605385084cbc5463c7a7d36b9 | same |
+| setup_has_pe | false | false (Q5) |
+| contract_void_has_pe | false | false (Q2) |
+| pe_profiles_now | 0 | 0 |
