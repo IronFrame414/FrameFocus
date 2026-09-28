@@ -386,3 +386,12 @@ companies → Q18 reversed (control always shown); Q17 (a)–(e) will be "built 
 - Rebased onto `584573e7`: `feature/s114-c-migration` (3 own commits; tsc 0), `feature/s114-b-qb-exclusion` (4; tsc 0).
 - ⚠️ `feature/s114-c5-multi-upload` rebased to ZERO commits (main holds C-5 + its revert, so git dropped them as upstream);
   restored with a revert-of-the-revert. tsc 0; unit 138 files / 1,895 tests. Still unproven per `#2-s180u`.
+
+### Step 20 — `main` after the C-branch 1 merge: verified green
+- `main` CI **36427464897** on `584573e7`: Lint & Type ✓; E2E **cancelled at the 50-minute job timeout** (`timeout-minutes: 50`;
+  normal ≈ 33 min). No failing test in the log (only the expected `OPENAI_API_KEY is not set` translate errors); the reporter
+  prints no per-test progress, so slow-vs-hung cannot be told from it. `gh run rerun` refused ("Resource not accessible by
+  integration").
+- Re-verified by pushing `584573e7` to a throwaway branch `ci/s114-main-verify`: CI **36433709837** — **Lint & Type ✓, E2E ✓**
+  (14:08→14:50 UTC, 42 min, same tree as `main`). Branch deleted. `main` = green.
+- C-branch 2 CI started with this commit (next), then PART B, one at a time. Neither merges before Josh's runbook.
