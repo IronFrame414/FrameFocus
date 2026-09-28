@@ -148,11 +148,21 @@ async function makeSide(side: Side, seq: number): Promise<void> {
   f.inspection = (await one('inspection', admin.from('inspections').insert({ company_id: companyId, project_id: f.project, inspection_type: 'framing' }).select('id').single())).id;
   f.schedule = (await one('schedule', admin.from('schedule_entries').insert({ company_id: companyId, project_id: f.project, member_id: ownerMemberId, entry_date: '2026-10-01', general_kind: 'project' }).select('id').single())).id;
   f.selection = (await one('selection', admin.from('selections').insert({ company_id: companyId, project_id: f.project, name: `${MARKER} selection` }).select('id').single())).id;
+  // A trigger creates the selection's one selection_amounts row (unique per
+  // selection). Remove it, so the PE's INSERT probe LANDS where the tally sees
+  // it instead of colliding on selection_amounts_selection_id_key.
+  await admin.from('selection_amounts').delete().eq('selection_id', f.selection);
   f.area = (await one('area', admin.from('selection_areas').insert({ company_id: companyId, project_id: f.project, name: `${MARKER} area` }).select('id').single())).id;
   f.option = (await one('option', admin.from('selection_options').insert({ company_id: companyId, selection_id: f.selection, name: `${MARKER} option`, source: 'scratch' }).select('id').single())).id;
   f.budgetItem = (await one('budget item', admin.from('project_budget_items').insert({ company_id: companyId, project_id: f.project, description: `${MARKER} line` }).select('id').single())).id;
-  f.po = (await one('po', admin.from('purchase_orders').insert({ company_id: companyId, project_id: f.project, vendor_name: `${MARKER} vendor` }).select('id').single())).id;
+  f.po = (await one('po', admin.from('purchase_orders').insert({ company_id: companyId, project_id: f.project, vendor_name: `${MARKER} vendor`, author_member_id: ownerMemberId }).select('id').single())).id;
   f.poItem = (await one('po item', admin.from('purchase_order_items').insert({ company_id: companyId, purchase_order_id: f.po, description: `${MARKER} item`, qty_ordered: 1 }).select('id').single())).id;
+  // BARE's line is ISSUED, so flag_po_item_missing reaches its role/project
+  // check instead of refusing earlier on "only an issued line can be flagged".
+  if (side === 'bare') {
+    const { error: iErr } = await admin.from('purchase_order_items').update({ line_status: 'issued' }).eq('id', f.poItem);
+    if (iErr) throw new Error(`issue bare line: ${iErr.message}`);
+  }
   f.subThread = (await one('sub thread', admin.from('chat_threads').insert({ company_id: companyId, project_id: f.project, kind: 'sub' }).select('id').single())).id;
   f.contact = (await one('contact', admin.from('contacts').insert({ company_id: companyId, first_name: tag, last_name: `${MARKER} Contact`, contact_type: 'client' }).select('id').single())).id;
   f.crewMember = (await one('crew member', admin.from('company_members').insert({ company_id: companyId, member_type: 'crew', display_name: `${MARKER} ${tag} crew` }).select('id').single())).id;
@@ -176,7 +186,7 @@ beforeAll(async () => {
   await sweep();
 
   clientContactId = (await one('client', admin.from('contacts').insert({ company_id: companyId, first_name: 'PE', last_name: `${MARKER} Client`, contact_type: 'client' }).select('id').single())).id;
-  catalogItemId = (await one('catalog', admin.from('cost_catalog').insert({ company_id: companyId, name: `${MARKER} catalog item`, category: 'material', unit_of_measure: 'ea', unit_cost: 1 }).select('id').single())).id;
+  catalogItemId = (await one('catalog', admin.from('cost_catalog').insert({ company_id: companyId, name: `${MARKER} catalog item`, category: 'other', unit_of_measure: 'each', unit_cost: 1 }).select('id').single())).id;
   const { data: seqRow } = await admin.from('projects').select('project_internal_seq').eq('company_id', companyId)
     .order('project_internal_seq', { ascending: false }).limit(1).maybeSingle();
   const base = (seqRow?.project_internal_seq ?? 0) + 6000;
@@ -388,9 +398,9 @@ describe('S114 PART A — purchase orders', () => {
     const flag = await pe.rpc('flag_po_item_missing', { p_item_id: fx.bare.poItem, p_note: 'x' });
     const { data } = await admin.from('purchase_order_items').select('line_status').eq('id', fx.bare.poItem).single();
     record('po_functions_bare', { issue: issue.error?.message ?? null, flag: flag.error?.message ?? null, status: data?.line_status });
-    expect(issue.error?.message ?? '').toMatch(/not found/);
-    expect(flag.error?.message ?? '').toMatch(/not (found|assigned)|only an issued/);
-    expect(data?.line_status).toBe('draft');
+    expect(issue.error?.message ?? '').toMatch(/purchase order not found/);
+    expect(flag.error?.message ?? '').toMatch(/you are not assigned to this line/);
+    expect(data?.line_status).toBe('issued');
   });
 });
 
@@ -532,7 +542,7 @@ describe('S114 PART A — the ruled company-level READS (S111 Q2, Q3)', () => {
   });
   it('and still no catalog WRITE', async () => {
     const before = await tally('cost_catalog', 'company_id', companyId);
-    const { error } = await pe.from('cost_catalog').insert({ company_id: companyId, name: `${MARKER} pe item`, category: 'material', unit_of_measure: 'ea', unit_cost: 1 });
+    const { error } = await pe.from('cost_catalog').insert({ company_id: companyId, name: `${MARKER} pe item`, category: 'other', unit_of_measure: 'each', unit_cost: 1 });
     const after = await tally('cost_catalog', 'company_id', companyId);
     record('catalog_write', { before, after, error: error?.message ?? null });
     expect(error?.message ?? '').toMatch(/row-level security/i);

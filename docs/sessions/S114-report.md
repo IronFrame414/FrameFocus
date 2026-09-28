@@ -73,3 +73,22 @@ Branch: `feature/s114-pe-operational-arms` (from `main` 210683b0). Appended afte
 - Q4 lets the PE insert committed `subcontractor` expenses linked to a `sub_contract_id` by hand, i.e. build stage-like
   commitments without `setup_payment_schedule()` (and without its one-schedule-per-contract check). The subcontract's
   own terms (value, retainage) stay untouchable. Built as ruled; flagged.
+
+## Step 5 — rebuild-test: negative-first, apply, verify, green
+
+- Main CI 36361033388 **completed success** before any DB work; in-progress runs at push time: 0. Lint exit 0; `next build` exit 0 (133/133).
+- **Negative-first (before the migrations):** carve-outs 11 passed / **2 failed — N9i (PE INSERTed a contract amount, tally 0→1)
+  and N9u (PE changed contract_value 50000→1)**: Q2's defect, live. Operational: **36 failed** (every ON write refused) / 6 passed
+  (control + the deliberate refusals: contracts file, project-less schedule, archive/trash, retainage expense, catalog write).
+  Three fixture errors fixed on the way (catalog CHECK values; PO author default is get_my_member_id(), NULL for the service role).
+- **Apply (rebuild-test only):** `supabase/.temp/project-ref` = nmyphyhmfttxkdoposvf. The four held files (1850/1860/1890/1900) copied
+  in **temporarily, uncommitted** from their origin branches (S181 precedent; no `migration repair`). `db push --dry-run --include-all`
+  exit 0 listed exactly 1940/1950/1960/1970/1980. Push exit 0, "Applying migration" ×5. Copies deleted; tree clean but the test file.
+- **Verified by object (MCP):** ledger 5/5; `pe_read_arms` (ends-with `%\_project\_executive`, SELECT) **27** = 19+5+3;
+  `pe_write_arms` **59** = 19+41+1−2; `client_contract_amounts` PE write arms **0**, read arm 1; storage arm 1; anon EXECUTE on
+  `pe_can_upload_project_file` false; 7/7 functions name the PE; `setup_payment_schedule` no PE; contract void no PE;
+  carve-out write arms naming the PE **0**.
+- **After:** carve-outs **13/13**; operational **42/42** (one more fixture fix: a trigger pre-creates the selection's unique
+  selection_amounts row — removed so the PE's insert lands where the tally sees it; BARE PO line set `issued` so
+  flag_po_item_missing refuses on scope, not on line status). Row counts: every ON insert 0→1 or n→n+1, every BARE n→n with an RLS
+  error; storage ON 1 / BARE 0; roster 10=10 profiles, 590=590 members, catalog 4=4; teardown 0 projects left.
