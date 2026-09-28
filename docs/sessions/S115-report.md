@@ -60,3 +60,17 @@ Branch for this log and the spec fold: `feature/s115-report` (docs-only).
 | client portal / emails | **no** scope rendered (portal `financials/page.tsx:107` is a subtitle; `proposal-email.tsx` has none) | grep |
 | markdown deps | `react-markdown ^10.1.0` + `remark-gfm ^4.0.1` direct in `apps/web/package.json`; used only by `components/public/markdown-doc.tsx` (terms/privacy) — cannot render into React-PDF | `grep -nE 'react-markdown\|…' package.json apps/*/package.json packages/*/package.json` → 2 |
 | AI writing scope | **none** — only `text-tabs.tsx:485` writes `scope_summary` (plus SQL copy on conversion). Markdown is typed/pasted by authors (FILL-C-12.2: authors type markdown into a plain textarea because nothing told them otherwise) | grep of OpenAI callers |
+
+### Phase 1 — C-11 (measured; Explore agent trace, key claims re-run by me)
+| what | number / location | command |
+| --- | --- | --- |
+| delete controls on desktop Photos tab | **0** | `grep -rniE "delete\|trash\|remove" app/dashboard/projects/[id]/photos \| wc -l` → 0 (re-run by me) |
+| the only "Delete" a desktop user reaches from a photo | markup editor "Delete selected" (`markup-editor.tsx:406-413`) → `handleDeleteSelected` removes a **drawn shape** from React state; `disabled={!selectedId}` but its style always shows `cursor: pointer`, no disabled look → **looks live, does nothing** | `grep -rn "Delete" …/markup/markup-editor.tsx` |
+| how desktop lost photo delete | `831879b4` (2026-09-27, S112 2a) took photos off the Files tab (`getDocumentFiles()` = `exclude_category: 'photos'`), removing the only desktop path to `softDeleteFile`; nothing replaced it on Photos | `git log --oneline -5 -- <file>` |
+| `/m` photo delete | wired: grid bulk delete (`photo-grid.tsx:442-455`) and viewer (`viewer.tsx:364-374`) → `softDeleteFile` (`lib/services/files-client.ts:396-412`), which does `.update().eq().select('id')` + `applied()` → a 0-row RLS-filtered write **is reported as failure**, not success (not the C-8 `saveMarkup` shape). Shown only to owner/admin (`photos/page.tsx:79`, `[fileId]/page.tsx:105`) | read |
+| `softDeleteFile` call sites | 5 (photo-grid, viewer, file-row-actions, payables-client cleanup) | `grep -rn "softDeleteFile" app components lib` → 9 lines incl. 4 def/import |
+| RLS | `files_update_non_client` (`20260822000000:98-100`): owner/admin any row; PM/foreman/crew/sub on viewable projects for non-contract categories; PE arm `20261940000000:66`. `files_z_site_visit_freeze` blocks `is_deleted` on frozen site-visit photos (42501) | read |
+
+**Verdict (FILL-C-11.1): no handler on desktop.** Not an RLS 0-row success. The fix is a real desktop photo delete through the same `softDeleteFile`, plus the markup button's disabled look.
+**FILL-C-11.2:** today "delete" = soft delete (`is_deleted=true`, `deleted_at`), row and storage object kept (restorable from Trash via `getTrash()`); thumbnails/derivatives are untouched because the row survives; any daily log / estimate / sent document referencing the row keeps its reference. A frozen site-visit photo refuses with an error.
+**FILL-C-11.3 PARITY:** `/m` works for owner/admin; desktop has nothing. ⚠️ Role gap: CLAUDE.md "Delete files: Owner/Admin/PM ✓"; `/m` gates owner/admin only; RLS lets PM/foreman/crew soft-delete. → ASK.
