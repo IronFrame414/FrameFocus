@@ -218,6 +218,35 @@ export function seesProjectMoney(role: string | null | undefined): boolean {
 }
 
 /**
+ * [S114 PART B, RULED Josh R3 + Q16] EXCLUDE A PROJECT FROM QUICKBOOKS.
+ * 'set' — may exclude / include again (the Owner, and ONLY the Owner).
+ * 'see' — sees the read-only state line (the Admin, who reconciles the books).
+ * 'none' — no QuickBooks UI at all. The Project Executive is 'none' although
+ * it now has project status authority (S114 Q3) and sits in the same STATUS
+ * card: QuickBooks is company books.
+ *
+ * ⚠️ PRESENTATION ONLY. The authority is `project_qb_exclusions`' RLS
+ * (20262010000000): INSERT/UPDATE Owner, SELECT Owner + Admin. A total map, so
+ * a new role fails to compile until it answers.
+ */
+export const QB_PROJECT_EXCLUSION: Record<CompanyRole, 'set' | 'see' | 'none'> = {
+  owner: 'set',
+  admin: 'see',
+  project_executive: 'none',
+  project_manager: 'none',
+  foreman: 'none',
+  crew_member: 'none',
+  subcontractor: 'none',
+  client: 'none',
+};
+
+export function qbExclusionAccess(role: string | null | undefined): 'set' | 'see' | 'none' {
+  return role && Object.prototype.hasOwnProperty.call(QB_PROJECT_EXCLUSION, role)
+    ? QB_PROJECT_EXCLUSION[role as CompanyRole]
+    : 'none';
+}
+
+/**
  * [S114 PART A] WHO RUNS A PROJECT'S OPERATIONS — the one answer every UI gate
  * and route reads for project work, desktop and /m alike (PARITY).
  *

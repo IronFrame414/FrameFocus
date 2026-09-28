@@ -381,6 +381,9 @@ export const COMPANY_TABLES: string[] = [
   'selection_amounts', 'selection_notes', 'selection_signing_sessions',
   'selections', 'selection_areas',
   'project_budget_amounts', 'project_budget_items', 'project_financials',
+  // [S114 PART B] the Owner's QuickBooks exclusion flag — cascades with its
+  // project, listed so the walk stays explicit about every table it owns.
+  'project_qb_exclusions',
   'project_contacts', 'project_assignments',
   // Client + sub contracts: archived first [Q3], amounts ride the client
   // parent. contract_documents FK estimates/projects/sub_contracts, its

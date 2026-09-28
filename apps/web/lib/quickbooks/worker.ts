@@ -105,6 +105,27 @@ export interface DrainOutcome {
   vendorMapWriteFailures: number;
 }
 
+/** [S114 PART B] What a dropped row says — shown in the accounting panel. */
+export const QB_PROJECT_EXCLUDED_REASON =
+  'Not sent: this project is excluded from QuickBooks by the Owner.';
+
+/**
+ * [S114 PART B] The exit gate's check — `qb_entity_excluded()` (service role
+ * only), the same resolver the entry gate in `qb_enqueue()` uses. Returns
+ * true / false, or `{ error }` when it could not decide (the caller retries).
+ */
+export async function queueRowExcluded(
+  admin: SupabaseClient,
+  row: { entity_type: string; entity_id: string }
+): Promise<boolean | { error: string }> {
+  const { data, error } = await admin.rpc('qb_entity_excluded', {
+    p_entity_type: row.entity_type,
+    p_entity_id: row.entity_id,
+  });
+  if (error) return { error: `Could not check the QuickBooks exclusion: ${error.message}` };
+  return data === true;
+}
+
 export async function runQbSync(admin: SupabaseClient): Promise<DrainOutcome> {
   const outcome: DrainOutcome = {
     companiesConsidered: 0,
@@ -263,6 +284,25 @@ export async function runQbSync(admin: SupabaseClient): Promise<DrainOutcome> {
             false
           );
           outcome.failedTerminal += 1;
+          continue;
+        }
+
+        // [S114 PART B, RULED Josh R3 / Q17 a+d] THE EXIT GATE. A row queued
+        // BEFORE its project was excluded, or a client payment that turned out
+        // to cover an excluded project's invoice, is dropped at pickup — marked
+        // terminal with the reason, which the accounting panel shows. If the
+        // check itself cannot run, the row waits (transient): under-syncing is
+        // recoverable, leaking an excluded project's money into QuickBooks is not.
+        const exclusion = await queueRowExcluded(admin, row);
+        if (exclusion !== false) {
+          await markFailed(
+            admin,
+            row,
+            exclusion === true ? QB_PROJECT_EXCLUDED_REASON : exclusion.error,
+            exclusion !== true
+          );
+          if (exclusion === true) outcome.failedTerminal += 1;
+          else outcome.failedTransient += 1;
           continue;
         }
 
