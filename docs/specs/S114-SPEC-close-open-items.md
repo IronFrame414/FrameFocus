@@ -110,7 +110,7 @@ production regression when it was truncated.
 > `subcontractor_contracts` I/U. (`contract_documents` I/U and `client_refunds` I/U are Owner/Admin only
 > and do not name PM; they are FILL-A-4's negatives.)
 >
-> **G3 — company level, ruled NO write (37).**
+> **G3 — company level, NO arm (40).**
 > - Directories, S111 Q4 read-only: `contacts` I/U, `contact_addresses` I/U/D, `subcontractors` I/U (7).
 >   The PE already reads all three through `<> ALL('subcontractor','client')` SELECT policies (Q4's
 >   column condition was checked in S181: no rate/price columns).
@@ -122,12 +122,16 @@ production regression when it was truncated.
 >   converted estimate never is, so a PE arm would admit nothing anyway.
 > - Site visits (pre-estimate, no project): `site_visits`, `site_visit_measurements`, `site_visit_notes`,
 >   `site_visit_voice_notes` SELECT (4).
+> - Safety incidents with **no project**: `safety_incidents`, `safety_incident_injuries`,
+>   `safety_incident_witnesses` SELECT (3). PM appears only in the `project_id IS NULL` branch; the
+>   project-linked branch is `can_view_project()` with no role list, so the PE **already reads** its
+>   projects' incidents, injuries and witnesses. A company-wide unattached incident is company level.
 >
 > **G4 — ruled reads, unbuilt (3).** `profiles_select_visible` + `company_members_select_visible` (S111 Q2:
 > whole roster, read-only, company-wide by ruling); `cost_catalog_select_manager` (S111 Q3: read-only).
 > `scope_library` SELECT is already company-open.
 >
-> **G5 — R1 operational arms to build, all project-scoped (50).**
+> **G5 — R1 operational arms to build, all project-scoped (47).**
 > | Table | Policies (PM) | PE arm | R/W |
 > | --- | --- | --- | --- |
 > | `files` | I, U (+ storage I, FILL-A-2) | I/U where `project_id` is its project and `category` not in contracts/change_orders/invoices (money files keep their S181 arms) | W |
@@ -146,7 +150,6 @@ production regression when it was truncated.
 > | `selection_notes` | S, I, U | S/I/U via its selection's project | R+W |
 > | `selection_threads` | I | I via the selection's project | W |
 > | `selection_signing_sessions` | S | S via its project | R |
-> | `safety_incidents`, `_injuries`, `_witnesses` | S ×3 | project-linked incidents are **already** readable (`can_view_project`); injuries and witnesses need a S arm via the incident's project; `project_id IS NULL` incidents stay company-level (no) | R |
 > | `project_assignments` | I, U | I/U on its projects (S111 Q8: existing staff and subs only; no invite) | W |
 > | `project_contacts` | I, U | I/U | W |
 > | `projects` | U | U on its projects (see ASK-A-1 b) | W |
@@ -155,7 +158,7 @@ production regression when it was truncated.
 >
 > ⚠️ **The spec's opening paragraph is partly a claim, corrected by policy text:** the PE can already
 > READ tasks, phases, purchase orders, inspections, selections, daily logs, deliveries, punch lists and
-> project-linked safety incidents, because those SELECT policies are `can_view_project()` with no role
+> project-linked safety incidents (with injuries and witnesses), because those SELECT policies are `can_view_project()` with no role
 > list. What it cannot do on those is write. Live proof is Phase 3's.
 >
 > **Functions (the same search over `pg_proc.prosrc`, 21 hits, full list):**
