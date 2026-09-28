@@ -614,3 +614,14 @@ Dry run (exit 0): exactly one, `20261910000000_s111_project_executive_write_arms
 | `md5_co_void` | 0bd45f0f8b3c2b377b68380af501ed74 | 0bd45f0f8b3c2b377b68380af501ed74 |
 | `contract_void_has_pe` | false (not NULL: the function exists) | false |
 | `invoice_insert_has_pe` | true | true |
+
+### Section 4 — `20261920000000_s181_pe_expense_and_money_file_reads` — APPLIED, VERIFIED
+
+Dry run (exit 0): exactly one, `20261920000000_s181_pe_expense_and_money_file_reads.sql`. Push (exit 0): `Applying migration
+20261920000000_s181_pe_expense_and_money_file_reads.sql...` → `Finished supabase db push.`
+
+| column | measured | expected |
+| --- | --- | --- |
+| `ledger_row` | 1 | 1 |
+| `arms` | 4 | 4 |
+| `anon_can_run` | false | false |
