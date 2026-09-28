@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { PNG } from 'pngjs';
+import { deflateSync } from 'node:zlib';
 import { admin, assertRebuildTest, sessionFor } from './live-session';
 import { runUploadBatch, toUploadItems, type UploadOutcome } from '@/lib/uploads/upload-batch';
 
@@ -29,15 +29,42 @@ let companyId = '';
 let projectId = '';
 const created: { id: string; file_path: string }[] = [];
 
-function noisePng(w: number, h: number): Buffer {
-  const png = new PNG({ width: w, height: h });
-  for (let i = 0; i < png.data.length; i += 4) {
-    png.data[i] = (Math.random() * 256) | 0;
-    png.data[i + 1] = (Math.random() * 256) | 0;
-    png.data[i + 2] = (Math.random() * 256) | 0;
-    png.data[i + 3] = 255;
+// A minimal PNG encoder on node:zlib — no image dependency. RGB, 8-bit,
+// random pixels, so the bytes do not compress (a phone photo is ~2–4 MB).
+function crc32(buf: Buffer): number {
+  let c = ~0;
+  for (let i = 0; i < buf.length; i++) {
+    c ^= buf[i];
+    for (let k = 0; k < 8; k++) c = (c >>> 1) ^ (0xedb88320 & -(c & 1));
   }
-  return PNG.sync.write(png);
+  return ~c >>> 0;
+}
+function chunk(type: string, data: Buffer): Buffer {
+  const len = Buffer.alloc(4);
+  len.writeUInt32BE(data.length);
+  const body = Buffer.concat([Buffer.from(type, 'ascii'), data]);
+  const crc = Buffer.alloc(4);
+  crc.writeUInt32BE(crc32(body));
+  return Buffer.concat([len, body, crc]);
+}
+function noisePng(w: number, h: number): Buffer {
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(w, 0);
+  ihdr.writeUInt32BE(h, 4);
+  ihdr[8] = 8; // bit depth
+  ihdr[9] = 2; // colour type: RGB
+  const raw = Buffer.alloc((w * 3 + 1) * h);
+  for (let y = 0; y < h; y++) {
+    const row = y * (w * 3 + 1);
+    raw[row] = 0; // filter: none
+    for (let x = 1; x <= w * 3; x++) raw[row + x] = (Math.random() * 256) | 0;
+  }
+  return Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    chunk('IHDR', ihdr),
+    chunk('IDAT', deflateSync(raw)),
+    chunk('IEND', Buffer.alloc(0)),
+  ]);
 }
 
 beforeAll(async () => {
