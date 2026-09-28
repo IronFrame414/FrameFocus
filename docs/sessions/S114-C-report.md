@@ -242,3 +242,20 @@ companies → Q18 reversed (control always shown); Q17 (a)–(e) will be "built 
   re-formatted: 17+/8−, all mine.
 - **Not on this branch:** `/m` site-visit new contact (RPC `create_site_visit` check + Company field) → C-branch 2 with its migration.
 - P4 recorded in the util's header: 0 violating contacts on production 2026-09-28.
+
+### Step 11 — C-2 built (C-branch 1), to the P1-superseded ruling
+- `PHOTO_VIEW_FILTER` (`lib/services/files.ts`) = `category.eq.photos,and(category.in.(daily_logs,safety),mime_type.like.image/*)`,
+  read by `getProjectPhotos`, `getPhoto` (viewer + markup resolver), `/m` overview and `/m` field badges. Files
+  (`getDocumentFiles`) unchanged: excludes `photos` only, never MIME. False "S111 Q18 widened" comment corrected, old text quoted.
+- RLS read before building: `files_update_non_client` / `files_update_project_executive` and the storage `.markup.jpg` arms are
+  category-neutral for `daily_logs` / `safety` → markup on those rows needs **no migration**.
+- Live `s114-photo-view.live.ts` **4/4** on 6 real rows: Photos exactly 3 (photo, log image, safety image), Files exactly 5.
+  Sabotage: photos-only filter → **1 red**; filter without the MIME clause → **2 red** (the log PDF joined Photos). Restored, md5 OK;
+  fixture rows left: 0. Unit `s114-photo-view.test.ts` + `s112-document-files` + `s108-visit-era-photos` **17/17**. S157 sweep: no
+  test asserted daily-log/safety images absent from Photos; e2e photo counts use own fixtures/deltas.
+- PARITY: desktop gallery and /m gallery both read `getProjectPhotos`; /m viewer markup via `getPhoto`; desktop markup via `getFile`
+  (no category gate before or after).
+- **Unattended decision (reversible, narrower):** within `daily_logs`/`safety` the Photos side takes **images only** (MIME test).
+  Alternative: take both categories whole — a PDF filed under `daily_logs` would then sit in the photo grid as a broken tile and be
+  offered markup. Nothing leaves Files either way (R7 holds: the MIME test is never applied to Files).
+- Backfill (P2 STEP 2, one row on production) remains **Josh's** action.
