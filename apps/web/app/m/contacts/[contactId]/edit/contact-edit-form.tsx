@@ -7,6 +7,7 @@ import { updateContact } from '@/lib/services/contacts-client';
 import { useT } from '@/components/i18n/language-provider';
 import type { MsgKey } from '@/lib/i18n/messages';
 import { SetMobileHeader } from '../../../mobile-header';
+import { hasValidContactName, normalizeContactNames } from '@framefocus/shared/utils/contact-name';
 import {
   ErrorNotice,
   FieldLabel,
@@ -86,11 +87,16 @@ export function ContactEditForm({ contact }: { contact: ContactEditable }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // A-49b's fallback, enforced as a RULE rather than assumed: first, last and
-  // company are all nullable, and a company-only contact is a real state — but
-  // a contact with none of the three has no name anywhere in the app.
-  const ready =
-    firstName.trim().length > 0 || lastName.trim().length > 0 || companyName.trim().length > 0;
+  // [S114 C-9, RULED Josh] the ONE rule every contact writer uses: first AND
+  // last, OR company. _Superseded, quoted:_ "first, last and company are all
+  // nullable" (false — first/last are NOT NULL, blanks are stored as '') and
+  // `ready` = any ONE of the three, which let a first-name-only contact through
+  // here while desktop refused it.
+  const ready = hasValidContactName({
+    first_name: firstName,
+    last_name: lastName,
+    company_name: companyName,
+  });
 
   async function save() {
     if (!online) return;
@@ -103,9 +109,12 @@ export function ContactEditForm({ contact }: { contact: ContactEditable }) {
     setError(null);
 
     const result = await updateContact(contact.id, {
-      first_name: firstName.trim() || null,
-      last_name: lastName.trim() || null,
-      company_name: companyName.trim() || null,
+      // Blank names as '' — NULL broke the NOT NULL columns with a raw error.
+      ...normalizeContactNames({
+        first_name: firstName,
+        last_name: lastName,
+        company_name: companyName,
+      }),
       contact_type: contactType,
       phone: phone.trim() || null,
       mobile: mobile.trim() || null,

@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { listSiteVisits, type SiteVisit } from '@/lib/services/site-visits';
 import { groupSiteVisits } from '@/lib/site-visits/groups';
+import { contactDisplayName } from '@framefocus/shared/utils/contact-name';
 
 // S110 B [RULED Josh, Q5 → A] — SITE VISITS ON DESKTOP, reachable without
 // knowing a URL: a top-level sidebar item for every internal employee.
@@ -14,7 +15,7 @@ import { groupSiteVisits } from '@/lib/site-visits/groups';
 // NO "record a visit" button [Q6 → B]: recording stays on the phone, on site.
 
 function Row({ v }: { v: SiteVisit }) {
-  const who = v.contact ? `${v.contact.first_name} ${v.contact.last_name}`.trim() : null;
+  const who = v.contact ? contactDisplayName(v.contact) : null;
   const where = v.address ? `${v.address.address_line1}, ${v.address.city}` : null;
   return (
     <li style={{ borderBottom: '1px solid #eef1f6' }}>

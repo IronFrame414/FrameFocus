@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase-browser';
 import { applied, DISCARDED } from '@/lib/services/mutation-result';
+import { CONTACT_NAME_RULE_MESSAGE, hasValidContactName, normalizeContactNames } from '@framefocus/shared/utils/contact-name';
 
 /**
  * The id of an ACTIVE contact with this email in the caller's company, or null.
@@ -30,6 +31,16 @@ export async function createContact(
   contact: Record<string, unknown>
 ): Promise<{ success: boolean; id?: string; error?: string }> {
   const supabase = createClient();
+
+  // [S114 C-9, RULED Josh] first AND last, OR company — for every create path,
+  // below the UI. Blank names are stored as '' (the columns are NOT NULL).
+  const names = {
+    first_name: contact.first_name as string | null | undefined,
+    last_name: contact.last_name as string | null | undefined,
+    company_name: contact.company_name as string | null | undefined,
+  };
+  if (!hasValidContactName(names)) return { success: false, error: CONTACT_NAME_RULE_MESSAGE };
+  contact = { ...contact, ...normalizeContactNames(names) };
 
   // §1d — REUSE an existing (company_id, lower(email)) contact rather than mint a
   // duplicate. Every create path funnels through here, and the portal-invite /
@@ -63,6 +74,23 @@ export async function updateContact(
   updates: Record<string, unknown>
 ): Promise<{ success: boolean; error?: string }> {
   const supabase = createClient();
+
+  // [S114 C-9] A blank name is '' — never NULL, which the NOT NULL columns
+  // reject with a raw Postgres error (the /m edit form sent NULL). When a
+  // caller sends all three name fields, the rule is checked here too.
+  if ('first_name' in updates && 'last_name' in updates && 'company_name' in updates) {
+    const names = {
+      first_name: updates.first_name as string | null | undefined,
+      last_name: updates.last_name as string | null | undefined,
+      company_name: updates.company_name as string | null | undefined,
+    };
+    if (!hasValidContactName(names)) return { success: false, error: CONTACT_NAME_RULE_MESSAGE };
+    updates = { ...updates, ...normalizeContactNames(names) };
+  } else {
+    for (const k of ['first_name', 'last_name'] as const) {
+      if (k in updates && updates[k] == null) updates = { ...updates, [k]: '' };
+    }
+  }
 
   // BEFORE UPDATE trigger `contacts_set_updated_by` handles updated_by.
   // updated_at is handled by the existing updated_at trigger.

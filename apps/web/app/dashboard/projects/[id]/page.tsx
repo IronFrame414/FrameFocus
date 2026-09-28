@@ -14,6 +14,7 @@ import { StatusControl } from './status-control';
 import { RateSummary } from './rate-summary';
 import { cardStyle, color, font, microLabelStyle } from '@/lib/theme';
 import { ActivatableRow } from '@/components/list-screen/row-activation';
+import { contactDisplayName } from '@framefocus/shared/utils/contact-name';
 
 /**
  * ui-04 — 1a Project Overview: KPI row + schedule-progress stepper (derived
@@ -399,7 +400,7 @@ export default async function ProjectOverviewPage({ params }: { params: { id: st
                       fontWeight: 700,
                     }}
                   >
-                    {initialsOf(`${project.contact.first_name} ${project.contact.last_name}`)}
+                    {initialsOf(contactDisplayName(project.contact))}
                   </span>
                   <span style={{ minWidth: 0 }}>
                     <span
@@ -410,7 +411,7 @@ export default async function ProjectOverviewPage({ params }: { params: { id: st
                         color: color.navy,
                       }}
                     >
-                      {project.contact.first_name} {project.contact.last_name}
+                      {contactDisplayName(project.contact)}
                     </span>
                     <span style={{ fontSize: '12px', color: color.faint }}>Client</span>
                   </span>

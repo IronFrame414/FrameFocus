@@ -14,6 +14,7 @@ import { paymentTermsLabel } from '@/lib/services/invoices-shared';
 // [S106] was a seventh local copy of the company-tz calendar-date rule.
 import { companyToday } from '@framefocus/shared/utils/dates';
 import { remainingOnInvoice } from '@/lib/services/payments-shared';
+import { contactDisplayName } from '@framefocus/shared/utils/contact-name';
 import {
   dueReminders,
   effectiveDueDate,
@@ -117,7 +118,7 @@ export async function GET(request: NextRequest) {
 
     const { data: contacts } = await admin
       .from('contacts')
-      .select('id, first_name, last_name, email')
+      .select('id, first_name, last_name, company_name, email')
       .in('id', contactIds as string[]);
     const contactById = new Map((contacts ?? []).map((c) => [c.id, c]));
 
@@ -183,7 +184,7 @@ export async function GET(request: NextRequest) {
 
         const variables: Record<string, string> = {
           company_name: company.name,
-          contact_name: `${contact.first_name} ${contact.last_name}`.trim() || 'there',
+          contact_name: contactDisplayName(contact) || 'there', // [S114 C-9]
           invoice_number: row.invoice_number ?? row.id.slice(0, 8),
           project_name: project?.name ?? '',
           issue_date: fmtDate(row.issue_date),

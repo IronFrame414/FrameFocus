@@ -12,6 +12,7 @@ import {
   ListSearchInput,
 } from '@/components/list-screen/list-screen';
 import { badgeStyle, cardStyle, color, font, microLabelStyle, primaryButtonStyle, secondaryButtonStyle } from '@/lib/theme';
+import { contactDisplayName } from '@framefocus/shared/utils/contact-name';
 
 // ===========================================================================
 // THE ROW IS THE WAY IN. [S158 · Finding 1, RULED Josh]
@@ -185,12 +186,12 @@ export function ContactsList({ contacts, canEdit, jobs, portal }: ContactsListPr
                       // which leaves most of the row inert. Click, keyboard
                       // (role/tabIndex/Enter/Space) and the interactive-child guard
                       // come from the ONE shared row primitive [S109 #163].
-                      {...rowActivation(() => setOpenId(c.id), `Open ${c.first_name} ${c.last_name}`)}
+                      {...rowActivation(() => setOpenId(c.id), `Open ${contactDisplayName(c)}`)}
                       data-testid={`contact-row-${c.id}`}
                       style={{ borderBottom: `1px solid ${color.rowDivider}`, cursor: 'pointer' }}
                     >
                       <td style={{ ...td, paddingLeft: '20px', fontWeight: 600, color: color.navy }}>
-                        {c.first_name} {c.last_name}
+                        {contactDisplayName(c)}
                       </td>
                       <td style={td}>{c.company_name || '—'}</td>
                       <td style={td}>

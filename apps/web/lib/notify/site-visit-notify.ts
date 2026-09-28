@@ -4,6 +4,7 @@ import type { Database } from '@framefocus/shared/types/database';
 import type { CompanyRole } from '@framefocus/shared';
 import { notify, type NotifyRecipient } from '@/lib/notify/notify';
 import { getManagerNotifyRecipients } from '@/lib/notify/recipients';
+import { contactDisplayName } from '@framefocus/shared/utils/contact-name';
 
 // S108 Spec A, ASK-A4 → A, AMENDED [Josh, 2026-09-23, ruling 1] — a site
 // visit tells the OFFICE when it is FINISHED ("ready to price"), not when it
@@ -49,7 +50,7 @@ export async function notifySiteVisitReadyToPrice(
 ): Promise<void> {
   const { data: visit } = await admin
     .from('site_visits')
-    .select('company_id, title, contact:contacts(first_name, last_name), address:contact_addresses(address_line1, city)')
+    .select('company_id, title, contact:contacts(first_name, last_name, company_name), address:contact_addresses(address_line1, city)')
     .eq('estimate_id', estimateId)
     .single();
   if (!visit) return;
@@ -71,7 +72,7 @@ export async function notifySiteVisitReadyToPrice(
   const address = Array.isArray(visit.address) ? visit.address[0] : visit.address;
   const who = [recorder?.first_name, recorder?.last_name].filter(Boolean).join(' ') || 'A team member';
   const where = address ? `${address.address_line1}, ${address.city}` : null;
-  const client = contact ? `${contact.first_name} ${contact.last_name}`.trim() : null;
+  const client = contact ? contactDisplayName(contact) : null;
 
   await notify({
     admin,

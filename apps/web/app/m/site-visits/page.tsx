@@ -9,6 +9,7 @@ import { EmptyState, ListRowLink, SectionLabel } from '../mobile-ui';
 import { getMobileT, getMyLanguage } from '@/lib/i18n/server';
 import { dateLocale } from '@/lib/i18n/dates';
 import { getCompanyTimeSettings } from '@/lib/services/company';
+import { contactDisplayName } from '@framefocus/shared/utils/contact-name';
 
 // S108 Spec A — the site visits list on the phone.
 //
@@ -51,7 +52,7 @@ export default async function SiteVisitsPage() {
   const { recording: open, finished, estimates: done } = groupSiteVisits(visits);
 
   const row = (v: (typeof visits)[number]) => {
-    const who = v.contact ? `${v.contact.first_name} ${v.contact.last_name}`.trim() : null;
+    const who = v.contact ? contactDisplayName(v.contact) : null;
     const where = v.address ? `${v.address.address_line1}, ${v.address.city}` : null;
     return (
       <ListRowLink

@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import { EstimatesList } from './estimates-list';
 import Link from 'next/link';
 import { listSiteVisits, type SiteVisit } from '@/lib/services/site-visits';
+import { contactDisplayName } from '@framefocus/shared/utils/contact-name';
 
 // [S108 Spec A] Open site visits — recorded, not yet estimates. Shown ABOVE
 // the list and never inside it: no number, $0 totals, and excluded from the
@@ -28,7 +29,7 @@ function SiteVisitsPanel({ visits }: { visits: SiteVisit[] }) {
             </span>
             <span style={{ color: '#7b8699', fontSize: '0.8125rem' }}>
               {' · '}
-              {[v.contact ? `${v.contact.first_name} ${v.contact.last_name}` : null, v.address ? `${v.address.address_line1}, ${v.address.city}` : null, new Date(v.visited_at).toLocaleDateString()].filter(Boolean).join(' · ')}
+              {[v.contact ? contactDisplayName(v.contact) : null, v.address ? `${v.address.address_line1}, ${v.address.city}` : null, new Date(v.visited_at).toLocaleDateString()].filter(Boolean).join(' · ')}
             </span>
           </li>
         ))}

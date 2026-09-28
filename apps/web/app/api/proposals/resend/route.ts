@@ -17,6 +17,7 @@ import {
   invalidateSessionsForEstimate,
 } from '@/lib/services/signing-service';
 import { ProposalEmail } from '@/lib/email/templates/proposal-email';
+import { contactDisplayName } from '@framefocus/shared/utils/contact-name';
 
 // Spec 2 (4F F10) — "Resend Proposal": invalidates every pending
 // session (old links stop working), creates a fresh token, sends a
@@ -78,7 +79,7 @@ export async function POST(request: NextRequest) {
 
   const { data: contact } = await supabase
     .from('contacts')
-    .select('first_name, last_name, email')
+    .select('first_name, last_name, company_name, email')
     .eq('id', estimate.contact_id)
     .single();
   if (!contact?.email) {
@@ -100,7 +101,7 @@ export async function POST(request: NextRequest) {
   // F10: old links stop working before the new one goes out.
   await invalidateSessionsForEstimate(admin, estimate.id);
 
-  const contactName = `${contact.first_name} ${contact.last_name}`.trim();
+  const contactName = contactDisplayName(contact); // [S114 C-9] company-only contacts
   const session = await createSigningSession(admin, {
     companyId: estimate.company_id,
     estimateId: estimate.id,
