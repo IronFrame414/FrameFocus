@@ -34,3 +34,15 @@ Branch for this log and the spec fold: `feature/s115-report` (docs-only).
 - Folded R9–R11 (new `# RULED [Josh, 2026-09-28]` block after R8), C-11/C-12 (end of PART C), F-11–F-13 (end of PART F), G-7/G-8 (end of PART G; the additions' G-6 restates the existing G-6 — noted, not duplicated), new PART H (after PART G), ASK-19–22 (appended to ASK list), and "Production state recorded 2026-09-28" (before Standing constraints). Each folded block is tagged `[Folded in S115 …]`.
 - Spec 719 → 895 lines (`wc -l`). Additions file (untracked, never committed) deleted with `rm`.
 - **R9 is recorded as already built; nothing built for it.**
+
+### Phase 1 — H-3 (measured)
+| what | number | command |
+| --- | --- | --- |
+| `s112-m-loading` commits not on main | 6 (c34133ef…72d603b3), tip 2026-09-27 00:59Z | `git log --oneline main..origin/feature/s112-m-loading` |
+| `s112-m-loading` diff | 4 files, +213/−13: `app/m/nav-pending.tsx` (new, 92), `mobile-shell.tsx` (+mount), `e2e/m-sections.spec.ts` (+1 test), a doc | `git diff --stat main...origin/feature/s112-m-loading` |
+| its CI | **green** — run 36284154586 on 72d603b3 (30m52s). The spec's "pushed without CI" (F-8 / H-3) is **stale**; the earlier red 36246627024 was the dropped `loading.tsx` | `gh run list -b feature/s112-m-loading` |
+| reflow in it | 4 hunks are pure Prettier reflow of unchanged lines (2 in `mobile-shell.tsx`, 2 in `m-sections.spec.ts`); both files **fail** `prettier --check` on main → the reflow violates the formatting rule and will be dropped when rebuilt | `npx prettier --check apps/web/app/m/mobile-shell.tsx apps/web/e2e/m-sections.spec.ts` (2 warn) |
+| `s112-staletimes-hold` diff | 1 file, +19: `experimental.staleTimes: { dynamic: 0 }` | `git diff main...origin/feature/s112-staletimes-hold` |
+| both merge cleanly onto main | yes / yes | `git merge-tree --write-tree main origin/feature/<b>` |
+
+⚠️ **CONTRADICTION — H-3's premise is false.** The spec says `s112-staletimes-hold` "raises Next's client router cache above its 30-second default, so returning to a page you just visited is instant." It does the **opposite**: it sets `staleTimes.dynamic` from 30 s to **0**, so every revisit refetches. Its own measurement (`docs/sessions/S112-router-staleness.md` §1): tab revisit 52 → 369 ms unthrottled, 51 → 639 ms Fast 3G, 51 → 2,129 ms Slow 3G. It is a **correctness** fix (stale page after a mutation), bought with speed. Shipping it inside "the app is slow, fix it" makes navigation slower. Per the spec's own rule ("if a measurement contradicts a RULED line, STOP and report"), the staletimes half of H-3 **stops** and goes to Josh as an ASK; the m-loading half proceeds.
