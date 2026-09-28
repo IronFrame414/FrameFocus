@@ -92,3 +92,25 @@ Branch: `feature/s114-pe-operational-arms` (from `main` 210683b0). Appended afte
   selection_amounts row — removed so the PE's insert lands where the tally sees it; BARE PO line set `issued` so
   flag_po_item_missing refuses on scope, not on line status). Row counts: every ON insert 0→1 or n→n+1, every BARE n→n with an RLS
   error; storage ON 1 / BARE 0; roster 10=10 profiles, 590=590 members, catalog 4=4; teardown 0 projects left.
+
+## Step 6 — FILL-A-4 sabotage (rebuild-test, MCP), every one restored and read back
+
+Pre-snapshot: policies on client_refunds / client_contracts / subcontractor_contracts / contract_documents /
+client_contract_amounts `md5 379fda4a9cf049a1a5789274339bc914` (20 policies); `setup_payment_schedule` `d606120d…`;
+`enforce_contract_void_authority` `def223b2…`; `pe_on_project` `97c8c884…`; `pe_can_upload_project_file` `f72520ec…`;
+`is_assigned_to_project` `e105a6c0…`.
+
+| Round | Sabotage | Red (as predicted) | Stayed green (and why) |
+| --- | --- | --- | --- |
+| A | 9 `…_s114_sabotage` arms (refunds I/U, client_contracts I/U, subcontracts I/U, contract_documents I, client_contract_amounts I/U) + PE added to `setup_payment_schedule` | **N1** 1→2, **N2** →approved, **N3** 2→3, **N4** notes changed, **N5** 1→2, **N7** 0→1, **N8** stage expense 0→1, **N9i** 0→1, **N9u** 50000→1 | N4v (void trigger: "Voiding a contract is Owner/Admin only"), **N6 — a PROBE DEFECT**: it updated `contract_value`, which `enforce_subcontractor_contracts_column_scope` refuses for non-O/A, so it measured the trigger, not RLS |
+| — | restore A | policies md5 **379fda4a… (identical)**, setup md5 **d606120d… (identical)**, 0 sabotage left | |
+| fix | N6 now updates `scope_of_work`; the value probe kept as **N6f**, plus **N6v** (subcontract void). Clean: 15/15 | | |
+| B1 | client_contracts + subcontract UPDATE arms only | **N4**, **N6** | N4v, N6f, N6v — each refused by its trigger (second line proven live) |
+| B2 | B1 + DISABLE `client_contracts_void_authority`, `subcontractor_contracts_void_authority`, `subcontractor_contracts_column_scope` | **N4v** →void, **N6f** →999999, **N6v** →void | — |
+| — | restore B | ⚠️ first restore batch **rolled back** (a type error in my read-back SELECT inside the same batch); state re-read (2 arms left, 3 triggers `D`), restore re-run alone → policies md5 **379fda4a… identical**, void md5 **def223b2… identical**, all 15 triggers `O`, 0 sabotage left. Clean carve-outs 15/15 | |
+| C | `pe_on_project` without its assignment clause; upload helper without its assignment join | 14 BARE probes (every arm scoped directly by `pe_on_project`, + storage) | 12 parent-resolved arms/functions (task deps, PO lines/assignments, selection children, chat, set_po_total, chat_can_post, budget capture) — their parent subquery also runs under the parent's SELECT RLS (`can_view_project`): a genuine second line |
+| D | C + `is_assigned_to_project` = any project in my company | **all 28** BARE/scope probes, incl. the 12 above | 14 = ON updates + deliberate refusals |
+| — | restore C/D | `pe_on_project` **97c8c884…**, upload helper **f72520ec…**, `is_assigned_to_project` **e105a6c0…** — all identical; anon EXECUTE false on all | |
+
+Teardown after every round: 0 projects left. Clean final: carve-outs **15/15**, operational **42/42**.
+⚠️ Stated limit, unchanged: `contract_documents` UPDATE cannot be isolated (PE has no SELECT on it; control reads 0).

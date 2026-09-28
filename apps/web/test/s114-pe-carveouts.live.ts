@@ -353,11 +353,31 @@ describe('S114 FILL-A-4 carve-out 2 — no contract authority', () => {
     expect(after).toBe(before);
   });
 
-  it('N6 subcontractor_contracts UPDATE contract_value on its own project: unchanged', async () => {
+  // N6 measures the RLS UPDATE arm with a column no trigger guards. [S114
+  // sabotage round A: the first draft updated contract_value, which
+  // enforce_subcontractor_contracts_column_scope refuses for any non-O/A role
+  // ("The financial terms of a subcontract are Owner/Admin only") — so it
+  // stayed green with the RLS arm widened and measured the TRIGGER, not RLS.
+  // That probe is kept, renamed N6f, as the second line.]
+  it('N6 subcontractor_contracts UPDATE scope_of_work (manage) on its own project: unchanged', async () => {
+    const err = await quietUpdate('subcontractor_contracts', { scope_of_work: 'changed by PE' }, on.subContract);
+    const scope = await col('subcontractor_contracts', 'scope_of_work', on.subContract);
+    record('N6', { err, scope });
+    expect(scope).toBe('fixture');
+  });
+
+  it('N6f subcontractor_contracts UPDATE contract_value (second line: column-scope trigger): unchanged', async () => {
     const err = await quietUpdate('subcontractor_contracts', { contract_value: 999999 }, on.subContract);
     const value = await col('subcontractor_contracts', 'contract_value', on.subContract);
-    record('N6', { err, value });
+    record('N6f', { err, value });
     expect(Number(value)).toBe(1000);
+  });
+
+  it('N6v subcontractor_contracts UPDATE status=void (second line: void trigger): unchanged', async () => {
+    const err = await quietUpdate('subcontractor_contracts', { status: 'void' }, on.subContract);
+    const status = await col('subcontractor_contracts', 'status', on.subContract);
+    record('N6v', { err, status });
+    expect(status).toBe('draft');
   });
 
   it('N7 contract_documents INSERT on its own subcontract: refused, tally unchanged', async () => {
