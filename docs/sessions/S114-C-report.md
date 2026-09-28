@@ -311,3 +311,12 @@ companies → Q18 reversed (control always shown); Q17 (a)–(e) will be "built 
 - **Residuals (unattended, narrower):** desktop check-in / delivery edit / log / incident / receipts name failures but have no
   in-form Retry button (re-pick, or re-attach from Edit as their messages already say). A photo that UPLOADS but fails to LINK
   (`uploadDailyLogPhoto` "uploaded but not linked") is retried as a new upload, leaving one unlinked file row — pre-existing shape.
+
+### Step 14 — C-3 hotfix MERGED (`951d2623` on `main`, 2026-09-28)
+- CI run **36410492460** green (E2E + Lint & Type Check) on `5a486f38`, parent = then-current `main` `2269a9a9` → no rebase.
+- Merge tree `git diff --quiet 5a486f38 951d2623` → identical to the tested tree. Migrations carried: 0.
+- Pushed `2269a9a9..951d2623 main -> main`; Vercel deploys. Branch deleted (local + origin).
+- **Status: deployed. Owed:** Josh's P6 (which live tokens exist and what they could reach before this deploy) — decides whether
+  anyone must be told. After this deploy, a bid token reaches **no** staff file until PART E's share control tags one `bid-scope`.
+- **C-4** also committed on C-branch 1 (`[Capture] S114 C-4`): app-wide deletion strip + tray notice reworded; `s114-held-deletion`
+  11/11; sabotage 1 red, restored md5 OK. Not clicked on a phone.
