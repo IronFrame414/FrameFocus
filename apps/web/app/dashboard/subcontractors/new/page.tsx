@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase-server';
 import { redirect } from 'next/navigation';
 import { SubcontractorForm } from '../subcontractor-form';
+import { editsSubDirectory } from '@framefocus/shared/constants/roles';
 
 export default async function NewSubcontractorPage() {
   const supabase = await createClient();
@@ -17,7 +18,8 @@ export default async function NewSubcontractorPage() {
     .eq('is_deleted', false)
     .single();
 
-  if (!profile || !['owner', 'admin', 'project_manager'].includes(profile.role)) {
+  // [S114 C-10] one predicate (SUB_DIRECTORY_EDIT), same answer: O/A/PM. Was a hand list.
+  if (!profile || !editsSubDirectory(profile.role)) {
     redirect('/dashboard/subcontractors');
   }
 

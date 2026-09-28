@@ -5,6 +5,8 @@ import { getSubcontractor } from '@/lib/services/subcontractors';
 import { getComplianceStatus } from '@/lib/services/payables';
 import { cardStyle, color, font, h2Style, microLabelStyle, secondaryButtonStyle } from '@/lib/theme';
 import { ComplianceSection } from './compliance-section';
+import { editsSubDirectory } from '@framefocus/shared/constants/roles';
+import { isDashboardRole } from '@/lib/dashboard-access';
 
 // 7C §4 screen 6 — the read-only sub/vendor profile.
 //
@@ -37,12 +39,20 @@ export default async function SubcontractorProfilePage({
     .eq('is_deleted', false)
     .single();
 
-  // Same gate as the edit page. The roster floor (20260911000000) already
-  // stops `subcontractor` and `client` reading the subcontractors table at
-  // all, so this check is about the five dashboard roles.
-  if (!profile || !['owner', 'admin', 'project_manager'].includes(profile.role)) {
+  // [S114 C-10, RULED Josh 2026-09-28] READ-ONLY for every dashboard role —
+  // PARITY with /m's sub detail, which never gated the read, and S111 Q4 (the
+  // Project Executive reads the directory). The page shows no money: rates,
+  // markup and EIN live in the Owner/Admin-only `subcontractor_financials`.
+  // _Superseded, quoted:_ "Same gate as the edit page" —
+  // `['owner', 'admin', 'project_manager']`, which redirected the PE, foreman
+  // and crew although the database lets them read the row. The roster floor
+  // (20260911000000) still refuses `subcontractor` and `client` in the DB.
+  if (!profile || !isDashboardRole(profile.role)) {
     redirect('/dashboard/subcontractors');
   }
+  // The Edit link is now the only write affordance here; it was ungated because
+  // the redirect above used to be the gate. Same predicate as /m.
+  const canEdit = editsSubDirectory(profile.role);
 
   const sub = await getSubcontractor(id);
   if (!sub) redirect('/dashboard/subcontractors');
@@ -79,9 +89,11 @@ export default async function SubcontractorProfilePage({
             {sub.status ? ` · ${sub.status}` : ''}
           </p>
         </div>
-        <Link href={`/dashboard/subcontractors/${id}/edit`} style={secondaryButtonStyle}>
-          Edit
-        </Link>
+        {canEdit && (
+          <Link href={`/dashboard/subcontractors/${id}/edit`} style={secondaryButtonStyle}>
+            Edit
+          </Link>
+        )}
       </div>
 
       <div style={{ ...cardStyle, padding: '18px 20px', marginTop: '18px', maxWidth: '640px' }}>
