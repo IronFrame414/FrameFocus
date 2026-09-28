@@ -586,3 +586,16 @@ Dry run (exit 0): `Would push these migrations:` → exactly one, `2026182000000
 | `invitations_check_has_pe` | true | true |
 | `md5_time_role_rank` | 8ae4c32dcb2ab329a372f65cead8428f | 8ae4c32dcb2ab329a372f65cead8428f |
 | `grant_policies_with_pe` | 3 | 3 |
+
+### Section 2 — `20261830000000_s111_project_executive_floor_reads` — APPLIED, VERIFIED
+
+Dry run (exit 0): exactly one, `20261830000000_s111_project_executive_floor_reads.sql`. Push (exit 0): `Applying migration
+20261830000000_s111_project_executive_floor_reads.sql...` → `Finished supabase db push.`
+
+| column | measured | expected |
+| --- | --- | --- |
+| `ledger_row` | 1 | 1 |
+| `pe_read_arms` | 13 | 13 |
+| `pe_functions` | 7 | 7 |
+| `md5_record_client_payment` | 6470d73297bd802a45533c91c7bd0cb0 | 6470d73297bd802a45533c91c7bd0cb0 |
+| `pe_functions_anon_can_run` | 0 | 0 |
