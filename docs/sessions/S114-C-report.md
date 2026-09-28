@@ -215,3 +215,30 @@ Recorded in `S114-C-questions.md` § PRODUCTION RESULTS. C-4 closed on productio
 2026-09-28; not added). Q3 superseded: Photos gains `daily_logs` + `safety`, Files unchanged. P5: QB disconnected on both
 companies → Q18 reversed (control always shown); Q17 (a)–(e) will be "built to ruling, unproven against live QuickBooks data".
 **P6 still owed.**
+
+### Step 9 — C-10 built (C-branch 1)
+- `SUB_DIRECTORY_EDIT: Record<CompanyRole, boolean>` + `editsSubDirectory()` (`packages/shared/constants/roles.ts`): O/A/PM true,
+  PE/foreman/crew/sub/client false. Used by desktop profile (view gate now `isDashboardRole`; the formerly ungated Edit link now
+  behind the predicate), `[id]/edit`, `new`, list `canEdit`, trash `canRestore`, and `/m` `canEdit('sub')` (its hand list quoted
+  as superseded). DB agrees (I/U O/A/PM; SELECT refuses only sub/client). No money on the page.
+- `test/s114-sub-directory.test.ts` **5/5** (total map; junk incl. `constructor` fail closed; /m == desktop for all 8 roles;
+  source pins for both gates). ⚠️ Correction: the commit message `9f…`/C-10 says "7/7"; the file has **5** tests (the sabotage run
+  printed `1 failed | 4 passed (5)`). With neighbours (`s114-project-operations`, `s181-m-co-access`, `s159-subs-sheet`): 41/41.
+- Sabotage: PE → true → 1 red; restored, md5 OK. S157 sweep: no test pinned the PE redirect.
+- PARITY: /m sub detail (read, all dashboard roles) == desktop profile (read, all dashboard roles); edit O/A/PM on both via one predicate.
+
+### Step 10 — C-9 app side built (C-branch 1)
+- `packages/shared/utils/contact-name.ts`: `hasValidContactName` (first AND last, OR company), `normalizeContactNames` ('' for blank
+  names; NOT NULL kept), `contactDisplayName`, `contactNameWithCompany`.
+- Writers now on the one rule: desktop contact form (labels lose `*`, a line states the rule), "also send to" (+ Company field),
+  project contacts panel, `/m` contact edit (was "any one of three" and sent NULL), and beneath them `createContact` (rule
+  enforced) / `updateContact` (rule when all three sent; NULL names → '').
+- Display: 20 sites moved to the helpers (lists, project header + initials, contacts panel ×3, pickers, site-visit pages ×4,
+  estimates list, notify, proposal/CO data, 4 email routes + reminders cron — `company_name` added to 6 selects). Not changed,
+  already correct: QuickBooks entities, `site-visits.ts` label, /m contact/project pages, invoice PDF (prints company separately).
+- Tests `s114-contact-name.test.ts` **12/12**; sabotage (AND→OR) **2 red / 10**; restored, md5 OK. DB probe (rebuild-test, BEGIN…ROLLBACK):
+  company-only row with '' names inserted (1), 0 left after rollback. S157 sweep: no test pinned the old message/rule; `m-writes.spec.ts`
+  contact-edit payload keys unchanged. `tsc` 0, lint 0. Only formatted-on-main file touched with drift (`contact-edit-form.tsx`)
+  re-formatted: 17+/8−, all mine.
+- **Not on this branch:** `/m` site-visit new contact (RPC `create_site_visit` check + Company field) → C-branch 2 with its migration.
+- P4 recorded in the util's header: 0 violating contacts on production 2026-09-28.
