@@ -560,6 +560,27 @@ top of this file is advanced to `#164` in the same commit, which is what keeps t
   Traps: `test/s109-row-activation.test.tsx` + `e2e/desktop-row-activation-s109.spec.ts`, each
   proven by sabotage — see `S109-report.md` Step 4.
 
+### Branch-scoped, awaiting real numbers — `feature/s114-pe-operational-arms` [S114, 2026-09-28]
+
+- **#1-s114a — a Project Executive scheduling a crew member cannot see that person's bookings on
+  other projects (double-booking risk). FILED by ruling [Josh, S114 Q6 A].** `schedule_entries` for the
+  PE is its own projects plus its own rows (`schedule_entries_select_project_executive`,
+  20261940000000); a PM reads the whole company schedule. The cost of the narrow read: a PE can book
+  someone who is already booked elsewhere and not see the clash. **If it bites, the cheap fix is a
+  busy/free signal carrying NO project detail** (e.g. a SECURITY DEFINER function returning
+  `(member_id, date, busy boolean)` for members of its projects' teams). ⚠️ **Never a company-wide
+  schedule read — that breaches R1** ("nothing at company level").
+- **#2-s114a — timesheets for the Project Executive: left out of PART A entirely. Needs a ruling.
+  FILED by ruling [Josh, S114 Q7 C].** The database already lets the PE approve foreman and crew
+  timesheets company-wide by rank (`time_role_rank` 3, S111 Q13; `can_approve_member`), but the
+  timesheet pages (`dashboard/timeclock/page.tsx:32` `isSupervisor`, `timesheets/page.tsx:57`,
+  `timesheets/[sessionId]/page.tsx:43`) do not admit it. **This fails closed**, as `#1-pe` does: the
+  database permits more than the UI offers. Opening the pages as they are would show a PE every
+  employee's hours company-wide — company-level data about people, which R1 excludes. **Options for
+  Josh:** (A) open the pages with approval company-wide, as Q13's rank rule literally allows; (B) open
+  them and narrow approval — for the PE, and possibly the PM — to sessions with time on projects the
+  approver is assigned to (new database work; changes a ruled rule and affects the PM too).
+
 ### Branch-scoped, awaiting real numbers — `feature/s111-project-role` [S181b, 2026-09-27]
 
 > Provisional ids per the S136 rule: never allocate a bare `#N` on a branch.

@@ -35,3 +35,41 @@ Branch: `feature/s114-pe-operational-arms` (from `main` 210683b0). Appended afte
 - Scoped production override for this session: CC applies PART A's own migrations and merges. CLAUDE.md and R8 unchanged.
 - Q1 production row recorded with its pattern (`LIKE '%\_project\_executive'` ends-with; contains-pattern gives 21 non-SELECT).
 - PART A opening paragraph corrected in place (98 → 114, both searches stated; reads exist, writes missing), old text quoted.
+
+## Step 4 — Build (no database touched yet; main CI 36361033388 still running)
+
+- **Migrations written** (not applied): `20261940000000` operational arms (46: 41 non-SELECT + 5 SELECT), `20261950000000`
+  storage upload arm + `pe_can_upload_project_file()` (resolves the caller inline from auth.uid(); no get_my_company_id),
+  `20261960000000` seven functions (role clause only; PE scoped by pe_on_project; pre-md5 recorded in the header),
+  `20261970000000` roster + catalog reads (3 SELECT), `20261980000000` Q2 drops (2). No constraint added anywhere.
+- **Tests written**: `s114-pe-carveouts.live.ts` (N1–N9, no RETURNING, own project), `s114-pe-operational.live.ts`
+  (ON lands / BARE refused per arm, no RETURNING; UPDATE ON only — stated limit), `s114-project-operations.test.ts`.
+- **TS**: `PROJECT_OPERATIONS: Record<CompanyRole,…>` + `managesProjectOperations` / `supervisesProjectWork` /
+  `receivesAssignedProjectAlerts` in `packages/shared/constants/roles.ts`; 22 hand lists replaced (schedule, punch ×3 incl.
+  /m, PO ×6, selections ×6, team, contacts, project status, expenses ×3, split editor). Q8: assigned-PE project alerts
+  (recipients.ts + check-in route, one predicate); safety alerts add only PEs assigned to the incident's project.
+  Chat sub-thread candidates, surface toggle, translate readers: + PE. Catalog nav: + PE (read; manage stays O/A/PM).
+  Tests inverted in place: `s130-ffnav` (old expectation quoted), `s123-incident-notify` comment. tsc exit 0; 7 unit files 104/104.
+- **Q2 UI control**: none exists to remove. `grep -rn client_contract_amounts apps/web/{app,lib,components}` shows reads only;
+  the one writer is `convert_estimate_to_project()` (SECURITY DEFINER, migrations 1051/1550/1770).
+- **Debt filed**: `#1-s114a` (Q6 double-booking), `#2-s114a` (Q7 timesheets, both options).
+
+### Reversible decisions taken unattended (narrower option)
+1. `purchase_order_item_assignments`: the ASSIGNABLE member list stays the PM's (O/A/PM/F/crew) — the PE can assign lines, it
+   cannot itself be assigned one. Alternative: add PE to the target list.
+2. `files` for the PE: `change_orders`-category files excluded exactly as for the PM; `invoices` allowed (it holds invoice
+   authority, 1910); `contracts` refused (carve-out 2). Alternative: allow change_orders files.
+3. Client chat (Q9): the PE gets what the PM has — `may_enter_client_thread()` (read/enter). No staff role can INSERT into a
+   client thread through RLS today; I did not add one for the PE. Alternative: a PE client-thread insert arm.
+4. `schedule_entries`: no PE write of project-less rows (PTO/shop), even its own. Alternative: own project-less rows.
+5. `projects` UPDATE: an already-archived project is not editable by the PE at all (WITH CHECK status <> 'archived').
+6. Subcontractor detail page still redirects the PE (`subcontractors/[id]/page.tsx:43`) although S111 Q4 rules the directory
+   readable — the DB read exists; the UI fails closed. Not widened here. Alternative: admit the PE read-only.
+
+### ⚠️ Awaiting a ruling (reported, not acted on)
+- `project_financials.contract_value` — the PE has INSERT/UPDATE arms from 1910 (on production). Q2's reasoning ("the
+  contract value is the defining term of the agreement the client signed") may reach this figure too; Q2 named only
+  `client_contract_amounts`. Not changed.
+- Q4 lets the PE insert committed `subcontractor` expenses linked to a `sub_contract_id` by hand, i.e. build stage-like
+  commitments without `setup_payment_schedule()` (and without its one-schedule-per-contract check). The subcontract's
+  own terms (value, retainage) stay untouchable. Built as ruled; flagged.
