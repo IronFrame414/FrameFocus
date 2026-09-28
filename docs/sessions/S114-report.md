@@ -174,3 +174,11 @@ pattern) · `contract_amount_arms 2` · `upload_helper 0` · `fn_md5_before` = t
 | setup_has_pe | false | false (Q5) |
 | contract_void_has_pe | false | false (Q2) |
 | pe_profiles_now | 0 | 0 |
+
+**§4 `20261970000000_s114_pe_roster_catalog_reads.sql` — APPLIED, VERIFIED.** Dry run exit 0, exactly one line. Push exit 0.
+| column | measured | expected |
+| --- | --- | --- |
+| ledger_row | 1 | 1 |
+| named_arms (profiles / company_members / cost_catalog SELECT) | 3 | 3 |
+| pe_read_arms | 27 | 27 (24+3) |
+| pe_profiles_now | 0 | 0 |
