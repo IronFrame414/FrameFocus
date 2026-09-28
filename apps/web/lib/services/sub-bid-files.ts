@@ -20,11 +20,16 @@ export const SUB_UPLOAD_TAG = 'sub-bid-upload';
  * unfiltered list hands a bidder their competitors' pricing — a money
  * disclosure on a public surface.
  *
- * A row is visible ONLY if BOTH hold:
+ * A row is visible ONLY if ALL THREE hold:
  *   1. `created_by` is set — a signed-in staff member uploaded it. Every
  *      bid-token upload goes through the service role and has no `auth.uid()`.
  *   2. it does not carry `SUB_UPLOAD_TAG` — the positive marker the upload path
  *      stamps.
+ *   3. [S114 C-3 hotfix, RULED Josh 2026-09-28] it carries `BID_SCOPE_TAG` —
+ *      staff SHARED it with bidders. _Superseded, quoted:_ "A row is visible
+ *      ONLY if BOTH hold" (1 and 2). Under that rule every staff file on the
+ *      estimate — Files-tab attachments, site-visit photos of the client's
+ *      property, site-visit voice notes — reached anyone holding a bid token.
  *
  * ⚠️ Either test alone would be sufficient TODAY. Both are applied because they
  * fail INDEPENDENTLY: (1) breaks if some future staff-side insert forgets
@@ -37,5 +42,19 @@ export function bidderCanSeeFile(file: {
   tags?: string[] | null;
 }): boolean {
   if (!file.created_by) return false;
-  return !(file.tags ?? []).includes(SUB_UPLOAD_TAG);
+  const tags = file.tags ?? [];
+  if (tags.includes(SUB_UPLOAD_TAG)) return false;
+  return tags.includes(BID_SCOPE_TAG);
 }
+
+/**
+ * [S114 C-3 hotfix] The marker for "staff shared this file with bidders" — the
+ * same value `feature/s112-bid-token-status` introduces, so that branch lands on
+ * top of this without renaming anything.
+ *
+ * ⚠️ NOTHING ON `main` SETS IT YET. The "Share with bidders" control ships with
+ * that branch (PART E). Until then the bid documents endpoint returns an empty
+ * list, which is deliberate: nothing on the bid page calls it, so no user loses
+ * anything, and the exposure is closed now rather than when PART E merges.
+ */
+export const BID_SCOPE_TAG = 'bid-scope';

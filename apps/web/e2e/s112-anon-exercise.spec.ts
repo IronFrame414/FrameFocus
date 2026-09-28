@@ -344,6 +344,8 @@ test('a — /bid/{token} logged out: renders, takes a bid, serves its documents'
     file_size: 24,
     mime_type: 'application/pdf',
     created_by: ownerUserId,
+    // [S114 C-3 hotfix] GET serves only files shared with bidders. Superseded: untagged, and served.
+    tags: ['bid-scope'],
   });
   expect(f.error, f.error?.message).toBeNull();
   const req = await one<{ token: string }>(

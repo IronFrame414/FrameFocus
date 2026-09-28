@@ -13,7 +13,8 @@ import { admin, assertRebuildTest } from './live-session';
 //   ✅ the token resolves to exactly this request  (get_sub_bid_request)
 //   ✅ a sub uploads through the anonymous route   (real POST handler)
 //   ✅ the file LANDS on the estimate              (files row + storage object)
-//   ✅ the sub can read the estimator's scope docs (real GET handler)
+//   ✅ the sub can read the estimator's SHARED scope docs (real GET handler)
+//   ⚠️ the sub CANNOT read an unshared staff file  (S114 C-3: site-visit photo, voice note)
 //   ⚠️ the sub CANNOT read another sub's upload    (the leak this could cause)
 //   ❌ the email itself — not here, by ruling
 //
@@ -45,6 +46,7 @@ let subId = '';
 let requestId = '';
 let token = '';
 let staffFileId = '';
+let unsharedFileId = '';
 const createdFileIds: string[] = [];
 const createdPaths: string[] = [];
 
@@ -150,9 +152,11 @@ beforeAll(async () => {
   requestId = reqRow.id;
   token = reqRow.token;
 
-  // A STAFF-uploaded scope document — created_by set, no sub tag. This is the
-  // positive control: without it, "the bidder sees no sub uploads" would pass
-  // just as well on an empty list.
+  // A STAFF-uploaded scope document — created_by set, no sub tag, SHARED with
+  // bidders (the bid-scope tag). This is the positive control: without it, "the
+  // bidder sees no sub uploads" would pass just as well on an empty list.
+  // [S114 C-3 hotfix] _Superseded, quoted:_ "created_by set, no sub tag" was
+  // enough to be served; now the file must also carry `bid-scope`.
   const staffPath = `${companyId}/estimates/${estimateId}/${MARK}-plans.png`;
   await admin.storage.from(BUCKET).upload(staffPath, PNG_8, { contentType: 'image/png', upsert: true });
   createdPaths.push(staffPath);
@@ -168,11 +172,38 @@ beforeAll(async () => {
       file_size: PNG_8.length,
       mime_type: 'image/png',
       created_by: seed.created_by,
+      tags: ['bid-scope'],
     })
     .select('id')
     .single();
   staffFileId = staffFile!.id;
   createdFileIds.push(staffFileId);
+
+  // [S114 C-3] A STAFF file that was NOT shared with bidders — the shape of a
+  // site-visit photo of the client's property. Before the hotfix, GET served it
+  // to any token holder. It must stay hidden.
+  const unsharedPath = `${companyId}/estimates/${estimateId}/${MARK}-site-visit.png`;
+  await admin.storage.from(BUCKET).upload(unsharedPath, PNG_8, { contentType: 'image/png', upsert: true });
+  createdPaths.push(unsharedPath);
+  const { data: unsharedFile, error: unsharedErr } = await admin
+    .from('files')
+    .insert({
+      company_id: companyId,
+      project_id: null,
+      estimate_id: estimateId,
+      category: 'photos',
+      file_name: `${MARK}-site-visit.png`,
+      file_path: unsharedPath,
+      file_size: PNG_8.length,
+      mime_type: 'image/png',
+      created_by: seed.created_by,
+      site_visit_capture: true,
+    })
+    .select('id')
+    .single();
+  if (unsharedErr) throw new Error(`unshared staff file: ${unsharedErr.message}`);
+  unsharedFileId = unsharedFile!.id;
+  createdFileIds.push(unsharedFileId);
 });
 
 afterAll(async () => {
@@ -190,6 +221,7 @@ describe('S107 Part B — the link resolves, the upload lands, the bidder sees o
     expect(token).toMatch(/^[0-9a-f]{64}$/);
     expect(estimateId).toMatch(/^[0-9a-f-]{36}$/);
     expect(staffFileId).toMatch(/^[0-9a-f-]{36}$/);
+    expect(unsharedFileId).toMatch(/^[0-9a-f-]{36}$/);
   });
 
   it('LINK: the token resolves to exactly this request, and to no money', async () => {
@@ -219,9 +251,10 @@ describe('S107 Part B — the link resolves, the upload lands, the bidder sees o
       .eq('estimate_id', estimateId)
       .eq('is_deleted', false);
     counts.filesOnEstimateAfterUpload = (rows ?? []).length;
-    expect(counts.filesOnEstimateAfterUpload, 'the upload did not land').toBe(2); // staff doc + sub upload
+    // [S114] 2 → 3: the unshared staff file was added. _Superseded, quoted:_ `.toBe(2); // staff doc + sub upload`
+    expect(counts.filesOnEstimateAfterUpload, 'the upload did not land').toBe(3); // shared doc + unshared staff file + sub upload
 
-    const subRow = (rows ?? []).find((r) => r.id !== staffFileId)!;
+    const subRow = (rows ?? []).find((r) => r.id !== staffFileId && r.id !== unsharedFileId)!;
     createdFileIds.push(subRow.id);
     createdPaths.push(subRow.file_path as string);
 
@@ -245,6 +278,8 @@ describe('S107 Part B — the link resolves, the upload lands, the bidder sees o
     expect(counts.visibleToBidder, 'the bidder saw nothing — the exclusion proves nothing').toBe(1);
     expect(body.files[0].id).toBe(staffFileId);
     expect(body.files.map((f) => f.file_name)).not.toContain('bid-quote.png');
+    // [S114 C-3] the unshared staff file (a site-visit photo) is NOT served.
+    expect(body.files.map((f) => f.id), 'an unshared staff file reached the bidder').not.toContain(unsharedFileId);
     // The payload must not carry internal fields either (#136).
     expect(body.files[0]).not.toHaveProperty('file_path');
     expect(body.files[0]).not.toHaveProperty('created_by');
