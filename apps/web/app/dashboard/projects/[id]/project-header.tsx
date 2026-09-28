@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import type { ProjectWithContact } from '@/lib/services/projects';
 import { PROJECT_STATUS_LABELS } from '@/lib/services/projects-client';
+import { LIEN_RELEASE_ROLES } from '@/lib/services/lien-releases-shared';
 import { badgeStyle, color, font, h2Style, primaryButtonStyle } from '@/lib/theme';
 
 interface ProjectHeaderProps {
@@ -27,7 +28,7 @@ const TABS: { slug: string; label: string; roles?: string[] }[] = [
   {
     slug: 'budget',
     label: 'Budget & Cost',
-    roles: ['owner', 'admin', 'project_manager', 'foreman'],
+    roles: ['owner', 'admin', 'project_executive', 'project_manager', 'foreman'],
   },
   // [S171] Allowances & Selections §9.2 — visible to EVERY role including
   // subcontractors (Q10); the page carries no costs, and the amounts side
@@ -40,7 +41,7 @@ const TABS: { slug: string; label: string; roles?: string[] }[] = [
   {
     slug: 'invoices',
     label: 'Invoices',
-    roles: ['owner', 'admin', 'project_manager'],
+    roles: ['owner', 'admin', 'project_executive', 'project_manager'],
   },
   // 7E — money received. OWNER/ADMIN ONLY. [Fix 4] The screen is all AGGREGATES
   // (collected/spent/ahead, AR aging, retainage held, outstanding, payments
@@ -51,7 +52,8 @@ const TABS: { slug: string; label: string; roles?: string[] }[] = [
   {
     slug: 'payments',
     label: 'Payments',
-    roles: ['owner', 'admin'],
+    // [S111] + a Project Executive on its own projects (Q9/Q10). Not a PM.
+    roles: ['owner', 'admin', 'project_executive'],
   },
   // 7H — job profitability. OWNER/ADMIN ONLY (§7H.6), narrower than Invoices
   // and Payments beside it: a PM legitimately sees invoice amounts (the S97
@@ -63,7 +65,8 @@ const TABS: { slug: string; label: string; roles?: string[] }[] = [
   {
     slug: 'profitability',
     label: 'Profitability',
-    roles: ['owner', 'admin'],
+    // [S111] + a Project Executive on its own projects (Q9/Q10). Not a PM.
+    roles: ['owner', 'admin', 'project_executive'],
   },
   // 7F — lien releases and waivers. OWNER/ADMIN ONLY (§8.2).
   //
@@ -75,7 +78,11 @@ const TABS: { slug: string; label: string; roles?: string[] }[] = [
   {
     slug: 'lien-releases',
     label: 'Lien Releases',
-    roles: ['owner', 'admin'],
+    // [S111] _Superseded, quoted:_ "NOT a Project Executive: lien_releases has
+    // no PE read arm, and whether it may bind the company on a release is
+    // unruled (§8.2)." [S181] RULED included (Josh 2026-09-26); the PE arms are
+    // 20261930000000. The same list the page, the route and the prompt read.
+    roles: [...LIEN_RELEASE_ROLES],
   },
   { slug: 'punch', label: 'Punch List' },
   { slug: 'deliveries', label: 'Deliveries' },

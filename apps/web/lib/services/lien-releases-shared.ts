@@ -339,3 +339,32 @@ export function releaseAmount(
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }
+
+/**
+ * 7F §8.2 — who may generate, send, notarize and void a lien release.
+ *
+ * _Superseded, quoted:_ "OWNER/ADMIN ONLY (§8.2)", hand-written as
+ * `['owner', 'admin']` in the page, the tab, the generate route and the invoice
+ * prompt. [RULED Josh 2026-09-26: "lien-release authority is INCLUDED" for a
+ * Project Executive; S181 Q5 B: both directions.] ONE predicate now, read by
+ * all four. The DATABASE is the authority: `lien_releases_*_project_executive`
+ * (20261930000000) scopes the role to releases whose subject — invoice,
+ * expense or subcontract — is on a project it is assigned to. This only
+ * decides whether a screen offers the act.
+ */
+export const LIEN_RELEASE_ROLES = ['owner', 'admin', 'project_executive'] as const;
+
+export function canManageLienReleases(role: string | null | undefined): boolean {
+  return (LIEN_RELEASE_ROLES as readonly string[]).includes(role ?? '');
+}
+
+/**
+ * Marking a subcontract complete (or reopening it) writes
+ * `subcontractor_contracts.completed_at`, which the column-scope trigger holds
+ * at Owner/Admin. That is CONTRACT authority, which a Project Executive does
+ * not have [S181 Q2, RULED Josh] — so the Lien Releases page hides the two
+ * buttons from it rather than offering an act the database refuses.
+ */
+export function canMarkSubContractComplete(role: string | null | undefined): boolean {
+  return role === 'owner' || role === 'admin';
+}

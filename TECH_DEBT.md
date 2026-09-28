@@ -560,6 +560,82 @@ top of this file is advanced to `#164` in the same commit, which is what keeps t
   Traps: `test/s109-row-activation.test.tsx` + `e2e/desktop-row-activation-s109.spec.ts`, each
   proven by sabotage — see `S109-report.md` Step 4.
 
+### Branch-scoped, awaiting real numbers — `feature/s111-project-role` [S181b, 2026-09-27]
+
+> Provisional ids per the S136 rule: never allocate a bare `#N` on a branch.
+
+- **#1-pe — the Payments tab does not offer a Project Executive the retainage release the database
+  permits. FILED by ruling [Josh, 2026-09-27] (S181b FILL-R-2); build it with the operational arms
+  (ruling Q3), NOT on this branch.** `20261910000000` grants the role INSERT/UPDATE on
+  `retainage_releases`, scoped by `pe_on_project(project_id)` (kept by ruling: releasing retainage is a
+  payment action on its own project, inside Q9). `payments-view.tsx:400` renders
+  `RetainageReleasePanel` only under `canRecord` (`role === 'owner' || role === 'admin'`, line 147), so
+  the PE never sees it. **This fails closed:** the database permits more than the UI offers. The
+  reverse would violate the Floor. **Known fix:** gate that one panel on a named predicate that admits the
+  PE (as `canRecordNew` already does for record-payment), and leave every other `canRecord` control
+  alone: unapply, void payment, apply credit, refunds (Q1), reminder settings. The database refuses the
+  PE all of those. ⚠️ **The release also DRAFTS AN INVOICE** (`payments-client.ts`
+  createRetainageRelease: invoice insert, fixed lines, recalc, then the release row). So the build must
+  prove the PE's invoice arms admit that exact sequence on its own project, with a live ON/OFF test. It
+  must not assume they do. The DB arm's scoping is already proven:
+  `test/s181-project-executive-retainage.live.ts` (10/10, sabotage red). `/m` has no Payments surface for
+  any role, so PARITY is unaffected.
+
+- **#2-pe — 14 off-scope negative write tests in 7 live files measure the READ policy, not the write
+  policy. FILED by ruling [Josh, 2026-09-27] (S181c Q2); audit and fix on ITS OWN branch, none here.**
+  `.insert(...).select(...)` sends RETURNING, so Postgres also judges the new row by the session's
+  SELECT policy. When the session cannot read that row, the SELECT refusal rolls the statement back,
+  and the test goes green whatever the INSERT arm says. Measured on `feature/s111-project-role`: four
+  PE write arms were widened to company scope and the S181 tests stayed 14/14 and 11/11 green (report
+  § S181b). The mechanism was already written down at `s98ct-offline.live.ts:365` (S105), but it was
+  never applied to floor tests.
+  **Enumeration** (`node scripts/enum-insert-select-negatives.mjs [--all]`, read-only, at `4425d640`):
+  151 live files; **429** `insert().select()` statements; **375** by the service role (`admin`);
+  **54** by a user session, in **21** files. By hand, reading each against its table's SELECT policy
+  on rebuild-test: **27** assert a refusal. 3 of those are not RLS negatives: `s98ct-offline:372` and
+  `s114-subcontractor-surfaces:153` are deliberate demonstrations of this trap, and
+  `s140-lien-releases:311` is a unique-key test. That leaves **24 RLS negatives**. **6 are in scope**
+  (the session CAN read the would-be row, so RETURNING passes and the write arm is what refuses):
+  `s111-project-executive-writes:521`, `s181-project-executive-liens:522`,
+  `s164-m9-client-writes:150,199,237`, `s175-stage6-spec-sheet:787`. **18 are masked.** 4 of them are
+  already paired on this branch with a no-RETURNING probe (X1b for writes:387,397; N2b for liens:384;
+  N6b for liens:464). **The 14 owed, 7 files:**
+  - `s164-m9-client-writes.live.ts` (6): 108 control→`chat_threads`, 119 linked→crew `chat_threads`,
+    166 linked→`files` with `client_visible=false`, 245 control→`chat_messages`, 424 and 444 a
+    deactivated client→`chat_messages`
+  - `s97ct-roles.live.ts` (2): 374 PM→`instrument_rates`, 665 PM→`project_financials` (also collides
+    with `project_financials_project_unique`)
+  - `s140-compliance-floor.live.ts` (2): 215 PM→`subcontractor_compliance_documents`, 284 PM→`files`
+    with `project_id` NULL
+  - `s97ct-reminders.live.ts` (1): 138 PM/Foreman→`client_reminder_settings`
+  - `s97ct-isolation.live.ts` (1): 230 company B's Owner→`contacts` in company A
+  - `s145-contracts.live.ts` (1): 181 PM→`contract_templates`
+  - `s145-sub-inbound.live.ts` (1): 394 PM→`lien_releases`
+
+  **Known fix, per test:** keep the old assertion (invert, do not delete); add the same write with NO
+  RETURNING, judged by a service-role count before and after; and prove it by widening that one arm
+  (it must go red with the count going 0 → 1). **Pick targets whose unique keys are free**, or a widened
+  arm collides instead of landing (S181b N2b, S181c P1–P6). **Residuals the search cannot see:** 136
+  `.from(<variable>)` calls (helpers taking a table name) and 5 `.upsert(` calls in live files are not
+  parsed. The refusal heuristic also misses the `expect(error ?? data?.length === 0).toBeTruthy()` form
+  (found by hand: reminders:138, roles:374, isolation:230). **UPDATE negatives are out of scope by
+  measurement:** every PostgREST UPDATE has a WHERE, so the SELECT arm judges both the old and the new
+  row, and no call isolates an UPDATE arm (S181b).
+
+- **#3-pe — a Project Executive may READ stored contract files on its own projects. RULED [Josh,
+  2026-09-27] (S181c Q3 A). Build on the operational-arms branch, NOT `feature/s111-project-role`.**
+  Q2 removed contract authority, not visibility, and the role already reads contract schedule amounts,
+  invoices and profitability on that project, so this adds no new exposure class. Today
+  `20261920000000`'s `files_select_project_executive_money` admits the categories `invoices` and
+  `change_orders` only, and `files_select_non_client` excludes `contracts` for every non-O/A role.
+  **Two conditions, both ruled:** (1) a **database read arm** (#136: authority belongs in the database,
+  not a UI gate) that resolves the project **through the file's subject**, meaning the contract / contract
+  document / subcontract the file belongs to, not merely a `project_id` column; (2) a **negative test**
+  proving a contract file on another project is unreachable, **written without RETURNING**, beside a
+  service-role control, with its own sabotage that must go red. SELECT only: no INSERT/UPDATE (Q2).
+  Storage read follows the `files` row (`project_files_select_non_client` admits any non-client whose
+  `files` RLS returns the row), so check that on the same branch.
+
 ### Branch-scoped, awaiting real numbers — `feature/s112-co-summary` [S112 follow-up, 2026-09-27]
 
 > Provisional ids per the S136 rule: never allocate a bare `#N` on a branch.

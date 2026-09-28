@@ -34,7 +34,9 @@ import { recalculateChangeOrderTotalsPrivileged } from '@/lib/services/change-or
 // logged server-side with the route and the failing check; the client message
 // is plain, the log never is.
 
-const AUTHORS = ['owner', 'admin', 'project_manager'];
+// [S111] + a Project Executive; the RLS-scoped fetch below confines it to its
+// own projects (change_orders_select_project_executive).
+const AUTHORS = ['owner', 'admin', 'project_executive', 'project_manager'];
 
 export async function POST(_request: NextRequest, { params }: { params: { id: string } }) {
   const supabase = await createClient();

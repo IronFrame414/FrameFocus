@@ -73,6 +73,7 @@ export const en = {
   // [S112 audit F9] Company role names for /m — Settings showed 'crew_member'.
   'shell.role.owner': 'Owner',
   'shell.role.admin': 'Admin',
+  'shell.role.project_executive': 'Project Executive',
   'shell.role.project_manager': 'Project Manager',
   'shell.role.foreman': 'Foreman',
   'shell.role.crew_member': 'Crew Member',
@@ -270,6 +271,7 @@ export const es: Record<keyof typeof en, string> = {
   'shell.notifications': 'Notificaciones',
   'shell.role.owner': 'Dueño',
   'shell.role.admin': 'Administrador',
+  'shell.role.project_executive': 'Ejecutivo de proyecto',
   'shell.role.project_manager': 'Gerente de proyecto',
   'shell.role.foreman': 'Capataz',
   'shell.role.crew_member': 'Miembro de cuadrilla',

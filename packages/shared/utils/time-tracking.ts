@@ -336,6 +336,7 @@ export interface WeeklyHoursSummary {
 export const TIME_ROLE_RANK: Record<string, number> = {
   owner: 5,
   admin: 4,
+  project_executive: 3, // [S111 Q13] with PM — mirrors time_role_rank (20261820000000)
   project_manager: 3,
   foreman: 2,
   crew_member: 1,

@@ -33,6 +33,7 @@ import type { CompanyRole } from '@framefocus/shared';
 const ROLE_KEY: Record<CompanyRole, MsgKey> = {
   owner: 'shell.role.owner',
   admin: 'shell.role.admin',
+  project_executive: 'shell.role.project_executive', // [S111] total map: the role joined CompanyRole
   project_manager: 'shell.role.project_manager',
   foreman: 'shell.role.foreman',
   crew_member: 'shell.role.crew_member',

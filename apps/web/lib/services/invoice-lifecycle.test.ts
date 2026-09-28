@@ -20,12 +20,16 @@ import {
 describe('§9 — who may void, and when', () => {
   const base = { hasPayment: false, paymentSyncedToQuickBooks: false, status: 'sent' as const };
 
-  it('UNPAID: Owner and Admin may void; PM may not — every role answered', () => {
+  // [S111] Title inverted in place — _superseded:_ "UNPAID: Owner and Admin may
+  // void; PM may not — every role answered". A Project Executive joins (FILL-5;
+  // the DB trigger scopes it to its own projects, 20261910000000).
+  it('UNPAID: Owner, Admin and a Project Executive may void; PM may not — every role answered', () => {
     // [S112 queue 3] Total map; _superseded:_ owner, admin and PM by hand.
     forEveryRole(
       {
         owner: true,
         admin: true,
+        project_executive: true,
         project_manager: false,
         foreman: false,
         crew_member: false,
@@ -37,7 +41,7 @@ describe('§9 — who may void, and when', () => {
     for (const junk of JUNK_ROLES) expect(canVoidInvoice({ ...base, role: junk }).allowed).toBe(false);
     const pm = canVoidInvoice({ ...base, role: 'project_manager' });
     expect(pm.allowed).toBe(false);
-    expect(pm.allowed === false && pm.reason).toContain('Owner or Admin');
+    expect(pm.allowed === false && pm.reason).toContain('Owner, Admin or a Project Executive');
   });
 
   it('PAID (any payment applied), NOT yet in QuickBooks: NOBODY may void — credit or refund [S103]', () => {
@@ -49,6 +53,7 @@ describe('§9 — who may void, and when', () => {
       {
         owner: false,
         admin: false,
+        project_executive: false,
         project_manager: false,
         foreman: false,
         crew_member: false,
@@ -57,7 +62,7 @@ describe('§9 — who may void, and when', () => {
       },
       (role, allowed) => expect(canVoidInvoice({ ...base, hasPayment: true, role }).allowed, role).toBe(allowed)
     );
-    for (const role of ['owner', 'admin', 'project_manager'] as const) {
+    for (const role of ['owner', 'admin', 'project_executive', 'project_manager'] as const) {
       const decision = canVoidInvoice({ ...base, hasPayment: true, role });
       expect(decision.allowed).toBe(false);
       expect(decision.allowed === false && decision.reason).toContain('credit memo or a refund');

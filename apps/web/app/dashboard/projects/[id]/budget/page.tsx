@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { seesProjectMoney } from '@framefocus/shared/constants/roles';
 import { createClient } from '@/lib/supabase-server';
 import { notFound, redirect } from 'next/navigation';
 import { getProject } from '@/lib/services/projects';
@@ -95,11 +96,17 @@ export default async function BudgetAndCostPage({ params }: { params: { id: stri
   const role = profile?.role ?? '';
 
   // Crew has no money screen (7A Q3) — own expense rows live on /dashboard/expenses.
-  if (!['owner', 'admin', 'project_manager', 'foreman'].includes(role)) {
+  if (!['owner', 'admin', 'project_executive', 'project_manager', 'foreman'].includes(role)) {
     redirect(`/dashboard/projects/${params.id}`);
   }
+  // [S111] Two questions, kept apart. `seesMoney` — may this role SEE this
+  // project's money (Owner/Admin, and a Project Executive on its own project:
+  // RLS, 20261830000000); it also gates rate renegotiate since the PE's
+  // instrument_rates arm (20261910000000). `isOwnerAdmin` — the §5.2 budget
+  // retry, whose apply_change_order_budget() admits no other role.
+  const seesMoney = seesProjectMoney(role);
   const isOwnerAdmin = role === 'owner' || role === 'admin';
-  const seesCommitted = isOwnerAdmin || role === 'project_manager'; // A-3 widened floor
+  const seesCommitted = seesMoney || role === 'project_manager'; // A-3 widened floor
   const seesPayables = seesCommitted;
 
   const project = await getProject(params.id);
@@ -111,7 +118,7 @@ export default async function BudgetAndCostPage({ params }: { params: { id: stri
 
   const [rollup, contract, jobCost, expenses, payables] = await Promise.all([
     getBudgetRollup(params.id),
-    isOwnerAdmin ? getRevisedContract(params.id) : Promise.resolve(null),
+    seesMoney ? getRevisedContract(params.id) : Promise.resolve(null),
     getJobCostRollup(params.id),
     getExpenses({ project_id: params.id }),
     seesPayables ? getPayablesSummary(params.id) : Promise.resolve(null),
@@ -121,14 +128,14 @@ export default async function BudgetAndCostPage({ params }: { params: { id: stri
   // SELL figure ABOUT THE JOB, so it sits with contract value and budget under
   // the Financial Visibility Floor. §12a's carve-out lets a PM see amounts ON
   // an invoice they can reach; it does not extend to a job-level roll-up.
-  const income = isOwnerAdmin ? await getProjectIncome(params.id) : null;
+  const income = seesMoney ? await getProjectIncome(params.id) : null;
 
   // §3 / acceptance #4 [S97] — what is left to invoice on the ORIGINAL
   // contract, with a sent deposit already deducted. Fully DERIVED (see
   // getContractBilling): void or refund the deposit and this figure returns on
   // its own, because nothing was ever copied. Fixed-price only — a cost-plus or
   // T&M deposit is §3a's credit balance and is deliberately not shown here.
-  const contractBilling = isOwnerAdmin && isFixed ? await getContractBilling(params.id) : null;
+  const contractBilling = seesMoney && isFixed ? await getContractBilling(params.id) : null;
 
   // §3a [S97] — the DEPOSIT CREDIT BALANCE, so a cost-plus/T&M job reads as
   // consistently as a fixed-price one: fixed-price shows what is left to bill,
@@ -147,25 +154,25 @@ export default async function BudgetAndCostPage({ params }: { params: { id: stri
   // derived COs are billed as incurred and negative COs are credits, so
   // neither gets a number. NOT gated on the project's own type — a fixed-price
   // job can carry a cost-plus CO and vice versa (P4).
-  const coBilling = isOwnerAdmin ? await getChangeOrderBilling(params.id) : null;
+  const coBilling = seesMoney ? await getChangeOrderBilling(params.id) : null;
 
   // [S175 stage 5] Approved SELECTIONS — the third term in revised contract
   // value (Q4: the signature is the binding instrument) and, like the COs, a
   // figure with its own remaining. getSelectionBilling is the READ of the
   // ceiling enforce_selection_billing_ceiling() enforces; the two share one
   // definition of "billed against this selection".
-  const selBilling = isOwnerAdmin ? await getSelectionBilling(params.id) : null;
+  const selBilling = seesMoney ? await getSelectionBilling(params.id) : null;
 
-  const depositCredits = isOwnerAdmin ? await getDepositCredits(params.id) : [];
+  const depositCredits = seesMoney ? await getDepositCredits(params.id) : [];
   const undrawnDeposit = Math.round(
     depositCredits.reduce((sum, d) => sum + d.remaining, 0) * 100
   ) / 100;
-  const members = isOwnerAdmin ? await getMembers() : [];
+  const members = seesMoney ? await getMembers() : [];
   const memberNames: Record<string, string> = Object.fromEntries(
     members.map((m) => [m.id, m.display_name])
   );
 
-  const showLabor = isOwnerAdmin && jobCost.labor.available;
+  const showLabor = seesMoney && jobCost.labor.available;
   const laborCost = showLabor ? jobCost.labor.totalCost : 0;
   // Cost to Date (§4.5) = per-line actual + remaining committed, plus derived
   // labor for Owner/Admin. Retainage rides the payables numbers only (Q3).
@@ -190,7 +197,7 @@ export default async function BudgetAndCostPage({ params }: { params: { id: stri
   // in a server component, which no harness can render.
   const columnPlan = budgetColumnsFor(role);
   void columnPlan;
-  const gridTemplate = isOwnerAdmin
+  const gridTemplate = seesMoney
     ? '0.6fr 1.9fr 1fr 1fr 1fr 1fr 1fr'
     : seesCommitted
       ? '0.6fr 2.4fr 1fr 1fr 1fr'
@@ -206,7 +213,7 @@ export default async function BudgetAndCostPage({ params }: { params: { id: stri
   const dashCell: React.CSSProperties = { ...moneyCell, color: color.faint };
 
   const summaryCards: { label: string; value: string; valueColor: string; inverted?: boolean; caption?: string }[] =
-    isOwnerAdmin
+    seesMoney
       ? [
           {
             label: isFixed ? 'Original' : 'Projected value (non-binding)',
@@ -424,7 +431,7 @@ export default async function BudgetAndCostPage({ params }: { params: { id: stri
         <div>
           <h2 style={{ ...h2Style, fontSize: '19px' }}>Budget &amp; cost</h2>
           <p style={{ color: color.muted, fontSize: '13px', margin: '4px 0 0' }}>
-            {isOwnerAdmin
+            {seesMoney
               ? 'Cost baseline by instrument (estimate + signed change orders), committed remaining, and actuals — one screen.'
               : seesCommitted
                 ? 'Committed (remaining) and actual cost on this job.'
@@ -495,7 +502,7 @@ export default async function BudgetAndCostPage({ params }: { params: { id: stri
           the CORRECTED copy: the mockup's "a client upgrade turns into a
           change order" is WRONG (§9.1 — the selection signature is the
           binding instrument and NO change order is generated). */}
-      {isOwnerAdmin &&
+      {seesMoney &&
         (() => {
           const WATCH_BUDGET_PCT = 0.5; // spend fraction for the unsigned-sub flag; one constant
           const unsignedHot: string[] = [];
@@ -566,11 +573,14 @@ export default async function BudgetAndCostPage({ params }: { params: { id: stri
 
       {/* §7.1 S-4 (amended 2026-07-31) — contract rates + history, with
           renegotiate (Owner/Admin) and supersede (Owner only, §7.3).
-          Owner/Admin ONLY (Financial Visibility Floor): inside this gate the
-          component never renders or fetches for PM/Foreman. */}
-      {isOwnerAdmin && <RateSection project={project} canSupersede={role === 'owner'} />}
+          Owner/Admin, and a Project Executive on its own project [S111]
+          (Financial Visibility Floor): inside this gate the component never
+          renders or fetches for PM/Foreman. */}
+      {seesMoney && (
+        <RateSection project={project} canSupersede={role === 'owner'} canRenegotiate={seesMoney} />
+      )}
 
-      {isOwnerAdmin && (
+      {seesMoney && (
         <p style={{ fontSize: '13px', color: color.muted, margin: '0 0 6px' }}>
           Cost baseline from each instrument (pre-markup; tax included on taxed rows) — the budget
           total sits below the contract by the margin, by design.
@@ -583,7 +593,8 @@ export default async function BudgetAndCostPage({ params }: { params: { id: stri
         </p>
       )}
 
-      {/* §5.2 retry surface — signed COs missing their budget lines. */}
+      {/* §5.2 retry surface — signed COs missing their budget lines. [S111]
+          Owner/Admin: apply_change_order_budget admits no other role. */}
       {isOwnerAdmin &&
         rollup.signedCosWithoutBudget.map((co) => (
           <div
@@ -629,7 +640,7 @@ export default async function BudgetAndCostPage({ params }: { params: { id: stri
           >
             <span style={microLabelStyle}>Code</span>
             <span style={microLabelStyle}>Description</span>
-            {isOwnerAdmin && <span style={{ ...microLabelStyle, textAlign: 'right' }}>Budget</span>}
+            {seesMoney && <span style={{ ...microLabelStyle, textAlign: 'right' }}>Budget</span>}
             {seesCommitted && (
               <span style={{ ...microLabelStyle, textAlign: 'right' }}>Committed (rem.)</span>
             )}
@@ -637,7 +648,7 @@ export default async function BudgetAndCostPage({ params }: { params: { id: stri
             {seesCommitted && (
               <span style={{ ...microLabelStyle, textAlign: 'right' }}>Cost to date</span>
             )}
-            {isOwnerAdmin && <span style={{ ...microLabelStyle, textAlign: 'right' }}>Variance</span>}
+            {seesMoney && <span style={{ ...microLabelStyle, textAlign: 'right' }}>Variance</span>}
           </div>
 
           {rollup.instruments.map((instrument) => {
@@ -720,11 +731,11 @@ export default async function BudgetAndCostPage({ params }: { params: { id: stri
                                 Selection — {s.name}
                                 <span style={{ color: color.faint, fontSize: '11.5px' }}> · approved, at chosen cost</span>
                               </span>
-                              {isOwnerAdmin && <span style={{ ...moneyCell, fontSize: '12.5px' }}>{money(s.cost)}</span>}
+                              {seesMoney && <span style={{ ...moneyCell, fontSize: '12.5px' }}>{money(s.cost)}</span>}
                               {seesCommitted && <span style={dashCell}>—</span>}
                               <span style={dashCell}>—</span>
                               {seesCommitted && <span style={dashCell}>—</span>}
-                              {isOwnerAdmin && <span style={dashCell}>—</span>}
+                              {seesMoney && <span style={dashCell}>—</span>}
                             </div>
                           )),
                           <div
@@ -748,13 +759,13 @@ export default async function BudgetAndCostPage({ params }: { params: { id: stri
                                 {money(Math.abs(sub.variance))} vs the original — this is what the totals count
                               </span>
                             </span>
-                            {isOwnerAdmin && (
+                            {seesMoney && (
                               <span style={{ ...moneyCell, fontWeight: 600, fontSize: '12.5px' }}>{money(sub.resulting)}</span>
                             )}
                             {seesCommitted && <span style={dashCell}>—</span>}
                             <span style={dashCell}>—</span>
                             {seesCommitted && <span style={dashCell}>—</span>}
-                            {isOwnerAdmin && <span style={dashCell}>—</span>}
+                            {seesMoney && <span style={dashCell}>—</span>}
                           </div>,
                         ]
                       : [];
@@ -788,7 +799,7 @@ export default async function BudgetAndCostPage({ params }: { params: { id: stri
                             </span>
                           )}
                         </span>
-                        {isOwnerAdmin && (
+                        {seesMoney && (
                           <span
                             style={{ ...moneyCell, color: credit ? color.danger : moneyCell.color }}
                             title={`Gross committed: ${money(item.committed_amount ?? 0)}`}
@@ -821,7 +832,7 @@ export default async function BudgetAndCostPage({ params }: { params: { id: stri
                         {seesCommitted && (
                           <span style={cost ? moneyCell : dashCell}>{moneyOrDash(cost)}</span>
                         )}
-                        {isOwnerAdmin && (
+                        {seesMoney && (
                           <span
                             style={{
                               ...moneyCell,
@@ -867,7 +878,7 @@ export default async function BudgetAndCostPage({ params }: { params: { id: stri
                   >
                     {instrumentLabel(instrument)} subtotal
                   </span>
-                  {isOwnerAdmin && (
+                  {seesMoney && (
                     <span style={{ ...moneyCell, fontWeight: 600, color: color.body }}>
                       {instrument.budgeted === null ? '—' : money(instrument.budgeted)}
                     </span>
@@ -885,7 +896,7 @@ export default async function BudgetAndCostPage({ params }: { params: { id: stri
                       {moneyOrDash(lineCost(instrument.actual, instrument.committedRemaining))}
                     </span>
                   )}
-                  {isOwnerAdmin && (
+                  {seesMoney && (
                     <span style={dashCell}>
                       {instrument.budgeted !== null &&
                       lineCost(instrument.actual, instrument.committedRemaining)
@@ -915,7 +926,7 @@ export default async function BudgetAndCostPage({ params }: { params: { id: stri
             <span style={{ gridColumn: '1 / span 2', fontFamily: font.sans, fontSize: '14px', fontWeight: 700, color: color.navy }}>
               Total
             </span>
-            {isOwnerAdmin && (
+            {seesMoney && (
               <span style={{ ...moneyCell, fontSize: '14px', fontWeight: 700 }}>
                 {rollup.totalBudgeted === null ? '—' : money(rollup.totalBudgeted)}
               </span>
@@ -933,7 +944,7 @@ export default async function BudgetAndCostPage({ params }: { params: { id: stri
                 {moneyOrDash(rollup.costToDate)}
               </span>
             )}
-            {isOwnerAdmin && (
+            {seesMoney && (
               <span style={{ ...dashCell, fontSize: '14px', fontWeight: 700 }}>
                 {rollup.totalBudgeted !== null && rollup.costToDate
                   ? money(rollup.totalBudgeted - rollup.costToDate)
@@ -1123,7 +1134,7 @@ export default async function BudgetAndCostPage({ params }: { params: { id: stri
             <span style={{ fontFamily: font.mono, color: color.navy }}>{fmtMoney(total)}</span>
           </div>
         ))}
-        {isOwnerAdmin && (
+        {seesMoney && (
           <div style={{ borderTop: `1px solid ${color.rowDivider}`, marginTop: '6px', paddingTop: '6px', fontSize: '12px', color: color.muted }}>
             Allocated to budget lines: {fmtMoney(jobCost.expenses.allocated)} · unallocated:{' '}
             {fmtMoney(jobCost.expenses.unallocated)}

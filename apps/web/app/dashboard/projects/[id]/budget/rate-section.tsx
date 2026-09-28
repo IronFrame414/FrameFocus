@@ -116,9 +116,14 @@ interface RateSectionProps {
    *  Owner/Admin visibility): shows the "Correct rates" edit-mode control.
    *  The RPC re-checks Owner inside — this prop is display, not security. */
   canSupersede: boolean;
+  /** [S111] Stage-3 "Renegotiate rate", kept separate from seeing the section.
+   *  Owner/Admin, and a Project Executive on its own project since its
+   *  instrument_rates INSERT arm (20261910000000). Display, not security — the
+   *  DB refuses the write regardless. Supersede stays `canSupersede` (Owner). */
+  canRenegotiate: boolean;
 }
 
-export async function RateSection({ project, canSupersede }: RateSectionProps) {
+export async function RateSection({ project, canSupersede, canRenegotiate }: RateSectionProps) {
   const groups: InstrumentGroup[] = [];
 
   if (project.project_type !== 'fixed_price' && project.source_estimate_id) {
@@ -199,6 +204,7 @@ export async function RateSection({ project, canSupersede }: RateSectionProps) {
 
             {/* Stage 3 — renegotiate per rate type. Floor = latest live rate
                 + 1 day (client mirrors it; the DB guard is the authority). */}
+            {canRenegotiate && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', padding: '2px 20px 6px' }}>
               {EXPECTED_TYPES[group.contractType].map((rateType) => (
                 <div
@@ -220,6 +226,7 @@ export async function RateSection({ project, canSupersede }: RateSectionProps) {
                 </div>
               ))}
             </div>
+            )}
 
             {group.rates.length > 0 && (
               // History + the Owner-only "Correct rates" edit mode. Rows are

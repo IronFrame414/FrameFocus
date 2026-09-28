@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest';
+import { forEveryRole, JUNK_ROLES } from '@/test-support/role-matrix';
 import {
+  canManageLienReleases,
+  canMarkSubContractComplete,
   canVoidRelease,
   fitTextToBox,
   isLegalValueKey,
@@ -216,5 +219,46 @@ describe('§6.4 the amount rule', () => {
 
   it('an unpaid invoice yields a zero unconditional, never the receivable', () => {
     expect(releaseAmount('unconditional', 9500, 0).amount).toBe(0);
+  });
+});
+
+// [S181] Lien-release authority as TOTAL maps (CLAUDE.md, S112). RULED Josh
+// 2026-09-26: a Project Executive is INCLUDED; S181 Q2: it has NO contract
+// authority, so marking a subcontract complete stays Owner/Admin. The database
+// is the scope (20261930000000); these decide what a screen offers.
+describe('S181 — lien-release roles, every role answered', () => {
+  it('canManageLienReleases: Owner, Admin, Project Executive — nobody else', () => {
+    forEveryRole(
+      {
+        owner: true,
+        admin: true,
+        project_executive: true,
+        project_manager: false,
+        foreman: false,
+        crew_member: false,
+        subcontractor: false,
+        client: false,
+      },
+      (role, allowed) => expect(canManageLienReleases(role), role).toBe(allowed)
+    );
+    for (const junk of JUNK_ROLES) expect(canManageLienReleases(junk), `junk '${junk}'`).toBe(false);
+    expect(canManageLienReleases(null)).toBe(false);
+  });
+
+  it('canMarkSubContractComplete: Owner and Admin — a Project Executive is OUT (Q2)', () => {
+    forEveryRole(
+      {
+        owner: true,
+        admin: true,
+        project_executive: false,
+        project_manager: false,
+        foreman: false,
+        crew_member: false,
+        subcontractor: false,
+        client: false,
+      },
+      (role, allowed) => expect(canMarkSubContractComplete(role), role).toBe(allowed)
+    );
+    for (const junk of JUNK_ROLES) expect(canMarkSubContractComplete(junk), `junk '${junk}'`).toBe(false);
   });
 });

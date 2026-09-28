@@ -68,9 +68,15 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     .eq('user_id', user.id)
     .eq('is_deleted', false)
     .single();
-  if (!profile || !['owner', 'admin', 'project_manager'].includes(profile.role)) {
+  // [S111] + a Project Executive, confined to its projects by the RLS fetch below.
+  if (
+    !profile ||
+    !['owner', 'admin', 'project_executive', 'project_manager'].includes(profile.role)
+  ) {
     return NextResponse.json(
-      { error: 'Only an Owner, Admin or Project Manager can derive an invoice.' },
+      {
+        error: 'Only an Owner, Admin, Project Executive or Project Manager can derive an invoice.',
+      },
       { status: 403 }
     );
   }

@@ -97,9 +97,12 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     .eq('user_id', user.id)
     .eq('is_deleted', false)
     .single();
-  if (!profile || !['owner', 'admin'].includes(profile.role)) {
+  // [S111] + a Project Executive on its own project (FILL-5: send an invoice —
+  // yes on its projects). The RLS fetch below confines it; approval is checked
+  // in the DB by enforce_invoices_column_scope (20261910000000).
+  if (!profile || !['owner', 'admin', 'project_executive'].includes(profile.role)) {
     return NextResponse.json(
-      { error: 'Only an Owner or Admin can send an invoice to a client.' },
+      { error: 'Only an Owner, Admin or Project Executive can send an invoice to a client.' },
       { status: 403 }
     );
   }

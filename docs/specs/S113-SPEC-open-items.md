@@ -247,14 +247,62 @@ already ruled in `docs/specs/S111-SPEC-project-scoped-role.md`. The database sid
 
 **FILL-C-1** — The money UI. The database permits this role to read its own project's money; until the
 screens render it, the role Josh asked for does not exist from a user's point of view.
+
+> **FILLED [S181, 2026-09-27] — built; its DB half applied to rebuild-test, not production.** Desktop
+> Budget & Cost (full column set), Overview money, Invoices tab/builder/PDF, Payments (record new only, Q9),
+> Profitability, CO list/detail money, and contract schedule amounts render for the role through
+> `seesProjectMoney()` (S111 commits, rebased). S181 added: ⚠️ a **PARITY fix**: `/m` `readsChangeOrders()` omitted the
+> role, so `/m` showed "office only" over COs the database returned (red before the fix, green after:
+> `test/s181-m-co-access.test.ts`). **Q4** `20261920000000`: read-only arms on `expenses`, `expense_allocations`
+> (scoped to both the expense's and the budget item's project), `expense_payments`, and `files` of category
+> `invoices`/`change_orders` on its projects. Live: ON 1/1/1 and money file 1; OFF 0 of 1 each (control 1). **Surface
+> fact:** `/m` has no Budget/Invoices/Payments/Profitability/Lien section **for any role**. That is a pre-existing split, not a
+> PE divergence. **Q3:** the role is withheld from every grant picker (`WITHHELD_ROLES`, one source) until the
+> operational arms land on a follow-up branch; the schema keeps it. Report: `docs/sessions/S181-report.md`.
 **FILL-C-2** — Apply `20261910000000` to rebuild-test and run its live test. Currently unproven.
+
+> **FILLED [S181] — applied to rebuild-test with 20261920000000 and 20261930000000; proven.** Before applying, the S181 Q2 edit
+> removed the contract-void PE clause (1910 verified applied nowhere at edit time). Negative-first run before the
+> migrations: every OFF assertion green, every ON assertion red. After them: `s111-project-executive-writes` 11/11
+> (W1–W4 land 1 each; X1–X3 touch 0; service role confirms OFF rows unchanged; Q1 refund refused; Q2 contract void
+> touched 0), `s181-project-executive-liens` 14/14, `s111-project-executive-floor` 7/7, 32/32 in total. Sabotage (two PE read
+> arms widened company-wide) → 2 red (3/3 OFF releases and 1/1 OFF expense read), restored → green. **Constraints added:
+> none**, so no production row count is governed. Production: **not applied**; `docs/sessions/S181-PRODUCTION-RUNBOOK.md`.
+>
+> **CORRECTED [S181b, 2026-09-27].** X1's OFF inserts used `.select()`, so the SELECT arm refused them. They stayed green with the CO and
+> CO-line-item INSERT arms widened. Added **X1b** (no RETURNING, service-role tally): green on the real arms, red when they are widened.
+> Now `s111-project-executive-writes` 12/12. The two sabotages above widened only SELECT arms.
 **FILL-C-3** — ⚠️ **The refund near-miss.** A reformatting cleanup moved a line from
 `canRecordPayment` into `canIssueRefund`, which would have granted this role refund authority. It
 compiled and no test caught it, because `payments-shared.test.ts:141-143` enumerates Owner, Admin and
 PM by hand. Before any further permission work: that test covers `project_executive` explicitly, and
 states what the role still CANNOT do.
+
+> **FILLED [S181] — RULED Josh Q1: no refunds, neither issue nor approve.** The negative block was written first:
+> `canIssueRefund`, `refundNeedsOwnerApproval` and `canApproveRefund` are all `false` for the role, `canRecordPayment`
+> is `true`, and the two must differ. The three total maps now carry `project_executive: false`. 35/35. **Control:** the near-miss
+> replayed (`canIssueRefund` given `seesProjectMoney`) → 2 red, restored → green. In the DB, `client_refunds` has a PE SELECT arm only;
+> live, the PE's refund insert is refused by RLS, its approve touches 0, and the service-role control row is valid.
 **FILL-C-4** — Lien releases: every table, policy and route involved, and the negative test proving the
 role cannot reach another project's.
+
+> **FILLED [S181] — RULED Q5 B (both directions), Q6 A (read-only templates).** Tables: `lien_releases` (no
+> project_id; subject = invoice | expense | subcontract), `lien_release_templates`, `lien_release_template_boxes`, `files`
+> (category `lien_releases`, project_id NULL), `storage.objects` (`{company}/lien-releases/…`). All were O/A before.
+> `20261930000000` adds PE SELECT/INSERT/UPDATE (USING + WITH CHECK) through `pe_on_lien_subject()`, read-only template
+> and box arms, file SELECT/INSERT arms and a storage INSERT arm (inline subquery; no company helper). There is no DELETE for anyone.
+> Route `POST /api/lien-releases/generate`, the page, the tab and the invoice prompt now read one predicate,
+> `canManageLienReleases`. Mark-complete/Reopen are hidden from the role (contract authority, Q2; the trigger refuses
+> it). **Negative test** `test/s181-project-executive-liens.live.ts`: another project's releases read 0 of 3 (control 3);
+> inserts against its invoice, expense and subcontract land [0,0,0]; update touches 0; moving its own release onto the
+> other project's invoice is refused; uploading under the other project's release folder is refused. ON: 3 releases,
+> send/void, executed-copy upload plus signed URL all land. No `/m` lien surface exists for any role.
+>
+> **CORRECTED [S181b, 2026-09-27].** The "inserts … land [0,0,0]" negative used `.insert().select()`, so the PE's SELECT arm refused it
+> on RETURNING. With the INSERT arm widened to company scope it stayed green, so it never measured the INSERT arm. The facts above stand.
+> Added **N2b**: the same three inserts with NO RETURNING, tallied by the service role. Green on the real arm; red when the arm is widened
+> (the rows land). The "moving … is refused" check is the SELECT arm on the new row plus the UPDATE arm together. No PostgREST call
+> isolates the UPDATE arm. Report: `docs/sessions/S181-report.md` § S181b.
 
 ---
 

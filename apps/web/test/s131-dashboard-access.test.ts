@@ -30,6 +30,7 @@ describe('[S112 queue 3] every role\'s answer, stated — not derived from the c
       {
         owner: { admitted: true, redirect: null },
         admin: { admitted: true, redirect: null },
+        project_executive: { admitted: true, redirect: null },
         project_manager: { admitted: true, redirect: null },
         foreman: { admitted: true, redirect: null },
         crew_member: { admitted: true, redirect: null },
@@ -46,7 +47,10 @@ describe('[S112 queue 3] every role\'s answer, stated — not derived from the c
 });
 
 describe('the predicate agrees with the constant', () => {
-  it('admits exactly the five dashboard roles', () => {
+  // [S111] Superseded title, quoted: 'admits exactly the five dashboard roles' —
+  // project_executive made it six. The body iterates the constant, so it never
+  // pinned a count; the title did, and was wrong the day the role landed.
+  it('admits exactly the DASHBOARD_ROLES (six since S111 project_executive)', () => {
     for (const role of DASHBOARD_ROLES) {
       expect(isDashboardRole(role), `${role} should reach the dashboard`).toBe(true);
       expect(dashboardDeniedRedirect(role), `${role} should not be redirected`).toBeNull();

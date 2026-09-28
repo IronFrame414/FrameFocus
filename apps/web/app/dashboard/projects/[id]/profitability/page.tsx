@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase-server';
+import { seesProjectMoney } from '@framefocus/shared/constants/roles';
 import { redirect, notFound } from 'next/navigation';
 import { getProfitabilityReport } from '@/lib/services/profitability';
 import { getProject } from '@/lib/services/projects';
@@ -42,7 +43,9 @@ export default async function ProfitabilityPage({
     .eq('user_id', user.id)
     .eq('is_deleted', false)
     .single();
-  if (!profile || !['owner', 'admin'].includes(profile.role)) {
+  // [S111] + a Project Executive on its own project (Q10: its own projects'
+  // actual margin; RLS, 20261830000000). The company margin TARGET stays out.
+  if (!profile || !seesProjectMoney(profile.role)) {
     redirect(`/dashboard/projects/${id}`);
   }
 

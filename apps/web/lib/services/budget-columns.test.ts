@@ -15,6 +15,8 @@ describe('§7.1 — Budget & Cost columns per role', () => {
       {
         owner: 'full',
         admin: 'full',
+        // [S111 RULED 2] the Owner's visibility, on its own projects only (RLS).
+        project_executive: 'full',
         project_manager: 'committed',
         foreman: 'actual_only',
         crew_member: 'none',
@@ -34,6 +36,17 @@ describe('§7.1 — Budget & Cost columns per role', () => {
       expect(plan.seesBudgeted).toBe(true);
       expect(plan.seesCommitted).toBe(true);
     }
+  });
+
+  it('[S111] a Project Executive gets the full 7 — on its own projects, which RLS scopes', () => {
+    // RULED 2: "the same financial visibility an Owner has, scoped to those
+    // projects". The scoping is the database's (20261830000000); this plan only
+    // decides the columns once the page is reached.
+    const plan = budgetColumnsFor('project_executive');
+    expect(plan.columns).toBe(7);
+    expect(plan.set).toBe('full');
+    expect(plan.seesBudgeted).toBe(true);
+    expect(plan.seesCommitted).toBe(true);
   });
 
   it('a PM gets 5 columns — committed yes, budgeted NO', () => {
@@ -69,9 +82,16 @@ describe('§7.1 — Budget & Cost columns per role', () => {
   });
 
   it('the counts are strictly descending — no role sees more than the one above', () => {
-    const order = ['owner', 'admin', 'project_manager', 'foreman', 'crew_member'];
+    const order = [
+      'owner',
+      'admin',
+      'project_executive',
+      'project_manager',
+      'foreman',
+      'crew_member',
+    ];
     const counts = order.map((r) => budgetColumnsFor(r).columns);
-    expect(counts).toEqual([7, 7, 5, 3, 0]);
+    expect(counts).toEqual([7, 7, 7, 5, 3, 0]);
     for (let i = 1; i < counts.length; i += 1) {
       expect(counts[i]).toBeLessThanOrEqual(counts[i - 1]);
     }

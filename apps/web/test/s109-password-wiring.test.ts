@@ -61,6 +61,7 @@ describe('S109 #162 — one password check, one form, both surfaces', () => {
       {
         owner: null,
         admin: null,
+        project_executive: null,
         project_manager: null,
         foreman: null,
         crew_member: null,

@@ -55,9 +55,15 @@ export async function POST(
     .eq('user_id', user.id)
     .eq('is_deleted', false)
     .single();
-  if (!profile || !['owner', 'admin', 'project_manager'].includes(profile.role)) {
+  // [S111] + a Project Executive, confined to its projects by the RLS fetch below.
+  if (
+    !profile ||
+    !['owner', 'admin', 'project_executive', 'project_manager'].includes(profile.role)
+  ) {
     return NextResponse.json(
-      { error: 'Only Owner, Admin, or Project Manager can reissue change orders' },
+      {
+        error: 'Only Owner, Admin, Project Executive, or Project Manager can reissue change orders',
+      },
       { status: 403 }
     );
   }

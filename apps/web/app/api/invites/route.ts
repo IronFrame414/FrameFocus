@@ -1,3 +1,4 @@
+import { isOwnerOnlyGrant, isWithheldRole } from '@framefocus/shared';
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
 import { sendInviteEmail } from '@/lib/services/invite-email';
@@ -47,10 +48,18 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'An email address and a role are required.' }, { status: 400 });
   }
 
-  // Only an Owner may create another Admin (the Admin Role Principle).
-  if (role === 'admin' && profile.role !== 'owner') {
+  // [S181 Q3, RULED Josh] A withheld role exists in the schema but is not
+  // offered — and a hand-built request gets the same answer as the form.
+  if (isWithheldRole(role)) {
+    console.error(`[api/invites] ${profile.role} tried to invite as withheld role '${role}'`);
+    return NextResponse.json({ error: 'That role is not available yet.' }, { status: 400 });
+  }
+
+  // Only an Owner may create another Admin (the Admin Role Principle), or a
+  // Project Executive [S111 Q11]. The database refuses it too (20261820000000).
+  if (isOwnerOnlyGrant(role) && profile.role !== 'owner') {
     return NextResponse.json(
-      { error: 'Only the Owner can invite someone as an Admin.' },
+      { error: 'Only the Owner can invite someone as an Admin or a Project Executive.' },
       { status: 403 }
     );
   }

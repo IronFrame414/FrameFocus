@@ -77,11 +77,16 @@ describe('§9-A — payment arrives and is applied', () => {
 
   // [S112 queue 3] A TOTAL map: a new role fails to compile until it is answered.
   // _Superseded:_ four hand-written asserts (owner, admin, PM, foreman).
-  it('a PM cannot record a payment; Owner and Admin can (§8) — every role answered', () => {
+  // [S111] Title inverted in place — _superseded:_ "a PM cannot record a
+  // payment; Owner and Admin can (§8) — every role answered".
+  it('a PM cannot record a payment; Owner, Admin and a Project Executive can (§8, S111 Q9) — every role answered', () => {
     forEveryRole(
       {
         owner: true,
         admin: true,
+        // [S111 Q9] a Project Executive records, on its own projects' invoices
+        // only — record_client_payment() enforces the scope (20261830000000).
+        project_executive: true,
         project_manager: false,
         foreman: false,
         crew_member: false,
@@ -154,6 +159,8 @@ describe('§9-C — overpayment, mid-job then final', () => {
       {
         owner: true,
         admin: true,
+        // [S181 Q1, RULED Josh] NO refund authority — money out. FILL-C-3.
+        project_executive: false,
         project_manager: false,
         foreman: false,
         crew_member: false,
@@ -171,6 +178,7 @@ describe('§9-C — overpayment, mid-job then final', () => {
       {
         owner: false,
         admin: true,
+        project_executive: false, // [S181 Q1] it cannot initiate one, so nothing to route
         project_manager: false,
         foreman: false,
         crew_member: false,
@@ -183,6 +191,7 @@ describe('§9-C — overpayment, mid-job then final', () => {
       {
         owner: true,
         admin: false,
+        project_executive: false, // [S181 Q1] approval stays Owner-only (§5)
         project_manager: false,
         foreman: false,
         crew_member: false,
@@ -192,6 +201,24 @@ describe('§9-C — overpayment, mid-job then final', () => {
       (role, allowed) => expect(canApproveRefund(role), role).toBe(allowed)
     );
     for (const junk of JUNK_ROLES) expect(canApproveRefund(junk), `junk '${junk}'`).toBe(false);
+  });
+
+  // [S181 FILL-C-3, RULED Josh Q1] THE NEGATIVE, stated on its own. A Project
+  // Executive may NOT issue a refund, may NOT have one routed for approval, and
+  // may NOT approve one. It CAN record a payment (Q9) — and that asymmetry is
+  // the near-miss: a mis-applied patch moved canRecordPayment's body into
+  // canIssueRefund, it compiled, and no test caught it because the test listed
+  // owner, admin and PM by hand. The DB agrees: client_refunds has a PE SELECT
+  // arm only — no INSERT, no UPDATE (asserted live in
+  // test/s111-project-executive-writes.live.ts).
+  it('a Project Executive can NEITHER issue NOR approve a refund — though it records payments', () => {
+    expect(canIssueRefund('project_executive'), 'issue').toBe(false);
+    expect(refundNeedsOwnerApproval('project_executive'), 'routed for approval').toBe(false);
+    expect(canApproveRefund('project_executive'), 'approve').toBe(false);
+    // The neighbour whose body the near-miss copied. If these two ever agree for
+    // this role, refund authority has leaked.
+    expect(canRecordPayment('project_executive'), 'records payments (Q9)').toBe(true);
+    expect(canIssueRefund('project_executive')).not.toBe(canRecordPayment('project_executive'));
   });
 
   it('a soft-deleted payment removes its own credit — derivation self-corrects', () => {

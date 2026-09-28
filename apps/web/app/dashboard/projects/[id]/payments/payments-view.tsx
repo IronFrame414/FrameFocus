@@ -32,6 +32,7 @@ import {
   type AgingBucket,
   type AgingSummary,
   type JobPairing,
+  canRecordPayment,
 } from '@/lib/services/payments-shared';
 import {
   cardStyle,
@@ -138,7 +139,13 @@ export function PaymentsView(props: Props) {
   const [notice, setNotice] = useState<string | null>(null);
 
   // §8 — money in is Owner/Admin only.
+  // [S111] TWO flags, not one. `canRecord` also gates unapply, void payment,
+  // apply credit, refunds, the retainage/lien release and reminder settings —
+  // all Owner/Admin in the database. A Project Executive may ONLY record a new
+  // payment (Q9, via record_client_payment), so that one panel reads its own
+  // flag and everything else stays exactly as it was.
   const canRecord = role === 'owner' || role === 'admin';
+  const canRecordNew = canRecordPayment(role);
   const invoiceBase = `/dashboard/projects/${projectId}/invoices`;
 
   const creditBalance = useMemo(
@@ -165,7 +172,7 @@ export function PaymentsView(props: Props) {
     <div style={{ padding: '20px 0', display: 'flex', flexDirection: 'column', gap: '16px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', flexWrap: 'wrap', gap: '10px' }}>
         <h2 style={h2Style}>Payments</h2>
-        {!canRecord && (
+        {!canRecordNew && (
           <span style={{ fontSize: '12px', color: color.faint }}>
             Read-only — recording a payment is Owner/Admin (§8).
           </span>
@@ -284,7 +291,7 @@ export function PaymentsView(props: Props) {
         schedule={reminderSettings.schedule}
       />
 
-      {canRecord && openInvoices.length > 0 && (
+      {canRecordNew && openInvoices.length > 0 && (
         <RecordPaymentPanel
           contactId={contactId}
           openInvoices={openInvoices}

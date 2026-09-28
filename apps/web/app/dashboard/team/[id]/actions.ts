@@ -1,5 +1,6 @@
 'use server';
 
+import { isOwnerOnlyGrant, isWithheldRole } from '@framefocus/shared';
 import { createClient } from '@/lib/supabase-server';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@framefocus/shared/types/database';
@@ -56,8 +57,9 @@ function assertCanEdit(callerRole: string, callerProfileId: string, targetProfil
   }
   if (callerRole === 'owner') return;
   if (callerRole === 'admin') {
-    if (targetRole === 'owner' || targetRole === 'admin') {
-      throw new Error('Admins cannot edit Owners or other Admins');
+    // [S111 Q11] owner, admin AND project_executive — OWNER_ONLY_GRANT_ROLES.
+    if (isOwnerOnlyGrant(targetRole)) {
+      throw new Error('Admins cannot edit Owners, Admins or Project Executives');
     }
     return;
   }
@@ -72,8 +74,14 @@ export async function updateTeamMemberAction(
   const target = assertIsTeamMember(await getTeamMember(supabase, targetId));
   assertCanEdit(profile.role, profile.id, target.id, target.role);
 
-  if (profile.role === 'admin' && (updates.role === 'owner' || updates.role === 'admin')) {
-    throw new Error('Admins cannot promote users to Owner or Admin');
+  if (profile.role === 'admin' && isOwnerOnlyGrant(updates.role)) {
+    throw new Error('Admins cannot promote users to Owner, Admin or Project Executive');
+  }
+  // [S181 Q3, RULED Josh] A withheld role is not GRANTED here — the picker does
+  // not offer it, and a hand-built call gets the same answer. Keeping a role the
+  // target already holds is not a grant, so it passes.
+  if (isWithheldRole(updates.role) && updates.role !== target.role) {
+    throw new Error('That role is not available yet.');
   }
 
   await updateTeamMember(supabase, targetId, updates);

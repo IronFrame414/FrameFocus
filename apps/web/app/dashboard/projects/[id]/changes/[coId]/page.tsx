@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase-server';
+import { seesProjectMoney } from '@framefocus/shared/constants/roles';
 import { notFound, redirect } from 'next/navigation';
 import {
   getChangeOrder,
@@ -39,7 +40,10 @@ export default async function ChangeOrderPage({
     notFound();
   }
 
-  const canManage = ['owner', 'admin', 'project_manager'].includes(profile.role);
+  // [S111] + a Project Executive: CO write arms on its own projects (20261910000000).
+  const canManage = ['owner', 'admin', 'project_executive', 'project_manager'].includes(
+    profile.role
+  );
   // [S168] DELETE is Owner/Admin, narrower than `canManage`. Josh's ruling
   // names the signed/unsigned boundary and is silent on authority; a permanent,
   // unrecoverable removal of a legal document takes the conservative default.
@@ -54,8 +58,9 @@ export default async function ChangeOrderPage({
   // means RLS returned them the row, which after 20260830000000 means they
   // authored it; the check is restated rather than assumed so the UI does not
   // depend on a policy staying exactly as it is.
+  // [S111] + a Project Executive: every CO on its own projects, rates included.
   const canSeeRates =
-    ['owner', 'admin'].includes(profile.role) ||
+    seesProjectMoney(profile.role) ||
     (profile.role === 'project_manager' && changeOrder.created_by === user.id);
 
   // Company name (printed-name prefill) + whether a saved signature image is on

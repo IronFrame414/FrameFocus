@@ -1,4 +1,5 @@
 import type { Database } from '@framefocus/shared/types/database';
+import { seesProjectMoney } from '@framefocus/shared/constants/roles';
 import { daysBetween } from '@/lib/services/invoices-shared';
 
 // Module 7E1 — shared payment types and PURE logic. THE definitions.
@@ -336,6 +337,8 @@ export function canApproveRefund(role: string): boolean {
 
 /** §8 — money IN is Owner/Admin only. A PM cannot record a payment received;
  *  the asymmetry with money-out (where a PM may enter bills) is deliberate. */
+// [S111 Q9] + a Project Executive, through record_client_payment() — which
+// admits only applications to invoices on its own projects, whole payments.
 export function canRecordPayment(role: string): boolean {
-  return role === 'owner' || role === 'admin';
+  return seesProjectMoney(role);
 }

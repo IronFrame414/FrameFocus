@@ -3,6 +3,8 @@
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { updateTeamMemberAction, deleteTeamMemberAction, resetPasswordAction } from './actions';
+import { OFFERED_ROLES, ROLE_LABELS, isOwnerOnlyGrant } from '@framefocus/shared';
+import type { CompanyRole } from '@framefocus/shared';
 
 type Props = {
   target: {
@@ -18,18 +20,14 @@ type Props = {
   callerRole: 'owner' | 'admin';
 };
 
-const OWNER_ROLE_OPTIONS = [
-  { value: 'admin', label: 'Admin' },
-  { value: 'project_manager', label: 'Project Manager' },
-  { value: 'foreman', label: 'Foreman' },
-  { value: 'crew_member', label: 'Crew Member' },
-];
+// [S181 Q3, RULED Josh] DERIVED, not hand-written. _Superseded, quoted:_ two
+// literal lists — OWNER: admin, project_executive, project_manager, foreman,
+// crew_member; ADMIN: project_manager, foreman, crew_member. Both now come from
+// OFFERED_ROLES (roles.ts), so hiding a role is one edit in one place. The Admin
+// list drops the Owner-only grants [S111 Q11], exactly as before.
+const OWNER_ROLE_OPTIONS = OFFERED_ROLES.map((value) => ({ value, label: ROLE_LABELS[value] }));
 
-const ADMIN_ROLE_OPTIONS = [
-  { value: 'project_manager', label: 'Project Manager' },
-  { value: 'foreman', label: 'Foreman' },
-  { value: 'crew_member', label: 'Crew Member' },
-];
+const ADMIN_ROLE_OPTIONS = OWNER_ROLE_OPTIONS.filter((o) => !isOwnerOnlyGrant(o.value));
 
 export default function EditForm({ target, callerRole }: Props) {
   const router = useRouter();
@@ -58,7 +56,12 @@ export default function EditForm({ target, callerRole }: Props) {
   const baseOptions = callerRole === 'owner' ? OWNER_ROLE_OPTIONS : ADMIN_ROLE_OPTIONS;
   const roleOptions = baseOptions.find((o) => o.value === target.role)
     ? baseOptions
-    : [{ value: target.role, label: target.role }, ...baseOptions];
+    : // [S181 Q3] A withheld role someone already HOLDS stays selectable as-is,
+      // labelled, so saving their name does not silently change their role.
+      [
+        { value: target.role, label: ROLE_LABELS[target.role as CompanyRole] ?? target.role },
+        ...baseOptions,
+      ];
 
   async function handleSave() {
     setSaveMessage(null);

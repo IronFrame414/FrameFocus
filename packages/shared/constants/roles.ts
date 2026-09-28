@@ -11,6 +11,10 @@ import type { CompanyRole, InvitableRole } from '../types/roles';
 export const ROLE_HIERARCHY: Record<CompanyRole, number> = {
   owner: 100,
   admin: 90,
+  // [S111] Senior to a PM on its own projects. ⚠️ Admin outranks it here, but
+  // Admin may NOT grant or edit it (Q11) — that is OWNER_ONLY_GRANT_ROLES, not
+  // this number. Never infer grant authority from the hierarchy.
+  project_executive: 80,
   project_manager: 70,
   foreman: 50,
   crew_member: 30,
@@ -22,6 +26,7 @@ export const ROLE_HIERARCHY: Record<CompanyRole, number> = {
 export const ROLE_LABELS: Record<CompanyRole, string> = {
   owner: 'Owner',
   admin: 'Admin',
+  project_executive: 'Project Executive',
   project_manager: 'Project Manager',
   foreman: 'Foreman',
   crew_member: 'Crew Member',
@@ -41,6 +46,7 @@ export const ROLE_LABELS: Record<CompanyRole, string> = {
  */
 export const ROLE_DESCRIPTIONS: Record<InvitableRole, string> = {
   admin: 'Full access except billing and promoting to Admin',
+  project_executive: 'Full access to their assigned projects, money included. No company settings.',
   project_manager: 'Estimates, projects, finances, and team coordination',
   foreman: 'Field crew management, daily logs, and punch lists',
   crew_member: 'Clock in/out, daily logs, photos, and task updates',
@@ -79,10 +85,57 @@ export const ROLE_DESCRIPTIONS: Record<InvitableRole, string> = {
  */
 export const INVITABLE_ROLES: InvitableRole[] = [
   'admin',
+  'project_executive',
   'project_manager',
   'foreman',
   'crew_member',
 ];
+
+/**
+ * Roles ONLY the Owner may grant — by invitation or by changing someone's role —
+ * and whose holders an Admin may not edit. [Admin Role Principle; S111 Q11:
+ * `project_executive` is "Owner only, like promoting to Admin".]
+ *
+ * The ONE list every grant path reads: the Team edit action, the invite API and
+ * the invite form's options. The database enforces the same set
+ * (`profiles_update_admin`, `invitations_{insert,update}_owner_admin`,
+ * 20261820000000) — this constant is the UI/route mirror of it, not the floor.
+ */
+export const OWNER_ONLY_GRANT_ROLES: readonly CompanyRole[] = [
+  'owner',
+  'admin',
+  'project_executive',
+];
+
+export function isOwnerOnlyGrant(role: string | null | undefined): boolean {
+  return !!role && (OWNER_ONLY_GRANT_ROLES as readonly string[]).includes(role);
+}
+
+/**
+ * Roles that EXIST — in `CompanyRole`, in `profiles_role_check` and
+ * `invitations_role_check` — but are NOT OFFERED to anyone granting a role.
+ * [S181 Q3, RULED Josh]
+ *
+ * `project_executive` sees its projects' money (S111 Part One), but its
+ * operational arms — files, tasks, schedule, POs, roster — are on a follow-up
+ * branch. Until they land, an Owner is not offered a role that cannot upload a
+ * photo. **The schema keeps it**: this removes it from the OFFER, not the
+ * database. Remove it from here when the operational arms merge.
+ *
+ * ⚠️ THE ONE SOURCE. The invite form, the Team edit form (both option lists)
+ * and the two grant paths (`POST /api/invites`, `updateTeamMemberAction`) all
+ * read `OFFERED_ROLES` / `isWithheldRole` — never a second hand-edited list.
+ */
+export const WITHHELD_ROLES: readonly CompanyRole[] = ['project_executive'];
+
+export function isWithheldRole(role: string | null | undefined): boolean {
+  return !!role && (WITHHELD_ROLES as readonly string[]).includes(role);
+}
+
+/** What a grant UI offers: `INVITABLE_ROLES` minus `WITHHELD_ROLES`, in order. */
+export const OFFERED_ROLES: readonly InvitableRole[] = INVITABLE_ROLES.filter(
+  (role) => !isWithheldRole(role)
+);
 
 /**
  * Check if roleA outranks roleB in the hierarchy.
@@ -121,6 +174,7 @@ export function canManageRole(managerRole: CompanyRole, targetRole: CompanyRole)
 export const DASHBOARD_ROLES: CompanyRole[] = [
   'owner',
   'admin',
+  'project_executive',
   'project_manager',
   'foreman',
   'crew_member',
@@ -130,3 +184,34 @@ export const DASHBOARD_ROLES: CompanyRole[] = [
  * Roles that can manage team members (invite, remove, change roles).
  */
 export const TEAM_MANAGEMENT_ROLES: CompanyRole[] = ['owner', 'admin'];
+
+/**
+ * [S111 Part One] WHO SEES A PROJECT'S MONEY — contract value, budgeted/sell,
+ * variance and margin, change-order dollars and rates, invoices and their
+ * totals, client payments and retainage on THAT project.
+ *
+ * ⚠️ THIS IS VISIBILITY OF WHAT THE DATABASE ALREADY RETURNS, NOT A FLOOR.
+ * `project_executive` reads money only on its assigned projects because the
+ * RLS arms say so (20261830000000); a project it is not on never reaches a
+ * page that asks this question. A renderer omitting a column is not a floor
+ * (#136) — and equally, a renderer hiding what the database permits makes the
+ * role Josh ruled ("full access to the projects it is on, money included",
+ * S111 RULED 2) not exist from a user's point of view.
+ *
+ * ⚠️ PROJECT, NOT COMPANY. Portfolio totals, company dashboards, the company
+ * margin target and cross-project labor cost use `seesCompanyMoney()`, which
+ * is Owner/Admin only (RULED 3a: no company-level money).
+ *
+ * One list, read by desktop and /m alike (PARITY). Add a role here, never to
+ * an inline `['owner', 'admin']` at a call site.
+ */
+export const PROJECT_MONEY_ROLES: readonly CompanyRole[] = ['owner', 'admin', 'project_executive'];
+
+export function seesProjectMoney(role: string | null | undefined): boolean {
+  return !!role && (PROJECT_MONEY_ROLES as readonly string[]).includes(role);
+}
+
+/** Company-level money: portfolio totals, margin target, cross-project cost. Owner/Admin only. */
+export function seesCompanyMoney(role: string | null | undefined): boolean {
+  return role === 'owner' || role === 'admin';
+}

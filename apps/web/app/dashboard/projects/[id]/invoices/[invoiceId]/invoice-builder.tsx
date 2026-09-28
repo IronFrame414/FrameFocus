@@ -9,6 +9,8 @@
 // next time. Not selecting IS the hold-back — there is no separate mechanism.
 
 import { useMemo, useState } from 'react';
+import { seesProjectMoney } from '@framefocus/shared/constants/roles';
+import { canManageLienReleases } from '@/lib/services/lien-releases-shared';
 import { useRouter } from 'next/navigation';
 import { useConfirm } from '@/components/confirm/confirm-provider';
 import {
@@ -215,7 +217,9 @@ export function InvoiceBuilder(props: InvoiceBuilderProps) {
   ).length;
   const [pickerOpen, setPickerOpen] = useState(() => derivedLineCount === 0);
   const isDerived = derivedInstruments.length > 0;
-  const canApprove = role === 'owner' || role === 'admin';
+  // [S111] + a Project Executive on its own project — FILL-5 "send ... an
+  // invoice: yes"; enforce_invoices_column_scope admits it (20261910000000).
+  const canApprove = seesProjectMoney(role);
 
   // The DRAW panel belongs to the originating contract, which is the only
   // instrument a percentage-of-contract draw can price against (§2 rule a).
@@ -442,7 +446,7 @@ export function InvoiceBuilder(props: InvoiceBuilderProps) {
         <div style={{ ...cardStyle, padding: '10px 14px' }}>
           <InvoiceDeliveryPanel
             invoiceId={invoice.id}
-            canSend={role === 'owner' || role === 'admin'}
+            canSend={seesProjectMoney(role)}
             recipientEmail={recipientEmail}
             deliveries={deliveries}
             status={invoice.status}
@@ -450,9 +454,9 @@ export function InvoiceBuilder(props: InvoiceBuilderProps) {
             /* 7F §5.1 — Owner/Admin only, matching the release role gate
                (§8.2). A PM sees no prompt because a PM cannot generate one;
                offering a link that refuses is worse than offering nothing. */
-            lienReleasePrompt={
-              role === 'owner' || role === 'admin' ? { projectId } : null
-            }
+            /* [S181] + a Project Executive — canManageLienReleases(), the same
+               predicate as the page and the route (lien authority RULED included). */
+            lienReleasePrompt={canManageLienReleases(role) ? { projectId } : null}
             /* 7G §5.4 — stored at push time (S103 Q4), null until the sync
                completes or forever if the QuickBooks company has no Payments.
                Not Floor-gated: it is a URL, not a figure, and it inherits

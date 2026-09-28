@@ -5,13 +5,17 @@ import {
   getSubReleasesForProject,
   getTemplates,
 } from '@/lib/services/lien-releases';
+import { canManageLienReleases, canMarkSubContractComplete } from '@/lib/services/lien-releases-shared';
 import { ReleasesPanel } from './releases-panel';
 import { SubReleasesSection } from './sub-releases-section';
 
 // 7F §8.1 — the Lien Releases list under a job's financials.
 //
-// OWNER/ADMIN ONLY (§8.2). The tab is hidden from everyone else, and this
-// gate is what enforces it.
+// _Superseded, quoted:_ "OWNER/ADMIN ONLY (§8.2). The tab is hidden from
+// everyone else, and this gate is what enforces it." [S181] Owner, Admin and a
+// Project Executive — `canManageLienReleases()`. The gate hides the page; the
+// DATABASE scopes a Project Executive to its own projects' releases
+// (20261930000000), so this redirect is not what protects another project's.
 //
 // ⚠️ The role gate here is NOT the Financial Visibility Floor, and must not be
 // re-justified on it — that rationale was STRUCK at S98. The Floor's S97
@@ -39,7 +43,7 @@ export default async function LienReleasesPage({
     .eq('user_id', user.id)
     .eq('is_deleted', false)
     .single();
-  if (!profile || !['owner', 'admin'].includes(profile.role)) {
+  if (!profile || !canManageLienReleases(profile.role)) {
     redirect(`/dashboard/projects/${id}`);
   }
 
@@ -123,6 +127,7 @@ export default async function LienReleasesPage({
           hasPdf: t.pdf_file_id !== null,
         }))}
         subContracts={subContracts}
+        canMarkComplete={canMarkSubContractComplete(profile.role)}
       />
     </div>
   );

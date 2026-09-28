@@ -5,6 +5,7 @@
 // derivations come from payables-shared — never re-stated.
 
 import { useEffect, useState } from 'react';
+import { seesProjectMoney } from '@framefocus/shared/constants/roles';
 import { useRouter } from 'next/navigation';
 import { useConfirm } from '@/components/confirm/confirm-provider';
 import type {
@@ -488,6 +489,8 @@ function SubSchedulePanel({
 }) {
   const router = useRouter();
   const confirm = useConfirm();
+  // [S111] AUTHORITY only (approve, pay, revise, void). Seeing the amounts is
+  // seesProjectMoney(role), which also admits a Project Executive.
   const isOwnerAdmin = role === 'owner' || role === 'admin';
   const isOwner = role === 'owner';
 
@@ -700,7 +703,7 @@ function SubSchedulePanel({
               )}
               <ScheduleSetupEditor
                 contract={contract}
-                hideAmounts={!isOwnerAdmin}
+                hideAmounts={!seesProjectMoney(role)}
                 prefillBudgetItemId={single?.budget_item_id ?? null}
                 onDone={(warning) => {
                   if (warning) setNotice(warning);
@@ -772,7 +775,7 @@ function SubSchedulePanel({
           <ScheduleSetupEditor
             key={stageIdsKey}
             contract={contract}
-            hideAmounts={!isOwnerAdmin}
+            hideAmounts={!seesProjectMoney(role)}
             initialStages={editSeed}
             reviseMode
             onDone={(warning) => {
@@ -941,7 +944,7 @@ function SubSchedulePanel({
                 value={targetPicks[s.id] ?? ''}
                 onChange={(v) => setTargetPicks((prev) => ({ ...prev, [s.id]: v }))}
                 excludeMiscellaneous
-                hideAmounts={!isOwnerAdmin}
+                hideAmounts={!seesProjectMoney(role)}
                 disabled={busy}
                 style={{ padding: '0.25rem 0.375rem', border: '1px solid #d5dae4', borderRadius: '0.375rem', fontSize: '0.75rem', flex: 1, minWidth: '180px' }}
               />

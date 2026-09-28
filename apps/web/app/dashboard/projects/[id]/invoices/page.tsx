@@ -1,4 +1,5 @@
 import { notFound, redirect } from 'next/navigation';
+import { seesProjectMoney } from '@framefocus/shared/constants/roles';
 import { createClient } from '@/lib/supabase-server';
 import { getRevisedContract } from '@/lib/services/contract-value';
 import { getProject } from '@/lib/services/projects';
@@ -91,7 +92,9 @@ export default async function InvoicesPage({ params }: { params: { id: string } 
 
   // §12 — client billing is Owner/Admin/PM. Foreman/Crew are sent back to the
   // project overview rather than shown an empty screen.
-  if (!['owner', 'admin', 'project_manager'].includes(profile.role)) {
+  // [S111] + a Project Executive, which reads every invoice on its own
+  // projects (invoices_select_project_executive), not only ones it authored.
+  if (!['owner', 'admin', 'project_executive', 'project_manager'].includes(profile.role)) {
     redirect(`/dashboard/projects/${params.id}`);
   }
 
@@ -123,12 +126,13 @@ export default async function InvoicesPage({ params }: { params: { id: string } 
   // §8.8.3 "Cost you've fronted" — Owner/Admin only, beside the other
   // aggregates; a gated role triggers zero calls.
   const frontedCost =
-    profile.role === 'owner' || profile.role === 'admin'
+    seesProjectMoney(profile.role)
       ? await getFrontedCostTotal(params.id)
       : 0;
   // §12a (S97) — the PM carve-out covers amounts ON an invoice, not the job's
   // contract value (CLAUDE.md Financial Visibility Floor keeps that Owner/Admin).
-  const canSeeContractValue = profile.role === 'owner' || profile.role === 'admin';
+  // [S111] + a Project Executive on its own project (project_financials PE arm).
+  const canSeeContractValue = seesProjectMoney(profile.role);
 
   return (
     <div style={{ padding: '20px 0' }}>

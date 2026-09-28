@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase-server';
+import { seesProjectMoney } from '@framefocus/shared/constants/roles';
 import { redirect, notFound } from 'next/navigation';
 import Link from 'next/link';
 import { getProject, PROJECT_TYPE_LABELS } from '@/lib/services/projects';
@@ -90,7 +91,8 @@ export default async function ProjectOverviewPage({ params }: { params: { id: st
   }
 
   const canTransition = ['owner', 'admin', 'project_manager'].includes(profile.role);
-  const canSeeFinancials = profile.role === 'owner' || profile.role === 'admin';
+  // [S111] Owner/Admin, and a Project Executive on its own project (RLS).
+  const canSeeFinancials = seesProjectMoney(profile.role);
 
   // --- KPIs (ui-04 §S3) --------------------------------------------------
   // 7B: revised contract from the single legal derivation (contract-value.ts).
