@@ -195,3 +195,23 @@ shipment) → C-branch 1 (C-1, C-10, C-9 app, C-2 per P1, C-8, C-5, C-4 notice, 
 - `tsc --noEmit` exit 0; `next lint` on both files exit 0; **`next build` exit 0** (printed line read).
 - Pushed; CI run **36410492460** in progress. Merge under R8 when green on current `main` (branch is cut from current `main`).
 - ⚠️ **P6 is now the most urgent production query** (Josh): which live tokens exist and what they could reach.
+
+### Step 7 — C-1 built (`f40d7702`, C-branch 1)
+- `buildRecoveryConfirmUrl` + pure `authEmailLink` in `lib/services/auth-email.ts`; the hook route passes `NEXT_PUBLIC_APP_URL`;
+  `team-reset.ts` uses the same builder (was inline) — one mechanism for both resets.
+- `test/s114-recovery-link.test.ts` 13/13 (a `Record<AuthEmailAction,…>` total map: recovery → `/auth/confirm`, the other 7 →
+  `/auth/v1/verify`); with `s160-auth-email.test.tsx` + `auth-email-hook-signature-headers.test.ts`: **35/35**. Sabotage (recovery
+  branch disabled) → **2 failed / 11 passed**; restored, `md5sum -c` OK. `tsc` exit 0. No existing test pinned the hook's
+  recovery link (sweep: `grep -rln "handleAuthEmail|auth/v1/verify|auth/confirm|resetTeamMemberPassword" test e2e`, 5 files read).
+- **Not measured:** that GoTrue's `/verify` accepts a PKCE-prefixed `token_hash` via `verifyOtp` — rebuild-test's hook is off and
+  its default SMTP cannot send to a throwaway address. The admin path (non-PKCE hash) is proven by `s110-reset-password.live.ts`.
+  **C-1 = DEPLOYED-UNPROVEN** until Josh walks the real email on a second device.
+- **Config item for Josh (separate, not done — ruling Q2):** production `uri_allow_list` entry `…/auth/callback?next=*` does not
+  match `?next=/reset-password`; any other flow relying on `?next=<path>` also falls back to the Site URL
+  (`https://EZContractorBinder.com`, mixed case). The C-1 fix no longer depends on it.
+
+### Step 8 — Production results P1–P5 and second rulings (Josh, 2026-09-28)
+Recorded in `S114-C-questions.md` § PRODUCTION RESULTS. C-4 closed on production (notice only). P4 = 0 (CHECK was safe on
+2026-09-28; not added). Q3 superseded: Photos gains `daily_logs` + `safety`, Files unchanged. P5: QB disconnected on both
+companies → Q18 reversed (control always shown); Q17 (a)–(e) will be "built to ruling, unproven against live QuickBooks data".
+**P6 still owed.**

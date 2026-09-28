@@ -362,3 +362,21 @@ Following the prompt:
 - **Q17 A** — all five; (d) push a client payment only if every invoice it covers is on a non-excluded project.
 - **Q18 A** — only while connected.
 - **Q19 A** — with Q6's change: the C-3 hotfix is its own shipment, not the first item of a branch.
+
+## PRODUCTION RESULTS + RULINGS [Josh, 2026-09-28, second message]
+
+- **P3** — `files_owner_arm_check` exists, `convalidated = true`; no project-less photo can be written. **C-4 closed on
+  production.** Ship only the /m notice, with the 7-day silent deletion as its headline.
+- **P4** — **0 rows.** No existing contact would be rejected by a name-or-company rule **as of 2026-09-28**. Q12 A stands (no
+  CHECK); whoever adds the constraint later knows it was safe on this date.
+- **P1/P2 — Q3 SUPERSEDED.** Production holds exactly **one** image in Files: category `other`, `from_estimate`, on the Best
+  Western project, not soft-deleted. **Zero** daily-log or safety images (the 14-of-15 figure was rebuild-test). New ruling:
+  `photos` stays excluded from Files (as today); **`daily_logs` and `safety` JOIN the Photos query** (so they can be marked up)
+  **and REMAIN in Files** — nothing establishes those categories hold images only, and hiding a scanned document to tidy a list
+  is the wrong trade. The backfill (Josh's, STEP 2) moves one row.
+- **P5** — QuickBooks **disconnected on both companies**: `qb_linked false`, 0 projects with QB records, 0 invoices, purchases,
+  payments, multi-project payments, 0 queued. Consequences:
+  - ⚠️ **Q18 REVERSED: show the control ALWAYS**, not only while connected. The exclusion matters most before a connection
+    exists; a control that appears only after connecting arrives too late.
+  - PART B is still built, but **Q17 (a)–(e) are "built to ruling, unproven against live QuickBooks data."** Never claimed tested.
+- **P6** — not yet reported.
