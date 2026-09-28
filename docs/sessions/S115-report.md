@@ -29,3 +29,8 @@ Branch for this log and the spec fold: `feature/s115-report` (docs-only).
 - Serena MCP failed to connect this session (`uvx` not found); symbol searches use grep with stated counts.
 - ⚠️ The prompt names the additions file `docs/specs/S114-SPEC-additions-2026-09-28.md`; on disk it is the **untracked** `docs/specs/S114 spec additions.md` (184 lines). Same content per its heading (`# S114 spec additions — 2026-09-28 (evening)`). Used that file.
 - Untracked `RUNBOOK.md` and `S114-C-questions.md` at repo root are not mine; left untouched.
+
+### Step 0 — spec fold (done)
+- Folded R9–R11 (new `# RULED [Josh, 2026-09-28]` block after R8), C-11/C-12 (end of PART C), F-11–F-13 (end of PART F), G-7/G-8 (end of PART G; the additions' G-6 restates the existing G-6 — noted, not duplicated), new PART H (after PART G), ASK-19–22 (appended to ASK list), and "Production state recorded 2026-09-28" (before Standing constraints). Each folded block is tagged `[Folded in S115 …]`.
+- Spec 719 → 895 lines (`wc -l`). Additions file (untracked, never committed) deleted with `rm`.
+- **R9 is recorded as already built; nothing built for it.**
