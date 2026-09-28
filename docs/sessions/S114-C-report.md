@@ -377,3 +377,12 @@ companies → Q18 reversed (control always shown); Q17 (a)–(e) will be "built 
   the final report. Unit asserts the screens opt in and the three chat routes do not.
 - CI **36423249160** on `a9068fc2`: **Lint & Type ✓, E2E ✓** (full run). Branch contains current `main` `951d2623`; 0 files under
   `supabase/`. Merge follows with the tree-identity proof for this docs-only commit (report + `S114-CLICK-LIST.md`).
+
+### Step 19 — C-branch 1 MERGED (`584573e7`); remaining branches rebased
+- Merge message carries the R8 proof: CI **36423249160** green on `a9068fc2`; docs-only delta after it
+  (`docs/sessions/S114-C-report.md`, `docs/sessions/S114-CLICK-LIST.md`, via `git diff --name-only a9068fc2 <head>`);
+  `git diff --quiet a9068fc2 HEAD -- apps packages scripts supabase .github` → identical; 0 migrations. Pushed
+  `951d2623..584573e7`; branch deleted. **C-1 is now DEPLOYED-UNPROVEN** (Josh's second-device walk owed).
+- Rebased onto `584573e7`: `feature/s114-c-migration` (3 own commits; tsc 0), `feature/s114-b-qb-exclusion` (4; tsc 0).
+- ⚠️ `feature/s114-c5-multi-upload` rebased to ZERO commits (main holds C-5 + its revert, so git dropped them as upstream);
+  restored with a revert-of-the-revert. tsc 0; unit 138 files / 1,895 tests. Still unproven per `#2-s180u`.
