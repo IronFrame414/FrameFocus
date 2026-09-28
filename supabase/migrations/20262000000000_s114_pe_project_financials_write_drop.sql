@@ -1,0 +1,32 @@
+-- S114 Q14 A [RULED Josh 2026-09-28] — the Project Executive READS its projects'
+-- `project_financials` row but no longer WRITES it. Drops the two write arms
+-- 20261910000000 created; the SELECT arm (`project_financials_select_project_executive`)
+-- is KEPT.
+--
+-- WHY (measured 2026-09-28, rebuild-test, S114-C-report Step 1):
+--   · On a FIXED-PRICE project `project_financials.contract_value` IS the billing
+--     ceiling the database enforces — `enforce_contract_billing_ceiling()` locks
+--     and reads it; no value = no ceiling. A PE that can raise, or NULL, its own
+--     cap is the authority R1 carve-out 2 (no contract authority) withholds, the
+--     same reasoning as Q2's drop of `client_contract_amounts` (20261980000000).
+--   · App writers: 0. The only writer is `convert_estimate_to_project()`
+--     (SECURITY DEFINER); `updateProject()` refuses the column outright.
+--   · A client never reads this table (no client arm; the portal reads
+--     `client_contract_amounts`).
+--
+-- ⚠️ NO CONSTRAINT, NO DATA CHANGE. Two DROP POLICY statements; no existing row is
+-- touched. Owner/Admin arms are unchanged.
+--
+-- BEFORE (rebuild-test; production must match — runbook Step 0):
+--   project_financials policies = 6:
+--     insert_owner_admin, insert_project_executive, select_owner_admin,
+--     select_project_executive, update_owner_admin, update_project_executive
+--   insert_project_executive  WITH CHECK ((company_id = get_my_company_id()) AND pe_on_project(project_id))
+--   update_project_executive  USING / WITH CHECK the same
+-- AFTER: 4 policies; `…_project_executive` arms on this table = 1 (SELECT).
+--
+-- Proof: apps/web/test/s114-pe-financials-drop.live.ts — negative-first on the PE's
+-- OWN project, no RETURNING (F1 insert tally 0 → 0; F2 / F2b update re-read 50000).
+
+DROP POLICY IF EXISTS project_financials_insert_project_executive ON public.project_financials;
+DROP POLICY IF EXISTS project_financials_update_project_executive ON public.project_financials;

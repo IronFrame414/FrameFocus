@@ -14,6 +14,7 @@ import {
   useOnline,
 } from '../../write-ui';
 import { useT } from '@/components/i18n/language-provider';
+import { hasValidContactName } from '@framefocus/shared/utils/contact-name';
 
 // S108 Spec A — the create form. Online-only: the visit needs its id before
 // photos and voice can attach (those two are then held offline if signal
@@ -34,6 +35,7 @@ export function NewSiteVisitForm({ contacts }: { contacts: ContactOption[] }) {
   const [contactId, setContactId] = useState('');
   const [first, setFirst] = useState('');
   const [last, setLast] = useState('');
+  const [company, setCompany] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
   const [addressMode, setAddressMode] = useState<AddressMode>('new');
@@ -48,8 +50,13 @@ export function NewSiteVisitForm({ contacts }: { contacts: ContactOption[] }) {
   const chosen = contacts.find((c) => c.id === contactId) ?? null;
   const addressOptions = contactMode === 'existing' ? chosen?.addresses ?? [] : [];
 
+  // [S114 C-9, RULED Josh] first AND last, OR company — the shared rule, and the
+  // same one create_site_visit() applies (20261990000000). _Superseded, quoted:_
+  // `first.trim() !== '' && last.trim() !== ''`.
   const contactOk =
-    contactMode === 'existing' ? !!contactId : first.trim() !== '' && last.trim() !== '';
+    contactMode === 'existing'
+      ? !!contactId
+      : hasValidContactName({ first_name: first, last_name: last, company_name: company });
   const addressOk =
     addressMode === 'none' ||
     (addressMode === 'existing' ? !!addressId : [line1, city, state, zip].every((v) => v.trim() !== ''));
@@ -61,7 +68,10 @@ export function NewSiteVisitForm({ contacts }: { contacts: ContactOption[] }) {
     const r = await createSiteVisit({
       title,
       contact_id: contactMode === 'existing' ? contactId : null,
-      new_contact: contactMode === 'new' ? { first_name: first, last_name: last, phone, email } : null,
+      new_contact:
+        contactMode === 'new'
+          ? { first_name: first, last_name: last, company_name: company, phone, email }
+          : null,
       contact_address_id: addressMode === 'existing' ? addressId : null,
       new_address:
         addressMode === 'new' ? { address_line1: line1, city, state, zip } : null,
@@ -126,8 +136,10 @@ export function NewSiteVisitForm({ contacts }: { contacts: ContactOption[] }) {
         </div>
       ) : (
         <>
-          <TextField label={t('photos.sv.firstName')} value={first} onChange={setFirst} testId="m-sv-first" required />
-          <TextField label={t('photos.sv.lastName')} value={last} onChange={setLast} testId="m-sv-last" required />
+          {/* [S114 C-9] names are no longer each required: a name OR a company. */}
+          <TextField label={t('photos.sv.firstName')} value={first} onChange={setFirst} testId="m-sv-first" />
+          <TextField label={t('photos.sv.lastName')} value={last} onChange={setLast} testId="m-sv-last" />
+          <TextField label={t('photos.sv.company')} value={company} onChange={setCompany} testId="m-sv-company" />
           <TextField label={t('photos.sv.phone')} value={phone} onChange={setPhone} testId="m-sv-phone" />
           <TextField label={t('photos.sv.email')} value={email} onChange={setEmail} testId="m-sv-email" />
         </>

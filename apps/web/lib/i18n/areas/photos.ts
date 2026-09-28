@@ -203,6 +203,8 @@ export const en = {
   'photos.sv.chooseContact': 'Choose a contact…',
   'photos.sv.firstName': 'First name',
   'photos.sv.lastName': 'Last name',
+  // [S114 C-9] a new contact needs a first and last name, OR a company.
+  'photos.sv.company': 'Company (or a first and last name)',
   'photos.sv.phone': 'Phone',
   'photos.sv.email': 'Email',
   'photos.sv.jobSiteAddress': 'Job site address',
@@ -422,6 +424,7 @@ export const es: Record<keyof typeof en, string> = {
   'photos.sv.chooseContact': 'Elige un contacto…',
   'photos.sv.firstName': 'Nombre',
   'photos.sv.lastName': 'Apellido',
+  'photos.sv.company': 'Empresa (o nombre y apellido)',
   'photos.sv.phone': 'Teléfono',
   'photos.sv.email': 'Correo',
   'photos.sv.jobSiteAddress': 'Dirección de la obra',

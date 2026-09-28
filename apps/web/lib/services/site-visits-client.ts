@@ -35,6 +35,8 @@ async function rpc<T>(fn: string, args: Record<string, unknown>): Promise<{ data
 export interface NewContactInput {
   first_name: string;
   last_name: string;
+  /** [S114 C-9] first AND last, OR this — create_site_visit() (20261990000000). */
+  company_name?: string;
   phone?: string;
   email?: string;
 }
