@@ -536,6 +536,22 @@ against rebuild-test's rows has aborted on production twice.
 `subcontractors/[id]/page.tsx:43`. S111 Q4 rules the subcontractor directory readable for this role and the
 database read exists; the UI fails closed. A ruled behaviour that was never delivered.
 
+> **PART C STATUS [S114, 2026-09-28] — evidence: `docs/sessions/S114-C-report.md`.**
+> - **C-1** built on C-branch 1 (reset email → `/auth/confirm?token_hash=…`, one builder for both resets). **DEPLOYED-UNPROVEN**
+>   once merged, until Josh walks the real email on a second device. Allow-list config → `#168`.
+> - **C-2** built (C-branch 1): Photos view = `photos` + daily-log/safety IMAGES; Files unchanged; false comment corrected.
+>   Backfill of the one legacy row = Josh (P2 STEP 2).
+> - **C-3** hotfix **MERGED** `951d2623` (endpoint serves only `bid-scope` files). Document list → `#169`, after PART E. P6 owed.
+> - **C-4** closed on production (P3); /m deletion strip + tray wording built (C-branch 1).
+> - **C-5** built but **moved off** C-branch 1 to `feature/s114-c5-multi-upload`: `#2-s180u` requires one proof PER SURFACE.
+> - **C-6** closed on tests (23/23, sabotage 1 red); Josh's look owed.
+> - **C-7** filed `#166` — deferred, NOT delivered.
+> - **C-8** built (C-branch 1): shared check + route, per-photo freeze, frozen notice; live 10/10, sabotage ×3.
+> - **C-9** app side built (C-branch 1); RPC + /m site-visit form on **C-branch 2** (`20261990000000`, rebuild-test only).
+> - **C-10** built (C-branch 1).
+> - Carried: `project_financials` PE write arms dropped — **C-branch 2** (`20262000000000`, rebuild-test only).
+>   `setup_payment_schedule()` lockout filed `#167` (LIVE DEFECT).
+
 ---
 
 # PART D — security and access lifetime

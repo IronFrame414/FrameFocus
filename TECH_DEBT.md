@@ -12,9 +12,11 @@
 > register) is the assignment authority, unchanged from CLAUDE.md's rule that *main's file is the
 > authority*. **Numbers are IMMUTABLE — never reused, reassigned, or compacted — and they span all
 > THREE files.** The next free number is **one above the highest number appearing in ANY of the
-> three files**. The highest currently allocated is **#165** (in this file — S114 PART A, `#164`–`#165`,
-> 2026-09-28, converted from `#1-s114a`/`#2-s114a` when `feature/s114-pe-operational-arms` landed), so the
-> next free number is **#166**. _Superseded, quoted: "The highest currently allocated is **#163** (in this
+> three files**. The highest currently allocated is **#170** (in this file — S114 PART C, `#166`–`#170`,
+> 2026-09-28, converted from `#1-s114c`–`#5-s114c` when `feature/s114-c-no-migration` landed), so the
+> next free number is **#171**. _Superseded, quoted: "The highest currently allocated is **#165** (in this
+> file — S114 PART A, `#164`–`#165`, 2026-09-28, converted from `#1-s114a`/`#2-s114a` when
+> `feature/s114-pe-operational-arms` landed), so the next free number is **#166**."_ _Earlier superseded, quoted: "The highest currently allocated is **#163** (in this
 > file — the S108 Spec E production-runbook findings, `#159`–`#163`, 2026-09-22), so the next free number
 > is **#164**."_
 > Branch-scoped provisional ids (`#N-<tag>`, per CLAUDE.md → 'Tech-debt
@@ -2326,9 +2328,9 @@ numbering". **RULED Option A [Josh, S180]:** deferred to a focused build; `files
 **⚠️ Per-component verification = a test PER SURFACE**, not one test over the batch: **8 components, 8
 proofs, each stating what it uploaded and what landed.** A single batch test is not acceptance.
 
-## `#1-s114c` — ⚠️ Photo comments: Josh ASKED for this; it is DEFERRED, not delivered
+## `#166` (was `#1-s114c`) — ⚠️ Photo comments: Josh ASKED for this; it is DEFERRED, not delivered
 
-**Provisional branch-scoped id** (`feature/s114-c-no-migration`). **RULED Q9 A [Josh, S114, 2026-09-28]:** filed,
+**Converted to `#166` when `feature/s114-c-no-migration` landed** (was `#1-s114c`). **RULED Q9 A [Josh, S114, 2026-09-28]:** filed,
 not built. Say it plainly: Josh asked for the photo viewer's Comments button to work. The dead button was
 **deleted** (`cc53bbc3`, B-10) — that is not the feature existing. There is no schema (`file_comments` does
 not exist); the i18n key `photos.viewer.comment` is orphaned (`lib/i18n/areas/photos.ts`).
@@ -2342,9 +2344,9 @@ notifications, total role-map tests and no-RETURNING negatives. ~1.5–2.5 sessi
 clients too? (b) do comments reach the client portal? (c) who is notified — uploader, other commenters,
 @mentions? (d) someone WILL type a price into a comment: accepted as-is, or the `#1-cosum` no-price hint?
 
-## `#2-s114c` — ⚠️ LIVE DEFECT: one hand-entered sub expense locks `setup_payment_schedule()` for EVERYONE, Owner included
+## `#167` (was `#2-s114c`) — ⚠️ LIVE DEFECT: one hand-entered sub expense locks `setup_payment_schedule()` for EVERYONE, Owner included
 
-**Provisional branch-scoped id** (`feature/s114-c-no-migration`). **Filed loudly by ruling Q15 [Josh, S114].**
+**Converted to `#167` when `feature/s114-c-no-migration` landed** (was `#2-s114c`). **Filed loudly by ruling Q15 [Josh, S114].**
 Not a Project Executive concern — it bites Josh today.
 
 `setup_payment_schedule()`'s one-schedule-per-contract check is
@@ -2360,9 +2362,9 @@ schedule exists when none does.
 no schedule yet; (3) both. Needs a migration; count affected production rows first:
 `SELECT sub_contract_id, count(*) FROM expenses WHERE sub_contract_id IS NOT NULL AND NOT is_deleted AND NOT is_retainage GROUP BY 1;`
 
-## `#3-s114c` — Production auth redirect allow-list does not match the app's own `?next=` redirects (config, Josh)
+## `#168` (was `#3-s114c`) — Production auth redirect allow-list does not match the app's own `?next=` redirects (config, Josh)
 
-**Provisional branch-scoped id** (`feature/s114-c-no-migration`). **Separate config item by ruling Q2 [Josh, S114]:**
+**Converted to `#168` when `feature/s114-c-no-migration` landed** (was `#3-s114c`). **Separate config item by ruling Q2 [Josh, S114]:**
 a build session does not change production configuration.
 
 Measured 2026-09-28 (Management API GET, read-only): production `site_url = https://EZContractorBinder.com`
@@ -2375,17 +2377,17 @@ longer depends on it — but any other flow sending `?next=/…` still lands on 
 `https://frame-focus-eight.vercel.app/auth/callback**`), same for the other two hosts; lowercase the Site
 URL. Verify by walking a sign-up confirmation email end to end.
 
-## `#4-s114c` — The bid page's document list (C-3), owed after PART E
+## `#169` (was `#4-s114c`) — The bid page's document list (C-3), owed after PART E
 
-**Provisional branch-scoped id** (`feature/s114-c-no-migration`). The S114 C-3 hotfix (`951d2623`, on `main`)
+**Converted to `#169` when `feature/s114-c-no-migration` landed** (was `#4-s114c`). The S114 C-3 hotfix (`951d2623`, on `main`)
 made `GET /api/bid/[token]/files` serve only files tagged `bid-scope`; nothing on `main` sets that tag, so it
 returns an empty list and the page still lists nothing. **Build after `feature/s112-bid-token-status` lands**
 (its migrations 1850/1860/1890 on production first): in `bid-reply-client.tsx`, fetch the list, render name +
 size + a link that re-fetches on click (URLs live 300 s), hidden while `expired || closed`. No migration.
 
-## `#5-s114c` — The client portal splits photos from files by MIME type (R7 deviation)
+## `#170` (was `#5-s114c`) — The client portal splits photos from files by MIME type (R7 deviation)
 
-**Provisional branch-scoped id** (`feature/s114-c-no-migration`). Found in S114 C-2's audit, not changed:
+**Converted to `#170` when `feature/s114-c-no-migration` landed** (was `#5-s114c`). Found in S114 C-2's audit, not changed:
 `lib/services/portal.ts:433` and `:488` decide "photo" vs "file" for the client by `mime_type`, while every
 staff surface decides by `category` (R7, RULED: a scanned plan or photographed permit is a document). A
 client sees a photographed permit among the photos. Fix: the portal reads the same category rule

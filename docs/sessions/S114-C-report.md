@@ -343,3 +343,25 @@ companies → Q18 reversed (control always shown); Q17 (a)–(e) will be "built 
   (with the production count query); `#3-s114c` production auth allow-list config (Josh's dashboard action); `#4-s114c` bid-page
   document list after PART E; `#5-s114c` portal splits photos/files by MIME (R7 deviation).
 - `main` CI **36413800935** running on the C-3 merge `951d2623`; C-branch 1 waits for it (one branch's CI at a time).
+
+### Step 17 — PART B and C-branch 2 applied to rebuild-test; C-branch 1 rebased for CI
+- `main` CI **36413800935** green (43m) on `951d2623` → rebuild-test free.
+- **One `db push --include-all`** (from the PART B branch; 1990/2000 + the four PART E files copied in temporarily, uncommitted,
+  deleted after): dry run listed exactly **1990, 2000, 2010**; push exit 0, "Applying migration" ×3.
+- **By object:** `create_site_visit` md5 `ad38f7f8…`; `qb_enqueue` `fa91dad7…`; `qb_enqueue_job_chain` `165f64ca…` (all as the
+  headers predicted); `project_financials` 4 policies, 1 PE arm (SELECT); `project_qb_exclusions` RLS on, 3 policies; resolvers
+  EXECUTE service_role only (authenticated false, anon false); ledger 3/3.
+- **PART B live** `s114-qb-exclusion` **14/14** (after a fixture fix); sabotage S1+S3 → 4 red, S2 → 5 red; restored, md5s identical;
+  0 fixtures left. Types: only the 3 new blocks (+56) — the generated file's PART E / PART A extras deliberately not taken.
+- **C-branch 2 live:** negative-first red → `s114-pe-financials-drop` 5/5, `s114-create-site-visit-contact` 4/4; sabotage (1910 arms
+  re-created) → 3 red; dropped, md5 identical. ⚠️ **S157 miss caught by re-running:** `s111-project-executive-writes` W2 asserted the
+  PE CAN update `contract_value` on its own project; my single-line grep missed it. Inverted in place (19/19); re-swept with context.
+  Neighbour suites re-run green: s114-pe-operational 42/42, s114-pe-carveouts 15/15, s111-pe-floor 7/7, s97ct-contract-value 12/12,
+  s108-site-visit 35/35, s111-photo-conversion 8/8.
+- ⚠️ **Process note:** earlier today I ran C-2/C-8/C-5 live tests while the C-3 hotfix CI was using rebuild-test. Each used only its
+  own fixtures and cleaned to zero, and that CI passed — but it broke the "no live runs while CI is live" convention. From Step 17
+  on, live runs waited for CI.
+- **C-branch 1** rebased onto `951d2623` (28 commits, clean). Debt converted **`#1-s114c`–`#5-s114c` → `#166`–`#170`**; authority
+  line advanced to **`#171`** (old text quoted). Spec PART C status block added.
+- Drift check: the new objects (1990/2000/2010) will be flagged by the daily fingerprint cron like PART A's — same known cause
+  (`#1-s112f`, baseline from rebuild-test); fingerprint NOT regenerated (it would absorb PART E's unmerged objects).
