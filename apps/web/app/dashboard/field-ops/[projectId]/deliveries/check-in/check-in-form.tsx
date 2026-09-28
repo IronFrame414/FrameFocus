@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { checkInDelivery } from '@/lib/services/deliveries-client';
 import { uploadFile } from '@/lib/services/files-client';
 import { useAlert } from '@/components/confirm/confirm-provider';
+import { uploadRemaining } from '@/lib/uploads/upload-batch';
 
 // 6D — check-in form: the crew's two-slips comparison, on desktop. Against a
 // PO the lines prefill from the order with received at 0 — the crew counts
@@ -123,40 +124,46 @@ export function CheckInForm({ projectId, todayYmd, preselectedPoId, openPos }: C
     setItems((rows) => rows.map((r, j) => (j === i ? { ...r, ...patch } : r)));
   }
 
+  // [S114 C-5] bounded (3 in flight) and every failure NAMED — not the first
+  // one and a `break` that silently dropped the rest of the pick. Re-picking
+  // the named files retries just those.
   async function handleLinePhotoUpload(i: number, files: FileList | null) {
     if (!files || files.length === 0) return;
     setItem(i, { uploading: true });
-    for (const file of Array.from(files)) {
-      // Project-pooled (Q7): main job file, category 'photos'. client_visible
-      // defaults false, so these stay portal-hidden. The check-in route binds
-      // each photo to its delivery line and tags damage lines' photos.
-      const result = await uploadFile(file, { project_id: projectId, category: 'photos' });
-      if (result.success && result.id) {
-        const photo = { id: result.id, name: file.name };
-        setItems((rows) =>
-          rows.map((r, j) => (j === i ? { ...r, photos: [...r.photos, photo] } : r))
-        );
-      } else {
-        setError(`Photo "${file.name}": ${result.error ?? 'upload failed'}`);
-        break;
+    const out = await uploadRemaining(
+      Array.from(files),
+      new Map(),
+      async (file) => {
+        const result = await uploadFile(file, { project_id: projectId, category: 'photos' });
+        if (result.success && result.id) {
+          const photo = { id: result.id, name: file.name };
+          setItems((rows) => rows.map((r, j) => (j === i ? { ...r, photos: [...r.photos, photo] } : r)));
+          return { success: true, id: result.id };
+        }
+        return { success: false, error: result.error, storageLimited: result.storageLimited };
       }
-    }
+    );
+    if (out.message) setError(out.message);
     setItem(i, { uploading: false });
   }
 
   async function handleDeliveryPhotoUpload(files: FileList | null) {
     if (!files || files.length === 0) return;
     setDeliveryPhotosUploading(true);
-    for (const file of Array.from(files)) {
-      const result = await uploadFile(file, { project_id: projectId, category: 'photos' });
-      if (result.success && result.id) {
-        const photo = { id: result.id, name: file.name };
-        setDeliveryPhotos((p) => [...p, photo]);
-      } else {
-        setError(`Photo "${file.name}": ${result.error ?? 'upload failed'}`);
-        break;
+    const out = await uploadRemaining(
+      Array.from(files),
+      new Map(),
+      async (file) => {
+        const result = await uploadFile(file, { project_id: projectId, category: 'photos' });
+        if (result.success && result.id) {
+          const photo = { id: result.id, name: file.name };
+          setDeliveryPhotos((p) => [...p, photo]);
+          return { success: true, id: result.id };
+        }
+        return { success: false, error: result.error, storageLimited: result.storageLimited };
       }
-    }
+    );
+    if (out.message) setError(out.message);
     setDeliveryPhotosUploading(false);
   }
 

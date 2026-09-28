@@ -18,6 +18,7 @@ import {
   type PersonRowInput,
 } from '@/lib/services/safety-client';
 import { useAlert } from '@/components/confirm/confirm-provider';
+import { uploadRemaining } from '@/lib/uploads/upload-batch';
 
 // 6C §U — incident create/edit form (path A — no handoff design; mobile
 // foundation). Injured parties and witnesses are member-OR-outsider rows
@@ -296,11 +297,18 @@ export function IncidentForm({
     }
 
     if (targetId) {
+      // [S114 C-5] bounded (3 in flight) through the shared runner; the same
+      // named message. _Superseded:_ a serial loop.
       const failed: string[] = [];
       if (effectiveProjectId) {
-        for (const file of pendingPhotos) {
-          const result = await uploadIncidentPhoto(file, effectiveProjectId, targetId);
-          if (!result.success) failed.push(`${file.name}: ${result.error ?? 'upload failed'}`);
+        const projectForPhotos = effectiveProjectId;
+        const out = await uploadRemaining(pendingPhotos, new Map(), (file) =>
+          uploadIncidentPhoto(file, projectForPhotos, targetId)
+        );
+        for (const it of out.items) {
+          if (it.status === 'failed' || it.status === 'skipped') {
+            failed.push(`${it.file.name}: ${it.error ?? 'upload failed'}`);
+          }
         }
       }
       if (failed.length > 0) {

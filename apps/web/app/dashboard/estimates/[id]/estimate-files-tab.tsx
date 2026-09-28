@@ -1,6 +1,7 @@
 'use client';
 
 import { prepareImageForUpload } from '@/lib/services/files-client';
+import { uploadRemaining, type UploadOutcome } from '@/lib/uploads/upload-batch';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { fmtMoney } from '../labels';
 import { useFileSheet } from '@/components/files/file-sheet';
@@ -9,6 +10,7 @@ import type {
   ApiErrorResponse,
   EstimateFileListResponse,
   EstimateFileListItem,
+  EstimateFileUploadResponse,
   EstimateFileUrlResponse,
 } from '@/lib/api-contracts/estimate-files';
 
@@ -75,33 +77,48 @@ export default function EstimateFilesTab({
     void load();
   }, [load]);
 
-  async function onPick(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    e.target.value = '';
-    if (!file) return;
+  // [S114 C-5, RULED Josh] SEVERAL FILES AT ONCE — bounded (3 in flight),
+  // failures NAMED, and "Retry failed" uploads only those. The route still
+  // takes one file per POST; the batch is the loop. _Superseded:_ a
+  // single-file picker (`e.target.files?.[0]`).
+  const lastPick = useRef<{ files: File[]; done: Map<File, string | undefined> } | null>(null);
+  const [retryable, setRetryable] = useState(false);
+
+  async function uploadOne(file: File): Promise<UploadOutcome> {
     if (file.size > MAX_MB * 1024 * 1024) {
-      setError(`File too large. Max size is ${MAX_MB} MB.`);
-      return;
+      return { success: false, error: `${file.name} is too large (max ${MAX_MB} MB).` };
     }
-    setUploading(true);
-    setError(null);
     try {
       // [S111] HEIC → JPEG first, the same step every other upload runs.
       const { file: prepared } = await prepareImageForUpload(file);
       const form = new FormData();
       form.append('file', prepared);
       const res = await fetch(`/api/estimates/${estimateId}/files`, { method: 'POST', body: form });
-      const body = await res.json();
-      if (!res.ok) {
-        setError(body.error ?? 'Upload failed.');
-        return;
-      }
-      await load();
+      const body = (await res.json()) as Partial<EstimateFileUploadResponse> & { error?: string };
+      if (!res.ok) return { success: false, error: body.error ?? 'Upload failed.' };
+      return { success: true, id: body.file?.id };
     } catch {
-      setError('Upload failed.');
-    } finally {
-      setUploading(false);
+      return { success: false, error: 'Upload failed.' };
     }
+  }
+
+  async function runPick() {
+    if (!lastPick.current) return;
+    setUploading(true);
+    setError(null);
+    const out = await uploadRemaining(lastPick.current.files, lastPick.current.done, uploadOne);
+    setUploading(false);
+    setError(out.message);
+    setRetryable(out.unfinished > 0);
+    await load();
+  }
+
+  async function onPick(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files ?? []);
+    e.target.value = '';
+    if (files.length === 0) return;
+    lastPick.current = { files, done: new Map() };
+    await runPick();
   }
 
   const cell: React.CSSProperties = { padding: '0.5rem 0.75rem', fontSize: '0.875rem' };
@@ -136,6 +153,7 @@ export default function EstimateFilesTab({
               ref={inputRef}
               type="file"
               accept={ALLOWED}
+              multiple
               onChange={onPick}
               style={{ display: 'none' }}
             />
@@ -146,6 +164,15 @@ export default function EstimateFilesTab({
       {error && (
         <div style={{ padding: '0.5rem 0.75rem', borderRadius: '0.375rem', backgroundColor: '#fdf1f0', color: '#c0362c', fontSize: '0.8125rem', marginBottom: '0.75rem' }}>
           {error}
+          {retryable && !uploading && (
+            <button
+              type="button"
+              onClick={() => void runPick()}
+              style={{ marginLeft: '0.5rem', background: 'none', border: 'none', color: '#2f49d1', fontWeight: 600, cursor: 'pointer' }}
+            >
+              Retry failed
+            </button>
+          )}
         </div>
       )}
 

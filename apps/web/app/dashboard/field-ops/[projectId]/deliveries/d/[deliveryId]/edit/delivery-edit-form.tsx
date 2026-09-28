@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { saveDeliveryEdit } from '@/lib/services/deliveries-client';
 import { uploadFile } from '@/lib/services/files-client';
+import { uploadRemaining } from '@/lib/uploads/upload-batch';
 
 // 6D — delivery correction form. PO-linked lines keep their po_item_id and
 // descriptions (the order defines them); orderless lines are fully editable.
@@ -79,39 +80,46 @@ export function DeliveryEditForm({
     setItems((rows) => rows.map((r, j) => (j === i ? { ...r, ...patch } : r)));
   }
 
+  // [S114 C-5] bounded (3 in flight) and every failure NAMED — not the first
+  // one and a `break` that silently dropped the rest of the pick. Re-picking
+  // the named files retries just those.
   async function handleLinePhotoUpload(i: number, files: FileList | null) {
     if (!files || files.length === 0) return;
     setItem(i, { uploading: true });
-    for (const file of Array.from(files)) {
-      // Project-pooled, category 'photos', client_visible default false —
-      // the save route binds each to its line and tags damage lines' photos.
-      const result = await uploadFile(file, { project_id: projectId, category: 'photos' });
-      if (result.success && result.id) {
-        const photo = { id: result.id, name: file.name };
-        setItems((rows) =>
-          rows.map((r, j) => (j === i ? { ...r, newPhotos: [...r.newPhotos, photo] } : r))
-        );
-      } else {
-        setError(`Photo "${file.name}": ${result.error ?? 'upload failed'}`);
-        break;
+    const out = await uploadRemaining(
+      Array.from(files),
+      new Map(),
+      async (file) => {
+        const result = await uploadFile(file, { project_id: projectId, category: 'photos' });
+        if (result.success && result.id) {
+          const photo = { id: result.id, name: file.name };
+          setItems((rows) => rows.map((r, j) => (j === i ? { ...r, newPhotos: [...r.newPhotos, photo] } : r)));
+          return { success: true, id: result.id };
+        }
+        return { success: false, error: result.error, storageLimited: result.storageLimited };
       }
-    }
+    );
+    if (out.message) setError(out.message);
     setItem(i, { uploading: false });
   }
 
   async function handleDeliveryPhotoUpload(files: FileList | null) {
     if (!files || files.length === 0) return;
     setDeliveryPhotosUploading(true);
-    for (const file of Array.from(files)) {
-      const result = await uploadFile(file, { project_id: projectId, category: 'photos' });
-      if (result.success && result.id) {
-        const photo = { id: result.id, name: file.name };
-        setDeliveryPhotos((p) => [...p, photo]);
-      } else {
-        setError(`Photo "${file.name}": ${result.error ?? 'upload failed'}`);
-        break;
+    const out = await uploadRemaining(
+      Array.from(files),
+      new Map(),
+      async (file) => {
+        const result = await uploadFile(file, { project_id: projectId, category: 'photos' });
+        if (result.success && result.id) {
+          const photo = { id: result.id, name: file.name };
+          setDeliveryPhotos((p) => [...p, photo]);
+          return { success: true, id: result.id };
+        }
+        return { success: false, error: result.error, storageLimited: result.storageLimited };
       }
-    }
+    );
+    if (out.message) setError(out.message);
     setDeliveryPhotosUploading(false);
   }
 

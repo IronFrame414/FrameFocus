@@ -172,6 +172,18 @@ test.describe('A-20b · every field image input, not just the tab bar', () => {
         : lib.locator('input[type=file]');
       await expect(input).toHaveAttribute('accept', 'image/*');
       await expect(input).not.toHaveAttribute('capture', /./);
+      // [S114 C-5] the LIBRARY picks several (PARITY with each desktop twin).
+      await expect(input).toHaveAttribute('multiple', '');
+    });
+
+    test(`${c.what} camera stays single — one capture is one shot [S114 C-5]`, async ({ page }) => {
+      await page.goto(c.url);
+      if (c.open) await page.getByTestId(c.open).click();
+      const cam = page.getByTestId(c.camera);
+      const input = (await cam.evaluate((n) => n.tagName.toLowerCase())) === 'input'
+        ? cam
+        : cam.locator('input[type=file]');
+      await expect(input).not.toHaveAttribute('multiple', /.*/);
     });
   }
 
@@ -192,6 +204,9 @@ test.describe('A-20b · every field image input, not just the tab bar', () => {
 
     const lib = page.getByTestId('m-damage-photo-library-0').locator('input[type=file]');
     await expect(lib).not.toHaveAttribute('capture', /./);
+    // [S114 C-5] library picks several; the camera stays single.
+    await expect(lib).toHaveAttribute('multiple', '');
+    await expect(cam).not.toHaveAttribute('multiple', /.*/);
   });
 });
 
