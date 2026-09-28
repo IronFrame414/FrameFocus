@@ -7,7 +7,7 @@
 ⚠️ **A FILL you cannot fill must say why, in one line. Never delete a marker.**
 ⚠️ **If a measurement contradicts a RULED line, STOP and report — do not reconcile it.**
 
-Source of items: `S181-open-items-audit.md` (2026-09-27), `docs/specs/S113-SPEC-open-items.md`, and
+Source of items: `docs/specs/S114-open-items.md` (2026-09-27), `docs/specs/S113-SPEC-open-items.md`, and
 Josh's rulings of 2026-09-27. Each PART is independently shippable and has its own branch.
 
 ⚠️ **Items marked `[CLAIM]` in the audit are unverified.** Several were reported done or reported
