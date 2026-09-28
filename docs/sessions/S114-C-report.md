@@ -332,3 +332,14 @@ companies → Q18 reversed (control always shown); Q17 (a)–(e) will be "built 
 - **C-5 status: built, UNPROVEN per #2-s180u** — owed: one live/e2e proof per surface. Not merged.
 - ⚠️ My Phase 2 ASK-6 (Q7) did not cite `#2-s180u`; Josh's "A — as listed" ruling was made without it in front of him. Raised in
   the final report.
+
+### Step 16 — C-6 closed on a test re-run (ruling Q8 A); debt filed
+- `test/s112-client-proposal.test.tsx` **23/23** on C-branch 1. Sabotage: the signing page's Summary-with-Descriptions block
+  (`lib/proposal/proposal-html.tsx:406`) disabled → **1 failed / 22 passed**; restored, md5 OK. (A first sabotage attempt did not
+  apply — anchor text absent — and its "23 passed" measured nothing; caught by the assertion, re-run with the real line.)
+  C-6 = **closed on tests**; Josh's look at a real proposal goes on the click list.
+- Debt filed on C-branch 1 (provisional, converted at landing): `#1-s114c` photo comments — deferred, NOT delivered (four
+  rulings open); `#2-s114c` **LIVE DEFECT** `setup_payment_schedule()` locked for everyone by one hand-entered sub expense
+  (with the production count query); `#3-s114c` production auth allow-list config (Josh's dashboard action); `#4-s114c` bid-page
+  document list after PART E; `#5-s114c` portal splits photos/files by MIME (R7 deviation).
+- `main` CI **36413800935** running on the C-3 merge `951d2623`; C-branch 1 waits for it (one branch's CI at a time).
