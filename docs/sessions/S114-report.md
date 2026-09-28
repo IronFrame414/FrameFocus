@@ -210,3 +210,15 @@ Only after: carve-outs 15/15 with every sabotage red and restored (Step 6), and 
   moves spec F-4's "next free is #164" for `#1-pe`–`#3-pe` (not touched, by instruction) to #166+ — noted in the spec.
 - tsc exit 0; unit 132 files / 1837 tests exit 0; lint exit 0; `next build` exit 0 (133/133). origin/main = 210683b0, contained.
 - Requesting CI on this HEAD (no `[skip ci]`).
+
+## Step 11 — merge under R8 (the scoped override covers the production half only; the merge conditions are R8's own)
+
+1. **CI green on the branch containing current `main`:** run **36367076516** on **44e07148** — Lint & Type Check success, E2E (Playwright)
+   success. `origin/main` = 210683b0, an ancestor of 44e07148 (`git merge-base --is-ancestor origin/main 44e07148` exit 0).
+   Tree-identity exemption for this commit: the only path changed after 44e07148 is `docs/sessions/S114-report.md`
+   (`git diff --name-only 44e07148 HEAD`), which build, tests and runtime never read.
+2. **Every agreed check passed, with its measurement:** carve-outs 15/15 + sabotage rounds A/B1/B2 red and restored md5-identical;
+   operational 42/42 + rounds C/D red and restored; existing PE live suites 53/53; other-role suites 119/119; unit 1837/1837; lint 0;
+   `next build` 0 (133/133); CI 36364688797 and 36367076516 green.
+3. **Every migration on production, verified by object:** 20261940/1950/1960/1970/1980 — Step 9 tables; final dry run "Remote database
+   is up to date"; `pe_profiles_now 0`.
