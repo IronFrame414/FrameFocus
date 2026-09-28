@@ -319,6 +319,14 @@ measures the READ policy, not the write policy. Each with its own sabotage that 
 > ⚠️ **Stated limit:** `contract_documents` UPDATE **cannot** be isolated: the PE has no SELECT on it, so
 > the SELECT policy refuses first. That arm stays bounded by the SELECT arm, whose absence N7's fixture
 > confirms (PE reads 0 of 1).
+>
+> **FILLED — executed [S114, rebuild-test].** 15 probes (N6 split into N6 `scope_of_work` / N6f
+> `contract_value` / N6v void after round A showed the first N6 measured the column-scope TRIGGER, not RLS; N9i/N9u
+> added for Q2). Negative-first: N9i/N9u **red** before `20261980000000` (PE inserted an amount 0→1 and changed a
+> value 50000→1), green after. Sabotage: round A (9 arms + `setup_payment_schedule`) → N1 N2 N3 N4 N5 N7 N8 N9i N9u
+> red; B1 (UPDATE arms) → N4 N6 red, N4v N6f N6v held by their triggers; B2 (+ 3 triggers disabled) → N4v N6f N6v
+> red. Every sabotage restored; policies md5 `379fda4a…` and function md5s read back identical. Clean: 15/15.
+> Full record: `docs/sessions/S114-report.md` Step 6.
 
 **FILL-A-5** — PARITY. Every surface the role now reaches, on `/m` **and** desktop. ⚠️ Every item in this
 program that shipped one surface came back as a defect; `/m`'s `readsChangeOrders()` omitted the PE while
@@ -343,6 +351,26 @@ desktop listed them.
 > (desktop; `/m` project team reads); expenses entry (`/m` capture + desktop expenses through one
 > predicate); timesheets (desktop). Each gets a live check per surface in Phase 3, or a line saying why
 > that surface does not exist.
+>
+> **FILLED — after the build [S114, 2026-09-28]. PARITY per surface, one mechanism each.** Authority is the
+> database (20261940–1980), identical for every surface and proven by `s114-pe-operational.live.ts` (42/42,
+> ON lands / BARE refused). What differs per surface is only whether a control is offered, and every offer now
+> reads one predicate (`managesProjectOperations` / `supervisesProjectWork`, `packages/shared/constants/roles.ts`).
+> | Surface | `/m` | Desktop | Mechanism shared |
+> | --- | --- | --- | --- |
+> | Photo / file upload | capture screen, check-in, punch photo | Files upload, Photos "Add photos", selection sheet, deliveries | `uploadFile()` (`lib/services/files-client.ts`) on both; storage arm + `files_insert_project_executive` |
+> | Tasks / phases / inspections | read (RLS) — no `/m` write surface exists | schedule panel `supervisesProjectWork` | DB arms |
+> | Punch verify / delete | `punch-actions.tsx` `supervisesProjectWork` | `punch-panel.tsx` + `lib/services/punch-client.ts` `supervisesProjectWork` | **one predicate, three sites** (was three hand copies) |
+> | Purchase orders | check-in only (already `can_view_project`) | deliveries + field-ops PO pages, `api/pos/[id]/send` → `managesProjectOperations` | DB arms + the three PO functions |
+> | Selections | no `/m` surface (stated) | tab, lifecycle, sheet, 2 API routes → one predicate | DB arms |
+> | Project team / contacts | read | `managesProjectOperations` | DB arms |
+> | Project status | no `/m` control (stated) | `canTransition` → `managesProjectOperations`; archive/trash O/A in the DB | `projects_update_project_executive` |
+> | Expenses / bills | capture (unchanged; its O/A-only controls exclude the PM too) | expenses page + split editor → predicates | `expenses_insert_project_executive`, `create_budget_line_at_capture` |
+> | Chat | shared `lib/chat` | shared `lib/chat` | `chat_can_post`, sub-thread arm, `may_enter_client_thread` |
+> | Change orders | `readsChangeOrders` (S181) | CO pages | unchanged; `s181-m-co-access.test.ts` |
+> | Cost catalog (read) | no `/m` surface (stated) | nav + list; manage stays O/A/PM | `cost_catalog_select_project_executive` |
+> | Notifications (Q8) | both, server-side | both, server-side | `receivesAssignedProjectAlerts`; incident PEs by the incident's project |
+> | Timesheets | closed (Q7 C, `#2-s114a`) | closed | — |
 
 **FILL-A-6** — **Last step.** Remove `project_executive` from `WITHHELD_ROLES`, invert the
 `desktop-team.spec.ts` invite-options assertion in place with the old count quoted, and confirm both
