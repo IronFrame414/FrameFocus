@@ -290,3 +290,24 @@ companies → Q18 reversed (control always shown); Q17 (a)–(e) will be "built 
   canvas renders (the existing /m canvas vs desktop editor, as for project photos).
 - **Unattended decision:** desktop markup from the estimate-builder mount returns to `/dashboard/site-visits/[id]`, not the
   estimate builder. Alternative: carry a `?from=`. Narrower: no new routing parameter.
+
+### Step 13 — C-5 built (`77b181af`, C-branch 1)
+- `multiple`: /m library pickers daily log, delivery check-in, incident (PARITY with desktop twins) + desktop estimate attachments.
+  Camera inputs stay single. e2e `m-capture-camera.spec.ts` now asserts both (library `multiple`, camera not).
+- `uploadRemaining()` over the existing `runUploadBatch` (concurrency 3, named failures, retry = same call with the same map,
+  only unfinished files). Applied: /m log (done screen names + Retry), /m incident (Retry / Continue on page — the old error was
+  set and then the page navigated away), /m check-in (named, nothing submitted, re-submit retries just those), desktop log /
+  incident / expense receipts (bounded, same named messages), desktop check-in + delivery edit (a `break` used to drop the rest of
+  a pick), **selection thread (a failed photo was silently DROPPED and the message posted without it — defect fixed)**, site-visit
+  record (failures still held offline, same ids), estimate attachments (+ Retry failed).
+- **FILL-C-5.3 timing** (`s114-upload-timing.live.ts`, rebuild-test, owner session, 10 × 3.2 MB incompressible PNG = 32 MB):
+  concurrency 1: upload+rows **3,161 ms** + thumbnails **638 ms** = **3,799 ms**; concurrency 3: **1,383 ms** + **667 ms** = **2,050 ms**.
+  10/10 landed and 10/10 thumbnails both runs; 0 fixtures left. ⚠️ Measured from the Codespace (datacenter bandwidth), not a phone
+  on cellular; the upload leg on a phone will be network-bound and longer. HEIC conversion not exercised.
+- Tests: `s114-upload-remaining.test.ts` 3/3 (named failure + retry-only-that-one; peak in flight = 3 for 10; storage-limit stops
+  the queue); sabotage (retry re-uploads everything) → 1 red; restored md5 OK. Full unit suite **137 files / 1,882 tests** green. tsc 0.
+- **Not changed, stated:** client portal messages (photos go in one multipart POST, stored server-side — no client loop); the /m
+  capture tray (its own hold/retry); the single-purpose inputs kept single per the ruling.
+- **Residuals (unattended, narrower):** desktop check-in / delivery edit / log / incident / receipts name failures but have no
+  in-form Retry button (re-pick, or re-attach from Edit as their messages already say). A photo that UPLOADS but fails to LINK
+  (`uploadDailyLogPhoto` "uploaded but not linked") is retried as a new upload, leaving one unlinked file row — pre-existing shape.
