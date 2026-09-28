@@ -74,3 +74,19 @@ Branch for this log and the spec fold: `feature/s115-report` (docs-only).
 **Verdict (FILL-C-11.1): no handler on desktop.** Not an RLS 0-row success. The fix is a real desktop photo delete through the same `softDeleteFile`, plus the markup button's disabled look.
 **FILL-C-11.2:** today "delete" = soft delete (`is_deleted=true`, `deleted_at`), row and storage object kept (restorable from Trash via `getTrash()`); thumbnails/derivatives are untouched because the row survives; any daily log / estimate / sent document referencing the row keeps its reference. A frozen site-visit photo refuses with an error.
 **FILL-C-11.3 PARITY:** `/m` works for owner/admin; desktop has nothing. ⚠️ Role gap: CLAUDE.md "Delete files: Owner/Admin/PM ✓"; `/m` gates owner/admin only; RLS lets PM/foreman/crew soft-delete. → ASK.
+
+### Phase 1 — R10 (measured; Explore agent, policy counts from its greps)
+| what | number / location | command |
+| --- | --- | --- |
+| where original lines live | `project_budget_items` (line; no money column since `20260817000000` dropped `budgeted_amount`) + `project_budget_amounts.budgeted_amount` (one row per line, UNIQUE `budget_item_id`) | `database.ts:6125,6173` |
+| "original" as data | no origin enum; derived: `source_change_order_id IS NULL AND (source_line_row_id IS NOT NULL OR source_line_item_id IS NOT NULL)` (created by `convert_estimate_to_project`, latest `20261770000000:260,286`) | read |
+| writers of the two tables | 53 write statements across migrations, mapped to 6 writers (conversion, CO apply, capture RPC, misc line, 2 recompute triggers) + app `createAdHocBudgetLine` | `grep -nE "(INSERT INTO\|UPDATE\|DELETE FROM) (public\.)?project_budget_(items\|amounts)"` → 53 |
+| policies | 10 CREATE/DROP/ALTER POLICY statements; cross-check grep 22 lines, no extra | `grep -nE "(CREATE\|DROP\|ALTER) POLICY[^;]*ON (public\.)?project_budget_(items\|amounts)"` → 10 |
+| `project_budget_items` UPDATE/DELETE | **no policy — deliberate.** `20260818000000_budget_line_immutability.sql` table comment: "THE ABSENCE OF UPDATE AND DELETE POLICIES ON THIS TABLE IS DELIBERATE… the answer is a new line via a change order." Guarded by `test/s97ct-budget-immutability.live.ts` via `budget_line_policy_digest()` | read |
+| `project_budget_amounts` writers | owner/admin INSERT/UPDATE (`20260816000000`), PE INSERT/UPDATE on own projects (`20261910000000:105,107`). **No PM arm, read or write** | read |
+| lock triggers | none (only updated_at/updated_by) | read |
+| edit UI today | **none** on desktop (`budget/page.tsx` read-only for lines) or `/m` (no budget route) | read |
+| "first invoice issued" | `invoices.status IN ('sent','paid','voided')` ⇔ `sent_at IS NOT NULL` (draft/pending_approval are unissued; `issue_date` defaults on drafts so unusable). Must be evaluated SECURITY DEFINER: a PM sees only invoices it authored (`20261038000000:70`) | read |
+
+⚠️ **R10 collides with the Financial Visibility Floor for the PM.** An original line's only money is `project_budget_amounts.budgeted_amount`, which the Floor withholds from a PM for **read and write** (budgeted/sell is Owner/Admin — and PE on own projects). "PM may edit original budget line items" therefore either (a) lets the PM write a figure it cannot see, or (b) opens the figure to the PM. (b) is stop rule 4. → ASK; the PM arm is withheld, the rest is built.
+⚠️ R10 also overturns the S97 immutability ruling for original lines (R10 is Josh's newer ruling, so it governs); the S97 test is inverted in place, not deleted.
