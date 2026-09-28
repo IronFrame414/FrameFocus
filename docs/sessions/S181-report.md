@@ -625,3 +625,29 @@ Dry run (exit 0): exactly one, `20261920000000_s181_pe_expense_and_money_file_re
 | `ledger_row` | 1 | 1 |
 | `arms` | 4 | 4 |
 | `anon_can_run` | false | false |
+
+### Section 5 — `20261930000000_s181_pe_lien_releases` — APPLIED, VERIFIED
+
+Dry run (exit 0): exactly one, `20261930000000_s181_pe_lien_releases.sql`. Push (exit 0): `Applying migration
+20261930000000_s181_pe_lien_releases.sql...` → `Finished supabase db push.`
+
+| column | measured | expected |
+| --- | --- | --- |
+| `ledger_row` | 1 | 1 |
+| `public_arms` | 7 | 7 |
+| `storage_arm` | 1 | 1 |
+| `delete_arms` | 0 | 0 |
+| `template_write_arms` | 0 | 0 |
+| `anon_can_run` | 0 | 0 |
+
+### After all five — combined check on production, and Step 9
+
+A final `db push --dry-run --include-all` (exit 0) returned `Remote database is up to date.` The combined query (the one handed to Josh)
+returned: `ledger_rows 5`, `newest_migration 20261930000000`, `pe_profiles_now 0`, both role CHECKs true, `grant_policies_with_pe 3`,
+`pe_read_arms 19` (13 + 3 from #4 + 3 from #5), `pe_write_arms 19` (17 + 2 from #5), `pe_functions 11` (7 + 1 + 3),
+`pe_functions_anon_can_run 0`, the five post-migration hashes as in Sections 1–3, `contract_void_has_pe false`, `invoice_insert_has_pe true`,
+`expense_file_read_arms 4`, `lien_public_arms 7`, `lien_storage_arm 1`, `delete_arms 0`, `template_write_arms 0`. No row was written to
+production beyond the five migrations; no Project Executive exists there.
+
+Step 9: `npx supabase link --project-ref nmyphyhmfttxkdoposvf` exit 0; `supabase/.temp/project-ref` reads back **`nmyphyhmfttxkdoposvf`**.
+`/tmp/s181-hold` empty; all five migration files back in `supabase/migrations/`.
