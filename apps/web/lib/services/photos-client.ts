@@ -42,21 +42,37 @@ export type MarkupSaveResult =
 // the same rasteriser, at different sizes. A-23c (always from the ORIGINAL,
 // never from the previous derivative) is enforced there.
 
+/**
+ * [S114 C-8] WHERE A SAVE GOES. A project photo is written by the caller's own
+ * session (RLS, as since M6M). A SITE-VISIT capture is an estimate file
+ * (`project_id IS NULL`) that the session policies admit for Owner/Admin only,
+ * so it is posted to `/api/estimates/[id]/files/[fileId]/markup`, which runs
+ * the shared `authorizeSiteVisitMarkup()` check and writes the same two things
+ * in the same order with the service role. Same flatten, same result type,
+ * both surfaces.
+ */
+export type MarkupSaveTarget = { kind: 'project' } | { kind: 'site_visit'; estimateId: string };
+
 export async function saveMarkup(
   fileId: string,
   filePath: string,
   originalUrl: string,
   shapes: MarkupShape[],
-  imageDims: { w: number; h: number }
+  imageDims: { w: number; h: number },
+  target: MarkupSaveTarget = { kind: 'project' }
 ): Promise<MarkupSaveResult> {
-  const supabase = createClient();
-
   const markup: MarkupData = {
     version: MARKUP_SCHEMA_VERSION,
     imageWidth: imageDims.w,
     imageHeight: imageDims.h,
     shapes,
   };
+
+  if (target.kind === 'site_visit') {
+    return saveSiteVisitMarkup(target.estimateId, fileId, originalUrl, markup);
+  }
+
+  const supabase = createClient();
 
   // ---------------------------------------------------------------------
   // ORDER: markup_data FIRST.
@@ -80,6 +96,14 @@ export async function saveMarkup(
     .select('markup_data');
 
   if (rowError) return { status: 'failed', error: rowError.message };
+  // [S114 C-8] ZERO ROWS IS NOT A SAVE. An UPDATE that RLS filters out affects
+  // no row and returns no error; this used to fall through to the derivative
+  // write, fail there, and tell the user "Marks saved, but the flattened image
+  // could not be written" — when the marks were NOT saved. Both surfaces use
+  // this function, so both were wrong the same way.
+  if ((storedRows ?? []).length !== 1) {
+    return { status: 'failed', error: 'You do not have permission to mark up this photo.' };
+  }
 
   // [S112 R1] The STORED derivative is DISPLAY-SIZE (2,048 px long edge). It
   // is what every surface shows; exports rebuild full resolution on demand
@@ -120,5 +144,46 @@ export async function saveMarkup(
   // [S112 3c] The viewer shows THESE bytes instead of downloading them back.
   const stored = storedRows?.[0]?.markup_data;
   if (stored) rememberLocalDerivative(fileId, markupFingerprint(stored), blob);
+  return { status: 'saved' };
+}
+
+/** [S114 C-8] The site-visit branch of `saveMarkup` — see MarkupSaveTarget. */
+async function saveSiteVisitMarkup(
+  estimateId: string,
+  fileId: string,
+  originalUrl: string,
+  markup: MarkupData
+): Promise<MarkupSaveResult> {
+  const blob = await flattenMarked({ originalUrl, markup, maxEdge: DISPLAY_MAX_EDGE });
+  if (!blob) {
+    // Nothing was written: the route writes markup_data and the derivative
+    // together, so without the image there is nothing to send.
+    return { status: 'failed', error: 'The marked-up image could not be generated.' };
+  }
+  const form = new FormData();
+  form.set('markup', JSON.stringify(markup));
+  form.set('derivative', blob, 'markup.jpg');
+  let res: Response;
+  try {
+    res = await fetch(`/api/estimates/${estimateId}/files/${fileId}/markup`, {
+      method: 'POST',
+      body: form,
+    });
+  } catch {
+    return { status: 'failed', error: 'No connection — the marks were not saved.' };
+  }
+  const body = (await res.json().catch(() => ({}))) as {
+    status?: string;
+    error?: string;
+    markup_data?: unknown;
+  };
+  if (!res.ok) return { status: 'failed', error: body.error ?? 'The marks could not be saved.' };
+  if (body.status === 'derivative_failed') {
+    return {
+      status: 'derivative_failed',
+      error: body.error ?? 'The marked-up image could not be written.',
+    };
+  }
+  if (body.markup_data) rememberLocalDerivative(fileId, markupFingerprint(body.markup_data), blob);
   return { status: 'saved' };
 }

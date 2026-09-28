@@ -67,7 +67,13 @@ export default async function DesktopSiteVisitPage({ params }: { params: { id: s
           finishedAt={detail.visit.finished_at}
         />
       ) : null}
-      <SiteVisitRecord detail={detail} canWrite={access !== null} viewerUserId={user.id} office={office} />
+      <SiteVisitRecord
+        detail={detail}
+        canWrite={access !== null}
+        viewerUserId={user.id}
+        office={office}
+        markupBasePath={`/dashboard/site-visits/${params.id}/photos`}
+      />
     </div>
   );
 }

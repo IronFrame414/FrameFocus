@@ -45,6 +45,12 @@ export interface EstimateFileUrlResponse {
    * a tile then uses `url` (ruled: never an invisible photo).
    */
   thumb_url: string | null;
+  /**
+   * [S114 C-8] The marked-up derivative (`.markup.jpg`) when the file carries
+   * markup — what a marked photo DISPLAYS. Null when there is no markup or the
+   * derivative is missing; the consumer then shows `url`.
+   */
+  display_url: string | null;
 }
 
 /** Every error body these routes return. */

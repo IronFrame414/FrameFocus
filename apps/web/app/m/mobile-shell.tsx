@@ -264,7 +264,11 @@ export function showsBackChevron(pathname: string): boolean {
  * below are the dark screens.
  */
 export function isDarkCanvasScreen(pathname: string): boolean {
-  return /^\/m\/p\/[^/]+\/photos\/[^/]+/.test(pathname);
+  // [S114 C-8] + the site-visit photo markup screen, which is the same canvas.
+  return (
+    /^\/m\/p\/[^/]+\/photos\/[^/]+/.test(pathname) ||
+    /^\/m\/site-visits\/[^/]+\/photos\/[^/]+\/markup/.test(pathname)
+  );
 }
 
 /** Fallback titles for screens that have not declared their own (see mobile-header.tsx). */

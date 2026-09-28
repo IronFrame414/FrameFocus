@@ -6,7 +6,7 @@ import { SIGNED_URL_TTL_SECONDS } from '@/lib/services/signed-url-ttl';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@framefocus/shared/types/database';
 import type { EstimateFileUrlResponse } from '@/lib/api-contracts/estimate-files';
-import { thumbPathFor } from '@framefocus/shared/utils/markup';
+import { derivativePathFor, hasMarkup, thumbPathFor } from '@framefocus/shared/utils/markup';
 
 // S109 #161 [RULED Josh, 161.B] — SIGN ON CLICK, NOT AT LIST TIME.
 //
@@ -74,9 +74,16 @@ export async function GET(
   // — one Storage request per file, as before (per-photo signing was measured
   // to exhaust Storage's connections). An absent thumbnail is just absent.
   const thumbPath = file.mime_type.startsWith('image/') ? thumbPathFor(file.file_path, file.markup_data) : null;
+  // [S114 C-8] A marked-up site-visit photo DISPLAYS its derivative (D-31), in
+  // the same single sign call. Absent → null, and the tile uses `url`.
+  const derivPath =
+    file.mime_type.startsWith('image/') && hasMarkup(file.markup_data) ? derivativePathFor(file.file_path) : null;
   const { data: batch, error: signErr } = await admin.storage
     .from(BUCKET)
-    .createSignedUrls(thumbPath ? [file.file_path, thumbPath] : [file.file_path], SIGNED_URL_TTL_SECONDS);
+    .createSignedUrls(
+      [file.file_path, ...(thumbPath ? [thumbPath] : []), ...(derivPath ? [derivPath] : [])],
+      SIGNED_URL_TTL_SECONDS
+    );
   const signedFor = (p: string) => (batch ?? []).find((d) => d.path === p && !d.error)?.signedUrl ?? null;
   const signed = { signedUrl: signedFor(file.file_path) };
   if (signErr || !signed.signedUrl) {
@@ -95,5 +102,6 @@ export async function GET(
     file_name: file.file_name,
     mime_type: file.mime_type,
     thumb_url: thumbPath ? signedFor(thumbPath) : null,
+    display_url: derivPath ? signedFor(derivPath) : null,
   } satisfies EstimateFileUrlResponse);
 }

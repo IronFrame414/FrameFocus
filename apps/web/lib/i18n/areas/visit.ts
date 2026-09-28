@@ -41,6 +41,11 @@ export const en = {
   'visit.photos.after': 'Added after it was sent',
   'visit.photos.filesTabStays': "Files added from the estimate's Files tab stay there.",
   'visit.photos.add': 'Add photos',
+  // [S114 C-8] markup on a site-visit photo. The frozen notice says WHY, on the tile itself.
+  'visit.photos.frozenNotice': "Part of a sent estimate — can't be annotated.",
+  'visit.photos.markup': 'Mark up',
+  'visit.photos.markupTitle': 'Mark up photo',
+  'visit.photos.backToVisit': 'Back to the site visit',
   // ── banners ──
   'visit.promoted.title': 'This visit is now an estimate.',
   'visit.promoted.canWrite': 'The team can still add to it and fix it here until the estimate is sent.',
@@ -146,6 +151,10 @@ export const es: Record<keyof typeof en, string> = {
   'visit.photos.filesTabStays':
     'Los archivos agregados desde la pestaña Archivos del presupuesto se quedan ahí.',
   'visit.photos.add': 'Agregar fotos',
+  'visit.photos.frozenNotice': 'Parte de un presupuesto enviado — no se puede marcar.',
+  'visit.photos.markup': 'Marcar',
+  'visit.photos.markupTitle': 'Marcar foto',
+  'visit.photos.backToVisit': 'Volver a la visita',
   'visit.promoted.title': 'Esta visita ya es un presupuesto.',
   'visit.promoted.canWrite':
     'El equipo todavía puede agregar y corregir cosas aquí hasta que se envíe el presupuesto.',

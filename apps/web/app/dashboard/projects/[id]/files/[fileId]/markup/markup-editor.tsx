@@ -3,7 +3,11 @@
 import * as React from 'react';
 import { useRouter } from 'next/navigation';
 import { type MarkupData, type MarkupShape } from '@framefocus/shared/types/markup';
-import { saveMarkup, type MarkupSaveResult } from '@/lib/services/photos-client';
+import {
+  saveMarkup,
+  type MarkupSaveResult,
+  type MarkupSaveTarget,
+} from '@/lib/services/photos-client';
 
 type Tool = 'arrow' | 'circle' | 'rectangle' | 'pen' | 'text' | 'select';
 
@@ -26,6 +30,10 @@ interface MarkupEditorProps {
   filePath: string;
   imageUrl: string;
   initialMarkup: MarkupData | null;
+  /** [S114 C-8] Omitted for a project file; a site-visit capture saves through its route. */
+  saveTarget?: MarkupSaveTarget;
+  /** [S114 C-8] Where to go after a save; omitted = stay and refresh (unchanged). */
+  savedHref?: string;
 }
 
 export default function MarkupEditor({
@@ -33,6 +41,8 @@ export default function MarkupEditor({
   filePath,
   imageUrl,
   initialMarkup,
+  saveTarget,
+  savedHref,
 }: MarkupEditorProps) {
   const router = useRouter();
   const svgRef = React.useRef<SVGSVGElement | null>(null);
@@ -269,13 +279,16 @@ export default function MarkupEditor({
       filePath,
       imageUrl,
       shapes,
-      imageDims
+      imageDims,
+      saveTarget
     );
 
     setSaving(false);
 
     if (result.status === 'saved') {
       setDirty(false);
+      // Push first, then refresh (the S112 action-queue lesson, markup-canvas.tsx).
+      if (savedHref) router.push(savedHref);
       router.refresh();
       return;
     }

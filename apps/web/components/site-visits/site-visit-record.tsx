@@ -17,7 +17,8 @@ import { useOfflineSync } from '@/app/m/offline-sync';
 import { ErrorNotice, useOnline } from '@/app/m/write-ui';
 import { VoiceNotes } from './voice-notes';
 import { resolveSiteVisitMedia } from '@/lib/site-visits/media';
-import { addedAfterSend, type Phase } from '@/lib/site-visits/photos';
+import { addedAfterSend, isFrozenCapture, type Phase } from '@/lib/site-visits/photos';
+import Link from 'next/link';
 import type { EstimateFileListResponse } from '@/lib/api-contracts/estimate-files';
 import { useT } from '@/components/i18n/language-provider';
 import { UserText } from '@/components/i18n/user-text';
@@ -245,6 +246,8 @@ interface PhotoFile {
   url: string | null;
   /** [S111 D] Stored thumbnail for the tile; null → `url`. */
   thumbUrl: string | null;
+  /** [S114 C-8] The marked-up derivative, when marked; null → `url`. */
+  displayUrl: string | null;
   phase: Phase;
 }
 
@@ -253,6 +256,7 @@ export function SiteVisitRecord({
   canWrite,
   viewerUserId,
   office,
+  markupBasePath,
 }: {
   detail: SiteVisitDetail;
   /** site_visit_access() said this viewer may ADD — every status [S110 A]. */
@@ -260,6 +264,13 @@ export function SiteVisitRecord({
   viewerUserId: string;
   /** Owner/Admin/PM. Finishing the visit is the office's or the recorder's. */
   office: boolean;
+  /**
+   * [S114 C-8] Where a photo's markup opens: `${markupBasePath}/${fileId}/markup`.
+   * Each MOUNT supplies its own surface's route (/m or desktop) — a string, not a
+   * function, because the /m and desktop pages are server components. The
+   * component does not inspect its URL. Omitted → no markup entry point.
+   */
+  markupBasePath?: string;
 }) {
   const router = useRouter();
   const t = useT();
@@ -273,7 +284,10 @@ export function SiteVisitRecord({
   // [S110 A] stamped by the database when the estimate is sent (and moved
   // forward at its outcome). Everything created at or before it is frozen.
   const frozenAt = detail.visit.frozen_at ?? null;
-  const isFrozen = (createdAt: string | null) => !!frozenAt && !!createdAt && createdAt <= frozenAt;
+  // [S114 C-8] the database's own rule, stated once (lib/site-visits/photos.ts).
+  // _Superseded, quoted:_ `!!frozenAt && !!createdAt && createdAt <= frozenAt` — a
+  // STRING compare of two timestamps, correct only while both share a format.
+  const isFrozen = (createdAt: string | null) => isFrozenCapture(createdAt, frozenAt);
   const recordedByMe = detail.visit.created_by === viewerUserId;
   const [confirmingFinish, setConfirmingFinish] = useState(false);
 
@@ -427,15 +441,41 @@ export function SiteVisitRecord({
                 </p>
               ) : null}
               <div className="grid grid-cols-3 gap-[6px]">
-                {group.map((p) =>
-                  p.url ? (
+                {group.map((p) => {
+                  if (!p.url) {
+                    return <div key={p.id} data-testid="sv-photo-missing" className="aspect-square rounded-[8px] bg-m6m-border" />;
+                  }
+                  // [S111 D] The stored thumbnail (of the marked version, when
+                  // marked — its name carries the markup fingerprint), else the
+                  // derivative [S114 C-8], else the full original.
+                  const img = (
                     // eslint-disable-next-line @next/next/no-img-element
-                    // [S111 D] The stored thumbnail, or the full file when there is none.
-                    <img key={p.id} data-testid="sv-photo" src={p.thumbUrl ?? p.url} alt={p.file_name} className="aspect-square w-full rounded-[8px] object-cover" />
-                  ) : (
-                    <div key={p.id} data-testid="sv-photo-missing" className="aspect-square rounded-[8px] bg-m6m-border" />
-                  )
-                )}
+                    <img data-testid="sv-photo" src={p.thumbUrl ?? p.displayUrl ?? p.url} alt={p.file_name} className="aspect-square w-full rounded-[8px] object-cover" />
+                  );
+                  const frozen = isFrozen(p.created_at);
+                  // [S114 C-8, RULED Josh] PER PHOTO (Q10 A). A frozen photo says
+                  // WHY, on the tile — never a missing or dead control.
+                  if (frozen) {
+                    return (
+                      <div key={p.id} data-testid="sv-photo-frozen" className="relative">
+                        {img}
+                        {canWrite ? (
+                          <span className="absolute inset-x-0 bottom-0 rounded-b-[8px] bg-black/60 px-[4px] py-[2px] text-center text-[10px] leading-tight text-white">
+                            {t('visit.photos.frozenNotice')}
+                          </span>
+                        ) : null}
+                      </div>
+                    );
+                  }
+                  if (canWrite && online && markupBasePath) {
+                    return (
+                      <Link key={p.id} href={`${markupBasePath}/${p.id}/markup`} data-testid="sv-photo-markup" aria-label={`${t('visit.photos.markup')}: ${p.file_name}`} className="block">
+                        {img}
+                      </Link>
+                    );
+                  }
+                  return <div key={p.id}>{img}</div>;
+                })}
               </div>
             </div>
           );

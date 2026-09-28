@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { MarkupShapes } from '@framefocus/shared/components/MarkupViewer';
 import type { MarkupShape } from '@framefocus/shared/types/markup';
 import { nextPinNumber } from '@framefocus/shared/utils/markup';
-import { saveMarkup, type MarkupSaveResult } from '@/lib/services/photos-client';
+import { saveMarkup, type MarkupSaveResult, type MarkupSaveTarget } from '@/lib/services/photos-client';
 // Moved out of this route folder for #129 [S122] — the desktop editor now
 // writes the SAME derivative from the SAME rasteriser. A flattener living under
 // /m implied mobile owned the format; it does not.
@@ -60,6 +60,7 @@ export function MarkupCanvas({
   initialShapes,
   imageDims,
   returnHref,
+  saveTarget,
 }: {
   fileId: string;
   filePath: string;
@@ -70,6 +71,8 @@ export function MarkupCanvas({
   imageDims: { w: number; h: number };
   /** A-24d — where Cancel/Done return to, carrying the originating record. */
   returnHref: string;
+  /** [S114 C-8] Omitted for a project photo; a site-visit capture saves through its route. */
+  saveTarget?: MarkupSaveTarget;
 }) {
   const router = useRouter();
   const t = useT();
@@ -279,7 +282,8 @@ export function MarkupCanvas({
       filePath,
       originalUrl,
       shapes,
-      imageDims
+      imageDims,
+      saveTarget
     );
 
     setSaving(false);

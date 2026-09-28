@@ -34,6 +34,7 @@ export default async function SiteVisitPage({ params }: { params: { id: string }
       <SetMobileHeader title={detail.visit.title} sub={[who, where].filter(Boolean).join(' · ') || null} />
       <SiteVisitRecord
         detail={detail}
+        markupBasePath={`/m/site-visits/${params.id}/photos`}
         canWrite={access !== null}
         viewerUserId={user?.id ?? ''}
         office={access === 'office' || ['owner', 'admin', 'project_manager'].includes(profile?.role ?? '')}

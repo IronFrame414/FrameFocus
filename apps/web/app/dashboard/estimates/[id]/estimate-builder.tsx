@@ -692,7 +692,13 @@ export function EstimateBuilder({
               {siteVisit.visit.finished_at ? ` · finished ${new Date(siteVisit.visit.finished_at).toLocaleString()}` : ''}
               {siteVisit.visit.promoted_at ? ` · became this estimate ${new Date(siteVisit.visit.promoted_at).toLocaleDateString()}` : ''}
             </p>
-            <SiteVisitRecord detail={siteVisit} canWrite={siteVisitCanWrite} viewerUserId={userId} office />
+            <SiteVisitRecord
+              detail={siteVisit}
+              canWrite={siteVisitCanWrite}
+              viewerUserId={userId}
+              office
+              markupBasePath={`/dashboard/site-visits/${siteVisit.visit.estimate_id}/photos`}
+            />
           </div>
         )}
         {activeTab === 'cover' && <CoverTab {...tabProps} />}
