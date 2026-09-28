@@ -548,3 +548,28 @@ so CI runs on HEAD for the first time since `487db131`. ⚠️ **Merge waits for
 migrations is on production).
 
 **CI result:** run `36357719601` on `173f9f31`: **success**. "Lint & Type Check" success, "E2E (Playwright)" success (`gh run watch --exit-status` exit 0; `gh run view` headSha `173f9f31c6d1…`). The commit after it touches only this report (`docs/`), the delta the tree-identity exemption allows; the path list is in that commit.
+
+## S181d — production apply (one-time authorization, these five migrations only)
+
+Instrument for every database fact below: `npx supabase db query --linked -f <file> -o json` (Management API), run only after
+`supabase/.temp/project-ref` read back `jwkcknyuyvcwcdeskrmz`. Control that the query reached production and not rebuild-test:
+`newest_migration` read `20261880000000`; rebuild-test already carries all five S181 migrations.
+
+Pre-flight deviation, stated: `git status --short` showed one untracked file, `docs/specs/S114-open-items.md` (Josh's, open in his editor,
+not this session's). `git status --short supabase/` was empty (exit 0), so the migrations directory was whole. Proceeded on that basis.
+
+### Step 0 — production pre-check — PASSED (every value matched)
+
+| column | measured | expected |
+| --- | --- | --- |
+| `pe_profiles_now` | 0 | 0 |
+| `newest_migration` | 20261880000000 | 20261880000000 |
+| `already_recorded` | NULL | NULL |
+| `role_check_has_pe` | false | false |
+| `md5_time_role_rank` | b5a19b8363dc23d257470fb6f5e1b047 | b5a19b8363dc23d257470fb6f5e1b047 |
+| `md5_record_client_payment` | 94da59462b5d7d66e36531d85abf53dd | 94da59462b5d7d66e36531d85abf53dd |
+| `md5_invoice_void` | 29b35ed5727d17c9bb0d1ee33634ee30 | 29b35ed5727d17c9bb0d1ee33634ee30 |
+| `md5_invoice_scope` | e7d1b870f0a9e6319b36b6d35a615e8a | e7d1b870f0a9e6319b36b6d35a615e8a |
+| `md5_co_void` | 56bfb56299e35fce3040b9d9fb4fb65a | 56bfb56299e35fce3040b9d9fb4fb65a |
+| `profiles_by_role` | admin=1 crew_member=3 foreman=1 owner=2 | known roles only |
+| `invitations_by_role` | admin=2 crew_member=10 foreman=5 | known roles only, no owner |
