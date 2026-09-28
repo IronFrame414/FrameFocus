@@ -491,6 +491,19 @@ explaining WHY — "part of a sent estimate, can't be annotated" — not a missi
 across both surfaces. The eventual answer for sent visits is a derivative that never writes back to the
 sent record; do not design that now.
 
+**C-9. The contact form requires both names even when a company is given.** Josh, 2026-09-28: adding a
+contact requires first **and** last name; it should require **first and last name OR a company name**.
+⚠️ **Audit by what is CALLED, not by what matches a filter.** Every contact-creation path — the contacts
+screen, client contacts, subcontractor contacts, anything the estimate or proposal flow creates — not just
+the one form Josh was looking at.
+**FILL-C-9.1** — Is the requirement client-side validation, a server check, a NOT NULL, or a CHECK? If it is
+a database constraint, it needs a migration **and a production row count first** — a constraint written
+against rebuild-test's rows has aborted on production twice.
+
+**C-10. The subcontractor detail page still redirects a Project Executive.**
+`subcontractors/[id]/page.tsx:43`. S111 Q4 rules the subcontractor directory readable for this role and the
+database read exists; the UI fails closed. A ruled behaviour that was never delivered.
+
 ---
 
 # PART D — security and access lifetime
@@ -548,8 +561,14 @@ admit the exact sequence, live.
 **F-3. `#3-pe`** — the PE reading stored contract files on its own projects. Read-only, resolving the
 project through the file's subject, with a no-returning negative and its own sabotage.
 
-**F-4.** Renumber `#1-pe`, `#2-pe`, `#3-pe` once the branch lands. Next free on `main` is `#164`.
-> [S114] `#164`–`#165` were taken by PART A's own debt when it landed; next free is now **`#166`**.
+**F-4.** Renumber `#1-pe`, `#2-pe`, `#3-pe` once the branch lands. Next free on `main` is **`#166`** or
+later — take it from `TECH_DEBT.md` on `main` at landing, never from this line.
+> **[CORRECTED S114 PART C, per F-10.]** Superseded text, quoted: "Next free on `main` is `#164`."
+> PART A took `#164` (Q6 double-booking, was `#1-s114a`) and `#165` (Q7 timesheets, was `#2-s114a`) when it
+> landed at `2269a9a9`, and advanced the authority line to `#166`.
+
+**F-10. Debt numbering moved.** PART A took `#164` and `#165` and advanced the authority line to `#166`.
+F-4 is corrected in place above, with the old text quoted.
 
 **F-5. CLAUDE.md** is 391 lines against a 350 target. ⚠️ **No rule is deleted.** Every line that leaves
 is compressed in place or moved to a named file; anything proposed for deletion is listed for Josh.
@@ -595,6 +614,13 @@ Español on `/m`; a proposal with a Spanish name; a row dragged in Safari on a M
 **G-5. The performance pass**, once the region question is answered: the main screens on production as a
 real user, with time-to-interactive, transferred bytes, request count and the slowest server call,
 ranked.
+
+**G-6. The PART A click-test is owed, not passed.** Josh deferred it on 2026-09-28. The Project Executive
+exists on production and is assigned to one project. Nobody has confirmed: that an unassigned project is
+invisible to it; that Budget, Invoices, Profitability, Payments, Change Orders and Lien Releases show money;
+that it can create a task, see the schedule and upload a photo; and that it has no route to edit or void a
+contract. ⚠️ **PART A is not verified.** (G-1 is done by Josh; G-2's last clause — the forms do not offer
+the role — is superseded by FILL-A-6, which now offers it.)
 
 ---
 
