@@ -176,3 +176,22 @@ Nothing built. No migration written. Questions ASK-1 … ASK-18 are in the chat 
 ### Step 5 — Rulings received (Josh, 2026-09-28)
 All 19 answered; recorded in `docs/sessions/S114-C-questions.md` § RULINGS. Build begins. Order: C-3 hotfix (own branch, own
 shipment) → C-branch 1 (C-1, C-10, C-9 app, C-2 per P1, C-8, C-5, C-4 notice, filings) → C-branch 2 → PART B.
+
+### Step 6 — C-3 hotfix, its own shipment (`feature/s114-c3-bid-scope-hotfix`, from `main` 2269a9a9, commit `5a486f38`)
+- **Change:** `GET /api/bid/[token]/files` adds `.contains('tags', ['bid-scope'])`; `bidderCanSeeFile` requires `BID_SCOPE_TAG`.
+  Same tag value as `feature/s112-bid-token-status` (PART E), so that branch lands on top without renames. No migration.
+  `canShareWithBidders` (PART E's UI helper) deliberately not ported — no share control on `main`.
+- **Negative first:** `s107-bid-upload-e2e.live.ts` given a tagged scope doc (positive control) + an untagged `site_visit_capture`
+  staff photo. On the OLD code: **red**, `expected 2 to be 1` (the bidder received the unshared photo). 1 failed / 4 passed (5).
+- **After fix:** unit `s107-bidder-file-visibility.test.ts` **7/7**; live **5/5**. Fixture cleanup verified by SQL: files 0,
+  objects 0, estimates 0 left.
+- **Sabotage** (each restored; `md5sum -c` both files OK): A — query filter removed → live 5/5 green (lib guard holds alone);
+  B — lib tag rule removed → live 5/5 green (query guard holds alone), unit **2 failed / 5 passed**; A+B → live **red**
+  (`expected 2 to be 1`). The two guards are independently sufficient, as the file's comment claims.
+- **Inverted in place, old text quoted:** unit test (`staffScopeDoc`, describe title, "OTHER tags is still visible" → hidden);
+  live test (`toBe(2)` → `toBe(3)`); e2e `s112-anon-exercise.spec.ts` scope PDF now tagged `bid-scope`.
+- Formatting: route and all three tests are NOT Prettier-formatted on `main` → edited by hand; `sub-bid-files.ts` is formatted
+  and still passes `prettier --check`.
+- `tsc --noEmit` exit 0; `next lint` on both files exit 0; **`next build` exit 0** (printed line read).
+- Pushed; CI run **36410492460** in progress. Merge under R8 when green on current `main` (branch is cut from current `main`).
+- ⚠️ **P6 is now the most urgent production query** (Josh): which live tokens exist and what they could reach.
