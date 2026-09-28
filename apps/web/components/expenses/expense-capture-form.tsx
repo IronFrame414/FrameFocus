@@ -45,6 +45,7 @@ import {
 } from '@/lib/theme';
 import { overlayStyle, fieldLabelStyle, inputStyle } from '@/components/time/clock-modal';
 import { CAPTURE_CATEGORY_LABELS, ExpenseStatusChip } from './expense-ui';
+import { uploadRemaining } from '@/lib/uploads/upload-batch';
 
 export interface ExpenseCaptureFormProps {
   /** Job picker options. Omit to have the form fetch active projects itself
@@ -191,11 +192,14 @@ export function ExpenseCaptureForm({
   }, [projectsProp]);
 
   async function uploadPhotos(expenseId: string, targetProjectId: string): Promise<string | null> {
-    const failures: string[] = [];
-    for (const photo of photos) {
-      const res = await uploadExpenseReceipt(photo, targetProjectId, expenseId);
-      if (!res.success) failures.push(`${photo.name}: ${res.error ?? 'upload failed'}`);
-    }
+    // [S114 C-5] bounded (3 in flight) through the shared runner; the same
+    // named message. _Superseded:_ a serial loop.
+    const out = await uploadRemaining(photos, new Map(), (photo) =>
+      uploadExpenseReceipt(photo, targetProjectId, expenseId)
+    );
+    const failures = out.items
+      .filter((it) => it.status === 'failed' || it.status === 'skipped')
+      .map((it) => `${it.file.name}: ${it.error ?? 'upload failed'}`);
     return failures.length > 0 ? `Some receipt photos failed: ${failures.join('; ')}` : null;
   }
 

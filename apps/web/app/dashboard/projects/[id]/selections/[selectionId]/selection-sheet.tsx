@@ -22,6 +22,7 @@ import type { CostCatalogItem } from '@/lib/services/cost-catalog-client';
 import { OptionThumb, StatusPill, UrlThumb } from '../selections-tab';
 import { inheritPlaceholder, optionSell } from '@/lib/selections/option-sell';
 import { SelectionLifecycle } from './selection-lifecycle';
+import { uploadRemaining } from '@/lib/uploads/upload-batch';
 
 // ============================================================================
 // §9.1 — the company selection sheet. [S171, stage 3]
@@ -453,6 +454,7 @@ function Thread({ selection, projectId, myProfileId, thread, canPost, run }: { s
   const [link, setLink] = useState('');
   const [files, setFiles] = useState<File[]>([]);
   const paths = useImagePaths((f) => setFiles((p) => [...p, f]));
+  const uploadedThreadPhotos = useRef(new Map<File, string | undefined>());
   async function post() {
     if (!body.trim() && files.length === 0) return;
     let threadId = thread.threadId;
@@ -461,13 +463,18 @@ function Thread({ selection, projectId, myProfileId, thread, canPost, run }: { s
       if (!t.success || !t.id) return run(async () => ({ success: false, error: t.error ?? 'Could not open the thread' }));
       threadId = t.id;
     }
-    const ids: string[] = [];
-    for (const f of files) {
+    // [S114 C-5] bounded, and a failed photo STOPS the post with its name —
+    // posting again uploads only the ones still missing. _Superseded, quoted:_
+    // `if (r.success && r.id) ids.push(r.id);` — a failed photo was dropped and
+    // the message posted without it, silently.
+    const out = await uploadRemaining(files, uploadedThreadPhotos.current, async (f) => {
       const r = await uploadFile(f, { project_id: projectId, category: 'photos', tags: ['selection-thread'] });
-      if (r.success && r.id) ids.push(r.id);
-    }
+      return r.success && r.id ? { success: true, id: r.id } : { success: false, error: r.error, storageLimited: r.storageLimited };
+    });
+    if (out.unfinished > 0) return run(async () => ({ success: false, error: out.message ?? 'A photo did not upload.' }));
+    const ids = files.map((f) => uploadedThreadPhotos.current.get(f)).filter((id): id is string => !!id);
     const r = await run(() => postSelectionMessage({ thread_id: threadId!, author_profile_id: myProfileId, body: body.trim() || '(photo)', link_url: link.trim() || null, photo_file_ids: ids }));
-    if ((r as { success: boolean }).success) { setBody(''); setLink(''); setFiles([]); }
+    if ((r as { success: boolean }).success) { setBody(''); setLink(''); setFiles([]); uploadedThreadPhotos.current = new Map(); }
   }
   return (
     <section style={card} data-testid="sel-thread">

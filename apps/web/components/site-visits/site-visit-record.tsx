@@ -19,6 +19,7 @@ import { VoiceNotes } from './voice-notes';
 import { resolveSiteVisitMedia } from '@/lib/site-visits/media';
 import { addedAfterSend, isFrozenCapture, type Phase } from '@/lib/site-visits/photos';
 import Link from 'next/link';
+import { uploadRemaining } from '@/lib/uploads/upload-batch';
 import type { EstimateFileListResponse } from '@/lib/api-contracts/estimate-files';
 import { useT } from '@/components/i18n/language-provider';
 import { UserText } from '@/components/i18n/user-text';
@@ -333,10 +334,22 @@ export function SiteVisitRecord({
     if (!files || files.length === 0) return;
     setError(null);
     let held = 0;
-    for (const file of Array.from(files)) {
-      const id = crypto.randomUUID();
-      const r = online ? await uploadSiteVisitPhoto(estimateId, file, file.name, id) : { success: false };
-      if (r.success) continue;
+    // [S114 C-5] online uploads go through the shared bounded runner (3 in
+    // flight); whatever did not land is then HELD exactly as before. Each file
+    // keeps one id across the attempt and the hold, so a held photo is the
+    // same row when it lands. _Superseded:_ a serial loop.
+    const picked = Array.from(files);
+    const ids = new Map(picked.map((f) => [f, crypto.randomUUID()] as const));
+    const landed = new Map<File, string | undefined>();
+    if (online) {
+      await uploadRemaining(picked, landed, async (f) => {
+        const r = await uploadSiteVisitPhoto(estimateId, f, f.name, ids.get(f)!);
+        return r.success ? { success: true, id: ids.get(f) } : { success: false, error: r.error };
+      });
+    }
+    for (const file of picked) {
+      if (landed.has(file)) continue;
+      const id = ids.get(file)!;
       // A weak signal reads as online and fails — the same fallback as M6M
       // capture: ANY failure is held, never dropped.
       if (!offlineSync) {

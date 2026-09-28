@@ -14,6 +14,7 @@ import {
   type SubEntryInput,
 } from '@/lib/services/daily-logs-client';
 import { useAlert } from '@/components/confirm/confirm-provider';
+import { uploadRemaining } from '@/lib/uploads/upload-batch';
 
 // 6B-1 §4 — shared create/edit form (path A: no handoff design; ui-01
 // tokens). Crew auto-fills from the presence RPC on date change (create
@@ -183,11 +184,14 @@ export function LogForm({
     if (targetId) {
       // Log-bound photo uploads (S87) — now that the log id exists. Failures
       // don't lose the log; they surface before the redirect.
-      const failed: string[] = [];
-      for (const file of pendingPhotos) {
-        const result = await uploadDailyLogPhoto(file, projectId, targetId);
-        if (!result.success) failed.push(`${file.name}: ${result.error ?? 'upload failed'}`);
-      }
+      // [S114 C-5] bounded (3 in flight) through the shared runner; the same
+      // named message. _Superseded:_ a serial loop.
+      const out = await uploadRemaining(pendingPhotos, new Map(), (file) =>
+        uploadDailyLogPhoto(file, projectId, targetId)
+      );
+      const failed = out.items
+        .filter((it) => it.status === 'failed' || it.status === 'skipped')
+        .map((it) => `${it.file.name}: ${it.error ?? 'upload failed'}`);
       if (failed.length > 0) {
         void alert(
           `The log saved, but ${failed.length} photo(s) did not attach:\n${failed.join('\n')}\nYou can re-attach them from Edit.`

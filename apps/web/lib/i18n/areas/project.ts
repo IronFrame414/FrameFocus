@@ -263,6 +263,11 @@ export const en = {
   // ── incident report ──
   'project.incident.fileFailed': 'The report could not be filed.',
   'project.incident.photoFailed': 'A photo failed to upload; the report is filed.',
+  // [S114 C-5] named, with a retry of just those.
+  'project.incident.photosFailedNamed': 'The report is filed, but {n} photo(s) did not upload: {names}.',
+  'project.incident.retryPhotos': 'Retry those photos',
+  'project.incident.continue': 'Continue without them',
+  'project.checkIn.photosFailedNamed': '{n} photo(s) did not upload — nothing was submitted: {names}. Submit again to retry just those.',
   'project.incident.title': 'Report incident',
   'project.incident.type': 'TYPE',
   'project.incident.whoHurt': 'WHO WAS HURT',
@@ -517,6 +522,10 @@ export const es: Record<keyof typeof en, string> = {
   'project.incidentType.near_miss': 'Casi accidente',
   'project.incident.fileFailed': 'No se pudo enviar el reporte.',
   'project.incident.photoFailed': 'No se pudo subir una foto; el reporte sí se envió.',
+  'project.incident.photosFailedNamed': 'El reporte se envió, pero {n} foto(s) no se subieron: {names}.',
+  'project.incident.retryPhotos': 'Reintentar esas fotos',
+  'project.incident.continue': 'Continuar sin ellas',
+  'project.checkIn.photosFailedNamed': '{n} foto(s) no se subieron — no se envió nada: {names}. Envía de nuevo para reintentar solo esas.',
   'project.incident.title': 'Reportar incidente',
   'project.incident.type': 'TIPO',
   'project.incident.whoHurt': 'QUIÉN SE LASTIMÓ',
