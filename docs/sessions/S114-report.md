@@ -130,3 +130,11 @@ Teardown after every round: 0 projects left. Clean final: carve-outs **15/15**, 
 - Requesting CI on this HEAD (no `[skip ci]`).
 
 ## Step 8 — CI on the build: run 36364688797 on 763667b2 — **success** (Lint & Type Check success, E2E (Playwright) success)
+
+## Step 9 — PRODUCTION (jwkcknyuyvcwcdeskrmz), worked under Josh's scoped override — runbook `S114-PRODUCTION-RUNBOOK.md`
+
+**Step 0.** `project-ref` read `nmyphyhmfttxkdoposvf` → `supabase link --project-ref jwkcknyuyvcwcdeskrmz` exit 0 → reads
+`jwkcknyuyvcwcdeskrmz`. Read-only pre-check (`supabase db query --linked`, exit 0), every value as expected:
+`pe_profiles_now 0` · `newest_migration 20261930000000` · `s114_ledger_rows 0` · `pe_read_arms 19` · `pe_write_arms 19` (ends-with
+pattern) · `contract_amount_arms 2` · `upload_helper 0` · `fn_md5_before` = the 1960 header exactly (c420c2c3 / ac7cfdfb / 42b561a9 /
+28969ada / 9fcbda5e / 030fa292 / 7c596d84) · `pe_on_project` 97c8c884 and `is_assigned_to_project` e105a6c0 = rebuild-test.
