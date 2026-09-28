@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase-server';
 import { getSiteVisit, getSiteVisitAccess } from '@/lib/services/site-visits';
 import { SiteVisitRecord } from '@/components/site-visits/site-visit-record';
 import { SiteVisitOfficeActions } from './office-actions';
+import { contactDisplayName } from '@framefocus/shared/utils/contact-name';
 
 // S108 Spec A — a site visit on DESKTOP. The record itself is the SAME component
 // the phone renders (PARITY [S122]); for the OFFICE this page adds the two office
@@ -40,7 +41,7 @@ export default async function DesktopSiteVisitPage({ params }: { params: { id: s
   if (!detail) notFound();
   const access = await getSiteVisitAccess(params.id);
   const who = detail.visit.contact
-    ? `${detail.visit.contact.first_name} ${detail.visit.contact.last_name}`.trim()
+    ? contactDisplayName(detail.visit.contact)
     : null;
   const where = detail.visit.address
     ? `${detail.visit.address.address_line1}, ${detail.visit.address.city}, ${detail.visit.address.state} ${detail.visit.address.zip}`
@@ -66,7 +67,13 @@ export default async function DesktopSiteVisitPage({ params }: { params: { id: s
           finishedAt={detail.visit.finished_at}
         />
       ) : null}
-      <SiteVisitRecord detail={detail} canWrite={access !== null} viewerUserId={user.id} office={office} />
+      <SiteVisitRecord
+        detail={detail}
+        canWrite={access !== null}
+        viewerUserId={user.id}
+        office={office}
+        markupBasePath={`/dashboard/site-visits/${params.id}/photos`}
+      />
     </div>
   );
 }

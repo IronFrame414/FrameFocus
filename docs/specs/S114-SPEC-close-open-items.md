@@ -423,9 +423,23 @@ do not decide.
 sync today, what objects does it push, from which code paths, and is it automatic or triggered? Do not
 trust `7G-spec` or any context file; read the code and say what you found.
 
+> **FILLED [S114 PART C/B Phase 1, from code + rebuild-test catalog]** (full evidence: `docs/sessions/S114-C-report.md` Steps 2–3). A working integration. Pushes are
+> **automatic**: five AFTER triggers (`invoices`, `expenses`, `expense_payments`, `client_payments`, `client_refunds`) call
+> `qb_enqueue()`, gated only on `companies.qb_realm_id`; `qb_enqueue_job_chain` adds the client Customer. A Vercel cron
+> (`/api/cron/qb-sync`, 5 min) drains the queue per connected company. Objects pushed: Customer, Invoice (create/update/void),
+> Payment, CreditMemo/RefundReceipt, Purchase (create/update/delete; receipts and expense payments), Vendor inline. **No project
+> object exists in QuickBooks**: everything posts to the client's Customer, the project is memo text. Inbound: webhook + CDC
+> backstop record QB payments here.
+
 **FILL-B-2** — ⚠️ **Audit by what is CALLED, not by what matches a catalog filter.** Every path that can
 push a record to QuickBooks must honour the flag. A path found by naming convention and not by call
 graph is a path that will keep syncing.
+
+> **FILLED [S114 Phase 1].** Every push is born in `qb_enqueue()` (all five triggers, the job chain) and leaves through the worker's
+> `handleQueueRow`. TS writers to `qb_sync_queue` only reschedule/mark/terminal-fail existing rows (`income-item:97`,
+> `customer-conflict:170-176`, `callback:189`); TS `enqueue()` has no non-test caller. The one direct push outside the queue is
+> `customer-conflict/route.ts:125` (creates a Customer when an Owner/Admin resolves a name clash) — a Customer is per client, not per
+> project. Design gates both choke points: entry (skip enqueue) and exit (drop a row queued before the exclusion).
 
 **FILL-B-3** — The flag: column, default, and the policy that lets **only an Owner** set it.
 ⚠️ **Authority in the database, not the UI** — a gate controlling only rendering still ships the data in
@@ -444,8 +458,14 @@ records pushed to QuickBooks. He runs it.
 **C-1. Password reset is unusable on production.** `[CLAIM]` The email's link verifies then lands on the
 site root, which does not exchange the PKCE code.
 **FILL-C-1.1** — Does the app pass `redirectTo` to `resetPasswordForEmail`? File and line.
+> **FILLED.** Yes: `app/forgot-password/page.tsx:19-21`, `${origin}/auth/callback?next=/reset-password`. Only self-service caller.
 **FILL-C-1.2** — The Site URL and every Redirect URL in production's auth settings. Supabase silently
 substitutes the Site URL when a requested redirect is not allowlisted; establish which is happening.
+> **FILLED [production, Management API GET, read-only].** Site URL `https://EZContractorBinder.com`. Allow list: `…vercel.app/auth/callback`,
+> `…vercel.app/auth/callback?next=*`, the same pair for `localhost:3000` and `ezcontractorbinder.com`. The requested
+> `…?next=/reset-password` is not matched by `?next=*` (glob `*` stops at `/` — inferred, not measured), so GoTrue substitutes the Site
+> URL: the root, which never reads `?code=`. **Plus** PKCE: the verifier cookie is on the requesting browser, so a second device fails
+> even with the redirect fixed. Fix: the Send Email Hook emits `/auth/confirm?token_hash=…&type=recovery` (the admin reset's shape).
 **FILL-C-1.3** — ⚠️ **The proof must walk the REAL path**: request the email, click the link that
 actually arrives, set a password, sign in with it, on a second device. The S112 proof used
 `/auth/confirm?token_hash=…`, a link shape the emails never send, and passed while the real flow was
@@ -454,8 +474,15 @@ broken.
 **C-2. Photos are still filed under Files.** `[CLAIM]` Reported 2026-09-26, unresolved.
 **FILL-C-2.1** — What actually separates a photo from a file in this schema. ⚠️ **Do not propose a fix
 before this is answered** — write-path bug, conversion bug and query bug have different fixes.
+> **FILLED.** One table, `files`; **`category = 'photos'` alone** decides. Not a query bug, not a write bug for new uploads, not a
+> conversion bug (`convert_estimate_to_project` reclassifies `image/%` `'other'`→`'photos'`). What remains: **legacy** rows converted
+> before `20261770000000` (backfill `S111-photos-backfill-PREPARED.sql`, never run on production), **daily-log and safety images by
+> design**, and images uploaded through desktop Files' own form (`'other'`). ⚠️ `files.ts:167-171` falsely says Photos widened to
+> daily-log/safety images in S111 Q18; Q18 was stopped.
 **FILL-C-2.2** — The query backing the Files list, file and line. R7 applies.
+> **FILLED.** `getDocumentFiles` = `exclude_category:'photos'` (`lib/services/files.ts:173-174`), both surfaces. Category only; R7-compliant.
 **FILL-C-2.3** — Production count of rows that would leave the Files view, per company and project.
+> **Josh's query** (Phase 2). Rebuild-test: 15 image rows in Files — `daily_logs` 12, `safety` 2, `receipts` 1.
 **ASK-C-2** — Daily-log and safety images are in the Photos query but are not category `photos`. Say
 what your change does to them; do not decide it.
 
@@ -465,7 +492,9 @@ subcontractor invited to bid cannot reach the scope documents through the UI at 
 **C-4. Refuse a photo upload with no project (R4).**
 **FILL-C-4.1** — What happens to those rows today: `project_id`, `category`, `file_path`, and which
 surface lists them, if any.
+> **FILLED.** No row is written: /m holds the shot on the device until a project is chosen; `uploadFile` refuses; `files_owner_arm_check` forbids a project-less, estimate-less `photos` row. R4 is already the behaviour. Residual: held shots expire silently after 7 days.
 **FILL-C-4.2** — Desktop too. Untested.
+> **FILLED.** Every desktop photo surface takes the project from the route; no optional-project picker exists.
 **FILL-C-4.3** — ⚠️ **Rows already orphaned on production.** Count them per company and hand Josh the
 query. R4 stops new ones; it does nothing for the existing ones, and they need a ruling once counted.
 
@@ -490,6 +519,38 @@ which have **no markup entry point at all**. Unsent visits only. ⚠️ A frozen
 explaining WHY — "part of a sent estimate, can't be annotated" — not a missing or dead control. PARITY
 across both surfaces. The eventual answer for sent visits is a derivative that never writes back to the
 sent record; do not design that now.
+
+**C-9. The contact form requires both names even when a company is given.** Josh, 2026-09-28: adding a
+contact requires first **and** last name; it should require **first and last name OR a company name**.
+⚠️ **Audit by what is CALLED, not by what matches a filter.** Every contact-creation path — the contacts
+screen, client contacts, subcontractor contacts, anything the estimate or proposal flow creates — not just
+the one form Josh was looking at.
+**FILL-C-9.1** — Is the requirement client-side validation, a server check, a NOT NULL, or a CHECK? If it is
+a database constraint, it needs a migration **and a production row count first** — a constraint written
+against rebuild-test's rows has aborted on production twice.
+> **FILLED.** All three of: client-side JS checks (desktop form, also-send-to, project contacts panel, /m site-visit form),
+> one server check inside RPC `create_site_visit` (20261650000000:414-418), and `NOT NULL` on both name columns. No CHECK.
+> `/m` contact edit already allows company-only but sends `null` → NOT NULL error.
+
+**C-10. The subcontractor detail page still redirects a Project Executive.**
+`subcontractors/[id]/page.tsx:43`. S111 Q4 rules the subcontractor directory readable for this role and the
+database read exists; the UI fails closed. A ruled behaviour that was never delivered.
+
+> **PART C STATUS [S114, 2026-09-28] — evidence: `docs/sessions/S114-C-report.md`.**
+> - **C-1** built on C-branch 1 (reset email → `/auth/confirm?token_hash=…`, one builder for both resets). **DEPLOYED-UNPROVEN**
+>   once merged, until Josh walks the real email on a second device. Allow-list config → `#168`.
+> - **C-2** built (C-branch 1): Photos view = `photos` + daily-log/safety IMAGES; Files unchanged; false comment corrected.
+>   Backfill of the one legacy row = Josh (P2 STEP 2).
+> - **C-3** hotfix **MERGED** `951d2623` (endpoint serves only `bid-scope` files). Document list → `#169`, after PART E. P6 owed.
+> - **C-4** closed on production (P3); /m deletion strip + tray wording built (C-branch 1).
+> - **C-5** built but **moved off** C-branch 1 to `feature/s114-c5-multi-upload`: `#2-s180u` requires one proof PER SURFACE.
+> - **C-6** closed on tests (23/23, sabotage 1 red); Josh's look owed.
+> - **C-7** filed `#166` — deferred, NOT delivered.
+> - **C-8** built (C-branch 1): shared check + route, per-photo freeze, frozen notice; live 10/10, sabotage ×3.
+> - **C-9** app side built (C-branch 1); RPC + /m site-visit form on **C-branch 2** (`20261990000000`, rebuild-test only).
+> - **C-10** built (C-branch 1).
+> - Carried: `project_financials` PE write arms dropped — **C-branch 2** (`20262000000000`, rebuild-test only).
+>   `setup_payment_schedule()` lockout filed `#167` (LIVE DEFECT).
 
 ---
 
@@ -548,8 +609,14 @@ admit the exact sequence, live.
 **F-3. `#3-pe`** — the PE reading stored contract files on its own projects. Read-only, resolving the
 project through the file's subject, with a no-returning negative and its own sabotage.
 
-**F-4.** Renumber `#1-pe`, `#2-pe`, `#3-pe` once the branch lands. Next free on `main` is `#164`.
-> [S114] `#164`–`#165` were taken by PART A's own debt when it landed; next free is now **`#166`**.
+**F-4.** Renumber `#1-pe`, `#2-pe`, `#3-pe` once the branch lands. Next free on `main` is **`#166`** or
+later — take it from `TECH_DEBT.md` on `main` at landing, never from this line.
+> **[CORRECTED S114 PART C, per F-10.]** Superseded text, quoted: "Next free on `main` is `#164`."
+> PART A took `#164` (Q6 double-booking, was `#1-s114a`) and `#165` (Q7 timesheets, was `#2-s114a`) when it
+> landed at `2269a9a9`, and advanced the authority line to `#166`.
+
+**F-10. Debt numbering moved.** PART A took `#164` and `#165` and advanced the authority line to `#166`.
+F-4 is corrected in place above, with the old text quoted.
 
 **F-5. CLAUDE.md** is 391 lines against a 350 target. ⚠️ **No rule is deleted.** Every line that leaves
 is compressed in place or moved to a named file; anything proposed for deletion is listed for Josh.
@@ -595,6 +662,13 @@ Español on `/m`; a proposal with a Spanish name; a row dragged in Safari on a M
 **G-5. The performance pass**, once the region question is answered: the main screens on production as a
 real user, with time-to-interactive, transferred bytes, request count and the slowest server call,
 ranked.
+
+**G-6. The PART A click-test is owed, not passed.** Josh deferred it on 2026-09-28. The Project Executive
+exists on production and is assigned to one project. Nobody has confirmed: that an unassigned project is
+invisible to it; that Budget, Invoices, Profitability, Payments, Change Orders and Lien Releases show money;
+that it can create a task, see the schedule and upload a photo; and that it has no route to edit or void a
+contract. ⚠️ **PART A is not verified.** (G-1 is done by Josh; G-2's last clause — the forms do not offer
+the role — is superseded by FILL-A-6, which now offers it.)
 
 ---
 

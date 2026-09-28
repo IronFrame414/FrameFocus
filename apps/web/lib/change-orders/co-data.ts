@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@framefocus/shared/types/database';
 import { hasMarkup, derivativePathFor } from '@framefocus/shared/utils/markup';
+import { contactDisplayName } from '@framefocus/shared/utils/contact-name';
 
 // Signed-artifact spec §6 — assembles everything the CO renderer needs as one
 // serializable object. Mirrors proposal-data.ts: takes the Supabase client as a
@@ -169,7 +170,7 @@ export async function getChangeOrderData(
       .maybeSingle();
     if (contact) {
       client = {
-        name: `${contact.first_name} ${contact.last_name}`.trim(),
+        name: contactDisplayName(contact), // [S114 C-9]
         companyName: contact.company_name,
         email: contact.email,
       };

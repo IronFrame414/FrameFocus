@@ -114,7 +114,12 @@ function stubBrowser({
 beforeEach(() => {
   updateSpy.mockReset();
   uploadSpy.mockReset();
-  updateSpy.mockResolvedValue({ error: null });
+  // [S114 C-8] A real save UPDATEs exactly one row, and `saveMarkup` now
+  // requires it. _Superseded default, quoted:_ `updateSpy.mockResolvedValue({ error: null });`
+  // — no rows, which is what an RLS-filtered update returns and is now `failed`.
+  // `markup_data: null` keeps the local-copy branch out of these tests (the
+  // S112 3c block below covers it with a real Blob).
+  updateSpy.mockResolvedValue({ data: [{ markup_data: null }], error: null });
   uploadSpy.mockResolvedValue({ error: null });
 });
 
@@ -216,6 +221,19 @@ describe('A-23j — a derivative failure is NOT plain success', () => {
     if (result.status === 'derivative_failed') {
       expect(result.error).toContain('storage refused');
     }
+  });
+
+  // [S114 C-8] THE LATENT BUG. An UPDATE that RLS filters out affects ZERO rows
+  // and returns NO error. The save used to carry on, fail at the derivative, and
+  // tell the user "Marks saved, but the flattened image could not be written" —
+  // when the marks were not saved. Zero rows is `failed`, and nothing uploads.
+  it('ZERO rows updated (RLS-filtered, no error) is FAILED — not saved, not derivative_failed', async () => {
+    stubBrowser({ canvasWorks: true });
+    updateSpy.mockResolvedValue({ data: [], error: null });
+
+    const result = await call();
+    expect(result.status).toBe('failed');
+    expect(uploadSpy).not.toHaveBeenCalled();
   });
 
   it('markup_data is written FIRST — a row failure never leaves an orphan image', async () => {

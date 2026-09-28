@@ -12,9 +12,11 @@
 > register) is the assignment authority, unchanged from CLAUDE.md's rule that *main's file is the
 > authority*. **Numbers are IMMUTABLE — never reused, reassigned, or compacted — and they span all
 > THREE files.** The next free number is **one above the highest number appearing in ANY of the
-> three files**. The highest currently allocated is **#165** (in this file — S114 PART A, `#164`–`#165`,
-> 2026-09-28, converted from `#1-s114a`/`#2-s114a` when `feature/s114-pe-operational-arms` landed), so the
-> next free number is **#166**. _Superseded, quoted: "The highest currently allocated is **#163** (in this
+> three files**. The highest currently allocated is **#170** (in this file — S114 PART C, `#166`–`#170`,
+> 2026-09-28, converted from `#1-s114c`–`#5-s114c` when `feature/s114-c-no-migration` landed), so the
+> next free number is **#171**. _Superseded, quoted: "The highest currently allocated is **#165** (in this
+> file — S114 PART A, `#164`–`#165`, 2026-09-28, converted from `#1-s114a`/`#2-s114a` when
+> `feature/s114-pe-operational-arms` landed), so the next free number is **#166**."_ _Earlier superseded, quoted: "The highest currently allocated is **#163** (in this
 > file — the S108 Spec E production-runbook findings, `#159`–`#163`, 2026-09-22), so the next free number
 > is **#164**."_
 > Branch-scoped provisional ids (`#N-<tag>`, per CLAUDE.md → 'Tech-debt
@@ -2325,6 +2327,71 @@ numbering". **RULED Option A [Josh, S180]:** deferred to a focused build; `files
 
 **⚠️ Per-component verification = a test PER SURFACE**, not one test over the batch: **8 components, 8
 proofs, each stating what it uploaded and what landed.** A single batch test is not acceptance.
+
+## `#166` (was `#1-s114c`) — ⚠️ Photo comments: Josh ASKED for this; it is DEFERRED, not delivered
+
+**Converted to `#166` when `feature/s114-c-no-migration` landed** (was `#1-s114c`). **RULED Q9 A [Josh, S114, 2026-09-28]:** filed,
+not built. Say it plainly: Josh asked for the photo viewer's Comments button to work. The dead button was
+**deleted** (`cc53bbc3`, B-10) — that is not the feature existing. There is no schema (`file_comments` does
+not exist); the i18n key `photos.viewer.comment` is orphaned (`lib/i18n/areas/photos.ts`).
+
+**Cost when built:** one migration (`file_comments`: standard columns, `file_id` FK, denormalised
+`project_id`, `body`, soft delete; its OWN project-scoped SELECT test — not "a matching `files` row
+exists"; notification type CHECK extended), a thread on the `/m` viewer and the desktop file sheet,
+notifications, total role-map tests and no-RETURNING negatives. ~1.5–2.5 sessions.
+
+**Four rulings owed before any build (all UNRESOLVED):** (a) who may comment — staff only, or subs and
+clients too? (b) do comments reach the client portal? (c) who is notified — uploader, other commenters,
+@mentions? (d) someone WILL type a price into a comment: accepted as-is, or the `#1-cosum` no-price hint?
+
+## `#167` (was `#2-s114c`) — ⚠️ LIVE DEFECT: one hand-entered sub expense locks `setup_payment_schedule()` for EVERYONE, Owner included
+
+**Converted to `#167` when `feature/s114-c-no-migration` landed** (was `#2-s114c`). **Filed loudly by ruling Q15 [Josh, S114].**
+Not a Project Executive concern — it bites Josh today.
+
+`setup_payment_schedule()`'s one-schedule-per-contract check is
+`PERFORM 1 FROM expenses WHERE sub_contract_id = p_sub_contract_id AND is_retainage = false AND is_deleted = false;
+IF FOUND THEN RAISE 'a schedule already exists for this contract'`. Any expense a PM (or PE, or Owner/Admin)
+records by hand with that `sub_contract_id` — permitted by `expenses_insert_authorized` /
+`expenses_insert_project_executive` — satisfies it. After one hand-entered sub bill, **nobody** can set up the
+subcontract's formal payment schedule (stages + retainage), including the Owner. The refusal message says a
+schedule exists when none does.
+
+**Fix options (unruled):** (1) the check counts only rows the function itself created (a marker column or a
+`payment_schedule_id`), so hand entries coexist; (2) refuse or warn at hand entry when the subcontract has
+no schedule yet; (3) both. Needs a migration; count affected production rows first:
+`SELECT sub_contract_id, count(*) FROM expenses WHERE sub_contract_id IS NOT NULL AND NOT is_deleted AND NOT is_retainage GROUP BY 1;`
+
+## `#168` (was `#3-s114c`) — Production auth redirect allow-list does not match the app's own `?next=` redirects (config, Josh)
+
+**Converted to `#168` when `feature/s114-c-no-migration` landed** (was `#3-s114c`). **Separate config item by ruling Q2 [Josh, S114]:**
+a build session does not change production configuration.
+
+Measured 2026-09-28 (Management API GET, read-only): production `site_url = https://EZContractorBinder.com`
+(mixed case); `uri_allow_list` holds `…/auth/callback` and `…/auth/callback?next=*` for
+`frame-focus-eight.vercel.app`, `localhost:3000` and `ezcontractorbinder.com`. GoTrue's glob `*` does not
+cross `/`, so `?next=/reset-password` (or any `?next=/path`) is NOT allowlisted and GoTrue substitutes the
+Site URL. S114 C-1 routes the password-reset email around this (`/auth/confirm?token_hash=…`), so reset no
+longer depends on it — but any other flow sending `?next=/…` still lands on the site root.
+**Josh's action (dashboard):** replace the `?next=*` entries with `**`-suffixed ones (e.g.
+`https://frame-focus-eight.vercel.app/auth/callback**`), same for the other two hosts; lowercase the Site
+URL. Verify by walking a sign-up confirmation email end to end.
+
+## `#169` (was `#4-s114c`) — The bid page's document list (C-3), owed after PART E
+
+**Converted to `#169` when `feature/s114-c-no-migration` landed** (was `#4-s114c`). The S114 C-3 hotfix (`951d2623`, on `main`)
+made `GET /api/bid/[token]/files` serve only files tagged `bid-scope`; nothing on `main` sets that tag, so it
+returns an empty list and the page still lists nothing. **Build after `feature/s112-bid-token-status` lands**
+(its migrations 1850/1860/1890 on production first): in `bid-reply-client.tsx`, fetch the list, render name +
+size + a link that re-fetches on click (URLs live 300 s), hidden while `expired || closed`. No migration.
+
+## `#170` (was `#5-s114c`) — The client portal splits photos from files by MIME type (R7 deviation)
+
+**Converted to `#170` when `feature/s114-c-no-migration` landed** (was `#5-s114c`). Found in S114 C-2's audit, not changed:
+`lib/services/portal.ts:433` and `:488` decide "photo" vs "file" for the client by `mime_type`, while every
+staff surface decides by `category` (R7, RULED: a scanned plan or photographed permit is a document). A
+client sees a photographed permit among the photos. Fix: the portal reads the same category rule
+(`PHOTO_VIEW_FILTER` / `getDocumentFiles`, `lib/services/files.ts`), with its own `client_visible` filter kept.
 
 ## Process notes
 

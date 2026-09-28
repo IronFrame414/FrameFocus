@@ -123,7 +123,7 @@ export default async function MobileFieldPage({
     getProjectDeliveries(current.id),
     getOrderlessDeliveries(current.id),
     getIncidentsForProject(current.id),
-    getFiles({ project_id: current.id, category: 'photos' }),
+    getFiles({ project_id: current.id, photo_view: true }), // [S114 C-2] = the Photos view
   ]);
 
   // ATTENTION BADGES, bound to the same expressions the destination screens use

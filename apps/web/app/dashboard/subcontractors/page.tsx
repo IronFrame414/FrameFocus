@@ -6,6 +6,7 @@ import { committedRemaining, countsTowardCommitted } from '@/lib/services/payabl
 import { getCompanyTimeSettings } from '@/lib/services/company';
 import { companyToday } from '@framefocus/shared/utils/dates';
 import { SubcontractorsList } from './subcontractors-list';
+import { editsSubDirectory } from '@framefocus/shared/constants/roles';
 
 /**
  * 14d Subs & Vendors (desktop-redesign §8.4).
@@ -112,7 +113,7 @@ export default async function SubcontractorsPage() {
   return (
     <SubcontractorsList
       subcontractors={subcontractors}
-      canEdit={!!profile && ['owner', 'admin', 'project_manager'].includes(profile.role)}
+      canEdit={editsSubDirectory(profile?.role)}
       // [S159] Owner/Admin only — the same list the detail page uses to decide
       // whether to run the compliance query at all. It gates the sheet's LINK
       // to that page, not any compliance data: nothing about a document

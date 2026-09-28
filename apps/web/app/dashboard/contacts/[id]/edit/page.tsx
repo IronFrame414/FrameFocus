@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import { getContact } from '@/lib/services/contacts';
 import { getPrimaryAddress } from '@/lib/services/contact-addresses';
 import { ContactForm } from '../../contact-form';
+import { contactDisplayName } from '@framefocus/shared/utils/contact-name';
 
 export default async function EditContactPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -36,7 +37,7 @@ export default async function EditContactPage({ params }: { params: Promise<{ id
         Edit Contact
       </h1>
       <p style={{ color: '#6b7280', marginBottom: '2rem', fontSize: '0.875rem' }}>
-        Update {contact.first_name} {contact.last_name}
+        Update {contactDisplayName(contact)}
       </p>
       <ContactForm existing={contact} existingAddress={primaryAddress} />
     </div>

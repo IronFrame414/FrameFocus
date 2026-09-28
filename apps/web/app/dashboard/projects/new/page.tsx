@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase-server';
 import { redirect } from 'next/navigation';
 import { getContacts } from '@/lib/services/contacts';
 import { NewProjectForm } from './new-project-form';
+import { contactNameWithCompany } from '@framefocus/shared/utils/contact-name';
 
 export default async function NewProjectPage() {
   const supabase = await createClient();
@@ -36,7 +37,7 @@ export default async function NewProjectPage() {
       <NewProjectForm
         contacts={contacts.map((c) => ({
           id: c.id,
-          name: `${c.first_name} ${c.last_name}${c.company_name ? ` (${c.company_name})` : ''}`,
+          name: contactNameWithCompany(c),
         }))}
       />
     </div>

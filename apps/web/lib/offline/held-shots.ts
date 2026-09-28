@@ -75,6 +75,21 @@ export function daysUntilExpiry(shot: HeldShot, now: number = Date.now()): numbe
   return Math.floor((new Date(shot.takenAt).getTime() + HELD_TTL_MS - now) / (24 * 60 * 60 * 1000));
 }
 
+/**
+ * [S114 C-4, RULED Josh] What the app-wide deletion warning says: how many
+ * unfiled shots there are and the whole days until the SOONEST is swept
+ * (0 = today). Null when there is nothing to warn about. The warning, not the
+ * per-shot label, is the headline — see HeldPhotosStrip in app/m/mobile-shell.tsx.
+ */
+export function soonestDeletion(
+  shots: readonly HeldShot[],
+  now: number = Date.now()
+): { count: number; days: number } | null {
+  if (shots.length === 0) return null;
+  const days = Math.min(...shots.map((s) => daysUntilExpiry(s, now)));
+  return { count: shots.length, days: Math.max(0, days) };
+}
+
 export type AdmitResult = { admitted: true } | { admitted: false; reason: string };
 
 /**

@@ -48,7 +48,7 @@ export default async function PhotoViewerPage({
   params: { projectId: string; fileId: string };
 }) {
   const [gallery, profile, t] = await Promise.all([
-    getProjectPhotos(params.projectId, { thumbnails: true }),
+    getProjectPhotos(params.projectId, { thumbnails: true, photoView: true }),
     getMyProfile(),
     getMobileT(),
   ]);

@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase-server';
 import { getDeletedSubcontractors } from '@/lib/services/subcontractors';
 import SubcontractorTrashRow from './trash-row';
+import { editsSubDirectory } from '@framefocus/shared/constants/roles';
 
 // Subs & Vendors trash. [S158 · Finding 2, RULED Josh]
 //
@@ -30,7 +31,7 @@ export default async function SubcontractorsTrashPage() {
     .single();
   if (!profile) redirect('/sign-in');
 
-  const canRestore = ['owner', 'admin', 'project_manager'].includes(profile.role);
+  const canRestore = editsSubDirectory(profile.role); // [S114 C-10] was the same list by hand
 
   const deleted = await getDeletedSubcontractors();
 

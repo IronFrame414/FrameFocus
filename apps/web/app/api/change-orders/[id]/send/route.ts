@@ -20,6 +20,7 @@ import {
   sendEmail,
 } from '@/lib/services/email-service';
 import { ChangeOrderEmail } from '@/lib/email/templates/change-order-email';
+import { contactDisplayName } from '@framefocus/shared/utils/contact-name';
 
 // Signed-artifact spec §§4.2, 6, 7 — "Send" a change order. Sending IS the
 // internal contractor-side acceptance (D-4). The contractor signs at send from
@@ -178,12 +179,12 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     if (project?.contact_id) {
       const { data: contact } = await admin
         .from('contacts')
-        .select('first_name, last_name, email')
+        .select('first_name, last_name, company_name, email')
         .eq('id', project.contact_id)
         .maybeSingle();
       if (contact?.email) {
         recipientEmail = contact.email;
-        recipientName = recipientName ?? `${contact.first_name} ${contact.last_name}`.trim();
+        recipientName = recipientName ?? contactDisplayName(contact); // [S114 C-9]
       }
     }
   }

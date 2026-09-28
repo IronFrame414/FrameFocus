@@ -44,3 +44,16 @@ export function addedAfterSend(createdAt: string | null | undefined, frozenAt: s
   if (!frozenAt || !createdAt) return false;
   return new Date(createdAt).getTime() > new Date(frozenAt).getTime();
 }
+
+/**
+ * [S114 C-8] IS THIS CAPTURE FROZEN? — the database's own rule, stated once for
+ * the UI and the markup route: `enforce_site_visit_file_freeze()` lets a
+ * capture change iff `frozen_at IS NULL OR created_at > frozen_at`. So frozen
+ * = there is a `frozen_at` AND the photo was created at or before it. PER
+ * PHOTO, by ruling (S114 Q10 A): a photo added after the send stays editable.
+ * The trigger remains the backstop; this only decides what is OFFERED.
+ */
+export function isFrozenCapture(createdAt: string | null | undefined, frozenAt: string | null | undefined): boolean {
+  if (!frozenAt || !createdAt) return false;
+  return new Date(createdAt).getTime() <= new Date(frozenAt).getTime();
+}

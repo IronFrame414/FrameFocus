@@ -7,6 +7,13 @@ import {
   type ContactOption,
 } from '@/lib/services/contacts-client';
 import type { AlsoSendToRecipient } from '@/lib/services/estimates-client';
+import {
+  CONTACT_NAME_RULE_MESSAGE,
+  contactDisplayName,
+  contactNameWithCompany,
+  hasValidContactName,
+  normalizeContactNames,
+} from '@framefocus/shared/utils/contact-name';
 
 // 19b "Also send to" (§1.4) — extra proposal recipients (spouse, architect,
 // lender). Per-job; frozen on send. A recipient is chosen from existing
@@ -16,8 +23,8 @@ import type { AlsoSendToRecipient } from '@/lib/services/estimates-client';
 // if the contact is later edited.
 
 function contactLabel(c: Pick<ContactOption, 'first_name' | 'last_name' | 'company_name'>): string {
-  const name = `${c.first_name} ${c.last_name}`.trim();
-  return c.company_name ? `${name} · ${c.company_name}` : name;
+  // [S114 C-9] a company-only contact shows its company once, not " · Acme".
+  return contactNameWithCompany(c, 'dot');
 }
 
 export function AlsoSendToField({
@@ -33,6 +40,7 @@ export function AlsoSendToField({
   const [adding, setAdding] = useState(false);
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
+  const [companyName, setCompanyName] = useState('');
   const [email, setEmail] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -49,7 +57,7 @@ export function AlsoSendToField({
     if (!c) return;
     onChange([
       ...value,
-      { contact_id: c.id, name: `${c.first_name} ${c.last_name}`.trim(), email: c.email },
+      { contact_id: c.id, name: contactDisplayName(c), email: c.email },
     ]);
   }
 
@@ -59,14 +67,17 @@ export function AlsoSendToField({
 
   async function saveNewContact() {
     setError(null);
-    if (!firstName.trim() || !lastName.trim()) {
-      setError('First and last name are required.');
+    // [S114 C-9] first AND last, OR company. Superseded: both names required,
+    // and this form had no company field at all.
+    const names = { first_name: firstName, last_name: lastName, company_name: companyName };
+    if (!hasValidContactName(names)) {
+      setError(CONTACT_NAME_RULE_MESSAGE);
       return;
     }
+    const normalized = normalizeContactNames(names);
     setBusy(true);
     const result = await createContact({
-      first_name: firstName.trim(),
-      last_name: lastName.trim(),
+      ...normalized,
       email: email.trim() || null,
     });
     setBusy(false);
@@ -76,18 +87,17 @@ export function AlsoSendToField({
     }
     const newOption: ContactOption = {
       id: result.id,
-      first_name: firstName.trim(),
-      last_name: lastName.trim(),
-      company_name: null,
+      ...normalized,
       email: email.trim() || null,
     };
     setOptions((prev) => [...prev, newOption]);
     onChange([
       ...value,
-      { contact_id: result.id, name: `${firstName.trim()} ${lastName.trim()}`, email: email.trim() || null },
+      { contact_id: result.id, name: contactDisplayName(normalized), email: email.trim() || null },
     ]);
     setFirstName('');
     setLastName('');
+    setCompanyName('');
     setEmail('');
     setAdding(false);
   }
@@ -199,6 +209,12 @@ export function AlsoSendToField({
               style={input}
             />
           </div>
+          <input
+            value={companyName}
+            onChange={(e) => setCompanyName(e.target.value)}
+            placeholder="Company (or a first and last name)"
+            style={{ ...input, marginBottom: '0.5rem' }}
+          />
           <input
             value={email}
             onChange={(e) => setEmail(e.target.value)}

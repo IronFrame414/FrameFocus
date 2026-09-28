@@ -1,7 +1,7 @@
 import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@framefocus/shared/types/database';
-import { handleAuthEmail } from '@/lib/services/auth-email';
+import { buildRecoveryConfirmUrl, handleAuthEmail } from '@/lib/services/auth-email';
 
 /**
  * Send a password recovery email to a team member. Caller authorization must be
@@ -30,9 +30,8 @@ export async function resetTeamMemberPassword(
   if (error || !data?.properties?.hashed_token || !data.user?.email) {
     throw error ?? new Error('generateLink returned no recovery token');
   }
-  const actionUrl =
-    `${appUrl.replace(/\/+$/, '')}/auth/confirm?` +
-    new URLSearchParams({ token_hash: data.properties.hashed_token, type: 'recovery' }).toString();
+  // [S114 C-1] One builder for both resets (PARITY). Superseded: built inline here.
+  const actionUrl = buildRecoveryConfirmUrl(appUrl, data.properties.hashed_token);
   const outcome = await handleAuthEmail(
     admin,
     {

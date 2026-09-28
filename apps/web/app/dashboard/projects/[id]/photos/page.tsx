@@ -58,7 +58,7 @@ export default async function ProjectPhotosPage({
       : null;
 
   const [photos, profile, timeSettings] = await Promise.all([
-    getProjectPhotos(params.id, { thumbnails: true }),
+    getProjectPhotos(params.id, { thumbnails: true, photoView: true }),
     getMyProfile(),
     getCompanyTimeSettings(),
   ]);

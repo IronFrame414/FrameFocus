@@ -69,7 +69,7 @@ export default async function ProjectPhotosPage({
   const active = raw === 'log' || raw === 'delivery' || raw === 'punch' ? raw : null;
 
   const [photos, profile, project] = await Promise.all([
-    getProjectPhotos(params.projectId, { thumbnails: true }),
+    getProjectPhotos(params.projectId, { thumbnails: true, photoView: true }),
     getMyProfile(),
     getProject(params.projectId),
   ]);

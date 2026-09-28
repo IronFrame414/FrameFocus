@@ -16,6 +16,7 @@ import {
 } from '@/lib/services/email-service';
 import { InvoiceEmail } from '@/lib/email/templates/invoice-email';
 import { companyToday, paymentTermsLabel } from '@/lib/services/invoices-shared';
+import { contactDisplayName } from '@framefocus/shared/utils/contact-name';
 
 // 7D1 §13 — SEND an invoice to the client: issue it and email it, one action.
 //
@@ -189,12 +190,12 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
   if (!recipientEmail && project?.contact_id) {
     const { data: contact } = await admin
       .from('contacts')
-      .select('first_name, last_name, email')
+      .select('first_name, last_name, company_name, email')
       .eq('id', project.contact_id)
       .maybeSingle();
     if (contact?.email) {
       recipientEmail = contact.email;
-      recipientName = recipientName ?? `${contact.first_name} ${contact.last_name}`.trim();
+      recipientName = recipientName ?? contactDisplayName(contact); // [S114 C-9]
     }
   }
   if (!recipientEmail) {

@@ -113,7 +113,10 @@ export async function POST(request: NextRequest) {
   const admin = getSupabaseAdmin() as SupabaseClient<Database>;
 
   try {
-    const outcome = await handleAuthEmail(admin, payload, supabaseUrl);
+    // [S114 C-1] recovery links go to this app's /auth/confirm (buildRecoveryConfirmUrl).
+    const outcome = await handleAuthEmail(admin, payload, supabaseUrl, {
+      appUrl: process.env.NEXT_PUBLIC_APP_URL,
+    });
 
     if (outcome.error) {
       console.error('auth email hook: send failed', {

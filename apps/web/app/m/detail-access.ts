@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
 import { getMyProfile } from '@/lib/services/profiles';
+import { editsSubDirectory } from '@framefocus/shared/constants/roles';
 
 // M6M D-54 / §4.11.10b — the route guard on the four gated DETAIL routes.
 //
@@ -300,14 +301,17 @@ export function readsChangeOrders(role: string | null | undefined): boolean {
 // that have no profile at all.
 export type EditSurface = 'sub' | 'contact' | 'team';
 
-const EDIT_ROLES: Record<EditSurface, readonly string[]> = {
-  sub: ['owner', 'admin', 'project_manager'],
+// [S114 C-10] `sub` now reads SUB_DIRECTORY_EDIT (packages/shared), the same
+// predicate desktop uses. _Superseded, quoted:_ `sub: ['owner', 'admin', 'project_manager'],`
+// — a hand list desktop had copied five times.
+const EDIT_ROLES: Record<Exclude<EditSurface, 'sub'>, readonly string[]> = {
   contact: ['owner', 'admin', 'project_manager'],
   team: ['owner', 'admin'],
 };
 
 /** D-54 step 1 — for HIDING the Edit affordance on a detail screen. */
 export function canEdit(surface: EditSurface, role: string | null | undefined): boolean {
+  if (surface === 'sub') return editsSubDirectory(role);
   return EDIT_ROLES[surface].includes(role ?? '');
 }
 

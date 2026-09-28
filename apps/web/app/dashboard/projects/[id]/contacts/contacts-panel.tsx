@@ -12,6 +12,7 @@ import {
   detachContact,
 } from '@/lib/services/project-contacts-client';
 import { setProjectClient } from '@/lib/services/projects-client';
+import { CONTACT_NAME_RULE_MESSAGE, contactDisplayName, hasValidContactName, normalizeContactNames } from '@framefocus/shared/utils/contact-name';
 
 interface ContactsPanelProps {
   projectId: string;
@@ -62,8 +63,9 @@ export function ContactsPanel({
       }
       result = await attachContact(projectId, contactId, role.trim() || null);
     } else {
-      if (!firstName.trim() || !lastName.trim()) {
-        setError('First and last name are required.');
+      // [S114 C-9] first AND last, OR company. Superseded: both names required.
+      if (!hasValidContactName({ first_name: firstName, last_name: lastName, company_name: companyName })) {
+        setError(CONTACT_NAME_RULE_MESSAGE);
         setBusy(false);
         return;
       }
@@ -72,10 +74,8 @@ export function ContactsPanel({
       result = await createAndAttachContact(
         projectId,
         {
-          first_name: firstName.trim(),
-          last_name: lastName.trim(),
+          ...normalizeContactNames({ first_name: firstName, last_name: lastName, company_name: companyName }),
           contact_type: contactType,
-          company_name: companyName.trim() || null,
           email: email.trim() || null,
           phone: phone.trim() || null,
         },
@@ -313,7 +313,7 @@ export function ContactsPanel({
             >
               <div>
                 <span style={{ fontWeight: 500 }}>
-                  {pc.contact ? `${pc.contact.first_name} ${pc.contact.last_name}` : 'Unknown'}
+                  {pc.contact ? contactDisplayName(pc.contact) || 'Unknown' : 'Unknown'}
                 </span>
                 {pc.contact?.company_name && (
                   <span style={{ color: '#6b7280' }}> · {pc.contact.company_name}</span>
@@ -346,7 +346,7 @@ export function ContactsPanel({
                       onClick={() =>
                         handleSetClient(
                           pc.contact_id,
-                          `${pc.contact!.first_name} ${pc.contact!.last_name}`
+                          contactDisplayName(pc.contact!)
                         )
                       }
                       disabled={busy}
@@ -367,7 +367,7 @@ export function ContactsPanel({
                     onClick={() =>
                       handleDetach(
                         pc.id,
-                        pc.contact ? `${pc.contact.first_name} ${pc.contact.last_name}` : 'contact'
+                        pc.contact ? contactDisplayName(pc.contact) : 'contact'
                       )
                     }
                     disabled={busy}

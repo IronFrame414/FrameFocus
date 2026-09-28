@@ -164,6 +164,52 @@ const ACTIONS: Record<
  * it through unchanged is what keeps that check meaningful; constructing our own
  * destination here would route around it.
  */
+/**
+ * [S114 C-1, RULED Josh 2026-09-28] THE RECOVERY LINK — this app's own
+ * `/auth/confirm`, which verifies the `token_hash` SERVER-SIDE with `verifyOtp`.
+ *
+ * ONE mechanism for BOTH resets (CLAUDE.md PARITY): the Team page's
+ * admin-initiated reset (`team-reset.ts`, since S110 E1) and the self-service
+ * "Forgot password" email the Send Email Hook sends. _Superseded for the hook,
+ * quoted:_ recovery used `buildVerifyUrl` like every other action.
+ *
+ * ⚠️ WHY GoTrue's `/auth/v1/verify` COULD NOT WORK FOR SELF-SERVICE RECOVERY,
+ * measured 2026-09-28 against production's auth config (Management API GET):
+ *   1. The allow list holds `…/auth/callback?next=*`; the request asks for
+ *      `…/auth/callback?next=/reset-password`, and `*` does not cross `/`. GoTrue
+ *      substitutes the Site URL — the site root — which never reads `?code=`.
+ *   2. Even with (1) fixed, the flow is PKCE: the code verifier is a cookie on
+ *      the browser that ASKED. A link opened on a second device cannot exchange
+ *      the code (`/auth/callback` → `/sign-in?error=auth`).
+ * `/auth/confirm` needs neither the allow list nor a verifier. Production's
+ * redirect settings are deliberately left alone (a separate config item).
+ */
+export function buildRecoveryConfirmUrl(appUrl: string, tokenHash: string): string {
+  return (
+    `${appUrl.replace(/\/+$/, '')}/auth/confirm?` +
+    new URLSearchParams({ token_hash: tokenHash, type: 'recovery' }).toString()
+  );
+}
+
+/**
+ * [S114 C-1] WHICH LINK AN AUTH EMAIL CARRIES — pure, so the choice is tested
+ * as a rule rather than only exercised through a send. An explicit `actionUrl`
+ * wins (the admin reset); `recovery` with an `appUrl` goes to this app's
+ * `/auth/confirm`; everything else keeps GoTrue's `/auth/v1/verify`.
+ */
+export function authEmailLink(
+  action: AuthEmailAction,
+  emailData: AuthEmailPayload['email_data'],
+  supabaseUrl: string,
+  opts?: { actionUrl?: string; appUrl?: string }
+): string {
+  if (opts?.actionUrl) return opts.actionUrl;
+  if (action === 'recovery' && opts?.appUrl) {
+    return buildRecoveryConfirmUrl(opts.appUrl, emailData.token_hash);
+  }
+  return buildVerifyUrl(supabaseUrl, emailData, action === 'email_change_new');
+}
+
 export function buildVerifyUrl(
   supabaseUrl: string,
   emailData: AuthEmailPayload['email_data'],
@@ -552,8 +598,13 @@ export async function handleAuthEmail(
    * `auth.admin.generateLink()` and points the email at this app's
    * `/auth/confirm` — a same-origin route, so no allow-list is routed around.
    * Every other caller (the Send Email Hook) omits it and is unchanged.
+   *
+   * [S114 C-1] `appUrl`: the Send Email Hook passes `NEXT_PUBLIC_APP_URL` so a
+   * `recovery` email links to `buildRecoveryConfirmUrl`, the same shape the
+   * admin reset uses. Without it (not configured), recovery falls back to
+   * `buildVerifyUrl` — the old, broken-on-production link — and says so in the log.
    */
-  opts?: { actionUrl?: string }
+  opts?: { actionUrl?: string; appUrl?: string }
 ): Promise<AuthEmailOutcome> {
   const actionRaw = payload.email_data.email_action_type;
   const action = (actionRaw in ACTIONS ? actionRaw : 'unknown') as AuthEmailAction | 'unknown';
@@ -650,9 +701,13 @@ export async function handleAuthEmail(
   }
 
   const { emailType, kind } = ACTIONS[action];
-  const verifyUrl =
-    opts?.actionUrl ??
-    buildVerifyUrl(supabaseUrl, payload.email_data, action === 'email_change_new');
+  if (action === 'recovery' && !opts?.actionUrl && !opts?.appUrl) {
+    console.error('[auth email] recovery link falls back to /auth/v1/verify', {
+      check: 'opts.appUrl (NEXT_PUBLIC_APP_URL) not provided',
+      user_id: payload.user.id,
+    });
+  }
+  const verifyUrl = authEmailLink(action, payload.email_data, supabaseUrl, opts);
 
   const { sender, reason: senderReason } = await senderFor(admin, payload.user.id);
 

@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import type { MarkupShape } from '@framefocus/shared/types/markup';
 import { MarkupCanvas } from './markup-canvas';
+import type { MarkupSaveTarget } from '@/lib/services/photos-client';
 import { useT } from '@/components/i18n/language-provider';
 
 // M6M §4.7a.1 — the canvas cannot open until it knows the image's NATURAL
@@ -28,6 +29,7 @@ export function MeasureThenEdit({
   initialShapes,
   dims,
   returnHref,
+  saveTarget,
 }: {
   fileId: string;
   filePath: string;
@@ -36,6 +38,8 @@ export function MeasureThenEdit({
   initialShapes: MarkupShape[];
   dims: { w: number; h: number } | null;
   returnHref: string;
+  /** [S114 C-8] passed through to the canvas's save. */
+  saveTarget?: MarkupSaveTarget;
 }) {
   const t = useT();
   const [measured, setMeasured] = useState<{ w: number; h: number } | null>(dims);
@@ -79,6 +83,7 @@ export function MeasureThenEdit({
       initialShapes={initialShapes}
       imageDims={measured}
       returnHref={returnHref}
+      saveTarget={saveTarget}
     />
   );
 }

@@ -15,6 +15,7 @@ import {
 import type { Metric } from '@/components/list-screen/list-screen';
 import { badgeStyle, cardStyle, color, font, microLabelStyle, primaryButtonStyle } from '@/lib/theme';
 import { rowActivation } from '@/components/list-screen/row-activation';
+import { contactDisplayName } from '@framefocus/shared/utils/contact-name';
 
 interface ProjectsListProps {
   projects: ProjectWithContact[];
@@ -119,7 +120,7 @@ export function ProjectsList({
     const q = search.trim().toLowerCase();
     if (q) {
       rows = rows.filter((p) => {
-        const client = p.contact ? `${p.contact.first_name} ${p.contact.last_name}` : '';
+        const client = p.contact ? contactDisplayName(p.contact) : '';
         return (
           p.name.toLowerCase().includes(q) ||
           p.project_number.toLowerCase().includes(q) ||
@@ -283,7 +284,7 @@ export function ProjectsList({
                   </span>
                 </span>
                 <span style={{ fontSize: '13px', color: color.bodyAlt }}>
-                  {p.contact ? `${p.contact.first_name} ${p.contact.last_name}` : '—'}
+                  {p.contact ? contactDisplayName(p.contact) || '—' : '—'}
                 </span>
                 <span>
                   <span

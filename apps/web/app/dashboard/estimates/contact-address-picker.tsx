@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { ContactOption, listContactOptions } from '@/lib/services/contacts-client';
+import { contactNameWithCompany } from '@framefocus/shared/utils/contact-name';
 import {
   ContactAddressOption,
   listAddressesForContact,
@@ -11,8 +12,7 @@ import {
 // by /dashboard/estimates/new, the clone modal, and the Details tab.
 
 export function contactLabel(c: ContactOption): string {
-  const name = `${c.first_name} ${c.last_name}`.trim();
-  return c.company_name ? `${name} (${c.company_name})` : name;
+  return contactNameWithCompany(c); // [S114 C-9] company-only → "Acme", not " (Acme)"
 }
 
 export function addressLabel(a: ContactAddressOption): string {

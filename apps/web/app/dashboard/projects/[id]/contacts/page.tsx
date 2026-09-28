@@ -6,6 +6,7 @@ import { getContacts } from '@/lib/services/contacts';
 import { getPortalAccountsForProject } from '@/lib/services/client-portal';
 import { ContactsPanel } from './contacts-panel';
 import { PortalPanel } from './portal-panel';
+import { contactNameWithCompany } from '@framefocus/shared/utils/contact-name';
 
 export default async function ProjectContactsPage({ params }: { params: { id: string } }) {
   const supabase = await createClient();
@@ -48,7 +49,7 @@ export default async function ProjectContactsPage({ params }: { params: { id: st
         projectContacts={projectContacts}
         allContacts={allContacts.map((c) => ({
           id: c.id,
-          name: `${c.first_name} ${c.last_name}${c.company_name ? ` (${c.company_name})` : ''}`,
+          name: contactNameWithCompany(c),
           contact_type: c.contact_type,
         }))}
         canManage={canManage}

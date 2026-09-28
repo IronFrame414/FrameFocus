@@ -6,7 +6,7 @@ import {
   markupFingerprint,
 } from '@framefocus/shared/utils/markup';
 import type { MarkupData } from '@framefocus/shared/types/markup';
-import { getFiles, getSignedUrls, type FileRecord } from './files';
+import { getFiles, getSignedUrls, PHOTO_VIEW_FILTER, type FileRecord } from './files';
 
 // M6M §4.8 / §4.9 — server reads for M-8 (gallery), M-9 (viewer) and M-10.
 //
@@ -180,10 +180,28 @@ async function resolveUrlsSingle(
  */
 export async function getProjectPhotos(
   projectId: string,
-  opts: { thumbnails?: boolean } = {}
+  opts: {
+    thumbnails?: boolean;
+    /**
+     * [S114 C-2] The PHOTOS VIEW's row set (PHOTO_VIEW_FILTER): + daily-log and
+     * safety IMAGES, so they can be marked up. OPT-IN, set by the three Photos
+     * screens (desktop page, /m grid, /m viewer). Omitted → `category = 'photos'`
+     * only, which is what CHAT uses (picker, message and thread routes).
+     *
+     * ⚠️ Unattended decision [S114, reversible, narrower]: chat does NOT widen.
+     * The ruling put those images in the Photos view for markup; a chat thread
+     * can include subcontractors and clients, and a safety image can be an
+     * injury photo. Widening what chat can share is a separate decision for Josh.
+     * (Found by CI run 36419080502: desktop-chat-photos went red when the
+     * widening reached the chat picker.)
+     */
+    photoView?: boolean;
+  } = {}
 ): Promise<PhotoRecord[]> {
   const [files, punchIds] = await Promise.all([
-    getFiles({ project_id: projectId, category: 'photos' }),
+    opts.photoView
+      ? getFiles({ project_id: projectId, photo_view: true })
+      : getFiles({ project_id: projectId, category: 'photos' }),
     getPunchPhotoIds(projectId),
   ]);
 
@@ -266,7 +284,10 @@ export async function getPhoto(fileId: string, projectId: string): Promise<Photo
     // Same clause, same position as `getReceiptFile()` below: the two photo
     // resolvers now scope identically, and neither can be handed a file from
     // another project by any caller, present or future.
-    .eq('category', 'photos')
+    // [S114 C-2] a photo is what the Photos view shows — PHOTO_VIEW_FILTER,
+    // which still excludes receipts, contracts and every non-image. Was
+    // `.eq('category', 'photos')`.
+    .or(PHOTO_VIEW_FILTER)
     .eq('project_id', projectId)
     .eq('is_deleted', false)
     .maybeSingle();

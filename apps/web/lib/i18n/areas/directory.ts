@@ -33,7 +33,8 @@ export const en = {
   'directory.contacts.unnamed': 'Unnamed contact',
   'directory.contacts.editTitle': 'Edit contact',
   'directory.contacts.editingWhat': 'Editing a contact',
-  'directory.contacts.needNameError': 'Give the contact a name or a company.',
+  // [S114 C-9] the shared rule's wording. Superseded: 'Give the contact a name or a company.'
+  'directory.contacts.needNameError': 'Enter a first and last name, or a company name.',
   'directory.contacts.needNameHint': 'A name or a company is required.',
   // Every value of contacts_contact_type_check (CONTACT_TYPES in @framefocus/shared).
   'directory.contactType.lead': 'Lead',
@@ -127,7 +128,8 @@ export const es: Record<keyof typeof en, string> = {
   'directory.contacts.unnamed': 'Contacto sin nombre',
   'directory.contacts.editTitle': 'Editar contacto',
   'directory.contacts.editingWhat': 'Editar un contacto',
-  'directory.contacts.needNameError': 'Ponle al contacto un nombre o una empresa.',
+  // [S114 C-9] Superseded: 'Ponle al contacto un nombre o una empresa.'
+  'directory.contacts.needNameError': 'Escribe nombre y apellido, o el nombre de una empresa.',
   'directory.contacts.needNameHint': 'Se necesita un nombre o una empresa.',
   'directory.contactType.lead': 'Prospecto',
   'directory.contactType.client': 'Cliente',

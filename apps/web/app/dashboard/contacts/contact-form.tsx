@@ -12,6 +12,7 @@ import type { Contact } from '@/lib/services/contacts';
 import { contactAddressSchema } from '@framefocus/shared/validation/contact-address';
 
 import { CONTACT_TYPES, LEAD_SOURCES, US_STATES } from '@framefocus/shared/constants';
+import { CONTACT_NAME_RULE_MESSAGE, hasValidContactName, normalizeContactNames } from '@framefocus/shared/utils/contact-name';
 
 interface ContactFormProps {
   existing?: Contact;
@@ -51,8 +52,9 @@ export function ContactForm({ existing, existingAddress }: ContactFormProps) {
   }
 
   async function handleSubmit() {
-    if (!form.first_name.trim() || !form.last_name.trim()) {
-      setError('First name and last name are required.');
+    // [S114 C-9] first AND last, OR company. Superseded: both names required.
+    if (!hasValidContactName(form)) {
+      setError(CONTACT_NAME_RULE_MESSAGE);
       return;
     }
 
@@ -62,9 +64,7 @@ export function ContactForm({ existing, existingAddress }: ContactFormProps) {
     const contactPayload = {
       contact_type: form.contact_type,
       status: form.status,
-      first_name: form.first_name.trim(),
-      last_name: form.last_name.trim(),
-      company_name: form.company_name.trim() || null,
+      ...normalizeContactNames(form),
       email: form.email.trim() || null,
       phone: form.phone.trim() || null,
       mobile: form.mobile.trim() || null,
@@ -202,9 +202,12 @@ export function ContactForm({ existing, existingAddress }: ContactFormProps) {
       {/* Name & Company */}
       <div style={sectionStyle}>
         <div style={sectionTitleStyle}>Basic Information</div>
+        <p style={{ fontSize: '0.8125rem', color: '#6b7280', margin: '0 0 0.75rem' }}>
+          A first and last name, or a company name, is required.
+        </p>
         <div style={{ ...gridTwoCol, marginBottom: '1rem' }}>
           <div>
-            <label style={labelStyle}>First Name *</label>
+            <label style={labelStyle}>First Name</label>
             <input
               name="first_name"
               value={form.first_name}
@@ -213,7 +216,7 @@ export function ContactForm({ existing, existingAddress }: ContactFormProps) {
             />
           </div>
           <div>
-            <label style={labelStyle}>Last Name *</label>
+            <label style={labelStyle}>Last Name</label>
             <input
               name="last_name"
               value={form.last_name}

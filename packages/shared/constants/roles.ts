@@ -284,3 +284,34 @@ export function receivesAssignedProjectAlerts(role: string | null | undefined): 
 export function seesCompanyMoney(role: string | null | undefined): boolean {
   return role === 'owner' || role === 'admin';
 }
+
+/**
+ * [S114 C-10, RULED Josh 2026-09-28] Who may create, edit, trash or restore a
+ * SUBCONTRACTOR in the directory. Reading the directory is every dashboard
+ * role's (S111 Q4 for the Project Executive; /m never gated the read) — this
+ * decides only the write controls, on BOTH surfaces: desktop profile, list and
+ * trash, and /m's `canEdit('sub')`.
+ *
+ * ⚠️ A TOTAL MAP. It replaced five hand copies of
+ * `['owner','admin','project_manager']` (desktop profile, edit, new, list,
+ * trash) plus /m's `EDIT_ROLES.sub`. The database agrees: `subcontractors`
+ * INSERT/UPDATE are Owner/Admin/PM (baseline), SELECT refuses only
+ * subcontractor and client. The Project Executive is `false` — directories are
+ * company level (S111 Q4: read-only).
+ */
+export const SUB_DIRECTORY_EDIT: Record<CompanyRole, boolean> = {
+  owner: true,
+  admin: true,
+  project_executive: false,
+  project_manager: true,
+  foreman: false,
+  crew_member: false,
+  subcontractor: false,
+  client: false,
+};
+
+export function editsSubDirectory(role: string | null | undefined): boolean {
+  return !!role && Object.prototype.hasOwnProperty.call(SUB_DIRECTORY_EDIT, role)
+    ? SUB_DIRECTORY_EDIT[role as CompanyRole]
+    : false;
+}

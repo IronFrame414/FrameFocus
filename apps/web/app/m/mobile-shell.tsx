@@ -33,6 +33,7 @@ import {
   resolveCaptureProjectId,
   useCaptureStore,
 } from './capture-store';
+import { soonestDeletion } from '@/lib/offline/held-shots';
 import { getOpenClockProjectId } from '@/lib/services/time-tracking-client';
 import { MobileChatOverlay } from '@/components/chat/mobile-chat-overlay';
 import { useT } from '@/components/i18n/language-provider';
@@ -264,7 +265,11 @@ export function showsBackChevron(pathname: string): boolean {
  * below are the dark screens.
  */
 export function isDarkCanvasScreen(pathname: string): boolean {
-  return /^\/m\/p\/[^/]+\/photos\/[^/]+/.test(pathname);
+  // [S114 C-8] + the site-visit photo markup screen, which is the same canvas.
+  return (
+    /^\/m\/p\/[^/]+\/photos\/[^/]+/.test(pathname) ||
+    /^\/m\/site-visits\/[^/]+\/photos\/[^/]+\/markup/.test(pathname)
+  );
 }
 
 /** Fallback titles for screens that have not declared their own (see mobile-header.tsx). */
@@ -548,6 +553,7 @@ function MobileShellInner({
         </div>
 
         <OfflineStrip />
+        <HeldPhotosStrip pathname={pathname} />
       </header>
 
       {/* ------------------------------------------------------------------ */}
@@ -948,6 +954,39 @@ function NavSheet({
 // upload. A conflicted entry has left the queue and is EXCLUDED — counting it
 // would promise an upload that will never happen. `last synced` remains the
 // moment this tab last saw the network. Flagged.
+// ---------------------------------------------------------------------------
+// [S114 C-4, RULED Josh 2026-09-28] PHOTOS WITH NO PROJECT ARE DELETED FROM THE
+// PHONE AFTER 7 DAYS — and that is the HEADLINE, on every /m screen, not a
+// footnote on the capture tray. Held shots (lib/offline/held-shots.ts) are
+// swept at the TTL; the tray showed "Expires in N days" per shot, but only on
+// /m/capture, so someone who tapped Done never saw it again and the photos
+// vanished silently. This strip shows while any unfiled shot exists, counts
+// down to the SOONEST deletion, and links to the tray to file them. Hidden on
+// /m/capture itself (the tray shows each shot's countdown) and on the dark
+// photo screens (no header there).
+// ---------------------------------------------------------------------------
+function HeldPhotosStrip({ pathname }: { pathname: string }) {
+  const capture = useCaptureStore();
+  const t = useT();
+  if (!capture?.ready || !capture.needsProject) return null;
+  if (pathname.startsWith('/m/capture')) return null;
+  const warning = soonestDeletion(capture.batch.shots);
+  if (!warning) return null;
+  const { count: n, days: soonest } = warning;
+  return (
+    <Link
+      href="/m/capture"
+      data-testid="m-held-photos-strip"
+      role="alert"
+      className="flex min-h-[44px] w-full items-center border-y border-m6m-danger-border bg-[#fdf1f0] px-[18px] py-[10px] text-[13px] font-semibold text-m6m-danger"
+    >
+      {soonest === 0
+        ? t(n === 1 ? 'field.capture.deleteTodayOne' : 'field.capture.deleteTodayMany', { n })
+        : t(n === 1 ? 'field.capture.deleteSoonOne' : 'field.capture.deleteSoonMany', { n, d: soonest })}
+    </Link>
+  );
+}
+
 // ---------------------------------------------------------------------------
 function OfflineStrip() {
   // Start ONLINE, always. navigator.onLine is not available during SSR, and

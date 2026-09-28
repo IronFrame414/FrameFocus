@@ -9,6 +9,7 @@ import {
 } from '@framefocus/shared/utils/estimate-totals';
 import { proposalFormatShowsCost } from '@framefocus/shared/utils/proposal-format';
 import { requireEstimateNumber } from '@/lib/estimate-number';
+import { contactDisplayName } from '@framefocus/shared/utils/contact-name';
 
 const ROW_TYPES: readonly RowType[] = ['labor', 'material', 'subcontractor', 'other', 'allowance'];
 
@@ -386,7 +387,7 @@ export async function getProposalData(
       grandTotal: estimate.grand_total,
     },
     client: {
-      name: `${contact.first_name} ${contact.last_name}`.trim(),
+      name: contactDisplayName(contact), // [S114 C-9]
       companyName: contact.company_name,
       email: contact.email,
     },
