@@ -1,5 +1,9 @@
 import { createClient } from '@/lib/supabase-server';
-import { seesProjectMoney, managesProjectOperations } from '@framefocus/shared/constants/roles';
+import {
+  seesProjectMoney,
+  managesProjectOperations,
+  qbExclusionAccess,
+} from '@framefocus/shared/constants/roles';
 import { redirect, notFound } from 'next/navigation';
 import Link from 'next/link';
 import { getProject, PROJECT_TYPE_LABELS } from '@/lib/services/projects';
@@ -11,6 +15,8 @@ import { getProjectAssignments } from '@/lib/services/project-assignments';
 import { projectHasUnsignedContract } from '@/lib/services/contracts';
 import { memberColor } from '@/components/schedule/member-color';
 import { StatusControl } from './status-control';
+import { QbExclusionControl } from './qb-exclusion-control';
+import { countQbLinkedRecords, getProjectQbExclusion } from '@/lib/services/qb-exclusions';
 import { RateSummary } from './rate-summary';
 import { cardStyle, color, font, microLabelStyle } from '@/lib/theme';
 import { ActivatableRow } from '@/components/list-screen/row-activation';
@@ -92,6 +98,13 @@ export default async function ProjectOverviewPage({ params }: { params: { id: st
   }
 
   const canTransition = managesProjectOperations(profile.role);
+  // [S114 PART B] Owner 'set', Admin 'see', everyone else 'none' — no
+  // QuickBooks UI at all (the PE included). RLS is the authority.
+  const qbAccess = qbExclusionAccess(profile.role);
+  const [qbExclusion, qbLinked] =
+    qbAccess === 'none'
+      ? [null, 0]
+      : await Promise.all([getProjectQbExclusion(project.id), countQbLinkedRecords(project.id)]);
   // [S111] Owner/Admin, and a Project Executive on its own project (RLS).
   const canSeeFinancials = seesProjectMoney(profile.role);
 
@@ -557,6 +570,14 @@ export default async function ProjectOverviewPage({ params }: { params: { id: st
                 userRole={profile.role}
                 actualEndDate={project.actual_end_date}
               />
+              {qbAccess !== 'none' && (
+                <QbExclusionControl
+                  projectId={project.id}
+                  access={qbAccess}
+                  exclusion={qbExclusion}
+                  linkedRecords={qbLinked}
+                />
+              )}
             </div>
           )}
         </div>
