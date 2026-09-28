@@ -259,3 +259,34 @@ companies → Q18 reversed (control always shown); Q17 (a)–(e) will be "built 
   Alternative: take both categories whole — a PDF filed under `daily_logs` would then sit in the photo grid as a broken tile and be
   offered markup. Nothing leaves Files either way (R7 holds: the MIME test is never applied to Files).
 - Backfill (P2 STEP 2, one row on production) remains **Josh's** action.
+
+### Step 12 — C-8 built (`10bd0326`, C-branch 1)
+- **Shared check** `authorizeSiteVisitMarkup()` (`lib/site-visits/markup-access.ts`): session floor
+  (`resolveEstimateFileAccess`) → `canCapture` (site_visit_access office|staff) → only then the service role → captured image on
+  this estimate → not frozen (`isFrozenCapture` = the trigger's rule, per photo). Used by the route
+  `POST /api/estimates/[id]/files/[fileId]/markup` and both pages through `loadSiteVisitMarkup()`
+  (`/m/site-visits/[id]/photos/[fileId]/markup`, `/dashboard/site-visits/[id]/photos/[fileId]/markup`). Both pages reuse the
+  existing editors (MeasureThenEdit / MarkupEditor) with a `saveTarget`; `saveMarkup()` posts site-visit saves to the route.
+- **Why a route, not wider policies (#136 NOT applied), recorded in the file header** per Josh: widening `files`/storage arms would
+  also let those roles overwrite the ORIGINAL object via `project_files_update_non_client`, which the freeze trigger does not guard.
+- Tiles (one component, three mounts: /m page, desktop page, estimate builder): editable → link to markup; frozen → notice on the
+  tile "Part of a sent estimate — can't be annotated." (EN/ES keys); display `thumb ?? derivative ?? original`; the URL route signs
+  `display_url` in the same call (contract `EstimateFileUrlResponse` + registry + `media.ts` updated together).
+  `isFrozen` in the component now uses the shared rule (old string compare quoted). /m chromeless check extended to the new route.
+- **Latent bug (both surfaces):** `saveMarkup` treated an RLS-filtered 0-row UPDATE as a write; now `failed`.
+- **Live `s114-site-visit-markup.live.ts` 10/10** — Q11 condition 2: sub (same company) and Ridgeline owner (other company) refused
+  and `getAdmin` never called; the sub's route save refused, `markup_data` still NULL by service-role read. Q10: crew admitted on
+  the after-send photo; frozen photo 409 with reason; route save lands (markup_data 1 shape + derivative downloaded); route on frozen
+  409, row unchanged. Condition 3: direct service-role write on the frozen capture → 42501; control on the open capture accepted.
+- **Sabotage:** S1 floor bypassed → **3 red**; S2 freeze check removed → **1 red** (the route-level frozen test stayed green because
+  the trigger refused and the route mapped 42501 → 409 — the backstop, observed); S3 trigger disabled on rebuild-test → **1 red**;
+  trigger re-enabled, `tgenabled O`, def md5 `6bd0b4c91bf55d58e42ea2242e87c1d9` identical to the pre-sabotage snapshot. File
+  sabotages restored, md5 OK. Clean re-run 10/10; fixtures left 0/0/0. (An S2 first attempt did not apply — the anchor had been
+  reflowed by Prettier, and its "10 passed" was the unmodified file; caught by `grep` and re-run.)
+- `m6m-markup-save.test.ts` 12/12: default mock now returns one row (old default quoted); new 0-row negative; sabotage → 1 red.
+  Neighbours (route contracts, media, both order tests, visit-era, markup, export) 104/104. `s109-site-visit-media` tile pattern
+  inverted in place (old quoted). tsc 0; lint 0 (warnings 5 → 4 vs a stash baseline).
+- **PARITY:** /m and desktop share the check, loader, route, save function and tile component; they differ only in which editor
+  canvas renders (the existing /m canvas vs desktop editor, as for project photos).
+- **Unattended decision:** desktop markup from the estimate-builder mount returns to `/dashboard/site-visits/[id]`, not the
+  estimate builder. Alternative: carry a `?from=`. Narrower: no new routing parameter.
