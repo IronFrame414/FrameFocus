@@ -67,9 +67,136 @@ read, write or both. ⚠️ **State the full count and the exact command.** A ro
 silent denial or a silent leak, and this is the same shape of search that already shipped one
 production regression when it was truncated.
 
+> **FILLED [S114, rebuild-test `nmyphyhmfttxkdoposvf`, MCP `execute_sql`, 2026-09-28].**
+>
+> **The 98 is real, but it is the wrong set.** It reproduces exactly with S181's filter:
+> ```sql
+> SELECT count(*) FROM pg_policies WHERE schemaname IN ('public','storage')
+>   AND (coalesce(qual,'')||' '||coalesce(with_check,'')) ~ '= ANY \(ARRAY\[[^\]]*''project_manager''';
+> -- 98 (2 of them now also name project_executive: invoices_insert/update_authorized, from 1910)
+> ```
+> ⚠️ That filter misses every policy written `get_my_role() = 'project_manager'` (scalar form).
+> **The complete set is 114** policies, on 53 tables (52 public plus `storage.objects`):
+> ```sql
+> SELECT count(*) FROM pg_policies
+>  WHERE coalesce(qual,'')||' '||coalesce(with_check,'') LIKE '%project_manager%';
+> -- 114 = 93 get_my_role()=ANY(...) + 19 get_my_role()='project_manager' + 4 profiles.role=ANY(...)
+> --       (overlapping); 25 SELECT, 41 INSERT, 37 UPDATE, 11 DELETE, 0 ALL; 0 negative forms
+> --       (no NOT IN / <> naming project_manager). 2 also name project_executive.
+> ```
+> The four migrations on rebuild-test that production lacks (1850/1860/1890/1900) contain **0**
+> `CREATE POLICY` or `project_manager` lines (`git show origin/feature/s112-bid-token-status:<file> | grep -c`),
+> so the 114 describes production too. It is still a rebuild-test measurement; production is not reachable
+> from this session.
+>
+> Every one of the 114, grouped by the arm R1 requires. "PE arm" means a separate
+> `{table}_{cmd}_project_executive` policy scoped by `pe_on_project()` (the S181 pattern), **never** adding
+> `'project_executive'` to the PM array: **many PM arms are not project-scoped in the policy**
+> (`selection_amounts`, `selection_option_amounts`, `selection_notes`, `task_dependencies`,
+> `po_item_assignments` UPDATE, `schedule_entries` with `project_id IS NULL`). A PM is "any project" in
+> those rows; the PE must be "its projects".
+>
+> **G1 — already answered for the PE; no new arm (20).**
+> `change_order_line_items` S/I/U/D, `change_order_line_rows` S/I/U/D, `change_orders` S/I/U (S181 PE arms);
+> `estimates_select_authenticated` (`estimates_select_project_executive`: converted, on its project);
+> `expenses_select_scoped`, `expense_allocations_select_scoped`, `expense_payments_select_scoped` (1920);
+> `invoices_select_visible` (PE arm), `invoices_insert_authorized` + `invoices_update_authorized` (name PE);
+> `files_select_non_client` (non-money categories admit any assigned staffer via `can_view_project`, no
+> role list; invoices/COs via `files_select_project_executive_money`; contracts are `#3-pe`, PART F);
+> `project_assignments_select_visible` (PM appears only in the subcontractor branch; staff branch is
+> `can_view_project`).
+>
+> **G2 — carve-out 2, no contract authority: NO arm (4).** `client_contracts` I/U,
+> `subcontractor_contracts` I/U. (`contract_documents` I/U and `client_refunds` I/U are Owner/Admin only
+> and do not name PM; they are FILL-A-4's negatives.)
+>
+> **G3 — company level, ruled NO write (37).**
+> - Directories, S111 Q4 read-only: `contacts` I/U, `contact_addresses` I/U/D, `subcontractors` I/U (7).
+>   The PE already reads all three through `<> ALL('subcontractor','client')` SELECT policies (Q4's
+>   column condition was checked in S181: no rate/price columns).
+> - Price list, S111 Q3 read-only: `cost_catalog` I/U, `scope_library` I/U (4).
+> - Create a project, S111 Q6 no: `projects_insert_authorized` (1).
+> - Sales stage, S111 Q7 no: `estimates` I/U; `estimate_categories`, `estimate_files`,
+>   `estimate_line_items`, `estimate_line_rows`, `estimate_subcategories` I/U/D; `estimate_sub_bid_requests`,
+>   `estimate_sub_bids` I/U (21). Every child write also requires `estimates.status = 'draft'`, which a
+>   converted estimate never is, so a PE arm would admit nothing anyway.
+> - Site visits (pre-estimate, no project): `site_visits`, `site_visit_measurements`, `site_visit_notes`,
+>   `site_visit_voice_notes` SELECT (4).
+>
+> **G4 — ruled reads, unbuilt (3).** `profiles_select_visible` + `company_members_select_visible` (S111 Q2:
+> whole roster, read-only, company-wide by ruling); `cost_catalog_select_manager` (S111 Q3: read-only).
+> `scope_library` SELECT is already company-open.
+>
+> **G5 — R1 operational arms to build, all project-scoped (50).**
+> | Table | Policies (PM) | PE arm | R/W |
+> | --- | --- | --- | --- |
+> | `files` | I, U (+ storage I, FILL-A-2) | I/U where `project_id` is its project and `category` not in contracts/change_orders/invoices (money files keep their S181 arms) | W |
+> | `tasks` | I, U | I/U on its projects | W |
+> | `task_dependencies` | I, U | I/U where predecessor's task is on its project | W |
+> | `phases` | I, U | I/U | W |
+> | `inspections` | I, U | I/U | W |
+> | `schedule_entries` | S, I, U | S/I/U only where `project_id` is its project (the PM's `project_id IS NULL` rows are company scheduling) | R+W |
+> | `purchase_orders` | I, U | I/U, keeping the PM clauses (closed / soft-delete stay Owner/Admin) | W |
+> | `purchase_order_items` | I, U, D | I/U/D via the PO's project | W |
+> | `purchase_order_item_assignments` | I, U | I/U via the PO's project | W |
+> | `selections`, `selection_areas` | I, U each | I/U | W |
+> | `selection_options` | I, U, D | I/U/D via the selection's project | W |
+> | `selection_option_amounts` | S, I, U, D | S/I/U/D via option → selection's project | R+W |
+> | `selection_amounts` | S, I, U | S/I/U via the selection's project | R+W |
+> | `selection_notes` | S, I, U | S/I/U via its selection's project | R+W |
+> | `selection_threads` | I | I via the selection's project | W |
+> | `selection_signing_sessions` | S | S via its project | R |
+> | `safety_incidents`, `_injuries`, `_witnesses` | S ×3 | project-linked incidents are **already** readable (`can_view_project`); injuries and witnesses need a S arm via the incident's project; `project_id IS NULL` incidents stay company-level (no) | R |
+> | `project_assignments` | I, U | I/U on its projects (S111 Q8: existing staff and subs only; no invite) | W |
+> | `project_contacts` | I, U | I/U | W |
+> | `projects` | U | U on its projects (see ASK-A-1 b) | W |
+> | `chat_messages` | I (sub thread) | I on its projects' sub threads | W |
+> | `expenses` | I | the PM-only clauses (committed, subcontractor category, sub/PO link, awaiting paper) on its projects (see ASK-A-1 c) | W |
+>
+> ⚠️ **The spec's opening paragraph is partly a claim, corrected by policy text:** the PE can already
+> READ tasks, phases, purchase orders, inspections, selections, daily logs, deliveries, punch lists and
+> project-linked safety incidents, because those SELECT policies are `can_view_project()` with no role
+> list. What it cannot do on those is write. Live proof is Phase 3's.
+>
+> **Functions (the same search over `pg_proc.prosrc`, 21 hits, full list):**
+> `SELECT proname FROM pg_proc WHERE pronamespace='public'::regnamespace AND prosrc LIKE '%project_manager%'`
+> - Add the PE, project-scoped (7): `chat_can_post` (sub threads), `may_enter_client_thread`,
+>   `create_budget_line_at_capture`, `flag_po_item_missing`, `issue_po_lines`, `set_po_total_amount`,
+>   `get_approved_change_order_summaries` (no money; the PE already reads full COs, parity only).
+> - Carve-out 2, no (1): `setup_payment_schedule` (builds a subcontract's payment stages; see ASK-A-1 d).
+> - Sales stage / site visit, S111 Q7, no (11): `clone_estimate`, `convert_estimate_to_project`,
+>   `mark_estimate_lost`, `void_estimate`, `switch_pricing_mode`, `set_line_override_cost`,
+>   `set_winning_bid`, `enforce_estimate_void_authority`, `create_site_visit`, `promote_site_visit`,
+>   `site_visit_access`.
+> - Already answer the PE (2): `time_role_rank` (rank 3), `enforce_change_order_void_authority`
+>   (`pe_on_change_order`, 1910).
+>
+> **Tables with a `project_id` whose policies do not name PM** (daily_logs, deliveries, punch_lists,
+> punch_list_items, chat_threads, time_segments, project_budget_items, sync_conflicts): they use
+> `can_view_project`, author/receiver identity, or Owner/Admin. The PE is treated exactly as a PM there.
+> No arm needed.
+
 **FILL-A-2** — The storage policies, separately. ⚠️ **A storage policy must never call
 `get_my_company_id()`** — resolve the caller from `auth.uid()` inline, as `pe_can_attach_lien_release`
 does. This is a recorded trap.
+
+> **FILLED [S114, rebuild-test].** `SELECT policyname, cmd FROM pg_policies WHERE schemaname='storage'`:
+> **13** policies. **0** call `get_my_company_id()` (the trap is clean); 8 call `get_my_role()`, which
+> resolves correctly in storage (the live `project_files_insert_non_client` has worked for PMs since M4).
+> - `project-files` bucket: `insert_non_client` (role list: O/A/PM/F/crew/sub, **no PE**, the one gap),
+>   `insert_client`, `insert_project_executive_lien` (1930), `select_non_client`, `select_client`,
+>   `select_thumbnail_assigned`, `update_non_client`, `delete_owner_admin`.
+> - `company-logos` ×4 (Owner/Admin writes, public read) and `exports` SELECT (Owner/Admin): company
+>   level, **no PE**.
+> - **SELECT and UPDATE already admit the PE**: `select_non_client`/`update_non_client` are
+>   `role <> 'client'` AND an `EXISTS` on a `files` row with that path, which runs under the caller's
+>   `files` RLS, so the PE reads exactly the objects whose `files` row it can read. The thumbnail policy is
+>   assignment-based with no role list.
+> - **One new storage arm:** `project_files_insert_project_executive`, INSERT, `bucket_id = 'project-files'`,
+>   company folder resolved inline from `profiles WHERE user_id = auth.uid()`, the role read inline from the
+>   same row (not `get_my_role()`, to match `pe_can_attach_lien_release`), and folder `[2]` a project the
+>   caller is assigned to. The markup-derivative branch (`%.markup.jpg`) is copied from the PM policy.
+>   Delete stays Owner/Admin, as for the PM.
 
 **FILL-A-3** — The TypeScript side: every `Record<CompanyRole, T>` total map and every hand-written role
 array. The total maps fail to compile until the role answers; the hand-written arrays do not, and they
