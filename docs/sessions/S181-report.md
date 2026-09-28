@@ -573,3 +573,16 @@ not this session's). `git status --short supabase/` was empty (exit 0), so the m
 | `md5_co_void` | 56bfb56299e35fce3040b9d9fb4fb65a | 56bfb56299e35fce3040b9d9fb4fb65a |
 | `profiles_by_role` | admin=1 crew_member=3 foreman=1 owner=2 | known roles only |
 | `invitations_by_role` | admin=2 crew_member=10 foreman=5 | known roles only, no owner |
+
+### Section 1 — `20261820000000_s111_project_executive_role` — APPLIED, VERIFIED
+
+Dry run (exit 0): `Would push these migrations:` → exactly one, `20261820000000_s111_project_executive_role.sql`. Push (exit 0):
+`Applying migration 20261820000000_s111_project_executive_role.sql...` → `Finished supabase db push.`
+
+| column | measured | expected |
+| --- | --- | --- |
+| `ledger_row` | 1 | 1 |
+| `profiles_check_has_pe` | true | true |
+| `invitations_check_has_pe` | true | true |
+| `md5_time_role_rank` | 8ae4c32dcb2ab329a372f65cead8428f | 8ae4c32dcb2ab329a372f65cead8428f |
+| `grant_policies_with_pe` | 3 | 3 |
