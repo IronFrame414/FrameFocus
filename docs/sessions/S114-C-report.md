@@ -33,3 +33,35 @@ line, unattended decision and stop. Newest entries at the bottom.
   contract authority.
 
 ## Log
+
+### Step 0 — start (2026-09-28)
+- `main` = `2269a9a9` confirmed by `git rev-parse origin/main`. Branch `feature/s114-c-no-migration` cut from it.
+- MCP `get_project_url` → `nmyphyhmfttxkdoposvf` (**rebuild-test**). Production is not reachable from this session;
+  every production number below is a query handed to Josh.
+- Spec: C-9, C-10, F-10, G-6 added in place; F-4 corrected (`#164` → `#166`+), old text quoted. Pushed.
+- Phase 1 audits dispatched read-only (C-1/C-9/C-10; C-2/C-4; C-3/C-6/C-7/C-8; C-5 + B-1/B-2 + STATUS section).
+
+### Step 1 — the two carried-over items, measured (rebuild-test, MCP `execute_sql`)
+**`project_financials.contract_value` PE arms.**
+- Columns named `contract_value`: 3 tables (`client_contract_amounts`, `project_financials`,
+  `subcontractor_contracts`) — `information_schema.columns WHERE column_name ILIKE '%contract_value%'`.
+- `project_financials` policies: 6 — SELECT/INSERT/UPDATE `_owner_admin` + SELECT/INSERT/UPDATE `_project_executive`
+  (`pe_on_project(project_id)`). No client arm → **a client never reads this row.** The portal's contract figure is
+  `client_contract_amounts.contract_value` (`lib/services/portal.ts:321`).
+- **App writers: 0.** `grep -rn -B2 -A6 project_financials apps/web/{lib,app}` filtered for `.insert/.update/.upsert/.delete`
+  → the only hit is a `projects` update at `projects-client.ts:117`, which explicitly REFUSES `contract_value` (`:109`).
+- **DB functions reading it: 3** (`prosrc ~* 'project_financials'`): `convert_estimate_to_project` (the writer, SECURITY
+  DEFINER), `enforce_projects_column_scope`, and **`enforce_contract_billing_ceiling`** — on a fixed-price project
+  `project_financials.contract_value` IS the billing ceiling (`SELECT f.contract_value … FOR UPDATE`; no value = no
+  ceiling). On cost-plus/T&M it is a projection that never feeds billing.
+- **Reading:** not a working margin figure. On fixed price it is the enforced cap on what may be billed to the client.
+  A PE UPDATE arm lets a PE raise (or NULL) the ceiling it bills against. No UI uses the write. Recommendation for
+  Phase 2: drop the two PE write arms, keep SELECT.
+
+**Q4 hand-built sub commitments.**
+- `expenses_insert_project_executive` does not restrict `sub_contract_id`, `state`, `cost_category` or `awaiting_paper`.
+  `expenses_insert_authorized` grants exactly the same to the **PM** (those clauses are O/A/PM). So the PE's reach
+  here equals the PM's; it is not a PE-specific widening.
+- Side effect, applies to PM and PE alike: `setup_payment_schedule()`'s one-schedule check is
+  `expenses WHERE sub_contract_id = … AND is_retainage = false AND is_deleted = false`. A single hand-entered expense
+  linked to a subcontract makes the formal schedule refuse **for the Owner too** ("a schedule already exists").
