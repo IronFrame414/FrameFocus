@@ -90,3 +90,15 @@ Branch for this log and the spec fold: `feature/s115-report` (docs-only).
 
 ⚠️ **R10 collides with the Financial Visibility Floor for the PM.** An original line's only money is `project_budget_amounts.budgeted_amount`, which the Floor withholds from a PM for **read and write** (budgeted/sell is Owner/Admin — and PE on own projects). "PM may edit original budget line items" therefore either (a) lets the PM write a figure it cannot see, or (b) opens the figure to the PM. (b) is stop rule 4. → ASK; the PM arm is withheld, the rest is built.
 ⚠️ R10 also overturns the S97 immutability ruling for original lines (R10 is Josh's newer ruling, so it governs); the S97 test is inverted in place, not deleted.
+
+### Phase 1 — F-12 (measured; Explore agent)
+| what | number | command |
+| --- | --- | --- |
+| `#2-s180u` | on main `TECH_DEBT.md:2310`; RULED order: **(1) FIRST** move the 8 existing-`multiple` inputs onto `runUploadBatch` + `upload-batch-list` UI; **(2) ONLY THEN** add `multiple` to new inputs; "8 components, 8 proofs, each stating what it uploaded and what landed" | `git grep -n "2-s180u" $(git for-each-ref --format='%(refname)' refs/heads refs/remotes)` |
+| branch vs main | 1 commit (`6409738e`, revert-of-revert of `39d4a493`), 12 behind, merges clean | `git log --oneline main..feature/s114-c5-multi-upload`; `git merge-tree --write-tree --name-only …` exit 0 |
+| diff | 17 files, +620/−127: **11 upload components** + helper `uploadRemaining` + i18n + tests | `git diff --stat main...feature/s114-c5-multi-upload` |
+| of the ruled 8 | **7 touched; the portal composer (`portal-writes-ui.tsx`) is NOT** | diff |
+| ruled order | **violated** — step 2 (`multiple` on 4 new inputs: estimate Files tab, /m log, /m check-in, /m incident) is in the same commit as step 1 | diff |
+| `upload-batch-list` UI | used by 0 of the 11 (ruling step 1 requires it) | diff |
+| per-surface proofs present | **0 of 8** (0 of 11). Existing: 3 unit tests on the helper, 2 live timing runs that bypass components, 1 attribute-only e2e | read |
+| defect risk | `uploadDailyLogPhoto` / `uploadIncidentPhoto` / `uploadExpenseReceipt` return `{success:false,id}` when upload succeeds but linking fails; `uploadRemaining` records successes only → a retry uploads a duplicate and leaves an unlinked `files` row | read |
