@@ -65,3 +65,34 @@ line, unattended decision and stop. Newest entries at the bottom.
 - Side effect, applies to PM and PE alike: `setup_payment_schedule()`'s one-schedule check is
   `expenses WHERE sub_contract_id = … AND is_retainage = false AND is_deleted = false`. A single hand-entered expense
   linked to a subcontract makes the formal schedule refuse **for the Owner too** ("a schedule already exists").
+
+### Step 2 — C-2 and C-4, Phase 1 (audit agent, then spot-checked by hand)
+**FILL-C-2.1 — what separates a photo from a file:** one table, `public.files`; **`category = 'photos'` alone decides**
+(FK to `file_categories`, 14 system keys). `mime_type` decides nothing. No `site_visit_id` column: a visit's captures
+carry `estimate_id` + `site_visit_capture = true`.
+**FILL-C-2.2 — the queries:** Files (desktop `projects/[id]/files/page.tsx:31`, /m `m/p/[projectId]/files/page.tsx:34`)
+both call `getDocumentFiles` = `getFiles({project_id, exclude_category:'photos'})` (`lib/services/files.ts:173-174`).
+Photos (both surfaces) call `getProjectPhotos` → `category:'photos'` (`lib/services/photos.ts:186`, read by hand).
+**R7-compliant already. Not a query bug.**
+**Classification:** not a write-path bug for new uploads (estimate/site-visit route writes `'photos'` for images since
+S111), not a conversion bug (`convert_estimate_to_project` re-points and reclassifies `'other'`→`'photos'` for `image/%`;
+object check on rebuild-test `reclassifies = true`). What still lands images in Files:
+1. **Legacy rows** converted before `20261770000000`, left `'other'`. The backfill `docs/sessions/S111-photos-backfill-PREPARED.sql`
+   exists and was **never run on production**. Running it moves rows between surfaces → stop rule 3, Josh's ruling.
+2. **Daily-log and safety images by design** (`daily_logs`, `safety` categories). ⚠️ The comment at `files.ts:167-171`
+   claims the Photos page "widened its query to them in S111 Q18". **False**: Q18 was STOPPED (S111-report-photos.md:88-114)
+   and `photos.ts:186` is `category:'photos'` only. So these appear in Files and NOT in Photos. That is ASK-C-2.
+3. Images uploaded through desktop Files' own form (`files/upload/upload-form.tsx`), default `'other'`, Photos excluded
+   from its picker by S112 N2.
+**Rebuild-test measurement** (MCP): project image rows shown by Files = **15**: `daily_logs` 12 (8 linked to a log, 4 not),
+`safety` 2, `receipts` 1, `other` 0. Production is Josh's query (handed over in Phase 2).
+Side notes: the portal splits photos/files by MIME (`portal.ts:433,488`) — an R7 deviation on the client surface; a
+sub's bid IMAGE (`'other'`) becomes a project Photo on conversion.
+
+**FILL-C-4.1/4.2:** **no surface writes a project-less photo row today.** /m capture holds shots in IndexedDB until a
+project is chosen (Save disabled, `capture-screen.tsx:303-311`); `uploadFile` refuses no project and no path segment
+(`files-client.ts:193-202`); desktop photo surfaces take the project from the route. The DB CHECK `files_owner_arm_check`
+already forbids `project_id IS NULL AND estimate_id IS NULL AND category='photos'` (rebuild-test: `convalidated = true`,
+orphan photo rows **0**). R4 is therefore already the behaviour. **Residual found:** held shots on the phone expire
+after 7 days (`lib/offline/held-shots.ts:29-31`) — if a user never picks a project, they vanish silently.
+**FILL-C-4.3:** production orphan count is Josh's query (expected 0 because of the CHECK).
