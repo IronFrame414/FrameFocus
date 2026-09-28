@@ -168,3 +168,7 @@ memo text. Inbound: webhook + CDC backstop record QB payments into FrameFocus.
 `handleQueueRow` (exit, catches rows queued before an exclusion).
 **STATUS section:** `projects/[id]/page.tsx:550-560`, gated `managesProjectOperations` (O/A/PE/PM); buttons from `status-control.tsx:135-142`;
 Move to Trash O/A. **The PE sees this section** — the new control must be rendered for Owner only and refused by the DB for everyone else.
+
+### Step 4 — Phase 2: questions sent to Josh; STOPPED (2026-09-28)
+Nothing built. No migration written. Questions ASK-1 … ASK-18 are in the chat message of this date and repeated in full in
+`docs/sessions/S114-C-questions.md`. Production queries P1–P6 are in the same file.
