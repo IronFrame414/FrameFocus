@@ -282,10 +282,10 @@ describe('S114 PART B — qb_entity_excluded, per entity type', () => {
         company_id: companyId,
         project_id: proj.exc,
         author_member_id: ownerMemberId,
-        vendor_name: `${MARKER} vendor`,
+        supplier: `${MARKER} vendor`,
         amount: 10,
         expense_date: '2026-09-28',
-        cost_category: 'materials',
+        cost_category: 'material',
         status: 'pending',
       })
       .select('id')
