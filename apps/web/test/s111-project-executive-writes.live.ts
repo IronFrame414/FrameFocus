@@ -338,7 +338,13 @@ describe('S111 step 3 — ON its project, every write lands', () => {
     expect(li).toHaveLength(1);
   });
 
-  it('W2 money side tables: contract value and budgeted amount', async () => {
+  // [S114 Q14 A, RULED Josh] INVERTED IN PLACE for the contract value only.
+  // _Superseded title, quoted:_ 'W2 money side tables: contract value and
+  // budgeted amount', which asserted `expect(fin).toBe(1)` — the PE UPDATEd its
+  // project's `project_financials.contract_value`. 20262000000000 dropped that
+  // arm: on fixed price the column IS the billing ceiling. The budgeted amount
+  // (project_budget_amounts) is unchanged and still lands.
+  it('W2 money side tables: budgeted amount lands; the contract value (billing ceiling) is refused [S114 Q14 A]', async () => {
     const fin = await touched(
       'project_financials',
       { contract_value: 51000 },
@@ -352,7 +358,7 @@ describe('S111 step 3 — ON its project, every write lands', () => {
       'budget_item_id'
     );
     record('W2_on', { financials: fin, budgetAmounts: bud });
-    expect(fin).toBe(1);
+    expect(fin, 'the PE changed its own billing ceiling').toBe(0); // was: toBe(1)
     expect(bud).toBe(1);
   });
 
@@ -621,7 +627,14 @@ describe('S181b — OFF its project (PEW BARE), each remaining INSERT arm refuse
     expect(empty).toEqual([0, 0, 0, 0, 0, 0]);
   });
 
-  it('P1 project_financials_insert_project_executive', async () => {
+  // [S114 Q14 A] `project_financials_insert_project_executive` was DROPPED
+  // (20262000000000): the PE may not set its project's contract value / billing
+  // ceiling anywhere. This OFF-project refusal therefore no longer measures that
+  // arm; its S181b sabotage claim is superseded. The ON-project proof, with its
+  // own sabotage, is s114-pe-financials-drop F1/F2/F2b. Kept, not deleted: it
+  // still asserts the refusal. Title was
+  // 'P1 project_financials_insert_project_executive'.
+  it('P1 project_financials INSERT off its project (arm dropped S114 Q14 A; still refused)', async () => {
     await probe('P1_financials', 'project_financials', 'project_id', bare.project, {
       project_id: bare.project,
       contract_value: 1,
