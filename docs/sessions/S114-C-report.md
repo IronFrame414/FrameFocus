@@ -395,3 +395,11 @@ companies → Q18 reversed (control always shown); Q17 (a)–(e) will be "built 
 - Re-verified by pushing `584573e7` to a throwaway branch `ci/s114-main-verify`: CI **36433709837** — **Lint & Type ✓, E2E ✓**
   (14:08→14:50 UTC, 42 min, same tree as `main`). Branch deleted. `main` = green.
 - C-branch 2 CI started with this commit (next), then PART B, one at a time. Neither merges before Josh's runbook.
+
+### Step 21 — final state (2026-09-28)
+- **Merged to `main`:** C-3 hotfix `951d2623`; C-branch 1 `584573e7` (verified green after merge by CI 36433709837).
+- **Green, awaiting Josh's runbook** (`docs/sessions/S114-CB-PRODUCTION-RUNBOOK.md`): C-branch 2 `feature/s114-c-migration`
+  (CI **36439127547** ✓ on `fa58fc3d`; §1–§2) and PART B `feature/s114-b-qb-exclusion` (CI **36444682411** ✓ on `5bfbd868`; §3).
+  Both carry migrations that are on rebuild-test only; R8 (3) blocks merge until production is verified by object.
+- **Built, unproven, not for merge:** C-5 `feature/s114-c5-multi-upload` — `#2-s180u` requires one proof per surface.
+- Commits after the tested SHAs on the two waiting branches are docs-only (this report; PART B report is the tested HEAD).
