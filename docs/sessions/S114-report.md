@@ -52,7 +52,7 @@ Branch: `feature/s114-pe-operational-arms` (from `main` 210683b0). Appended afte
   Tests inverted in place: `s130-ffnav` (old expectation quoted), `s123-incident-notify` comment. tsc exit 0; 7 unit files 104/104.
 - **Q2 UI control**: none exists to remove. `grep -rn client_contract_amounts apps/web/{app,lib,components}` shows reads only;
   the one writer is `convert_estimate_to_project()` (SECURITY DEFINER, migrations 1051/1550/1770).
-- **Debt filed**: `#1-s114a` (Q6 double-booking), `#2-s114a` (Q7 timesheets, both options).
+- **Debt filed**: `#1-s114a` (Q6 double-booking), `#2-s114a` (Q7 timesheets, both options). → converted at landing to **#164** / **#165**.
 
 ### Reversible decisions taken unattended (narrower option)
 1. `purchase_order_item_assignments`: the ASSIGNABLE member list stays the PM's (O/A/PM/F/crew) — the PE can assign lines, it
@@ -199,3 +199,14 @@ pattern) · `contract_amount_arms 2` · `upload_helper 0` · `fn_md5_before` = t
 Final `db push --dry-run` exit 0: **"Remote database is up to date."** Nothing written to production but the five migrations (no rows, no
 grants, no backfill; no `migration repair`). Hold dir empty; `git status supabase/migrations` clean.
 **Relinked:** `supabase link --project-ref nmyphyhmfttxkdoposvf` exit 0; `supabase/.temp/project-ref` reads **`nmyphyhmfttxkdoposvf`**.
+
+## Step 10 — FILL-A-6 (LAST): the role is offered again
+
+Only after: carve-outs 15/15 with every sabotage red and restored (Step 6), and all five migrations on production (Step 9).
+- `WITHHELD_ROLES = []` (old value quoted); `accept-invite.tsx` gains the label.
+- Inverted in place, old values quoted: `s111-role-caps.test.ts`, `e2e/desktop-team.spec.ts` (count 4 → 5).
+- Grant routes: both refuse only withheld roles (none now) and still refuse a non-Owner granting PE (`isOwnerOnlyGrant` asserted; DB arms).
+- Debt converted at landing: `#1-s114a` → **#164**, `#2-s114a` → **#165**; authority line advanced to **#166** (old quoted). ⚠️ This
+  moves spec F-4's "next free is #164" for `#1-pe`–`#3-pe` (not touched, by instruction) to #166+ — noted in the spec.
+- tsc exit 0; unit 132 files / 1837 tests exit 0; lint exit 0; `next build` exit 0 (133/133). origin/main = 210683b0, contained.
+- Requesting CI on this HEAD (no `[skip ci]`).

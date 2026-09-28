@@ -12,8 +12,11 @@
 > register) is the assignment authority, unchanged from CLAUDE.md's rule that *main's file is the
 > authority*. **Numbers are IMMUTABLE — never reused, reassigned, or compacted — and they span all
 > THREE files.** The next free number is **one above the highest number appearing in ANY of the
-> three files**. The highest currently allocated is **#163** (in this file — the S108 Spec E
-> production-runbook findings, `#159`–`#163`, 2026-09-22), so the next free number is **#164**.
+> three files**. The highest currently allocated is **#165** (in this file — S114 PART A, `#164`–`#165`,
+> 2026-09-28, converted from `#1-s114a`/`#2-s114a` when `feature/s114-pe-operational-arms` landed), so the
+> next free number is **#166**. _Superseded, quoted: "The highest currently allocated is **#163** (in this
+> file — the S108 Spec E production-runbook findings, `#159`–`#163`, 2026-09-22), so the next free number
+> is **#164**."_
 > Branch-scoped provisional ids (`#N-<tag>`, per CLAUDE.md → 'Tech-debt
 > numbering') convert to a real number **from this authority, when the branch lands** — not before.
 >
@@ -560,9 +563,9 @@ top of this file is advanced to `#164` in the same commit, which is what keeps t
   Traps: `test/s109-row-activation.test.tsx` + `e2e/desktop-row-activation-s109.spec.ts`, each
   proven by sabotage — see `S109-report.md` Step 4.
 
-### Branch-scoped, awaiting real numbers — `feature/s114-pe-operational-arms` [S114, 2026-09-28]
+### `feature/s114-pe-operational-arms` — converted to real numbers when the branch landed [S114, 2026-09-28]
 
-- **#1-s114a — a Project Executive scheduling a crew member cannot see that person's bookings on
+- **#164 (was #1-s114a) — a Project Executive scheduling a crew member cannot see that person's bookings on
   other projects (double-booking risk). FILED by ruling [Josh, S114 Q6 A].** `schedule_entries` for the
   PE is its own projects plus its own rows (`schedule_entries_select_project_executive`,
   20261940000000); a PM reads the whole company schedule. The cost of the narrow read: a PE can book
@@ -570,7 +573,7 @@ top of this file is advanced to `#164` in the same commit, which is what keeps t
   busy/free signal carrying NO project detail** (e.g. a SECURITY DEFINER function returning
   `(member_id, date, busy boolean)` for members of its projects' teams). ⚠️ **Never a company-wide
   schedule read — that breaches R1** ("nothing at company level").
-- **#2-s114a — timesheets for the Project Executive: left out of PART A entirely. Needs a ruling.
+- **#165 (was #2-s114a) — timesheets for the Project Executive: left out of PART A entirely. Needs a ruling.
   FILED by ruling [Josh, S114 Q7 C].** The database already lets the PE approve foreman and crew
   timesheets company-wide by rank (`time_role_rank` 3, S111 Q13; `can_approve_member`), but the
   timesheet pages (`dashboard/timeclock/page.tsx:32` `isSupervisor`, `timesheets/page.tsx:57`,

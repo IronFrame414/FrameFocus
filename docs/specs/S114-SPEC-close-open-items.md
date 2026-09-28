@@ -370,7 +370,7 @@ desktop listed them.
 > | Change orders | `readsChangeOrders` (S181) | CO pages | unchanged; `s181-m-co-access.test.ts` |
 > | Cost catalog (read) | no `/m` surface (stated) | nav + list; manage stays O/A/PM | `cost_catalog_select_project_executive` |
 > | Notifications (Q8) | both, server-side | both, server-side | `receivesAssignedProjectAlerts`; incident PEs by the incident's project |
-> | Timesheets | closed (Q7 C, `#2-s114a`) | closed | — |
+> | Timesheets | closed (Q7 C, `#165`, was `#2-s114a`) | closed | — |
 
 **FILL-A-6** — **Last step.** Remove `project_executive` from `WITHHELD_ROLES`, invert the
 `desktop-team.spec.ts` invite-options assertion in place with the old count quoted, and confirm both
@@ -384,6 +384,17 @@ grant routes now accept it.
 > (old set quoted at `:124`). The database already limits the grant to the Owner (S111 Q11:
 > `profiles_update_admin`, `invitations_*_owner_admin`, verified on production in S181d). Plus the
 > `accept-invite.tsx:7` label.
+>
+> **FILLED — done, LAST [S114, after the carve-outs went green and all five migrations were on production].**
+> `WITHHELD_ROLES = []` (old `['project_executive']` quoted in place); `OFFERED_ROLES` now all five, PE included.
+> Inverted in place with the old values quoted: `s111-role-caps.test.ts` (`isWithheldRole` PE true→false;
+> `WITHHELD_ROLES` `['project_executive']`→`[]`; `OFFERED_ROLES` the four → the five) and
+> `e2e/desktop-team.spec.ts` (old count **4** `['admin','crew_member','foreman','project_manager']` → **5** with
+> `project_executive`). **Both grant routes now accept it:** `POST /api/invites` (`if (isWithheldRole(role))`,
+> route.ts:53) and `updateTeamMemberAction` (actions.ts:83) refuse only a withheld role, and none is withheld
+> (`isWithheldRole('project_executive') === false`, asserted); both still refuse a non-Owner granting it
+> (`isOwnerOnlyGrant('project_executive') === true`, asserted; DB: `profiles_update_admin`,
+> `invitations_*_owner_admin`). `accept-invite.tsx` label added.
 
 **ASK-A-1** — Any table where "complete access" does not obviously answer read-versus-write. Propose,
 do not decide.
@@ -538,6 +549,7 @@ admit the exact sequence, live.
 project through the file's subject, with a no-returning negative and its own sabotage.
 
 **F-4.** Renumber `#1-pe`, `#2-pe`, `#3-pe` once the branch lands. Next free on `main` is `#164`.
+> [S114] `#164`–`#165` were taken by PART A's own debt when it landed; next free is now **`#166`**.
 
 **F-5. CLAUDE.md** is 391 lines against a 350 target. ⚠️ **No rule is deleted.** Every line that leaves
 is compressed in place or moved to a named file; anything proposed for deletion is listed for Josh.

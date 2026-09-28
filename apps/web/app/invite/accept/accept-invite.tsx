@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase-browser';
 
 const ROLE_LABELS: Record<string, string> = {
   admin: 'Admin',
+  project_executive: 'Project Executive',
   project_manager: 'Project Manager',
   foreman: 'Foreman',
   crew_member: 'Crew Member',

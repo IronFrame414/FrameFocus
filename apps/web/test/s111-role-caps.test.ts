@@ -6,6 +6,7 @@ import {
   OFFERED_ROLES,
   PROJECT_MONEY_ROLES,
   WITHHELD_ROLES,
+  isOwnerOnlyGrant,
   isWithheldRole,
   seesCompanyMoney,
   seesProjectMoney,
@@ -81,7 +82,9 @@ describe('S181 — money predicates, every role answered', () => {
 
 // [S181 Q3, RULED Josh] The Project Executive is WITHHELD from every grant UI
 // until its operational arms land — from ONE source, and never from the schema.
-describe('S181 Q3 — withheld from the offer, kept in the schema', () => {
+// [S114 FILL-A-6] INVERTED IN PLACE: the Project Executive is no longer
+// withheld. The superseded expectations are quoted at each assertion.
+describe('S181 Q3 → S114 FILL-A-6 — withheld until PART A, now offered; kept in the schema', () => {
   const read = (rel: string) => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), 'utf8');
 
   it('isWithheldRole — every role answered', () => {
@@ -89,7 +92,8 @@ describe('S181 Q3 — withheld from the offer, kept in the schema', () => {
       {
         owner: false,
         admin: false,
-        project_executive: true,
+        // [S114] was `project_executive: true`.
+        project_executive: false,
         project_manager: false,
         foreman: false,
         crew_member: false,
@@ -99,14 +103,20 @@ describe('S181 Q3 — withheld from the offer, kept in the schema', () => {
       (role, withheld) => expect(isWithheldRole(role), role).toBe(withheld)
     );
     for (const junk of JUNK_ROLES) expect(isWithheldRole(junk), `junk '${junk}'`).toBe(false);
-    expect([...WITHHELD_ROLES]).toEqual(['project_executive']);
+    // [S114] was `.toEqual(['project_executive'])`.
+    expect([...WITHHELD_ROLES]).toEqual([]);
   });
 
-  it('OFFERED_ROLES is INVITABLE_ROLES minus the withheld — PE absent, the four staff roles present', () => {
-    expect([...OFFERED_ROLES]).toEqual(['admin', 'project_manager', 'foreman', 'crew_member']);
-    expect(OFFERED_ROLES).not.toContain('project_executive');
-    // It is still INVITABLE by type and by list — withheld, not removed.
-    expect(INVITABLE_ROLES).toContain('project_executive');
+  // [S114] Title was 'OFFERED_ROLES is INVITABLE_ROLES minus the withheld — PE
+  // absent, the four staff roles present', asserting
+  // `.toEqual(['admin', 'project_manager', 'foreman', 'crew_member'])` and
+  // `.not.toContain('project_executive')`.
+  it('OFFERED_ROLES is INVITABLE_ROLES minus the withheld — now all five, PE included (S114)', () => {
+    expect([...OFFERED_ROLES]).toEqual(['admin', 'project_executive', 'project_manager', 'foreman', 'crew_member']);
+    expect(OFFERED_ROLES).toContain('project_executive');
+    expect([...OFFERED_ROLES]).toEqual([...INVITABLE_ROLES]);
+    // Still Owner-only to GRANT: offering it did not widen who may grant it.
+    expect(isOwnerOnlyGrant('project_executive')).toBe(true);
   });
 
   it('ONE source: both pickers derive from OFFERED_ROLES; neither hand-lists a role', () => {

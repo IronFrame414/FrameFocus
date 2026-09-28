@@ -126,7 +126,13 @@ export function isOwnerOnlyGrant(role: string | null | undefined): boolean {
  * and the two grant paths (`POST /api/invites`, `updateTeamMemberAction`) all
  * read `OFFERED_ROLES` / `isWithheldRole` — never a second hand-edited list.
  */
-export const WITHHELD_ROLES: readonly CompanyRole[] = ['project_executive'];
+// [S114 PART A, FILL-A-6 — the LAST step, RULED R2] Superseded, quoted rather
+// than deleted: `= ['project_executive']`. The operational arms landed
+// (20261940–1980000000, on production) and the two carve-outs were proven
+// negatively first (test/s114-pe-carveouts.live.ts), so the role is offered
+// again — still Owner-only to grant (OWNER_ONLY_GRANT_ROLES). The mechanism
+// stays for the next role that needs holding back.
+export const WITHHELD_ROLES: readonly CompanyRole[] = [];
 
 export function isWithheldRole(role: string | null | undefined): boolean {
   return !!role && (WITHHELD_ROLES as readonly string[]).includes(role);
