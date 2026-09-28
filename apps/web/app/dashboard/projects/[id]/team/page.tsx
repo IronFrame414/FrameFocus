@@ -1,3 +1,4 @@
+import { managesProjectOperations } from '@framefocus/shared/constants/roles';
 import { createClient } from '@/lib/supabase-server';
 import { redirect } from 'next/navigation';
 import { getProjectAssignments } from '@/lib/services/project-assignments';
@@ -25,7 +26,7 @@ export default async function ProjectTeamPage({ params }: { params: { id: string
     getMembers(),
   ]);
 
-  const canManage = ['owner', 'admin', 'project_manager'].includes(profile.role);
+  const canManage = managesProjectOperations(profile.role);
 
   return (
     <TeamPanel

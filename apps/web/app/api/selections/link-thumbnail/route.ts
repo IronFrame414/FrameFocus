@@ -1,3 +1,4 @@
+import { managesProjectOperations } from '@framefocus/shared/constants/roles';
 import { NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'node:crypto';
 import { createClient } from '@/lib/supabase-server';
@@ -24,7 +25,6 @@ import { brand } from '@/lib/brand';
 const BUCKET = 'project-files';
 const MAX_BYTES = 4 * 1024 * 1024;
 const TIMEOUT_MS = 6000;
-const MANAGER = new Set(['owner', 'admin', 'project_manager']);
 
 function isBlockedHost(host: string): boolean {
   const h = host.toLowerCase();
@@ -81,7 +81,7 @@ export async function POST(request: NextRequest) {
     .eq('user_id', user.id)
     .eq('is_deleted', false)
     .maybeSingle();
-  if (!profile || !MANAGER.has(profile.role)) {
+  if (!profile || !managesProjectOperations(profile.role)) {
     console.error('[link-thumbnail] 403: role', profile?.role, 'is not owner/admin/PM');
     return NextResponse.json({ error: 'Only an owner, admin or project manager can add option links.' }, { status: 403 });
   }

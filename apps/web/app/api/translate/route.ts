@@ -15,6 +15,7 @@ import { MAX_CHARS, MAX_TEXTS, translateForReader } from '@/lib/translation/tran
 const READERS = new Set([
   'owner',
   'admin',
+  'project_executive',
   'project_manager',
   'foreman',
   'crew_member',

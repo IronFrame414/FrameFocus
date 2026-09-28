@@ -1,4 +1,5 @@
 "use client";
+import { managesProjectOperations } from '@framefocus/shared/constants/roles';
 import { useState } from 'react';
 import { useConfirm } from '@/components/confirm/confirm-provider';
 import type { Selection } from '@/lib/services/selections-client';
@@ -7,7 +8,6 @@ import type { SheetSession } from './selection-sheet';
 // §6.1 controls, company side. The client's two acts (sign / decline) happen
 // in the portal — stage 7's page calls /api/portal/sign-selection and
 // /api/portal/decline-selection; nothing here signs on her behalf.
-const MANAGER = ['owner', 'admin', 'project_manager'];
 const money = (n: number | string | null) => (n == null ? '—' : Number(n).toLocaleString('en-US', { style: 'currency', currency: 'USD' }));
 const card: React.CSSProperties = { backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: '0.5rem', padding: '1rem', marginBottom: '1rem' };
 const btn: React.CSSProperties = { padding: '0.45rem 0.875rem', borderRadius: '0.375rem', border: '1px solid #1f2937', backgroundColor: '#1f2937', color: '#fff', fontSize: '0.8125rem', fontWeight: 600, cursor: 'pointer' };
@@ -22,7 +22,7 @@ export function SelectionLifecycle({ selection, role, sessions, onDone }: { sele
   // release"), so the only place a failure can be seen is here. A release that
   // silently did not reach the client is the exact defect this session fixes.
   const [emailWarning, setEmailWarning] = useState<string | null>(null);
-  const canManage = MANAGER.includes(role);
+  const canManage = managesProjectOperations(role);
 
   async function call(path: string) {
     setBusy(true);

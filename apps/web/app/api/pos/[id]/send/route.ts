@@ -1,3 +1,4 @@
+import { managesProjectOperations } from '@framefocus/shared/constants/roles';
 import { NextResponse } from 'next/server';
 import { renderToBuffer } from '@react-pdf/renderer';
 import { createClient } from '@/lib/supabase-server';
@@ -28,7 +29,7 @@ export async function POST(_request: Request, { params }: { params: { id: string
     .eq('user_id', user.id)
     .eq('is_deleted', false)
     .single();
-  if (!profile || !['owner', 'admin', 'project_manager'].includes(profile.role)) {
+  if (!profile || !managesProjectOperations(profile.role)) {
     return NextResponse.json({ error: 'Only Owner/Admin/PM may send a PO.' }, { status: 403 });
   }
 

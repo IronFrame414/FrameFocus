@@ -215,6 +215,10 @@ describe('§3c — strictly above the submitter, company-wide', () => {
     // The case a project scope would silence. computeIncidentRecipients takes no
     // project argument at all, which is the structural form of the guarantee;
     // this asserts the behaviour that structure is supposed to produce.
+    // [S114 Q8 A] It now takes an OPTIONAL projectId, used ONLY to ADD the
+    // Project Executives assigned to that project; the company-wide set is
+    // computed exactly as before, and a null project (this case) adds nobody.
+    // The assertions below are unchanged.
     const incident = fakeIncident({ project_id: null, project: null });
     const recipients = await computeIncidentRecipients(
       admin,

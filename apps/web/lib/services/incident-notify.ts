@@ -95,7 +95,8 @@ export async function computeIncidentRecipients(
   companyId: string,
   submitterRole: CompanyRole,
   submitterEmail: string | null,
-  submitterProfileId?: string | null
+  submitterProfileId?: string | null,
+  projectId?: string | null
 ): Promise<IncidentRecipient[]> {
   const submitterRank = ROLE_HIERARCHY[submitterRole] ?? 0;
   const above = SUPERVISORY_ROLES.filter((r) => ROLE_HIERARCHY[r] > submitterRank);
@@ -109,7 +110,50 @@ export async function computeIncidentRecipients(
     .eq('is_deleted', false)
     .in('role', targetRoles);
 
-  return (data ?? [])
+  const companyWide = (data ?? []).map((p) => ({
+    id: p.id,
+    email: p.email,
+    first_name: p.first_name,
+    role: p.role,
+  }));
+
+  // [S114 Q8 A] Project Executives hear about incidents on THEIR projects only:
+  // the company-wide set above is unchanged (and still assignment-independent);
+  // PEs ASSIGNED to the incident's project are added when they outrank the
+  // submitter. A shop/yard incident (no project) reaches no PE.
+  let assignedPes: typeof companyWide = [];
+  if (projectId && ROLE_HIERARCHY.project_executive > submitterRank) {
+    const { data: pa } = await admin
+      .from('project_assignments')
+      .select('member:company_members!inner(profile:profiles!inner(id, email, first_name, role, is_deleted, company_id))')
+      .eq('project_id', projectId)
+      .eq('is_deleted', false);
+    assignedPes = ((pa ?? []) as unknown as Array<{
+      member: {
+        profile: {
+          id: string;
+          email: string;
+          first_name: string;
+          role: string;
+          is_deleted: boolean | null;
+          company_id: string;
+        } | null;
+      } | null;
+    }>)
+      .map((r) => r.member?.profile)
+      .filter(
+        (p): p is NonNullable<typeof p> =>
+          Boolean(p) &&
+          p!.role === 'project_executive' &&
+          p!.is_deleted !== true &&
+          p!.company_id === companyId
+      )
+      .map((p) => ({ id: p.id, email: p.email, first_name: p.first_name, role: p.role }));
+  }
+
+  const seen = new Set<string>();
+  return [...companyWide, ...assignedPes]
+    .filter((p) => (seen.has(p.id) ? false : (seen.add(p.id), true)))
     .filter((p) =>
       submitterProfileId ? p.id !== submitterProfileId : p.email !== submitterEmail
     )

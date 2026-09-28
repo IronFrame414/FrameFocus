@@ -1,5 +1,5 @@
 import { createClient } from '@/lib/supabase-server';
-import { seesProjectMoney } from '@framefocus/shared/constants/roles';
+import { seesProjectMoney, managesProjectOperations } from '@framefocus/shared/constants/roles';
 import { redirect, notFound } from 'next/navigation';
 import Link from 'next/link';
 import { getProject, PROJECT_TYPE_LABELS } from '@/lib/services/projects';
@@ -90,7 +90,7 @@ export default async function ProjectOverviewPage({ params }: { params: { id: st
     sourceEstimate = data ?? null;
   }
 
-  const canTransition = ['owner', 'admin', 'project_manager'].includes(profile.role);
+  const canTransition = managesProjectOperations(profile.role);
   // [S111] Owner/Admin, and a Project Executive on its own project (RLS).
   const canSeeFinancials = seesProjectMoney(profile.role);
 

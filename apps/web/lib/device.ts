@@ -100,6 +100,8 @@ export const SURFACE_COOKIE = 'ff_surface';
 export const SURFACE_TOGGLE_ROLES: readonly CompanyRole[] = [
   'owner',
   'admin',
+  // [S114] An office role on its own projects, like the PM.
+  'project_executive',
   'project_manager',
 ];
 

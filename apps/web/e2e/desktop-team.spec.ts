@@ -98,7 +98,9 @@ test.describe('S175 · #1-s168 — clients are off the Team side', () => {
 
   // [S181 Q3] Title inverted in place — _superseded:_ "the invite form no longer
   // offers Client, and offers the staff roles (five since S111)".
-  test('the invite form no longer offers Client, and offers the four staff roles (PE withheld, S181)', async ({
+  // [S114 FILL-A-6] Title inverted in place — _superseded:_ "the invite form no
+  // longer offers Client, and offers the four staff roles (PE withheld, S181)".
+  test('the invite form no longer offers Client, and offers the five staff roles (PE offered again, S114)', async ({
     page,
   }) => {
     // Limb 1. The local `INVITABLE_ROLES` duplicate is gone and the form renders
@@ -124,8 +126,14 @@ test.describe('S175 · #1-s168 — clients are off the Team side', () => {
     //   ['admin', 'crew_member', 'foreman', 'project_executive', 'project_manager']
     // The Project Executive is WITHHELD (roles.ts WITHHELD_ROLES) until its
     // operational arms land; it stays in the schema.
-    expect(values.sort()).toEqual(['admin', 'crew_member', 'foreman', 'project_manager']);
-    expect(values, 'the withheld Project Executive is offered again').not.toContain('project_executive');
+    // [S114 FILL-A-6] Superseded, quoted rather than deleted — the S181 FOUR
+    // (count 4, PE withheld):
+    //   expect(values.sort()).toEqual(['admin', 'crew_member', 'foreman', 'project_manager']);
+    //   expect(values, 'the withheld Project Executive is offered again').not.toContain('project_executive');
+    // PART A landed; the role is offered to the Owner again (five). Still
+    // Owner-only to grant — the Admin's picker filters it (OWNER_ONLY_GRANT_ROLES).
+    expect(values.sort()).toEqual(['admin', 'crew_member', 'foreman', 'project_executive', 'project_manager']);
+    expect(values, 'the Project Executive is not offered to the Owner').toContain('project_executive');
     await expect(page.getByText('Portal access to project timeline')).toHaveCount(0);
   });
 });

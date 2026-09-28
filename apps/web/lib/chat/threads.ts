@@ -163,11 +163,13 @@ export async function postableSet(
     return withAssignment(admin, thread.project_id, eligible);
   }
 
-  // Sub thread: Owner and Admin by role; PM and subcontractor by assignment.
+  // Sub thread: Owner and Admin by role; PM, Project Executive [S114] and
+  // subcontractor by assignment — the same set chat_can_post() admits.
   // Foreman and crew are READERS only and are deliberately absent.
   const byRole = profiles.filter((p) => p.role === 'owner' || p.role === 'admin');
   const byAssignment = profiles.filter(
-    (p) => p.role === 'project_manager' || p.role === 'subcontractor'
+    (p) =>
+      p.role === 'project_manager' || p.role === 'project_executive' || p.role === 'subcontractor'
   );
   const assigned = await withAssignment(admin, thread.project_id, byAssignment);
   return [...byRole.map(toCandidate), ...assigned];

@@ -1,3 +1,4 @@
+import { supervisesProjectWork } from '@framefocus/shared/constants/roles';
 import { createClient } from '@/lib/supabase-server';
 import { redirect } from 'next/navigation';
 import { getExpenses } from '@/lib/services/expenses';
@@ -35,7 +36,6 @@ export default async function ExpensesPage() {
 
   /** 7C §4 — the Bills & Commitments audience. Mirrors the tab gate in
    *  expenses-page-client.tsx:77, and the pair is unit-tested equal. */
-  const SEES_BILLS = ['owner', 'admin', 'project_manager', 'foreman'];
   const isReviewer = ['owner', 'admin'].includes(role);
 
   const [expenses, billRows, activeProjects, allProjects, myMember, timeSettings] =
@@ -64,7 +64,7 @@ export default async function ExpensesPage() {
   // rows on any tab. `expenses_insert_authorized` restricts `is_retainage` to
   // Owner/Admin, and a crew receipt carries no sub-contract or PO link, so the
   // rows removed here are rows that role could not have authored either.
-  const seesBills = SEES_BILLS.includes(role);
+  const seesBills = supervisesProjectWork(role);
   const payableIdSet = new Set(billRows.map((b) => b.id));
   const visibleExpenses = seesBills ? expenses : expenses.filter((e) => !payableIdSet.has(e.id));
 

@@ -1,3 +1,4 @@
+import { managesProjectOperations } from '@framefocus/shared/constants/roles';
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase-server';
@@ -27,7 +28,7 @@ export default async function EditPurchaseOrderPage({
     .eq('user_id', user.id)
     .eq('is_deleted', false)
     .single();
-  if (!profile || !['owner', 'admin', 'project_manager'].includes(profile.role)) {
+  if (!profile || !managesProjectOperations(profile.role)) {
     redirect(`/dashboard/field-ops/${params.projectId}/deliveries/${params.poId}`);
   }
 

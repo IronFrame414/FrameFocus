@@ -123,7 +123,8 @@ export async function POST(request: NextRequest) {
         profile.company_id,
         profile.role as CompanyRole,
         profile.email,
-        profile.id
+        profile.id,
+        incident.project_id
       );
 
       // ND-5: pushes at ANY hour, every incident type. notify() never throws for
