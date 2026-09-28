@@ -28,3 +28,10 @@ Branch: `feature/s114-pe-operational-arms` (from `main` 210683b0). Appended afte
 - A-4 plan: N1–N8, each no-RETURNING with its own sabotage; `contract_documents` UPDATE stated as not isolatable.
 - ⚠️ ASK-A-1 a: `client_contract_amounts` PE write arms (1910, production) vs R1 carve-out 2 — reported, not reconciled.
 - Phase 2 questions sent; STOPPED for rulings. Nothing built, no migration written.
+
+## Step 3 — Rulings received (Josh, 2026-09-27); UNATTENDED from here
+
+- Q1 A · Q2 B · Q3 A · Q4 A · Q5 A · Q6 A (+debt) · Q7 C (timesheets out; filed) · Q8 A · Q9 A · Q10 A. Recorded in the spec PART A header.
+- Scoped production override for this session: CC applies PART A's own migrations and merges. CLAUDE.md and R8 unchanged.
+- Q1 production row recorded with its pattern (`LIKE '%\_project\_executive'` ends-with; contains-pattern gives 21 non-SELECT).
+- PART A opening paragraph corrected in place (98 → 114, both searches stated; reads exist, writes missing), old text quoted.

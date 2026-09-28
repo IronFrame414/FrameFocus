@@ -56,11 +56,44 @@ carry here.
 
 # PART A — the Project Executive, finished (`project_executive` operational arms)
 
-The database grants this role its projects' money and nothing else. Of **98** policies naming
-`project_manager` in a positive role list, **0** name `project_executive` `[VERIFIED 2026-09-27]`. On its
-own projects it cannot upload a photo or file, touch tasks, phases, schedule, purchase orders,
-inspections or selections, see safety incidents, read the roster (ruled, unbuilt), assign people
-(ruled, unbuilt), or read the cost catalog (ruled, unbuilt).
+**[CORRECTED S114, Josh ruling 2026-09-27.]** Of **114** policies naming `project_manager`, **2** name
+`project_executive` (`invoices_insert/update_authorized`, from 1910). Both searches, so the number is
+reproducible (rebuild-test, 2026-09-28):
+- `coalesce(qual,'')||' '||coalesce(with_check,'') LIKE '%project_manager%'` → **114** (the complete set);
+- `… ~ '= ANY \(ARRAY\[[^\]]*''project_manager'''` → **98**. ⚠️ The 98 matched only the
+  `= ANY(ARRAY[…])` form and **missed the 16 policies written `get_my_role() = 'project_manager'`**.
+
+On its own projects the PE can already **read** tasks, phases, purchase orders, inspections, selections
+and safety incidents (their SELECT policies are `can_view_project()` with no role list). What it lacks is
+**writes**: it cannot upload a photo or file, or write tasks, phases, schedule, purchase orders,
+inspections or selections; nor read the roster (ruled, unbuilt), assign people (ruled, unbuilt), or read
+the cost catalog (ruled, unbuilt).
+
+> Superseded text, quoted: "The database grants this role its projects' money and nothing else. Of
+> **98** policies naming `project_manager` in a positive role list, **0** name `project_executive`
+> `[VERIFIED 2026-09-27]`. On its own projects it cannot upload a photo or file, touch tasks, phases,
+> schedule, purchase orders, inspections or selections, see safety incidents, read the roster (ruled,
+> unbuilt), assign people (ruled, unbuilt), or read the cost catalog (ruled, unbuilt)."
+
+**RULED [Josh, 2026-09-27, S114 Phase 2]:** Q1 A (production verified by Josh, below) · Q2 B (drop both
+`client_contract_amounts` PE write arms in a NEW migration; remove the UI control; negative + sabotage) ·
+Q3 A (project status via a project-scoped UPDATE arm; archive/trash stay Owner/Admin) · Q4 A (all four
+expense entry types on its projects) · Q5 A (no `setup_payment_schedule()`; live negative N8) · Q6 A
+(schedule on its projects + its own entries; double-booking risk filed as debt; never company-wide read) ·
+**Q7 C** (timesheets left out of PART A entirely; pages stay closed; filed with both options) · Q8 A
+(project alerts yes; safety alerts only for incidents on its projects) · Q9 A (client chat on its
+projects) · Q10 A (build order; production before merge). **Scoped production override, this session
+only:** CC applies PART A's own migrations to production and merges; R8 and CLAUDE.md unchanged.
+
+**Q1 production row (Josh, 2026-09-27 20:20 ET), every value matched:** `ledger_rows 5`,
+`newest_migration 20261930000000`, `pe_profiles_now 0`, `profiles_check_has_pe true`,
+`invitations_check_has_pe true`, `grant_policies_with_pe 3`, `pe_read_arms 19`, `pe_write_arms 19`,
+`pe_functions 11`, `pe_functions_anon_can_run 0`, `contract_void_has_pe false`, `invoice_insert_has_pe
+true`, `expense_file_read_arms 4`, `lien_public_arms 7`, `lien_storage_arm 1`, `delete_arms 0`,
+`template_write_arms 0`, all five post-migration hashes as predicted. ⚠️ **Pattern:** the arm counts use
+`policyname LIKE '%\_project\_executive'` (**ends-with**), not `'%project\_executive%'` (contains), which
+also catches `_project_executive_lien`/`_money` and gives 21 on the non-SELECT side (S181b). Re-measure
+with ends-with, or it will look like drift.
 
 **FILL-A-1** — Every one of the 98, grouped by table, each with the arm R1 requires and whether it is
 read, write or both. ⚠️ **State the full count and the exact command.** A role list missed here is a
