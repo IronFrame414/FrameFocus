@@ -46,3 +46,17 @@ Branch for this log and the spec fold: `feature/s115-report` (docs-only).
 | both merge cleanly onto main | yes / yes | `git merge-tree --write-tree main origin/feature/<b>` |
 
 ⚠️ **CONTRADICTION — H-3's premise is false.** The spec says `s112-staletimes-hold` "raises Next's client router cache above its 30-second default, so returning to a page you just visited is instant." It does the **opposite**: it sets `staleTimes.dynamic` from 30 s to **0**, so every revisit refetches. Its own measurement (`docs/sessions/S112-router-staleness.md` §1): tab revisit 52 → 369 ms unthrottled, 51 → 639 ms Fast 3G, 51 → 2,129 ms Slow 3G. It is a **correctness** fix (stale page after a mutation), bought with speed. Shipping it inside "the app is slow, fix it" makes navigation slower. Per the spec's own rule ("if a measurement contradicts a RULED line, STOP and report"), the staletimes half of H-3 **stops** and goes to Josh as an ASK; the m-loading half proceeds.
+
+### Phase 1 — C-12 (measured; code-read by a read-only Explore agent, key lines re-read by me)
+| what | number / location | command |
+| --- | --- | --- |
+| where scope lives | `estimates.scope_summary` text (baseline `20260101000000:1353`) + `estimates.scope_sections` jsonb `[{title,bullets[]}]`; copied to `projects.scope_summary/scope_sections` on conversion | `grep -nE "scope_of_work\|scope_text\|scope_summary\|scope_sections" packages/shared/types/database.ts` → 18 |
+| app refs | `scope_summary\|scopeSummary` 24; `scope_sections\|scopeSections` 16 | `grep -rnE "…" apps/web packages --include=*.ts --include=*.tsx` |
+| editor | **plain `<textarea rows=3>`**, `app/dashboard/estimates/[id]/text-tabs.tsx:576-584`; label "Summary (shown at the top of the scope on the proposal)"; **no markdown hint anywhere**. Section titles/bullets are single-line inputs (can't hold markdown structure) | read |
+| surface 1 — PDF + builder preview + review-send preview | `lib/proposal/proposal-template.tsx:203` `<Text>{scopeSummary}</Text>` — React-PDF keeps `\n`, prints `##`/`*` literally. Rendered by `proposal-service.ts:28` for generate/send/resend/signing-service | read |
+| surface 2 — **client signing page (the "sent" version)** | `lib/proposal/proposal-html.tsx:146-148` plain `<p>` **with no `whiteSpace`** → every newline collapses to a space = "one paragraph". The intro (:136) and terms (:476) do have `pre-wrap`; scope was missed | read |
+| surface 3 — desktop project overview | `app/dashboard/projects/[id]/page.tsx:686-691` pre-wrap, raw | read |
+| surface 4 — `/m` project overview | `app/m/p/[projectId]/overview/page.tsx:164-167` `whitespace-pre-line`, raw | read |
+| client portal / emails | **no** scope rendered (portal `financials/page.tsx:107` is a subtitle; `proposal-email.tsx` has none) | grep |
+| markdown deps | `react-markdown ^10.1.0` + `remark-gfm ^4.0.1` direct in `apps/web/package.json`; used only by `components/public/markdown-doc.tsx` (terms/privacy) — cannot render into React-PDF | `grep -nE 'react-markdown\|…' package.json apps/*/package.json packages/*/package.json` → 2 |
+| AI writing scope | **none** — only `text-tabs.tsx:485` writes `scope_summary` (plus SQL copy on conversion). Markdown is typed/pasted by authors (FILL-C-12.2: authors type markdown into a plain textarea because nothing told them otherwise) | grep of OpenAI callers |
