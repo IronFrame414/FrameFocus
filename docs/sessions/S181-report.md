@@ -599,3 +599,18 @@ Dry run (exit 0): exactly one, `20261830000000_s111_project_executive_floor_read
 | `pe_functions` | 7 | 7 |
 | `md5_record_client_payment` | 6470d73297bd802a45533c91c7bd0cb0 | 6470d73297bd802a45533c91c7bd0cb0 |
 | `pe_functions_anon_can_run` | 0 | 0 |
+
+### Section 3 — `20261910000000_s111_project_executive_write_arms` — APPLIED, VERIFIED
+
+Dry run (exit 0): exactly one, `20261910000000_s111_project_executive_write_arms.sql`. Push (exit 0): `Applying migration
+20261910000000_s111_project_executive_write_arms.sql...` → `Finished supabase db push.`
+
+| column | measured | expected |
+| --- | --- | --- |
+| `ledger_row` | 1 | 1 |
+| `pe_write_arms` | 17 | 17 |
+| `md5_invoice_void` | fe21eb3dcf35798edf62d2afa819c3be | fe21eb3dcf35798edf62d2afa819c3be |
+| `md5_invoice_scope` | d60f60fc9bd3fc9edd4f7bcb320d83aa | d60f60fc9bd3fc9edd4f7bcb320d83aa |
+| `md5_co_void` | 0bd45f0f8b3c2b377b68380af501ed74 | 0bd45f0f8b3c2b377b68380af501ed74 |
+| `contract_void_has_pe` | false (not NULL: the function exists) | false |
+| `invoice_insert_has_pe` | true | true |
