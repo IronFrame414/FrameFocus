@@ -365,3 +365,15 @@ companies → Q18 reversed (control always shown); Q17 (a)–(e) will be "built 
   line advanced to **`#171`** (old text quoted). Spec PART C status block added.
 - Drift check: the new objects (1990/2000/2010) will be flagged by the daily fingerprint cron like PART A's — same known cause
   (`#1-s112f`, baseline from rebuild-test); fingerprint NOT regenerated (it would absorb PART E's unmerged objects).
+
+### Step 18 — C-branch 1 CI: red once (a real cause), fixed, green
+- CI **36419080502** on `a38c6fac`: Lint & Type ✓, **E2E 4 failed / 587 passed** — all four in `desktop-chat-photos.spec.ts`
+  (A-C19 picker count, 3 × A-C17 rendering). **Cause, not flake:** C-2's widened Photos view reached the CHAT photo picker through
+  the shared `getProjectPhotos()`; the picker offered daily-log images too (more than the fixture's 6), and the newest had no storage
+  object on rebuild-test, so they rendered as nothing.
+- **Unattended decision (reversible, narrower):** `getProjectPhotos({ photoView })` is opt-in for the three Photos SCREENS; chat
+  (picker, message and thread routes) keeps `category = 'photos'`. Alternative: let chat share daily-log and safety images too —
+  a chat thread can include subs and clients, and a safety image can be an injury photo; that widening is **Josh's call**, filed in
+  the final report. Unit asserts the screens opt in and the three chat routes do not.
+- CI **36423249160** on `a9068fc2`: **Lint & Type ✓, E2E ✓** (full run). Branch contains current `main` `951d2623`; 0 files under
+  `supabase/`. Merge follows with the tree-identity proof for this docs-only commit (report + `S114-CLICK-LIST.md`).
