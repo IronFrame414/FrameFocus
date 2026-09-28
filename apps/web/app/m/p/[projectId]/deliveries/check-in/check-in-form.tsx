@@ -1,12 +1,11 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Image as ImageIcon } from 'lucide-react';
 import { checkInDelivery } from '@/lib/services/deliveries-client';
 import { uploadFile } from '@/lib/services/files-client';
 import { useT } from '@/components/i18n/language-provider';
-import { uploadRemaining } from '@/lib/uploads/upload-batch';
 import { SetMobileHeader } from '../../../../mobile-header';
 
 // M6M §4.12.4 — the 7d form.
@@ -73,9 +72,6 @@ export function CheckInForm({
   const [online, setOnline] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // [S114 C-5] photos already uploaded (File → files.id): a second submit
-  // uploads only the ones that failed, never a landed photo twice.
-  const uploadedPhotos = useRef(new Map<File, string | undefined>());
 
   // The offline state is REAL, not decorative: `online` gates the submit.
   useEffect(() => {
@@ -140,28 +136,20 @@ export function CheckInForm({
 
     // Photos first — the payload carries file ids, so the bytes go up through
     // the shared uploadFile path (HEIC conversion included) before submit.
-    // [S114 C-5] every line's photos in ONE bounded batch; a failure is NAMED
-    // and nothing is submitted, and submitting again retries only those.
-    // _Superseded, quoted:_ a serial loop that stopped at the first failure
-    // with a generic "A photo failed to upload" and re-uploaded every photo on
-    // the next try.
-    const out = await uploadRemaining(
-      activeLines.flatMap((l) => l.photos),
-      uploadedPhotos.current,
-      async (file) => {
+    const withIds: { line: Line; photo_file_ids: string[] }[] = [];
+    for (const line of activeLines) {
+      const ids: string[] = [];
+      for (const file of line.photos) {
         const up = await uploadFile(file, { project_id: projectId, category: 'photos' });
-        return up.success && up.id ? { success: true, id: up.id } : { success: false, error: up.error, storageLimited: up.storageLimited };
+        if (!up.success || !up.id) {
+          setBusy(false);
+          setError(up.error ?? t('project.checkIn.photoFailed'));
+          return;
+        }
+        ids.push(up.id);
       }
-    );
-    if (out.unfinished > 0) {
-      setBusy(false);
-      setError(t('project.checkIn.photosFailedNamed', { n: out.unfinished, names: out.unfinishedNames.join(', ') }));
-      return;
+      withIds.push({ line, photo_file_ids: ids });
     }
-    const withIds: { line: Line; photo_file_ids: string[] }[] = activeLines.map((line) => ({
-      line,
-      photo_file_ids: line.photos.map((f) => uploadedPhotos.current.get(f)).filter((id): id is string => !!id),
-    }));
 
     // The submit — through the shared route, whose gate is the
     // submit_delivery_check_in RPC (D-30 rule 4). Only on success does the
@@ -370,18 +358,16 @@ export function CheckInForm({
                           aria-label={t('project.chooseFromLibrary')}
                           className="flex min-h-[44px] w-11 shrink-0 cursor-pointer items-center justify-center rounded-[10px] border border-m6m-danger-border text-m6m-danger"
                         >
-                          {/* [S114 C-5] `multiple` — PARITY with desktop check-in. */}
                           <input
                             type="file"
                             accept="image/*"
-                            multiple
                             className="hidden"
                             onChange={(e) => {
-                              const picked = Array.from(e.target.files ?? []);
-                              if (picked.length) {
+                              const f = e.target.files?.[0];
+                              if (f) {
                                 setLines((cur) =>
                                   cur.map((l, j) =>
-                                    j === i ? { ...l, photos: [...l.photos, ...picked] } : l
+                                    j === i ? { ...l, photos: [...l.photos, f] } : l
                                   )
                                 );
                               }

@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 import { Image as ImageIcon } from 'lucide-react';
 import {
   INCIDENT_TYPES,
@@ -10,7 +10,6 @@ import {
 } from '@framefocus/shared/constants/safety';
 import { createIncident, uploadIncidentPhoto } from '@/lib/services/safety-client';
 import { useT } from '@/components/i18n/language-provider';
-import { uploadRemaining } from '@/lib/uploads/upload-batch';
 import type { MsgKey } from '@/lib/i18n/messages';
 import { SetMobileHeader } from '../../../../mobile-header';
 
@@ -73,24 +72,6 @@ export function IncidentForm({
   const [openRow, setOpenRow] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // [S114 C-5] photos that have LANDED on the filed report, so a retry uploads
-  // only the rest; `filed` holds the report once it exists so it is never filed
-  // twice while photos are retried.
-  const uploadedPhotos = useRef(new Map<File, string | undefined>());
-  const [filed, setFiled] = useState<{ incidentId: string; n: number; names: string } | null>(null);
-
-  async function uploadReportPhotos(incidentId: string): Promise<boolean> {
-    const out = await uploadRemaining(photos, uploadedPhotos.current, (file) =>
-      uploadIncidentPhoto(file, projectId, incidentId)
-    );
-    setFiled(out.unfinished > 0 ? { incidentId, n: out.unfinished, names: out.unfinishedNames.join(', ') } : null);
-    return out.unfinished === 0;
-  }
-
-  function leave() {
-    router.push(`/m/p/${projectId}/safety`);
-    router.refresh();
-  }
 
   const injuryNeedsParty = type === 'injury' && injured.length === 0;
   const ready = type !== null && description.trim().length > 0 && !injuryNeedsParty;
@@ -128,12 +109,14 @@ export function IncidentForm({
       return;
     }
 
-    // [S114 C-5] bounded and NAMED. _Superseded, quoted:_ a serial loop whose
-    // `setError(...)` was followed at once by `router.push(...)`, so a failed
-    // photo was reported on a screen the user had already left.
-    const allLanded = await uploadReportPhotos(result.incidentId);
+    for (const file of photos) {
+      const up = await uploadIncidentPhoto(file, projectId, result.incidentId);
+      if (!up.success) setError(up.error ?? t('project.incident.photoFailed'));
+    }
+
     setBusy(false);
-    if (allLanded) leave();
+    router.push(`/m/p/${projectId}/safety`);
+    router.refresh();
   }
 
   return (
@@ -383,15 +366,13 @@ export function IncidentForm({
                 aria-label={t('project.chooseFromLibrary')}
                 className="flex min-h-[52px] w-11 shrink-0 cursor-pointer items-center justify-center rounded-[10px] border border-m6m-border text-m6m-muted"
               >
-                {/* [S114 C-5] `multiple` — PARITY with the desktop incident form. */}
                 <input
                   type="file"
                   accept="image/*"
-                  multiple
                   className="hidden"
                   onChange={(e) => {
-                    const picked = Array.from(e.target.files ?? []);
-                    if (picked.length) setPhotos((cur) => [...cur, ...picked]);
+                    const f = e.target.files?.[0];
+                    if (f) setPhotos((cur) => [...cur, f]);
                     e.target.value = '';
                   }}
                 />
@@ -415,50 +396,15 @@ export function IncidentForm({
         <p className="mt-[14px] text-center text-[12px] text-m6m-muted">
           {t('project.incident.emails')}
         </p>
-        {filed ? (
-          // The report EXISTS; only photos are outstanding. The file button is
-          // gone so the report cannot be filed twice.
-          <div
-            data-testid="m-incident-photos-failed"
-            role="alert"
-            className="mt-[6px] rounded-[10px] border border-m6m-danger-border bg-[#fdf1f0] px-[12px] py-[10px] text-[14px] text-m6m-danger"
-          >
-            <p>{t('project.incident.photosFailedNamed', { n: filed.n, names: filed.names })}</p>
-            <button
-              type="button"
-              data-testid="m-incident-photos-retry"
-              disabled={busy}
-              onClick={async () => {
-                setBusy(true);
-                const ok = await uploadReportPhotos(filed.incidentId);
-                setBusy(false);
-                if (ok) leave();
-              }}
-              className="mt-[8px] min-h-[44px] w-full rounded-[10px] border border-m6m-danger-border bg-white font-semibold"
-            >
-              {t('project.incident.retryPhotos')}
-            </button>
-            <button
-              type="button"
-              data-testid="m-incident-photos-continue"
-              disabled={busy}
-              onClick={leave}
-              className="mt-[6px] min-h-[44px] w-full text-[14px] font-semibold text-m6m-muted"
-            >
-              {t('project.incident.continue')}
-            </button>
-          </div>
-        ) : (
-          <button
-            type="button"
-            data-testid="m-file-report"
-            disabled={!ready || busy}
-            onClick={submit}
-            className="mt-[6px] flex h-[60px] w-full items-center justify-center rounded-[14px] bg-m6m-danger text-[17px] font-bold text-white disabled:opacity-40"
-          >
-            {busy ? t('project.incident.filing') : t('project.incident.fileReport')}
-          </button>
-        )}
+        <button
+          type="button"
+          data-testid="m-file-report"
+          disabled={!ready || busy}
+          onClick={submit}
+          className="mt-[6px] flex h-[60px] w-full items-center justify-center rounded-[14px] bg-m6m-danger text-[17px] font-bold text-white disabled:opacity-40"
+        >
+          {busy ? t('project.incident.filing') : t('project.incident.fileReport')}
+        </button>
       </div>
     </div>
   );

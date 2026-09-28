@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Image as ImageIcon } from 'lucide-react';
 import {
   createDailyLog,
@@ -15,7 +15,6 @@ import { useOfflineSync } from '../../offline-sync';
 import { buildDailyLogEntry, buildPhotoEntry } from '@/lib/offline/capture';
 import { SetMobileHeader } from '../../mobile-header';
 import { useT } from '@/components/i18n/language-provider';
-import { uploadRemaining } from '@/lib/uploads/upload-batch';
 
 // M6M §4.12.3 — the 7c form. Work performed is THE required field (the D-30
 // CHECK behind it rejects NULL and blank alike); crew hours are READ-ONLY,
@@ -95,18 +94,6 @@ export function LogForm({
     queued: boolean;
     rosterDropped: boolean;
   } | null>(null);
-  // [S114 C-5] photos that have LANDED on this log (File → files.id), so a
-  // retry uploads only the ones that did not. Named failures, not one generic line.
-  const uploadedPhotos = useRef(new Map<File, string | undefined>());
-  const [photoFailure, setPhotoFailure] = useState<{ n: number; names: string } | null>(null);
-
-  async function uploadLogPhotos(logId: string) {
-    if (!projectId) return;
-    const out = await uploadRemaining(photos, uploadedPhotos.current, (file) =>
-      uploadDailyLogPhoto(file, projectId, logId)
-    );
-    setPhotoFailure(out.unfinished > 0 ? { n: out.unfinished, names: out.unfinishedNames.join(', ') } : null);
-  }
 
   // Crew & hours — "auto from clock", read-only (§4.12.3). The 6A presence RPC
   // is the named source; nothing here is editable.
@@ -209,11 +196,12 @@ export function LogForm({
 
     // Photos bind to THIS log via daily_log_id — uploaded after the row
     // exists, through the shared uploadFile path (HEIC conversion included).
-    // [S114 C-5] bounded (3 at a time) and NAMED on the done screen, with a
-    // retry of just those. _Superseded, quoted:_ a serial loop whose
-    // `setError(...)` was then hidden by the done screen — a failed photo was
-    // reported nowhere.
-    await uploadLogPhotos(result.id);
+    for (const file of photos) {
+      const up = await uploadDailyLogPhoto(file, projectId, result.id);
+      if (!up.success) {
+        setError(up.error ?? t('field.log.photoFailed'));
+      }
+    }
 
     setBusy(false);
     setDone({ logId: result.id, hazard, queued: false, rosterDropped: false });
@@ -233,27 +221,6 @@ export function LogForm({
         >
           {done.queued ? t('field.log.savedOffline') : t('field.log.submitted')}
         </p>
-        {photoFailure ? (
-          <div
-            data-testid="m-log-photos-failed"
-            className="mt-[10px] rounded-[10px] border border-m6m-danger-border bg-[#fdf1f0] px-[12px] py-[10px] text-[13px] text-m6m-danger"
-          >
-            <p>{t('field.log.photosFailedNamed', { n: photoFailure.n, names: photoFailure.names })}</p>
-            <button
-              type="button"
-              data-testid="m-log-photos-retry"
-              disabled={busy}
-              onClick={async () => {
-                setBusy(true);
-                await uploadLogPhotos(done.logId);
-                setBusy(false);
-              }}
-              className="mt-[8px] min-h-[44px] w-full rounded-[10px] border border-m6m-danger-border bg-white font-semibold"
-            >
-              {t('field.log.retryPhotos')}
-            </button>
-          </div>
-        ) : null}
         {done.rosterDropped ? (
           <p
             data-testid="m-log-roster-dropped"
@@ -410,17 +377,13 @@ export function LogForm({
             aria-label={t('field.log.chooseLibrary')}
             className="flex min-h-[56px] w-11 shrink-0 cursor-pointer items-center justify-center rounded-[14px] border border-m6m-border bg-m6m-card text-[13px] font-semibold text-m6m-muted"
           >
-            {/* [S114 C-5] `multiple` — PARITY with the desktop log's picker. A library
-                pick is exactly where several shots already taken are chosen.
-                The camera input above stays single (one capture = one shot). */}
             <input
               type="file"
               accept="image/*"
-              multiple
               className="hidden"
               onChange={(e) => {
-                const picked = Array.from(e.target.files ?? []);
-                if (picked.length) setPhotos((cur) => [...cur, ...picked]);
+                const f = e.target.files?.[0];
+                if (f) setPhotos((cur) => [...cur, f]);
                 e.target.value = '';
               }}
             />

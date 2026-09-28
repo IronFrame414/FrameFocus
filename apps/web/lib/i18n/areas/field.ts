@@ -26,9 +26,6 @@ export const en = {
   'field.log.title': 'Log the day',
   'field.log.saveFailed': 'Could not save the log.',
   'field.log.photoFailed': 'A photo failed to upload; the log itself is saved.',
-  // [S114 C-5] named, with a retry of just those.
-  'field.log.photosFailedNamed': 'The log is saved, but {n} photo(s) did not upload: {names}.',
-  'field.log.retryPhotos': 'Retry those photos',
   'field.log.savedOffline': 'Log saved offline — it will sync when you’re back online.',
   'field.log.submitted': 'Log submitted.',
   'field.log.rosterDropped':
@@ -229,8 +226,6 @@ export const es: Record<keyof typeof en, string> = {
   'field.log.title': 'Reporte del día',
   'field.log.saveFailed': 'No se pudo guardar el reporte.',
   'field.log.photoFailed': 'Una foto no se pudo subir; el reporte sí se guardó.',
-  'field.log.photosFailedNamed': 'El reporte se guardó, pero {n} foto(s) no se subieron: {names}.',
-  'field.log.retryPhotos': 'Reintentar esas fotos',
   'field.log.savedOffline':
     'Reporte guardado sin conexión — se sincronizará cuando vuelvas a tener señal.',
   'field.log.submitted': 'Reporte enviado.',
