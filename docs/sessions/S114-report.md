@@ -114,3 +114,17 @@ client_contract_amounts `md5 379fda4a9cf049a1a5789274339bc914` (20 policies); `s
 
 Teardown after every round: 0 projects left. Clean final: carve-outs **15/15**, operational **42/42**.
 ⚠️ Stated limit, unchanged: `contract_documents` UPDATE cannot be isolated (PE has no SELECT on it; control reads 0).
+
+## Step 7 — S157 sweep + regression runs (rebuild-test, after the migrations)
+
+- Sweep: `grep -rln client_contract_amounts|project_executive|qa-pe apps/web/{test,e2e}` → 7 + 15 files read. One test named a
+  behaviour this branch overturns: `s111-project-executive-writes.live.ts` **P3** (`client_contract_amounts_insert_project_executive`,
+  an arm Q2 drops). Annotated in place, old title quoted, still asserting the refusal; the ON proof is s114 N9i/N9u.
+  `s111-role-caps.test.ts` + `e2e/desktop-team.spec.ts` (withheld) are FILL-A-6's, inverted there.
+- Existing PE live suites: `s111-project-executive-floor` 7/7, `-writes` 19/19, `s181-project-executive-liens` 17/17,
+  `-retainage` 10/10.
+- Other roles' suites through the seven replaced functions / changed notify code: `po18-committed` 8/8, `s112-co-summaries` 14/14,
+  `s121-co-floor` 41/41, `s123-co-signed-notify` 8/8, `s123-incident-notify` 12/12, `s126-chat-sub` 7/7, `s97ct-budget-writers` 10/10,
+  `s97ct-floor3` 19/19.
+- Full committed unit suite: **132 files, 1837 tests, exit 0**. In-progress CI before any run: 0.
+- Requesting CI on this HEAD (no `[skip ci]`).

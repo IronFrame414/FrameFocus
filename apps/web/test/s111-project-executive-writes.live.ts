@@ -635,7 +635,14 @@ describe('S181b — OFF its project (PEW BARE), each remaining INSERT arm refuse
     });
   });
 
-  it('P3 client_contract_amounts_insert_project_executive', async () => {
+  // [S114 Q2 B] `client_contract_amounts_insert_project_executive` was DROPPED
+  // (20261980000000): the PE may not set a client contract's value anywhere.
+  // This OFF-project refusal therefore no longer measures that arm (it has no
+  // arm to measure); its S181b sabotage claim is superseded. The ON-project
+  // proof, with its own sabotage, is s114-pe-carveouts N9i/N9u. Kept, not
+  // deleted: it still asserts the refusal. Title was
+  // 'P3 client_contract_amounts_insert_project_executive'.
+  it('P3 client_contract_amounts INSERT off its project (arm dropped S114 Q2 B; still refused)', async () => {
     await probe('P3_contract_amounts', 'client_contract_amounts', 'client_contract_id', bare.contract, {
       client_contract_id: bare.contract,
     });
