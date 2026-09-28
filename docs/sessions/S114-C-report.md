@@ -320,3 +320,15 @@ companies → Q18 reversed (control always shown); Q17 (a)–(e) will be "built 
   anyone must be told. After this deploy, a bid token reaches **no** staff file until PART E's share control tags one `bid-scope`.
 - **C-4** also committed on C-branch 1 (`[Capture] S114 C-4`): app-wide deletion strip + tray notice reworded; `s114-held-deletion`
   11/11; sabotage 1 red, restored md5 OK. Not clicked on a phone.
+
+### Step 15 — ⚠️ C-5 moved off C-branch 1 (unattended decision)
+- Found while filing debt: `TECH_DEBT.md` `#2-s180u` (on `main`) is a standing ruling on this exact build — "Per-component
+  verification = a test PER SURFACE … 8 components, 8 proofs, each stating what it uploaded and what landed. A single batch test is
+  not acceptance." [Josh, S180], and a sequencing rule (move the existing-`multiple` inputs onto the queue FIRST, then add `multiple`).
+  My C-5 met neither acceptance bar; it would have gone to Josh as done.
+- **Decision (reversible, narrower):** C-5 reverted on C-branch 1 (`[Uploads] S114: C-5 moved OFF …`); its commits live intact on
+  **`feature/s114-c5-multi-upload`** (pushed). Alternative: hold all of C-branch 1 until eight surface proofs exist — rejected, it
+  would trap C-1/C-9/C-10 behind unrelated verification. After revert: tsc 0; unit **137 files / 1,889 tests** green.
+- **C-5 status: built, UNPROVEN per #2-s180u** — owed: one live/e2e proof per surface. Not merged.
+- ⚠️ My Phase 2 ASK-6 (Q7) did not cite `#2-s180u`; Josh's "A — as listed" ruling was made without it in front of him. Raised in
+  the final report.
