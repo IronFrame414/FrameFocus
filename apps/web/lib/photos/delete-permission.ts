@@ -4,22 +4,32 @@
 // Before this, /m decided inline (`role === 'owner' || role === 'admin'`) and
 // desktop had no photo delete at all — two surfaces, two answers [PARITY, S122].
 //
-// ⚠️ OWNER AND ADMIN ONLY — the NARROWER of two written answers, pending
-// Josh [S115 ASK-C11-ROLES]. They disagree:
-//   · M6M A-25d: "'role-gated' in §4.9 means Owner/Admin, and the UI must not
-//     offer an action the DB will reject" — its premise is the hard-DELETE policy
-//     `files_delete_owner_admin`, but the control SOFT-deletes (an UPDATE);
-//   · CLAUDE.md's approvals table: "Delete files — Owner ✓, Admin ✓, PM ✓", and
-//     R1 [S114] gives the Project Executive everything a PM has on its projects.
-// Widening to PM/PE is one line here, and both surfaces follow it.
+// OWNER, ADMIN, PROJECT MANAGER, PROJECT EXECUTIVE — RULED [Josh, S116 Q11]:
+// CLAUDE.md's approvals table ("Delete files — Owner ✓, Admin ✓, PM ✓") plus
+// R1 [S114] (the PE gets what the PM has on its projects), on both surfaces.
+// The database admits exactly these on a project they can reach:
+// `files_update_non_client` (PM via can_view_project) and
+// `files_update_project_executive` (pe_on_project).
+//
+// SUPERSEDED [S116 Q11], quoted: "⚠️ OWNER AND ADMIN ONLY — the NARROWER of two
+// written answers, pending Josh [S115 ASK-C11-ROLES]." That narrowing followed
+// M6M A-25d ("'role-gated' in §4.9 means Owner/Admin"), which is SUPERSEDED for
+// this control: its premise is the hard-DELETE policy `files_delete_owner_admin`,
+// but this control SOFT-deletes (an UPDATE).
 //
 // ⚠️ THIS HIDES A CONTROL; IT PROTECTS NO ROW. The database decides:
 // `files_update_non_client` (20260822000000) and `files_update_project_executive`
-// (20261940000000). RLS is WIDER than this list today — a PM, foreman or crew
-// member can soft-delete a photo on a project they can view (filed as debt). A
+// (20261940000000). RLS is WIDER than this list today — a foreman, crew member
+// or subcontractor can soft-delete a photo on a project they can view (filed as
+// debt). A
 // frozen site-visit photo is refused by `files_z_site_visit_freeze` whatever this
 // says, and `softDeleteFile` reports that refusal (it counts the row it changed).
-export const PHOTO_DELETE_ROLES: readonly string[] = ['owner', 'admin'];
+export const PHOTO_DELETE_ROLES: readonly string[] = [
+  'owner',
+  'admin',
+  'project_manager',
+  'project_executive',
+];
 
 export function canDeletePhoto(role: string | null | undefined): boolean {
   return typeof role === 'string' && PHOTO_DELETE_ROLES.includes(role);

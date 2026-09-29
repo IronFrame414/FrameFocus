@@ -528,6 +528,9 @@ test.describe('M-9 · viewer', () => {
   test('A-25d · Delete is not offered to a role the DB would refuse', async ({ page }) => {
     // files_delete_owner_admin restricts DELETE to Owner/Admin. The signed-in
     // identity is CREW, so the control is absent rather than present-and-failing.
+    // SUPERSEDED premise [Josh, S116 Q11]: the control SOFT-deletes (an UPDATE),
+    // and who is offered it is canDeletePhoto = Owner/Admin/PM/PE. Crew is still
+    // not offered it, so this assertion stands unchanged.
     await page.goto(viewer(px.plain.id));
     await expect(page.getByTestId('m-action-delete')).toHaveCount(0);
     await expect(page.getByTestId('m-action-delete-absent')).toHaveCount(1);

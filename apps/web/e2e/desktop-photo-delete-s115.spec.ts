@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
-import { adminClient, COMPANY_A, CREW_MEMBER } from './hub-fixture';
+import type { Page } from '@playwright/test';
+import { adminClient, COMPANY_A, CREW_MEMBER, OTHER_MEMBER } from './hub-fixture';
 import { signInAs } from './sign-in-as';
 
 // C-11 [S115] — "There is a delete button on project photos and clicking it
@@ -16,6 +17,9 @@ import { signInAs } from './sign-in-as';
 
 const OWNER = 'josh+test50@worthprop.com';
 const CREW = 'josh+crew@worthprop.com';
+// Q11 [Josh, S116]: Owner/Admin/PM/PE. OTHER_MEMBER is this PM's member row.
+const PM = 'josh+pm@worthprop.com';
+const PE = 'josh+qa-pe@worthprop.com';
 const BUCKET = 'project-files';
 const RUN = `s115-c11-${Date.now()}`;
 // 1×1 transparent PNG.
@@ -27,16 +31,22 @@ const PNG = Buffer.from(
 const admin = adminClient();
 let projectId: string;
 const seeded: { id: string; path: string }[] = [];
+let peAssignmentId = '';
 
-async function seedPhoto(name: string): Promise<{ id: string; path: string }> {
-  const path = `${COMPANY_A}/${projectId}/${RUN}-${name}.png`;
+async function seedPhoto(
+  name: string,
+  where?: { companyId: string; projectId: string }
+): Promise<{ id: string; path: string }> {
+  const company = where?.companyId ?? COMPANY_A;
+  const project = where?.projectId ?? projectId;
+  const path = `${company}/${project}/${RUN}-${name}.png`;
   const up = await admin.storage.from(BUCKET).upload(path, PNG, { contentType: 'image/png' });
   if (up.error) throw new Error(`seed upload ${name}: ${up.error.message}`);
   const { data, error } = await admin
     .from('files')
     .insert({
-      company_id: COMPANY_A,
-      project_id: projectId,
+      company_id: company,
+      project_id: project,
       category: 'photos',
       file_name: `${RUN}-${name}.png`,
       file_path: path,
@@ -76,6 +86,7 @@ test.beforeAll(async () => {
 });
 
 test.afterAll(async () => {
+  if (peAssignmentId) await admin.from('project_assignments').delete().eq('id', peAssignmentId);
   if (seeded.length === 0) return;
   await admin
     .from('files')
@@ -87,7 +98,20 @@ test.afterAll(async () => {
   await admin.storage.from(BUCKET).remove(seeded.map((s) => s.path));
 });
 
-const photoPage = (fileId: string) => `/dashboard/projects/${projectId}/files/${fileId}/markup`;
+const photoPage = (fileId: string, project = projectId) =>
+  `/dashboard/projects/${project}/files/${fileId}/markup`;
+
+// Confirm, land on the Photos grid, then COUNT with the service role.
+async function confirmDeleteAndCount(page: Page, id: string, project: string) {
+  const del = page.getByTestId('photo-delete');
+  await expect(del).toBeVisible();
+  await del.click();
+  await page.getByTestId('confirm-accept').click();
+  await page.waitForURL(new RegExp(`/dashboard/projects/${project}/photos$`), {
+    timeout: 30_000,
+  });
+  await expect.poll(() => isDeleted(id), { timeout: 30_000 }).toBe(true);
+}
 
 test.describe('C-11 · deleting a project photo on desktop', () => {
   test.setTimeout(120_000);
@@ -140,6 +164,79 @@ test.describe('C-11 · deleting a project photo on desktop', () => {
     await expect(page.getByRole('heading', { name: new RegExp(`${RUN}-crew`) })).toBeVisible();
     await expect(page.getByTestId('photo-delete')).toHaveCount(0);
     expect(await isDeleted(photo.id)).toBe(false);
+  });
+
+  test('a Project Manager on its assigned project is offered "Delete photo", and it lands', async ({
+    page,
+  }) => {
+    // Q11 [Josh, S116] widened the rule to PM; files_update_non_client admits a
+    // PM on a project it can view (assigned). Ordered, so stable.
+    const { data: asg, error } = await admin
+      .from('project_assignments')
+      .select('project_id, created_at, projects!inner(is_deleted, company_id)')
+      .eq('member_id', OTHER_MEMBER)
+      .eq('is_deleted', false)
+      .eq('projects.is_deleted', false)
+      .eq('projects.company_id', COMPANY_A)
+      .order('created_at', { ascending: true })
+      .limit(1)
+      .single();
+    if (error || !asg)
+      throw new Error(`no Company A project assigned to the PM: ${error?.message}`);
+    const pmProject = asg.project_id as string;
+    const photo = await seedPhoto('pm', { companyId: COMPANY_A, projectId: pmProject });
+    await signInAs(page, PM);
+    await page.goto(photoPage(photo.id, pmProject));
+    await confirmDeleteAndCount(page, photo.id, pmProject);
+  });
+
+  test('a Project Executive on its assigned project is offered "Delete photo", and it lands', async ({
+    page,
+  }) => {
+    // Q11 [Josh, S116] + R1: the PE gets what the PM has on its projects;
+    // files_update_project_executive admits pe_on_project. The PE holds no
+    // standing assignment on rebuild-test, so this assigns it to one project
+    // (ordered) for its duration and removes exactly that row after.
+    const { data: prof } = await admin
+      .from('profiles')
+      .select('id, company_id')
+      .eq('email', PE)
+      .single();
+    const { data: member } = await admin
+      .from('company_members')
+      .select('id')
+      .eq('profile_id', prof!.id)
+      .single();
+    const { data: proj } = await admin
+      .from('projects')
+      .select('id')
+      .eq('company_id', prof!.company_id)
+      .eq('is_deleted', false)
+      .order('created_at', { ascending: true })
+      .limit(1)
+      .single();
+    if (!proj) throw new Error('no live project in the PE company');
+    const peProject = proj.id as string;
+    const { data: asg, error } = await admin
+      .from('project_assignments')
+      .insert({
+        company_id: prof!.company_id,
+        project_id: peProject,
+        member_id: member!.id,
+        role_on_project: 'project_executive',
+      })
+      .select('id')
+      .single();
+    if (error || !asg) throw new Error(`assign PE: ${error?.message}`);
+    peAssignmentId = asg.id as string;
+
+    const photo = await seedPhoto('pe', {
+      companyId: prof!.company_id as string,
+      projectId: peProject,
+    });
+    await signInAs(page, PE);
+    await page.goto(photoPage(photo.id, peProject));
+    await confirmDeleteAndCount(page, photo.id, peProject);
   });
 
   test('"Delete selected" (a SHAPE delete) now LOOKS disabled when no shape is selected', async ({

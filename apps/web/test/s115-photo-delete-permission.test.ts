@@ -7,14 +7,16 @@ import { canDeletePhoto } from '@/lib/photos/delete-permission';
 // project photo". A TOTAL map (CLAUDE.md, "Role-permission tests are TOTAL
 // maps"): adding a role fails to compile here until it states its answer.
 //
-// Owner/Admin only — the narrower of two written answers (M6M A-25d vs the
-// CLAUDE.md approvals table), pending Josh [S115 ASK-C11-ROLES]. If he widens
-// it, flip project_manager / project_executive here IN PLACE, quoting this line.
+// Owner/Admin/PM/PE — RULED [Josh, S116 Q11]. SUPERSEDED, quoted: "Owner/Admin
+// only — the narrower of two written answers (M6M A-25d vs the CLAUDE.md
+// approvals table), pending Josh [S115 ASK-C11-ROLES]. If he widens it, flip
+// project_manager / project_executive here IN PLACE, quoting this line."
+// Was: project_executive: false, project_manager: false.
 const EXPECTED: Record<CompanyRole, boolean> = {
   owner: true,
   admin: true,
-  project_executive: false,
-  project_manager: false,
+  project_executive: true,
+  project_manager: true,
   foreman: false,
   crew_member: false,
   client: false,
