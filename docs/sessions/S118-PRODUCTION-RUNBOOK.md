@@ -83,3 +83,17 @@ After: ledger 1; md5 `setup_payment_schedule` = `a60cf25a66e6e1adf561b73382e62cd
 ### Final — fingerprint = committed baseline (`feature/s118-ruled-fixes`): policies 456
 `67a3bcae0714563f1ee68a5e3be380fc`, triggers 287 `4c7920f6…`, functions 333 `9e6d0d6a34d8e589ba6f7ed99e72265b`,
 constraints 1017 `710ff1e9…`, latest `20262050000000`; ledger 265.
+
+## Item 16 — employee documents (branch `feature/s118-employee-documents`)
+
+Pre-check (production, read-only) — FILL-16.4: table 0, bucket 0, objects 0, `files` matching `%employ%` 0,
+`file_categories` matching 0, policies `employee_documents%` 0; newest `20262050000000`.
+
+### §8 — `20262060000000_s118_employee_documents`
+After: ledger 1; `public.employee_documents` exists, RLS on; table policies **4**
+(`select_owner_admin`, `select_own`, `insert_owner_admin`, `update_owner_admin`; no DELETE); storage policies
+**3** (`employee_documents_objects_select|insert|update`; no DELETE); bucket `employee-documents` exists,
+`public = false`; md5 `enforce_employee_document_owner` = `5c382ae984e65d39408ab5964a3784f5`,
+`set_employee_documents_updated_by` = `f8eaaeebfdf0752c0774d472ddddc742`; rows 0.
+Final: fingerprint = committed baseline — policies 460 `1e17fe2f…`, triggers 290 `16c49e44…`, functions 335
+`cf7bbdb0…`, constraints 1026 `5f3997d3…`, latest `20262060000000`; ledger 266.
