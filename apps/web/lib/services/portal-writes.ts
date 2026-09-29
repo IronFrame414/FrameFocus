@@ -206,6 +206,11 @@ export async function postClientMessage(
     // hers by construction; the category and visibility are enforced by
     // `files_insert_client`'s WITH CHECK, at the point of insert, which is a
     // stronger guarantee than a re-read.
+    // [S116 F-12] _Superseded premise:_ the photos now arrive FIRST, through
+    // `POST /api/portal/photos`, so "created by this same request" no longer
+    // holds. The route verifies instead, before calling this:
+    // `verifyOwnUnattachedPhotos` (hers, this project, photos, client-visible,
+    // live, on no other message).
     const attached = await attachPhotos(supabase, sent.id, params.fileIds);
     if (attached.error) {
       // The message IS posted. Reporting a bare failure would invite her to

@@ -23,3 +23,23 @@ export function readBudgeted(embed: BudgetedEmbed): number | null {
   if (!row || row.budgeted_amount === null || row.budgeted_amount === undefined) return null;
   return Number(row.budgeted_amount);
 }
+
+// S115 R10 — WHICH LINES ARE THE ORIGINAL BUDGET. The TypeScript mirror of the
+// check inside `update_original_budget_line()` (20262020000000): the database
+// decides whether an edit is allowed; this only decides where a line is listed
+// and whether an Edit control is offered. Original = converted from the
+// estimate (either source column), or added to the original budget under R10.
+// A change-order line, an ad-hoc capture line and Miscellaneous are not.
+export function isOriginalBudgetLine(line: {
+  source_change_order_id: string | null;
+  source_line_row_id: string | null;
+  source_line_item_id: string | null;
+  is_miscellaneous?: boolean | null;
+  added_to_original_budget?: boolean | null;
+}): boolean {
+  if (line.source_change_order_id) return false;
+  if (line.is_miscellaneous) return false;
+  return Boolean(
+    line.source_line_row_id || line.source_line_item_id || line.added_to_original_budget
+  );
+}

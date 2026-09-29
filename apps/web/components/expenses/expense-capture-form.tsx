@@ -19,11 +19,15 @@ import {
 import {
   createExpense,
   updateExpense,
-  uploadExpenseReceipt,
+  uploadExpenseReceiptFile,
+  linkExpenseReceipt,
   type CaptureCategory,
   type ExpenseListItem,
 } from '@/lib/services/expenses-client';
 import { listActiveProjects } from '@/lib/services/time-tracking-client';
+import { makeAttachWorker } from '@/lib/uploads/upload-batch';
+import { useUploadBatches } from '@/lib/uploads/use-upload-batches';
+import { UploadBatchList } from '@/components/uploads/upload-batch-list';
 import {
   flagPoItemMissing,
   listMyAssignedLines,
@@ -190,13 +194,23 @@ export function ExpenseCaptureForm({
     };
   }, [projectsProp]);
 
-  async function uploadPhotos(expenseId: string, targetProjectId: string): Promise<string | null> {
-    const failures: string[] = [];
-    for (const photo of photos) {
-      const res = await uploadExpenseReceipt(photo, targetProjectId, expenseId);
-      if (!res.success) failures.push(`${photo.name}: ${res.error ?? 'upload failed'}`);
-    }
-    return failures.length > 0 ? `Some receipt photos failed: ${failures.join('; ')}` : null;
+  // [S116 F-12, #2-s180u] Receipts upload through the shared queue (≤3 in
+  // flight); the confirmation lists each one and offers "Retry" for the
+  // missing ones, against the SAME expense. _Superseded, quoted:_ a serial
+  // `for` loop over uploadExpenseReceipt returning "Some receipt photos
+  // failed: …" — no retry, and a receipt that uploaded but did not LINK was
+  // left as an unlinked `files` row.
+  const batches = useUploadBatches();
+  async function uploadPhotos(expenseId: string, targetProjectId: string): Promise<void> {
+    if (photos.length === 0) return;
+    await batches.start(
+      'receipts',
+      photos,
+      makeAttachWorker(
+        (file) => uploadExpenseReceiptFile(file, targetProjectId),
+        (fileId) => linkExpenseReceipt(fileId, expenseId)
+      )
+    );
   }
 
   // Receipt photo required at capture (S90). Exemptions, presentation-only:
@@ -245,7 +259,7 @@ export function ExpenseCaptureForm({
         setError(res.error ?? 'Failed to save the expense.');
         return;
       }
-      setPhotoWarning(await uploadPhotos(existing.id, projectId));
+      await uploadPhotos(existing.id, projectId);
     } else {
       const resolved = await resolveSplit(projectId, split, parsedAmount);
       if (!resolved.allocations) {
@@ -270,7 +284,7 @@ export function ExpenseCaptureForm({
         setError(res.error ?? 'Failed to log the expense.');
         return;
       }
-      setPhotoWarning(await uploadPhotos(res.id, projectId));
+      await uploadPhotos(res.id, projectId);
       // R6.3/R7 — anything not obtained is flagged; the line stays open on
       // the PO and Owner/Admin/PM get the decision ping. A flag failure never
       // takes the logged expense with it — surfaced as a warning instead.
@@ -300,13 +314,21 @@ export function ExpenseCaptureForm({
         <p style={{ fontSize: '12px', color: color.muted, margin: '0 0 16px' }}>
           Nothing counts against the job until it is reviewed and approved.
         </p>
+        <div style={{ margin: '0 0 12px' }}>
+          <UploadBatchList
+            items={batches.items('receipts')}
+            busy={batches.busy('receipts')}
+            onRetry={() => void batches.retry('receipts')}
+            testId="expense-receipts-batch"
+          />
+        </div>
         {photoWarning && (
           <p style={{ fontSize: '12px', color: color.warning, margin: '0 0 12px' }}>
             {photoWarning}
           </p>
         )}
         <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-          <button style={primaryButtonStyle} onClick={onDone}>
+          <button style={primaryButtonStyle} onClick={onDone} disabled={batches.anyBusy}>
             Done
           </button>
         </div>

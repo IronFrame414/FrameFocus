@@ -136,3 +136,43 @@ export function summarizeBatch(items: UploadItem[]): {
     );
   return { done, failed, skipped, message: parts.length ? parts.join(' ') : null };
 }
+
+/**
+ * [S116 F-12, #2-s180u] A worker for a file that must be uploaded AND THEN
+ * linked to a record (a daily log, an incident, an expense).
+ *
+ * ⚠️ THE DUPLICATE-ON-RETRY DEFECT THIS CLOSES. The old per-record helpers
+ * (`uploadDailyLogPhoto`, `uploadIncidentPhoto`, `uploadExpenseReceipt`)
+ * returned FAILURE when the upload had succeeded and only the link had failed.
+ * A retry of that "failed" file uploaded it a second time and left the first
+ * copy as an unlinked `files` row. Here the two steps are kept apart: a file
+ * whose upload landed is remembered by its `files.id`, and a retry of it only
+ * re-runs the LINK. It is never uploaded twice.
+ *
+ * The memory lives in the returned closure, so a batch and its retries must
+ * reuse the same worker (`useUploadBatches` keeps it per batch).
+ */
+export function makeAttachWorker(
+  upload: (file: File) => Promise<UploadOutcome>,
+  link: (fileId: string) => Promise<{ success: boolean; error?: string }>
+): (file: File) => Promise<UploadOutcome> {
+  const uploadedNotLinked = new Map<File, string>();
+  return async (file) => {
+    let id = uploadedNotLinked.get(file);
+    if (!id) {
+      const up = await upload(file);
+      if (!up.success || !up.id) return up;
+      id = up.id;
+    }
+    const linked = await link(id);
+    if (!linked.success) {
+      uploadedNotLinked.set(file, id);
+      return {
+        success: false,
+        error: `Uploaded but not attached: ${linked.error ?? 'link failed'}`,
+      };
+    }
+    uploadedNotLinked.delete(file);
+    return { success: true, id };
+  };
+}

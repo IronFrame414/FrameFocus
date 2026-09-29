@@ -6,6 +6,7 @@ import {
   isPayableRow,
   type ExpensePayment,
 } from '@/lib/services/payables-shared';
+import { isOriginalBudgetLine } from '@/lib/services/budget-shared';
 
 type BudgetItemRow = Database['public']['Tables']['project_budget_items']['Row'];
 
@@ -366,12 +367,11 @@ export async function getBudgetRollup(projectId: string): Promise<BudgetRollup> 
 
   // --- Instrument grouping ---------------------------------------------------
   const coById = new Map((cos ?? []).map((co) => [co.id, co]));
-  const original = items.filter(
-    (i) => !i.source_change_order_id && (i.source_line_row_id || i.source_line_item_id)
-  );
-  const adhoc = items.filter(
-    (i) => !i.source_change_order_id && !i.source_line_row_id && !i.source_line_item_id
-  );
+  // [S115 R10] A line ADDED to the original budget (added_to_original_budget)
+  // lists with the original instrument, not with ad-hoc. One rule, shared with
+  // the Edit control: isOriginalBudgetLine (budget-shared.ts).
+  const original = items.filter((i) => isOriginalBudgetLine(i));
+  const adhoc = items.filter((i) => !i.source_change_order_id && !isOriginalBudgetLine(i));
   const byCo = new Map<string, BudgetItem[]>();
   for (const i of items) {
     if (!i.source_change_order_id) continue;
@@ -441,4 +441,20 @@ export async function getBudgetRollup(projectId: string): Promise<BudgetRollup> 
     costToDate: totalActual + totalCommittedRemaining,
     signedCosWithoutBudget,
   };
+}
+
+/**
+ * S115 R10 — may the caller add/edit this project's ORIGINAL budget right now?
+ * The database's own answer (`can_edit_original_budget`): Owner/Admin, or a
+ * Project Executive on an assigned project, and no invoice issued yet. The
+ * page uses it only to OFFER the controls; the two write functions re-check it.
+ * Fails closed: any error reads as "no".
+ */
+export async function canEditOriginalBudget(projectId: string): Promise<boolean> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc('can_edit_original_budget', {
+    p_project_id: projectId,
+  });
+  if (error) return false;
+  return data === true;
 }

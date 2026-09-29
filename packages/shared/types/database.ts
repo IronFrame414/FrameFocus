@@ -6173,6 +6173,7 @@ export type Database = {
       project_budget_items: {
         Row: {
           actual_amount: number | null
+          added_to_original_budget: boolean | null
           committed_amount: number | null
           company_id: string
           cost_code: string | null
@@ -6193,6 +6194,7 @@ export type Database = {
         }
         Insert: {
           actual_amount?: number | null
+          added_to_original_budget?: boolean | null
           committed_amount?: number | null
           company_id?: string
           cost_code?: string | null
@@ -6213,6 +6215,7 @@ export type Database = {
         }
         Update: {
           actual_amount?: number | null
+          added_to_original_budget?: boolean | null
           committed_amount?: number | null
           company_id?: string
           cost_code?: string | null
@@ -10205,6 +10208,15 @@ export type Database = {
         Args: { p_estimate_id: string }
         Returns: undefined
       }
+      add_original_budget_line: {
+        Args: {
+          p_budgeted_amount: number
+          p_cost_code?: string
+          p_description: string
+          p_project_id: string
+        }
+        Returns: string
+      }
       allocate_invoice_number: {
         Args: { p_company_id: string }
         Returns: string
@@ -10242,6 +10254,10 @@ export type Database = {
       }
       can_approve_member: {
         Args: { p_target_member_id: string }
+        Returns: boolean
+      }
+      can_edit_original_budget: {
+        Args: { p_project_id: string }
         Returns: boolean
       }
       can_view_project: { Args: { p_project_id: string }; Returns: boolean }
@@ -10547,6 +10563,10 @@ export type Database = {
         Returns: boolean
       }
       pe_on_project: { Args: { p_project_id: string }; Returns: boolean }
+      project_has_issued_invoice: {
+        Args: { p_project_id: string }
+        Returns: boolean
+      }
       project_has_unsigned_contract: {
         Args: { p_project_id: string }
         Returns: boolean
@@ -10796,6 +10816,15 @@ export type Database = {
         Returns: undefined
       }
       unlock_trial_company: { Args: { p_company_id: string }; Returns: number }
+      update_original_budget_line: {
+        Args: {
+          p_budget_item_id: string
+          p_budgeted_amount: number
+          p_cost_code?: string
+          p_description: string
+        }
+        Returns: undefined
+      }
       update_site_visit: {
         Args: { p_estimate_id: string; p_title: string; p_visited_at?: string }
         Returns: undefined

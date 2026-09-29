@@ -22,6 +22,9 @@ import {
   fmtMoney,
 } from '@/components/expenses/expense-ui';
 import { ApplyCoBudgetButton } from './apply-co-budget-button';
+import { AddOriginalLineButton, EditOriginalLineButton } from './original-budget-controls';
+import { canEditOriginalBudget } from '@/lib/services/budget';
+import { isOriginalBudgetLine } from '@/lib/services/budget-shared';
 import { RateSection } from './rate-section';
 import { cardStyle, color, font, h2Style, microLabelStyle, primaryButtonStyle } from '@/lib/theme';
 
@@ -440,6 +443,13 @@ export default async function BudgetAndCostPage({ params }: { params: { id: stri
 
   const lineCost = (actual: number | null, remaining: number) => (actual ?? 0) + remaining;
 
+  // S115 R10 — original budget lines are editable until the first invoice is
+  // issued, for Owner/Admin and a Project Executive on its project. The
+  // database answers (can_edit_original_budget); a PM never sees the controls
+  // (Financial Visibility Floor — S115 ASK-R10-PM). Only money-seeing roles can
+  // qualify, so no one else pays the round trip.
+  const canEditOriginal = seesMoney ? await canEditOriginalBudget(params.id) : false;
+
   return (
     <div>
       <div
@@ -675,6 +685,18 @@ export default async function BudgetAndCostPage({ params }: { params: { id: stri
             {seesMoney && <span style={{ ...microLabelStyle, textAlign: 'right' }}>Variance</span>}
           </div>
 
+          {canEditOriginal && (
+            <div
+              style={{ padding: '10px 20px', borderBottom: `1px solid ${color.rowDivider}` }}
+              data-testid="original-budget-editable"
+            >
+              <AddOriginalLineButton projectId={params.id} />
+              <span style={{ marginLeft: '12px', fontSize: '12px', color: color.faint }}>
+                The original budget can be changed until the first invoice is issued; after that,
+                changes go through change orders.
+              </span>
+            </div>
+          )}
           {rollup.instruments.map((instrument) => {
             const isCo = instrument.kind === 'change_order';
             return (
@@ -821,6 +843,14 @@ export default async function BudgetAndCostPage({ params }: { params: { id: stri
                               {' '}
                               · catch-all
                             </span>
+                          )}
+                          {canEditOriginal && isOriginalBudgetLine(item) && (
+                            <EditOriginalLineButton
+                              itemId={item.id}
+                              description={item.description}
+                              costCode={item.cost_code}
+                              budgetedAmount={item.budgeted_amount}
+                            />
                           )}
                         </span>
                         {seesMoney && (

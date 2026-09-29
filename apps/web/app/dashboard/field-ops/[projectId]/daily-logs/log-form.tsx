@@ -8,12 +8,15 @@ import {
   setDailyLogCrew,
   setDailyLogSubEntries,
   listProjectDayPresence,
-  uploadDailyLogPhoto,
+  uploadDailyLogPhotoFile,
+  linkDailyLogPhoto,
   generateDailyLogPdf,
   type DailyLogFields,
   type SubEntryInput,
 } from '@/lib/services/daily-logs-client';
-import { useAlert } from '@/components/confirm/confirm-provider';
+import { makeAttachWorker } from '@/lib/uploads/upload-batch';
+import { hasUnfinished, useUploadBatches } from '@/lib/uploads/use-upload-batches';
+import { UploadBatchList } from '@/components/uploads/upload-batch-list';
 
 // 6B-1 §4 — shared create/edit form (path A: no handoff design; ui-01
 // tokens). Crew auto-fills from the presence RPC on date change (create
@@ -53,7 +56,6 @@ export function LogForm({
   initialSubs,
 }: LogFormProps) {
   const router = useRouter();
-  const alert = useAlert();
 
   const [fields, setFields] = useState<DailyLogFields>({
     log_date: initialFields.log_date,
@@ -72,6 +74,12 @@ export function LogForm({
   // Photos are LOG-BOUND (S87 revision): they need the log's id to link, so
   // selections queue here and upload at save — create mode has no id earlier.
   const [pendingPhotos, setPendingPhotos] = useState<File[]>([]);
+  // [S116 F-12, #2-s180u] The photos upload through the shared queue (≤3 in
+  // flight, each failure named). A log that saved with photos still missing
+  // STAYS on this screen with "Retry" (only the missing ones, against the SAME
+  // log — never a second log) and a button to continue without them.
+  const batches = useUploadBatches();
+  const [savedLogId, setSavedLogId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pdfWarning, setPdfWarning] = useState<string | null>(null);
@@ -182,28 +190,49 @@ export function LogForm({
 
     if (targetId) {
       // Log-bound photo uploads (S87) — now that the log id exists. Failures
-      // don't lose the log; they surface before the redirect.
-      const failed: string[] = [];
-      for (const file of pendingPhotos) {
-        const result = await uploadDailyLogPhoto(file, projectId, targetId);
-        if (!result.success) failed.push(`${file.name}: ${result.error ?? 'upload failed'}`);
-      }
-      if (failed.length > 0) {
-        void alert(
-          `The log saved, but ${failed.length} photo(s) did not attach:\n${failed.join('\n')}\nYou can re-attach them from Edit.`
+      // don't lose the log; they stay on screen, named, with Retry.
+      // [S116 F-12] _Superseded, quoted:_ a serial `for` loop over
+      // uploadDailyLogPhoto, then `alert("The log saved, but N photo(s) did not
+      // attach … You can re-attach them from Edit.")` and a redirect — which
+      // left no retry, and a photo that uploaded but did not LINK became an
+      // unlinked `files` row that a re-attach uploaded a second time.
+      if (pendingPhotos.length > 0) {
+        const logIdForPhotos = targetId;
+        const out = await batches.start(
+          'photos',
+          pendingPhotos,
+          makeAttachWorker(
+            (file) => uploadDailyLogPhotoFile(file, projectId),
+            (fileId) => linkDailyLogPhoto(fileId, logIdForPhotos)
+          )
         );
+        if (hasUnfinished(out)) {
+          setSavedLogId(targetId);
+          setSaving(false);
+          return;
+        }
       }
-
-      const pdf = await generateDailyLogPdf(targetId);
-      if (!pdf.success) {
-        // The log is saved; the PDF can be regenerated from the detail view.
-        setPdfWarning(pdf.error ?? 'PDF generation failed — the log itself is saved.');
-      }
-      router.push(`/dashboard/field-ops/${projectId}/daily-logs/${targetId}`);
-      router.refresh();
+      await finish(targetId);
       return;
     }
     setSaving(false);
+  }
+
+  async function finish(targetId: string) {
+    setSaving(true);
+    const pdf = await generateDailyLogPdf(targetId);
+    if (!pdf.success) {
+      // The log is saved; the PDF can be regenerated from the detail view.
+      setPdfWarning(pdf.error ?? 'PDF generation failed — the log itself is saved.');
+    }
+    router.push(`/dashboard/field-ops/${projectId}/daily-logs/${targetId}`);
+    router.refresh();
+  }
+
+  async function retryPhotos() {
+    if (!savedLogId) return;
+    const out = await batches.retry('photos');
+    if (!hasUnfinished(out)) await finish(savedLogId);
   }
 
   return (
@@ -461,14 +490,37 @@ export function LogForm({
           </div>
         ) : null}
 
-        <button
-          type="button"
-          disabled={saving}
-          onClick={() => void handleSave()}
-          className="rounded-[9px] bg-[#2f49d1] px-[15px] py-[10px] text-[13px] font-semibold text-white transition-colors hover:bg-[#2438a8] disabled:opacity-50"
-        >
-          {saving ? 'Saving…' : mode === 'create' ? 'Save daily log' : 'Save changes'}
-        </button>
+        {batches.items('photos').length > 0 ? (
+          <div className={card}>
+            <UploadBatchList
+              items={batches.items('photos')}
+              busy={batches.busy('photos')}
+              onRetry={() => void retryPhotos()}
+              testId="log-photos-batch"
+            />
+          </div>
+        ) : null}
+        {savedLogId ? (
+          // The log IS saved: a second Save would create a second log.
+          <button
+            type="button"
+            data-testid="log-photos-continue"
+            disabled={saving || batches.busy('photos')}
+            onClick={() => void finish(savedLogId)}
+            className="rounded-[9px] border border-[#e0e4ea] bg-white px-[15px] py-[10px] text-[13px] font-semibold text-[#14213d] disabled:opacity-50"
+          >
+            The log is saved — continue without the missing photos
+          </button>
+        ) : (
+          <button
+            type="button"
+            disabled={saving || batches.anyBusy}
+            onClick={() => void handleSave()}
+            className="rounded-[9px] bg-[#2f49d1] px-[15px] py-[10px] text-[13px] font-semibold text-white transition-colors hover:bg-[#2438a8] disabled:opacity-50"
+          >
+            {saving ? 'Saving…' : mode === 'create' ? 'Save daily log' : 'Save changes'}
+          </button>
+        )}
       </div>
     </div>
   );

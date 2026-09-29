@@ -4,6 +4,9 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { checkInDelivery } from '@/lib/services/deliveries-client';
 import { uploadFile } from '@/lib/services/files-client';
+import { mergeLanded, useUploadBatches } from '@/lib/uploads/use-upload-batches';
+import type { UploadItem } from '@/lib/uploads/upload-batch';
+import { UploadBatchList } from '@/components/uploads/upload-batch-list';
 import { useAlert } from '@/components/confirm/confirm-provider';
 
 // 6D — check-in form: the crew's two-slips comparison, on desktop. Against a
@@ -101,6 +104,11 @@ export function CheckInForm({ projectId, todayYmd, preselectedPoId, openPos }: C
   // check-in as a whole via files.delivery_id, never tagged 'damage'.
   const [deliveryPhotos, setDeliveryPhotos] = useState<LinePhoto[]>([]);
   const [deliveryPhotosUploading, setDeliveryPhotosUploading] = useState(false);
+  // [S116 F-12, #2-s180u] One shared-queue batch per line (`line-<i>`) and one
+  // for the whole delivery: ≤3 in flight, EVERY picked file attempted, each
+  // failure named with "Retry" for just those. Landed files join the photo
+  // lists exactly as before; the save route binds them.
+  const batches = useUploadBatches();
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -109,6 +117,7 @@ export function CheckInForm({ projectId, todayYmd, preselectedPoId, openPos }: C
 
   function handlePoChange(nextId: string) {
     setPoId(nextId);
+    for (let j = 0; j < items.length; j += 1) batches.clear(`line-${j}`);
     const po = openPos.find((p) => p.id === nextId) ?? null;
     if (po) {
       setVendor(po.vendor_name);
@@ -123,40 +132,50 @@ export function CheckInForm({ projectId, todayYmd, preselectedPoId, openPos }: C
     setItems((rows) => rows.map((r, j) => (j === i ? { ...r, ...patch } : r)));
   }
 
+  // [S116 F-12] _Superseded, quoted:_ both handlers were a serial `for` loop
+  // that, on the first failure, did `setError(\`Photo "${file.name}": …\`);
+  // break;` — the rest of the picked files were never tried, and there was no
+  // retry.
+  function uploadPooledPhoto(file: File) {
+    // Project-pooled (Q7): main job file, category 'photos'. client_visible
+    // defaults false, so these stay portal-hidden. The check-in route binds
+    // each photo to its delivery line and tags damage lines' photos.
+    return uploadFile(file, { project_id: projectId, category: 'photos' });
+  }
+
+  function landLinePhotos(i: number, rows: UploadItem[]) {
+    setItems((all) =>
+      all.map((r, j) => (j === i ? { ...r, photos: mergeLanded(r.photos, rows) } : r))
+    );
+  }
+
   async function handleLinePhotoUpload(i: number, files: FileList | null) {
     if (!files || files.length === 0) return;
+    const picked = Array.from(files);
     setItem(i, { uploading: true });
-    for (const file of Array.from(files)) {
-      // Project-pooled (Q7): main job file, category 'photos'. client_visible
-      // defaults false, so these stay portal-hidden. The check-in route binds
-      // each photo to its delivery line and tags damage lines' photos.
-      const result = await uploadFile(file, { project_id: projectId, category: 'photos' });
-      if (result.success && result.id) {
-        const photo = { id: result.id, name: file.name };
-        setItems((rows) =>
-          rows.map((r, j) => (j === i ? { ...r, photos: [...r.photos, photo] } : r))
-        );
-      } else {
-        setError(`Photo "${file.name}": ${result.error ?? 'upload failed'}`);
-        break;
-      }
-    }
+    landLinePhotos(i, await batches.start(`line-${i}`, picked, uploadPooledPhoto));
+    setItem(i, { uploading: false });
+  }
+
+  async function retryLinePhotos(i: number) {
+    setItem(i, { uploading: true });
+    landLinePhotos(i, await batches.retry(`line-${i}`));
     setItem(i, { uploading: false });
   }
 
   async function handleDeliveryPhotoUpload(files: FileList | null) {
     if (!files || files.length === 0) return;
+    const picked = Array.from(files);
     setDeliveryPhotosUploading(true);
-    for (const file of Array.from(files)) {
-      const result = await uploadFile(file, { project_id: projectId, category: 'photos' });
-      if (result.success && result.id) {
-        const photo = { id: result.id, name: file.name };
-        setDeliveryPhotos((p) => [...p, photo]);
-      } else {
-        setError(`Photo "${file.name}": ${result.error ?? 'upload failed'}`);
-        break;
-      }
-    }
+    const rows = await batches.start('delivery', picked, uploadPooledPhoto);
+    setDeliveryPhotos((p) => mergeLanded(p, rows));
+    setDeliveryPhotosUploading(false);
+  }
+
+  async function retryDeliveryPhotos() {
+    setDeliveryPhotosUploading(true);
+    const rows = await batches.retry('delivery');
+    setDeliveryPhotos((p) => mergeLanded(p, rows));
     setDeliveryPhotosUploading(false);
   }
 
@@ -366,6 +385,12 @@ export function CheckInForm({ projectId, todayYmd, preselectedPoId, openPos }: C
                   }}
                 />
               </label>
+              <UploadBatchList
+                items={batches.items(`line-${i}`)}
+                busy={batches.busy(`line-${i}`)}
+                onRetry={() => void retryLinePhotos(i)}
+                testId={`checkin-line-${i}-batch`}
+              />
               {item.photos.length > 0 ? (
                 <span className="text-[12px] text-[#3d7a4b]">
                   {item.photos.map((p) => p.name).join(', ')}
@@ -417,6 +442,12 @@ export function CheckInForm({ projectId, todayYmd, preselectedPoId, openPos }: C
             {deliveryPhotosUploading ? (
               <p className="mt-1 text-[12px] text-[#8a919c]">Uploading…</p>
             ) : null}
+            <UploadBatchList
+              items={batches.items('delivery')}
+              busy={batches.busy('delivery')}
+              onRetry={() => void retryDeliveryPhotos()}
+              testId="checkin-delivery-batch"
+            />
             {deliveryPhotos.length > 0 ? (
               <p className="mt-1 text-[12px] text-[#3d7a4b]">
                 Uploaded: {deliveryPhotos.map((p) => p.name).join(', ')}
