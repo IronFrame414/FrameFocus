@@ -40,11 +40,31 @@ export async function middleware(request: NextRequest) {
     }
   );
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
   const pathname = request.nextUrl.pathname;
+
+  // H-1b [S115; RULED Josh, S116 Q9 — merge]. getClaims()
+  // verifies the access token LOCALLY against the project's ES256 JWKS (cached
+  // module-wide by auth-js), ~1 ms, where getUser() asks the Auth server,
+  // ~50–70 ms — on every middleware run, 6–11 per screen load. It still
+  // refreshes an expired session (it goes through getSession) and persists the
+  // cookie through setAll above.
+  //
+  // What it does NOT see: a session revoked server-side whose access token has
+  // not yet expired (≤ 1 h). Every layout still calls getUser(), so such a
+  // user is bounced by the layout, never shown a page — which is why the ONE
+  // place that must stay authoritative is the redirect AWAY from /sign-in and
+  // /sign-up: trusting a revoked token there would send the user to
+  // /dashboard, whose layout sends them back — a loop. So those two paths keep
+  // getUser().
+  let user: { id: string } | null = null;
+  if (pathname === '/sign-in' || pathname === '/sign-up') {
+    const { data } = await supabase.auth.getUser();
+    user = data.user;
+  } else {
+    const { data } = await supabase.auth.getClaims();
+    const sub = data?.claims?.sub;
+    user = typeof sub === 'string' && sub.length > 0 ? { id: sub } : null;
+  }
 
   // Redirect unauthenticated users away from dashboard
   if (!user && pathname.startsWith('/dashboard')) {
