@@ -487,15 +487,14 @@ describe('C · #167 — a hand-entered bill never locks the payment schedule', (
       ],
     });
     expect(error, error?.message).toBeNull();
-    const before = await liveRows(contract);
-    const keep = before.stages.find((s) => s.stage_label === 'A')!;
     const { error: rErr } = await session.owner.rpc('revise_sub_contract_schedule', {
       p_sub_contract_id: contract,
-      p_stages: [{ id: keep.id, label: 'A', amount: 1500 }],
+      // Unpaid stages are REPLACED, not edited (the function's own rule): resend without id.
+      p_stages: [{ label: 'A2', amount: 1500 }],
     });
     expect(rErr, rErr?.message).toBeNull();
     const after = await liveRows(contract);
-    expect(after.stages.map((s) => s.stage_label)).toEqual(['A']);
+    expect(after.stages.map((s) => s.stage_label)).toEqual(['A2']);
     expect(after.hand).toHaveLength(1);
     expect(after.hand[0].is_deleted, 'the hand bill was trashed as a stage').toBe(false);
   });
