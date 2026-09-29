@@ -217,9 +217,12 @@ export async function POST(request: NextRequest) {
   }
 
   // Read back trigger-derived state + receiver for the email.
+  // [S116] FK named — the bare embed is ambiguous since 20260902000000 (see
+  // DELIVERY_SELECT, lib/services/deliveries.ts). _Superseded, quoted:_
+  // `'has_exceptions, receiver:company_members(display_name)'`.
   const { data: derived } = await supabase
     .from('deliveries')
-    .select('has_exceptions, receiver:company_members(display_name)')
+    .select('has_exceptions, receiver:company_members!deliveries_received_by_fkey(display_name)')
     .eq('id', delivery.id)
     .maybeSingle();
   const hasExceptions = derived?.has_exceptions ?? false;
