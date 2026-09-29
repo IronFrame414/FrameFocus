@@ -220,3 +220,48 @@ estimates on assigned projects.
 ### 5. R11 (read slice) — CI requested; Q5 NOT built
 - Rebased onto `160a57d5` (clean; 11 files, none under `supabase/`). `lint-job.sh`: TYPE 0, LINT 0,
   TEST 0 — **142 files / 1940 passed**, 0 cache hits. CI request `8e859c6c` → run **36562206482**.
+
+### ✅ 5. R11 MERGED to main as `ef6192bc` (R8)
+- CI **36562206482** on `8e859c6c` (base = main `160a57d5`): Lint & Type Check success; E2E 634 →
+  **613 passed, 21 skipped** (26.9m); tally 615 `✓`, **0 `✘`**; `desktop-pe-estimates-s115` 3 `✓`. No
+  migration. `[skip ci]` merge; `git diff 8e859c6c HEAD --stat` → empty. Q5 not built.
+
+### F-12 proofs — first runs (rebuild-test free; F-12 rebased onto `ef6192bc`, BUILD_EXIT=0)
+- `CI=1 playwright test <spec> --retries=0`, one spec at a time: desktop-log **1 passed**,
+  desktop-incident **1 passed**, desktop-checkin **1 passed**, expense-receipts **1 passed**,
+  site-visit **1 passed**, portal-composer **2 passed** (incl. the not-hers negative + its control),
+  **delivery-edit 1 failed**, **selection-thread 1 failed**.
+- **selection-thread — a pre-existing defect, fixed on F-12 (`4e43ec16`).** Probe: after
+  `setInputFiles`, `input.files.length` = 0 and "N photos attached" never appeared. The thread's
+  input did `setFiles((p) => [...p, ...Array.from(e.target.files ?? [])]); e.target.value = '';` —
+  the updater can run after the clear and read an empty FileList, so "Attach photo" silently attached
+  nothing (same code on `main`). Files are now read before the clear. Rebuilt → **1 passed**.
+- **delivery-edit — a LIVE defect outside C-5, fixed on its own branch.** Probe: the edit URL rendered
+  Next's 404. `getDelivery` returned null because PostgREST refuses
+  `receiver:company_members(display_name)` with **PGRST201** ("more than one relationship":
+  `deliveries_received_by_fkey` and `deliveries_checked_in_by_fkey`), reproduced with the service
+  role. The second FK came with `20260902000000_deliveries_check_in_state.sql` (`13a5e9df`,
+  2026-08-09, on main). Every read through `DELIVERY_SELECT` (4 call sites in
+  `lib/services/deliveries.ts`) and the check-in route's email read-back failed since then: delivery
+  lists empty, detail/edit 404, delivery PDF "Delivery not found" — the C-12 CI log line
+  `[deliveries/check-in] PDF failed for …: Delivery not found` is this. No e2e rendered a delivery
+  page. Production cannot be probed from here; it has carried that migration for weeks, so it is
+  presumed affected.
+  - Branch `feature/s116-delivery-embed` (from main `ef6192bc`), `5e9034bf`: both embeds name
+    `!deliveries_received_by_fkey`; the fixed select returns rows with receivers (service role, 3 rows,
+    no error). New `e2e/s116-delivery-pages.spec.ts` (seeds a checked-in delivery so both FKs are set;
+    detail heading + receiver name, edit heading) → **2 passed**. **Sabotage:** main's
+    `deliveries.ts` restored → rebuilt → **2 failed**; restored, `cmp` identical, rebuilt, **2 passed**.
+    `lint-job.sh`: 142 / 1940, all 0. CI requested → run **36567384544** on `5e9034bf`.
+  - ⚠️ Unattended decision: fixed and queued ahead of F-12 (a user-facing page broken on production vs.
+    a batch-upload rework). Alternative: file it and leave it — rejected, it is a two-string fix with a
+    red-to-green proof.
+
+### Josh schedule change [2026-09-29, mid-session]
+1. Merge `feature/s115-report` + `feature/s116-report` now (docs-only). Debt `#1-s115r`/`#2-s115r`
+   converted to **#171 / #172** on landing (TECH_DEBT's own note names #170 as highest; next free #173).
+2. Apply R10's `20262020000000` to production under the runbook, now — production and rebuild-test do
+   not contend. (Note: the prompt said "while R11's CI runs"; R11 had already merged. The run in flight
+   was the delivery-embed fix, on rebuild-test — the separation still holds.)
+3. Stack C-5 on R10 (keep Josh's `2f4ae640` specs), one CI for both, merge both on green; bisect R10
+   first if red. The eight C-5 proofs in one Playwright invocation (they are Playwright, not vitest).
