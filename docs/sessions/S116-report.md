@@ -167,3 +167,24 @@ estimates on assigned projects.
   completeness only.
 - Also open inside B/C: may the PE **send** a proposal for signature (R1 carve-out 2 keeps send at
   Owner/Admin today)?
+
+### ✅ 2. C-11 MERGED to main as `75fac48f` (R8)
+- CI **36551156531** on `dd39458e` (base = main `8ad95990`): Lint & Type Check success; E2E "Running
+  630 tests using 1 worker" → **609 passed, 21 skipped** (27.4m). Independent tally: 611 `✓` lines, **0
+  `✘`**; the 5 `desktop-photo-delete-s115` tests (owner, crew negative, PM, PE, shape) all `✓`.
+- No migration (0 paths under `supabase/`). `--no-ff` merge `[skip ci]`; `git diff dd39458e HEAD
+  --stat` → empty.
+
+### 3. H-5 — CI requested
+- Rebased onto `75fac48f` (clean; 5 files: dashboard-shell, photos page, project-header, projects page,
+  `desktop-prefetch-s115.spec.ts`). `lint-job.sh`: TYPE 0, LINT 0, TEST 0 — 141 files / 1922 passed,
+  0 cache hits. CI request `f7096c98` → run **36554670229**.
+
+### F-12 proofs — 8 specs drafted by 4 agents (write + tsc only, no DB while CI runs)
+- Files: `e2e/s116-c5-{desktop-log,desktop-incident,desktop-checkin,delivery-edit,expense-receipts,
+  selection-thread,site-visit,portal-composer}.spec.ts`. **Not yet run** — each is run, debugged and
+  sabotaged by me in a DB-free window.
+- ⚠️ Agent finding, verified by reading: `OfflineSyncProvider` is mounted only by
+  `app/m/mobile-shell.tsx`, so on the desktop site-visit route `useOfflineSync()` is null and a failed
+  photo is not held. The desktop proof therefore does not exercise the offline replay; the `/m`
+  replay path stays covered only by the per-file stable id + the route's idempotency.
