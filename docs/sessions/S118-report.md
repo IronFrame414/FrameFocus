@@ -374,3 +374,32 @@ Branch `feature/s118-employee-documents`.
   busy).
 - **Production order:** merge the phase-1 stack → confirm the Vercel deployment of `main` → only then apply
   `20262070000000` to production → then item 12's own CI/merge.
+
+### Item 5 + item 12 phase 1 — MERGED (`f92f88ad`)
+- CI **36600278121** GREEN on `89094add` (base = main `128a7043`, merge-base verified): vitest 145 files /
+  1970 tests; e2e 630 passed, 21 skipped (both `s118-bid-documents` tests passed). No migration in the stack.
+  Merged under R8. Vercel deployed `f92f88ad`: status `success` 17:24:10Z — phase 1 live before item 12's
+  migration.
+
+### Item 12 — proofs, production, CI
+- Live `s118-daily-log-closeout` **25/25**. Sabotage (office roles widened to foreman + crew in the column
+  guard AND `mark_daily_log_reviewed`) → **3 red** (crew/foreman total-map rows + the author's direct UPDATE);
+  restored, both definitions read back `cmp`-identical; re-run 25/25.
+- e2e **3/3** (/m crew files A/C/D/E; desktop office marks ordered + reviewed; /m field sees them, no office
+  controls). e2e control: `isDailyLogOffice` forced true → the "field has no office controls" test **red**
+  (`toHaveCount`). (One unrelated first-try sign-in stall in that sabotage run — test 2 passed on retry; the
+  clean run had 0 retries.)
+- ⚠️ **Caught by `lint-job.sh` before CI — two unit-suite failures item 12 would have shipped red:**
+  (1) the /m anti-rot guard read `CLOSEOUT_ITEMS`' `label: 'field.closeout.*'` message keys as 10 hard-coded
+  strings → property renamed `labelKey`; (2) `m6m-field-font-size`: 10 close-out inputs at 14px (iOS focus
+  zoom) → 16px. After: 145 files / 1973 tests, all 0.
+- Baseline regenerated (rebuild-test ledger 267 == tree 267): policies 463, triggers 293, functions 339,
+  constraints 1035, latest `20262070000000`.
+- **Production (runbook §9):** pre-check measured (ledger 266, `daily_logs` 21 columns, guard md5 `ba211f64…`,
+  table absent, 0 rows). `prod-section.sh`: dry run listed exactly `20262070000000_s118_daily_log_closeout.sql`;
+  push 0; relinked `nmyphyhmfttxkdoposvf` (read back). **Verified by object:** ledger 267; `daily_logs` 38
+  columns; `daily_log_material_needs` RLS on, 3 policies (insert a / select r / update w); all five md5 equal
+  the file (`ca0ef1a9…`, `d2843d26…`, `f8eaaeeb…`, `7d3ca709…`, `510583d8…`); 0 rows; **production
+  `schema_fingerprint()` == committed baseline** (463 `b4e86072…` / 293 `530741c6…` / 339 `c643725b…` / 1035
+  `f0445bd7…`, latest `20262070000000`).
+- Rebased onto main `f92f88ad`; lint-job 0/0/0 (145 / 1973). CI **36604993783** requested on `76deba31`.
