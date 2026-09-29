@@ -20,7 +20,9 @@ import { deleteCompanies } from '../test-support/company-purge';
 const admin = adminClient();
 const MARKER = 'S119ONB';
 const STAMP = Date.now();
-const OWNER_EMAIL = `disposable-s119-owner-${STAMP}@example.invalid`;
+// GoTrue refuses `@example.invalid` on a plain sign-up (email_address_invalid, first
+// run); the invite path accepts it. The fixture sink domain, never a real inbox.
+const OWNER_EMAIL = `disposable-s119-owner-${STAMP}@qa-noreply.ezcontractorbinder.com`;
 const INVITEE_EMAIL = `disposable-s119-invitee-${STAMP}@example.invalid`;
 const PW = 'FrameFocusTest!2026';
 let inviteCompanyId = '';
