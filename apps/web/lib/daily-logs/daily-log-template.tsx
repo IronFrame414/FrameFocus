@@ -22,6 +22,17 @@ export interface DailyLogPdfData {
   notes: string | null;
   hazardsPresent: boolean;
   hazardNotes: string | null;
+  /** [S118 item 12] The paper close-out form. A: label + answer (null = not answered). */
+  closeout: { label: string; value: boolean | null }[];
+  photosSentAt: string | null;
+  tasksTomorrowDate: string | null;
+  tasksDayAfter: string | null;
+  tasksDayAfterDate: string | null;
+  /** D — needed on site, not here now, with the office's ordered state. */
+  needs: { item: string; qty: number | null; unit: string | null; neededBy: string | null; vendor: string | null; orderedBy: string | null }[];
+  blockers: string | null;
+  officeReviewedBy: string | null;
+  officeReviewedAt: string | null;
   crew: { name: string; hours: number | null; warrantyOnly: boolean }[];
   subs: { name: string; hours: number; note: string | null }[];
   deliveries: { vendorName: string; hasExceptions: boolean }[];
@@ -178,6 +189,54 @@ export function DailyLogDocument({ data }: { data: DailyLogPdfData }) {
         </View>
 
         <TextSection title="Notes" value={data.notes} />
+
+        {/* [S118 item 12] The paper close-out form: A, C (dates), D, E, office review. */}
+        {data.closeout.some((c) => c.value !== null) || data.photosSentAt ? (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>A — Close-out checklist</Text>
+            {data.closeout.map((c) => (
+              <Text key={c.label} style={styles.body}>
+                {c.value === true ? '[x]' : c.value === false ? '[ ]' : '[–]'} {c.label}
+              </Text>
+            ))}
+            {data.photosSentAt ? (
+              <Text style={styles.body}>
+                Photos sent: {new Date(data.photosSentAt).toLocaleString('en-US', { timeZone: data.timeZone })}
+              </Text>
+            ) : null}
+          </View>
+        ) : null}
+        {data.tasksTomorrowDate || data.tasksDayAfter || data.tasksDayAfterDate ? (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>C — Next two days</Text>
+            {data.tasksTomorrowDate ? <Text style={styles.body}>Tomorrow: {fmtYmd(data.tasksTomorrowDate)}</Text> : null}
+            <Text style={data.tasksDayAfter ? styles.body : styles.empty}>
+              Day after{data.tasksDayAfterDate ? ` (${fmtYmd(data.tasksDayAfterDate)})` : ''}: {data.tasksDayAfter ?? '—'}
+            </Text>
+          </View>
+        ) : null}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>D — Needed on site, not here now</Text>
+          {data.needs.length === 0 ? (
+            <Text style={styles.empty}>—</Text>
+          ) : (
+            data.needs.map((n, i) => (
+              <Text key={`${n.item}-${i}`} style={styles.body}>
+                {n.item}
+                {n.qty != null ? ` · ${n.qty}${n.unit ? ` ${n.unit}` : ''}` : ''}
+                {n.neededBy ? ` · needed by ${fmtYmd(n.neededBy)}` : ''}
+                {n.vendor ? ` · ${n.vendor}` : ''}
+                {n.orderedBy ? ` · ORDERED (${n.orderedBy})` : ' · not ordered'}
+              </Text>
+            ))
+          )}
+        </View>
+        <TextSection title="E — Blockers" value={data.blockers} />
+        <Text style={styles.body}>
+          {data.officeReviewedBy
+            ? `Office reviewed by ${data.officeReviewedBy}${data.officeReviewedAt ? ` · ${new Date(data.officeReviewedAt).toLocaleString('en-US', { timeZone: data.timeZone })}` : ''}`
+            : 'Office review: pending'}
+        </Text>
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Crew present</Text>

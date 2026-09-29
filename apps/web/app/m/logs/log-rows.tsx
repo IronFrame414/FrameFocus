@@ -139,6 +139,10 @@ export function LogRows({ rows, projectId }: { rows: MobileLogRow[]; projectId: 
                   excerpt(r.work_performed, t)
                 )}
               </p>
+              {/* [S118 item 12] The office has not reviewed it yet (desktop list shows the same). */}
+              <p className="mt-[2px] text-[11px] font-semibold text-m6m-amber" data-testid="m-log-unreviewed" hidden={Boolean(r.office_reviewed_at)}>
+                {t('field.review.badge')}
+              </p>
             </ListRowLink>
           ))}
         </ul>

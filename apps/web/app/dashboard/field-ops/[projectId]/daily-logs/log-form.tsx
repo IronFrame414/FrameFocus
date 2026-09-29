@@ -11,9 +11,17 @@ import {
   uploadDailyLogPhotoFile,
   linkDailyLogPhoto,
   generateDailyLogPdf,
+  setDailyLogMaterialNeeds,
   type DailyLogFields,
   type SubEntryInput,
 } from '@/lib/services/daily-logs-client';
+import { DailyLogCloseoutFields } from '@/components/field/daily-log-closeout-fields';
+import {
+  cleanNeeds,
+  emptyCloseout,
+  type CloseoutFields,
+  type MaterialNeedInput,
+} from '@/lib/daily-logs/closeout';
 import { makeAttachWorker } from '@/lib/uploads/upload-batch';
 import { hasUnfinished, useUploadBatches } from '@/lib/uploads/use-upload-batches';
 import { UploadBatchList } from '@/components/uploads/upload-batch-list';
@@ -39,6 +47,9 @@ interface LogFormProps {
   initialFields: Partial<DailyLogFields> & { log_date: string; hazards_present: boolean };
   initialCrewIds: string[];
   initialSubs: SubEntryInput[];
+  /** [S118 item 12] The paper form's A/C/E columns and section D lines (edit mode). */
+  initialCloseout?: CloseoutFields;
+  initialNeeds?: MaterialNeedInput[];
 }
 
 const card = 'rounded-[13px] border border-[#e6e9ef] bg-white p-[18px]';
@@ -54,6 +65,8 @@ export function LogForm({
   initialFields,
   initialCrewIds,
   initialSubs,
+  initialCloseout,
+  initialNeeds = [],
 }: LogFormProps) {
   const router = useRouter();
 
@@ -71,6 +84,9 @@ export function LogForm({
   });
   const [crewIds, setCrewIds] = useState<string[]>(initialCrewIds);
   const [subs, setSubs] = useState<SubEntryInput[]>(initialSubs);
+  // [S118 item 12] The paper close-out form — the SAME component the /m form renders.
+  const [closeout, setCloseout] = useState<CloseoutFields>(initialCloseout ?? emptyCloseout());
+  const [needs, setNeeds] = useState<MaterialNeedInput[]>(initialNeeds);
   // Photos are LOG-BOUND (S87 revision): they need the log's id to link, so
   // selections queue here and upload at save — create mode has no id earlier.
   const [pendingPhotos, setPendingPhotos] = useState<File[]>([]);
@@ -137,8 +153,12 @@ export function LogForm({
     }
     setSaving(true);
 
-    const payload: DailyLogFields = {
+    const payload: DailyLogFields & CloseoutFields = {
       ...fields,
+      // [S118 item 12] A / C (dates, day after) / E.
+      ...closeout,
+      tasks_day_after: closeout.tasks_day_after?.trim() || null,
+      blockers: closeout.blockers?.trim() || null,
       weather: fields.weather?.trim() || null,
       // #133 CLOSED [S122] — NOT `|| null` like its neighbours, and that is the
       // point. Every other field here is genuinely optional, so coercing blank
@@ -189,6 +209,18 @@ export function LogForm({
     }
 
     if (targetId) {
+      // [S118 item 12] Section D — reconcile the lines (new / kept / removed).
+      const needsResult = await setDailyLogMaterialNeeds(
+        targetId,
+        cleanNeeds(needs),
+        initialNeeds.flatMap((n) => (n.id ? [n.id] : []))
+      );
+      if (!needsResult.success) {
+        setSaving(false);
+        setSavedLogId(targetId);
+        setError(needsResult.error ?? 'Material-needed lines were not saved');
+        return;
+      }
       // Log-bound photo uploads (S87) — now that the log id exists. Failures
       // don't lose the log; they stay on screen, named, with Retry.
       // [S116 F-12] _Superseded, quoted:_ a serial `for` loop over
@@ -302,6 +334,14 @@ export function LogForm({
             onChange={(e) => set('notes', e.target.value)}
           />
         </div>
+
+        {/* [S118 item 12] The paper close-out form: A, C (dates), D, E. */}
+        <DailyLogCloseoutFields
+          value={closeout}
+          onChange={setCloseout}
+          needs={needs}
+          onNeedsChange={setNeeds}
+        />
 
         <div className={card}>
           <label className={label}>Photos</label>
