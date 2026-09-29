@@ -188,3 +188,26 @@ estimates on assigned projects.
   `app/m/mobile-shell.tsx`, so on the desktop site-visit route `useOfflineSync()` is null and a failed
   photo is not held. The desktop proof therefore does not exercise the offline replay; the `/m`
   replay path stays covered only by the per-file stable id + the route's idempotency.
+
+### ✅ 3. H-5 MERGED to main as `4d30415c` (R8)
+- CI **36554670229** on `f7096c98` (base = main `75fac48f`): Lint & Type Check success; E2E 631 →
+  **610 passed, 21 skipped** (26.1m); tally 612 `✓`, **0 `✘`**; `desktop-prefetch-s115` `✓`. No
+  migration. `[skip ci]` merge; `git diff f7096c98 HEAD --stat` → empty.
+
+### 4. H-1b (getClaims) — Q9's pre-merge check done on the rebased tree; CI requested
+- Rebased onto `4d30415c` (only `apps/web/middleware.ts` differs). `next build` BUILD_EXIT=0.
+  `CI=1 playwright test s115-middleware-gate desktop-dashboard-guard sign-in-destination` →
+  **24 passed**, `E2E_EXIT=0`, 24 `✓` / 0 `✘`.
+- ⚠️ **Sabotage 1 did NOT go red — recorded as an instrument finding.** The getClaims branch forced to
+  admit every request (`user = { id: 'sabotage' }`; anchor matched once) → rebuilt (exit 0) → still
+  **24 passed**. Cause read in code: `app/dashboard/layout.tsx:21` calls `getUser()` and
+  `redirect('/sign-in')` itself, so a signed-out visitor is bounced by the layout even when middleware
+  lets them through. These page-level negatives cannot isolate the middleware's claim check — which is
+  the defence-in-depth the H-1b design relies on ("every layout still calls getUser()"), now measured.
+  Restored, `cmp` identical.
+- **Sabotage 2 (the inverse) went red:** getClaims branch forced to `user = null` → rebuilt (exit 0)
+  → **10 failed / 14 passed** (`desktop-dashboard-guard` signed-in cases bounce), `E2E_EXIT=1`.
+  Restored from the saved copy, `cmp` identical, `grep -c SABOTAGE` → 0. So the specs do prove the
+  middleware recognises a valid session via getClaims; they do not (and cannot) prove it rejects one.
+- `lint-job.sh`: TYPE 0, LINT 0, TEST 0 — 141 / 1922, 0 cache hits. CI request `e8733c90` → run
+  **36558892243** (base = main `4d30415c`).
