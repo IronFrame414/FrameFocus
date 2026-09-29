@@ -114,6 +114,8 @@ describe('S151-M1 — cross-system findings on Module 1', () => {
   //
   // The fuller coverage is `s152-m1-fixes.live.ts` B1/B1b/B2, which also proves
   // the other arm (an unaffiliated caller CAN still insert, so signup is safe).
+  // [S119 A-1] That other arm is now INVERTED (B2 in s152): the policy is dropped,
+  // an unaffiliated caller is refused, and signup is proven in s119-profile-insert-floor.
   // This stays as the regression guard at the point the defect was found.
   // --------------------------------------------------------------------------
   it('F2 — a crew member can NO LONGER insert a company row [fixed S152]', async () => {

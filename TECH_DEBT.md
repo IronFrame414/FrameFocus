@@ -2435,6 +2435,52 @@ direct path today. Closing it = dropping/narrowing those UPDATE arms so the func
 (check every writer first: conversion, CO apply, the recompute triggers — S115 mapped 6). Policy change →
 needs Josh's word; not done unattended. Land after R10 is on production.
 
+## `#1-s119a` — ⚠️ PDF regeneration hard-deletes whatever `pdf_file_id` points at — and that pointer can name ANOTHER company's file
+
+Filed S119 ITEM A-3 (S118 item 16 audit). `apps/web/lib/services/daily-log-pdf-service.ts:176-185`,
+`delivery-pdf-service.ts:176-185`, `incident-pdf-service.ts:117-126`: the stale-artifact cleanup reads
+`files.file_path` by `id` ONLY and removes the object and the row **with the service role**. The record's
+author may set `pdf_file_id` (neither `enforce_daily_logs_column_scope` nor any trigger on `deliveries` /
+`safety_incidents` mentions it — measured live), and the FKs (`*_pdf_file_id_fkey`) are checked without
+RLS, so a foreign file id is accepted. ⚠️ **S119 measured this as CROSS-TENANT DELETION, not the
+"within-company integrity" the S119 prompt filed it under** — reachable only by someone who knows a
+foreign file's UUID (not enumerable through RLS). Fix shape (3 services, no migration): add
+`.eq('company_id', <record company>)` and the expected PDF category to the stale-file select; better,
+freeze `pdf_file_id` to the service role in the column-scope triggers. **Not fixed today:** the S119
+ruling is "file, do not fix" for this list; the premise difference is raised with Josh in the S119 report.
+
+## `#2-s119a` — `email_has_account` answers "does this email have an account" to any Owner/Admin
+
+Filed S119 ITEM A-3 (S118 item 9). `supabase/migrations/20260916000000_email_has_account.sql:35`
+(SECURITY DEFINER; EXECUTE `authenticated`). Anyone can become an Owner by signing up, so this is an
+account-existence oracle for any address. **Not fixed today:** it discloses existence only (no row
+content, no tenant data), and the invite flow depends on it; a rate limit or a same-company scope is a
+design decision for Josh.
+
+## `#3-s119a` — `record_client_payment` does not check `p_contact_id`'s company when there are no applications
+
+Filed S119 ITEM A-3 (S118 item 9). `supabase/migrations/20261830000000_s111_project_executive_floor_reads.sql:159`
+(live body; inserts `p_contact_id` at :204, and compares it only per application at :238). With
+`p_applications = []` an Owner/Admin can record an unapplied payment against another company's contact
+id — an FK-valid, RLS-invisible row in their own company. **Not fixed today:** within-company integrity,
+no disclosure; money code (stop rule 3 territory) wants its own session and tests.
+
+## `#4-s119a` — `create_safety_incident` trusts the member ids in its JSON
+
+Filed S119 ITEM A-3 (S118 item 9). Live 7-arg SECURITY INVOKER body
+`supabase/migrations/20260722020000_6c_create_incident_fn.sql:12`; the dead 6-arg DEFINER overload
+`20260711140000_module6_6c_safety_incidents.sql:307` (already `#1-s180u`). Injured-party / witness
+member ids in `p_injuries` / `p_witnesses` are not checked against the incident's company. **Not fixed
+today:** the live path is INVOKER, so child-row RLS still applies; integrity only, no disclosure.
+
+## `#5-s119a` — Two payment functions say "belongs to another company" instead of "not found"
+
+Filed S119 ITEM A-3 (S118 item 9). Live on production (by `prosrc`): `apply_client_credit`
+(`20260804000000_7e_payments.sql:642`) and `record_client_payment`
+(`20261830000000_s111_project_executive_floor_reads.sql:226`). The message confirms that a foreign
+invoice id exists. **Not fixed today:** ids are random UUIDs (no enumeration); wording-only change,
+batched with the next payments migration.
+
 ## Process notes
 
 When closing an item:
