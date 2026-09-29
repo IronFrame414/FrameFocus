@@ -24,5 +24,7 @@ test('H-5 · the sidebar fires no prefetch, and still navigates', async ({ page 
   expect(navPrefetches, 'sidebar prefetches').toEqual([]);
 
   await page.locator('[data-testid="nav-item-/dashboard/projects"]').click();
-  await expect(page).toHaveURL(/\/dashboard\/projects$/);
+  // The projects list itself takes seconds server-side (see H-5); the budget is
+  // for that page, not for the link.
+  await expect(page).toHaveURL(/\/dashboard\/projects$/, { timeout: 30_000 });
 });
