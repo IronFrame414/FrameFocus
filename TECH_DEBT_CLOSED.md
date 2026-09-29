@@ -13,6 +13,14 @@
 
 ## Closed Tech Debt
 
+- **#169 ✅ CLOSED [S118 item 5, `feature/s118-bid-docs`, 2026-09-29]** — the bid page lists the scope
+  documents staff shared with bidders (`BidDocuments` in `bid-reply-client.tsx`: what `GET /api/bid/[token]/files`
+  returns, bid-scope + staff-uploaded only; a click re-fetches a fresh 300 s URL; not rendered when closed or
+  expired). e2e `s118-bid-documents`: shared doc listed and opens; an UNTAGGED staff file on the same estimate is
+  not listed; a cancelled token shows the closed card, no list, and the route refuses. Found on the way and
+  fixed in `lib/supabase-admin.ts`: service-role reads went through Next's data cache (a cancelled bid kept
+  showing its open form) — now `cache: 'no-store'` for every admin read; sabotage red.
+
 - **#151 ✅ CLOSED [/m visual sweep, `feature/m-visual-sweep`, 2026-09-24]** — the push enrolment
   control did not read as tappable: zero `className`s, so under Preflight its `<button>` rendered
   as body text. **Styled in the shared component, both surfaces** (parity rule): a titled panel,

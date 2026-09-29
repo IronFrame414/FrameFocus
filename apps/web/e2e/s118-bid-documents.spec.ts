@@ -11,6 +11,11 @@ import { adminClient } from './hub-fixture';
 //   negative: a cancelled token shows no list at all
 
 const RUN = `S118B-${Date.now()}`;
+// 1×1 PNG: an image renders in the opened tab (a PDF would download headless, leaving no URL).
+const PNG = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=',
+  'base64'
+);
 const admin = adminClient();
 const made = {
   estimate: '',
@@ -97,13 +102,16 @@ test.beforeAll(async () => {
   made.token = req!.token as string;
 
   for (const [name, tags] of [
-    [`${RUN}-shared-plans.pdf`, ['plans', 'bid-scope']],
+    [`${RUN}-shared-plans.png`, ['plans', 'bid-scope']],
     [`${RUN}-private-site-photo.pdf`, ['plans']],
   ] as const) {
     const path = `${companyId}/estimates/${made.estimate}/${name}`;
     await admin.storage
       .from('project-files')
-      .upload(path, Buffer.from('%PDF-1.4'), { contentType: 'application/pdf', upsert: true });
+      .upload(path, name.endsWith('.png') ? PNG : Buffer.from('%PDF-1.4'), {
+        contentType: name.endsWith('.png') ? 'image/png' : 'application/pdf',
+        upsert: true,
+      });
     made.paths.push(path);
     const { data: f } = await admin
       .from('files')
@@ -114,7 +122,7 @@ test.beforeAll(async () => {
         file_name: name,
         file_path: path,
         file_size: 8,
-        mime_type: 'application/pdf',
+        mime_type: name.endsWith('.png') ? 'image/png' : 'application/pdf',
         created_by: seed.created_by,
         tags: [...tags],
       })
@@ -147,21 +155,31 @@ test.describe('S118 item 5 · the bid page lists shared scope documents, and onl
     await page.goto(`/bid/${made.token}`);
     const docs = page.getByTestId('bid-doc');
     await expect(docs).toHaveCount(1);
-    await expect(docs.first()).toContainText(`${RUN}-shared-plans.pdf`);
+    await expect(docs.first()).toContainText(`${RUN}-shared-plans.png`);
     await expect(page.locator('body')).not.toContainText('private-site-photo');
     const popup = context.waitForEvent('page');
     await docs.first().getByRole('button').click();
     const opened = await popup;
+    // The click re-fetches a fresh 300 s URL first, so the tab navigates after it opens.
+    await opened.waitForURL(/\/storage\/v1\/object\/sign\/project-files\//, { timeout: 30_000 });
     expect(opened.url()).toContain('/storage/v1/object/sign/project-files/');
     await opened.close();
   });
 
   test('a CANCELLED token shows the closed card and no document list', async ({ page }) => {
-    await admin
+    const { error: cancelErr } = await admin
       .from('estimate_sub_bid_requests')
       .update({ status: 'cancelled' })
       .eq('id', made.request);
+    expect(cancelErr, cancelErr?.message).toBeNull();
+    const { data: st } = await admin
+      .from('estimate_sub_bid_requests')
+      .select('status')
+      .eq('id', made.request)
+      .single();
+    expect(st?.status, 'control: the token really is cancelled').toBe('cancelled');
     await page.goto(`/bid/${made.token}`);
+    await page.waitForLoadState('networkidle');
     await expect(page.getByText('This request is no longer open')).toBeVisible();
     await expect(page.getByTestId('bid-docs')).toHaveCount(0);
     const res = await page.request.get(`/api/bid/${made.token}/files`);
