@@ -390,10 +390,15 @@ export async function reassignExpenseProject(
  * actual_amount is trigger-maintained only.
  *
  * RULING [S97]: the budgeted figure lives in project_budget_amounts
- * (Owner/Admin RLS), so it is written there rather than onto the line. UPSERT
- * rather than insert because the transitional sync trigger (20260816010000)
- * may already have created the row from the line's column default — this works
- * both before and after that trigger and the column are dropped.
+ * (Owner/Admin RLS), so it is written there rather than onto the line.
+ *
+ * [S118 #172] A plain INSERT of 0. 20262040000000 dropped every direct UPDATE arm
+ * on project_budget_amounts, and an upsert's conflict path is an UPDATE. The
+ * transitional sync trigger the upsert hedged against is gone (no trigger on
+ * project_budget_items writes amounts — measured S118). _Superseded, quoted:_
+ * "UPSERT rather than insert because the transitional sync trigger
+ * (20260816010000) may already have created the row from the line's column
+ * default".
  */
 export async function createAdHocBudgetLine(
   projectId: string,
@@ -420,10 +425,7 @@ export async function createAdHocBudgetLine(
 
   const { error: amountError } = await supabase
     .from('project_budget_amounts')
-    .upsert(
-      { company_id: data.company_id, budget_item_id: data.id, budgeted_amount: 0 },
-      { onConflict: 'budget_item_id' }
-    );
+    .insert({ company_id: data.company_id, budget_item_id: data.id, budgeted_amount: 0 });
   if (amountError) {
     // The line exists but carries no budget row — an Owner would see a dash
     // where a real zero belongs. Report it rather than returning a quiet

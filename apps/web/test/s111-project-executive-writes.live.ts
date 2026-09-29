@@ -344,7 +344,15 @@ describe('S111 step 3 — ON its project, every write lands', () => {
   // project's `project_financials.contract_value`. 20262000000000 dropped that
   // arm: on fixed price the column IS the billing ceiling. The budgeted amount
   // (project_budget_amounts) is unchanged and still lands.
-  it('W2 money side tables: budgeted amount lands; the contract value (billing ceiling) is refused [S114 Q14 A]', async () => {
+  //
+  // [S118 #172, RULED Josh] INVERTED IN PLACE for the budgeted amount too.
+  // _Superseded title, quoted:_ 'W2 money side tables: budgeted amount lands; the
+  // contract value (billing ceiling) is refused [S114 Q14 A]', which asserted
+  // `expect(bud).toBe(1)`. 20262040000000 dropped every direct UPDATE arm on
+  // project_budget_amounts: the figure moves only through R10's lock-checked
+  // functions. Judged by the SERVICE ROLE, not by `touched()` (its `.select()`
+  // would read 0 for a refusal and for a vanished read arm alike).
+  it('W2 money side tables: budgeted amount AND contract value are refused [S114 Q14 A, S118 #172]', async () => {
     const fin = await touched(
       'project_financials',
       { contract_value: 51000 },
@@ -359,7 +367,13 @@ describe('S111 step 3 — ON its project, every write lands', () => {
     );
     record('W2_on', { financials: fin, budgetAmounts: bud });
     expect(fin, 'the PE changed its own billing ceiling').toBe(0); // was: toBe(1)
-    expect(bud).toBe(1);
+    expect(bud).toBe(0); // was: toBe(1) — [S118 #172]
+    const { data: amt } = await admin
+      .from('project_budget_amounts')
+      .select('budgeted_amount')
+      .eq('budget_item_id', bi.on)
+      .single();
+    expect(Number(amt?.budgeted_amount), 'the PE changed a budget figure directly').not.toBe(1100);
   });
 
   it('W3 invoice: edit, approve, then void (FILL-5: send and void on its projects)', async () => {
@@ -642,9 +656,12 @@ describe('S181b — OFF its project (PEW BARE), each remaining INSERT arm refuse
   });
 
   it('P2 project_budget_amounts_insert_project_executive', async () => {
+    // [S118 #172] amount 0: the INSERT arms now also require budgeted_amount = 0, so a
+    // non-zero probe would be refused for THAT reason and stop measuring project scope.
+    // _Superseded, quoted:_ `budgeted_amount: 1,`
     await probe('P2_budget_amounts', 'project_budget_amounts', 'budget_item_id', bare.budgetItem, {
       budget_item_id: bare.budgetItem,
-      budgeted_amount: 1,
+      budgeted_amount: 0,
     });
   });
 

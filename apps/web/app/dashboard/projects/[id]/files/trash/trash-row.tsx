@@ -9,9 +9,12 @@ import { restoreFile, permanentDeleteFile } from '@/lib/services/files-client';
 export default function TrashRow({
   file,
   canPermanentDelete,
+  canRestore,
 }: {
   file: FileRecord;
   canPermanentDelete: boolean;
+  /** [S118 #171] canTrashFile(role). */
+  canRestore: boolean;
 }) {
   const router = useRouter();
   const confirm = useConfirm();
@@ -68,9 +71,11 @@ export default function TrashRow({
       </td>
       <td style={cellStyle}>
         <div style={{ display: 'flex', gap: '0.5rem' }}>
-          <button onClick={handleRestore} disabled={busy} style={btnStyle}>
-            Restore
-          </button>
+          {canRestore && (
+            <button onClick={handleRestore} disabled={busy} style={btnStyle}>
+              Restore
+            </button>
+          )}
           {canPermanentDelete && (
             <button
               onClick={handlePermanentDelete}

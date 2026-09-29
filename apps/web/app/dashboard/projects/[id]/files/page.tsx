@@ -3,6 +3,7 @@ import { getDocumentFiles, getFileCategories } from '@/lib/services/files';
 import { getActiveTags } from '@/lib/services/tag-options';
 import FilesList from './files-list';
 import { ArchivePanel } from './archive-panel';
+import { canTrashFile } from '@/lib/photos/delete-permission';
 
 export default async function ProjectFilesPage({ params }: { params: Promise<{ id: string }> }) {
   const { id: projectId } = await params;
@@ -23,6 +24,8 @@ export default async function ProjectFilesPage({ params }: { params: Promise<{ i
     role = profile?.role ?? null;
   }
   const canArchive = role === 'owner' || role === 'admin';
+  // [S118 #171] Delete (to Trash) — the rule the database enforces.
+  const canTrash = canTrashFile(role);
   // M3-05 [S157] — these two reads are INDEPENDENT and were awaited in series,
   // so the page paid two round trips end to end for work that takes one. Same
   // shape as M1-03 (five sequential reads for one row), smaller.
@@ -45,6 +48,7 @@ export default async function ProjectFilesPage({ params }: { params: Promise<{ i
         projectId={projectId}
         activeTags={activeTags}
         categoryLabels={categoryLabels}
+        canTrash={canTrash}
       />
 
       <ArchivePanel projectId={projectId} canArchive={canArchive} role={role ?? ''} />

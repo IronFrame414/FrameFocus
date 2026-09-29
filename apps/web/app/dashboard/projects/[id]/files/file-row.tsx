@@ -16,12 +16,15 @@ export default function FileRow({
   projectId,
   activeTags,
   categoryLabel,
+  canTrash,
 }: {
   file: FileRecord;
   projectId: string;
   activeTags: TagOption[];
   /** Redesign 6.1 — the renameable label; `file.category` stays the key. */
   categoryLabel: string;
+  /** [S118 #171] canTrashFile(role). */
+  canTrash: boolean;
 }) {
   const [hover, setHover] = useState(false);
 
@@ -142,6 +145,7 @@ export default function FileRow({
           annotated={annotated}
           markup={file.markup_data}
           projectId={projectId}
+          canTrash={canTrash}
         />
       </td>
     </tr>
