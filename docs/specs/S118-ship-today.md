@@ -166,9 +166,15 @@ signed URLs for every staff-uploaded file on an estimate to anyone holding a bid
 authorised the token and not the file. **An employee document must be structurally unable to reach any
 external surface** — no bid token, no client portal, no proposal payload, no share link.
 
-**Ruled — narrowest defaults, all reversible:**
-- **Owner and Admin only**, read and write. ⚠️ Not PM, not the Project Executive, not the employee
-  themselves. Widening later is one line; a disciplinary note read by a foreman cannot be un-read.
+**Ruled:**
+- **Write: Owner and Admin only.** ⚠️ Not PM, not the Project Executive, not the employee.
+- **Read: Owner, Admin, and the employee — their OWN documents only.** [Josh, 2026-09-29]
+  ⚠️ **This opens a read path, so the load-bearing negative test changes**: it is no longer "no employee
+  sees these", it is **"an employee sees their own and cannot see anyone else's"**. Prove it with a
+  second employee's documents present, counted with the service role.
+- ⚠️ **A notice at the top of the upload area, shown to Owner and Admin**, stating plainly that the
+  employee can see everything filed here. [Josh, 2026-09-29] It exists so nobody files a disciplinary
+  note believing it is private. ⚠️ **Do not bury it, and do not make it dismissible.**
 - Its **own storage prefix and its own category**, never a project category. ⚠️ **Category, never MIME.**
 - ⚠️ **Never appears** in project Files, project Photos, the client portal, a proposal, a bid scope, or
   any share surface. Prove each of those by a negative test, not by inspection.
@@ -181,18 +187,18 @@ shows it. The upload belongs on that surface.
 **FILL-16.2** — Every existing route and query that returns `files` rows. ⚠️ **Audit by what is CALLED,
 not by what matches a filter** — enumerate the callers and state the full count. Each one either excludes
 this category or is proven unable to reach it.
-**FILL-16.3** — ⚠️ **Negative tests, written without returning rows, one per excluded role**: PM,
-Project Executive, foreman, crew, subcontractor and client each refused, counted with the service role.
-Plus a bid-token probe and a portal probe proving neither can reach an employee file. Each with its own
-sabotage that must go red.
+**FILL-16.3** — ⚠️ **Negative tests, written without returning rows, counted with the service role.**
+Two employees with documents, and:
+- each employee reads **their own** and **zero** of the other's;
+- PM, Project Executive, foreman, crew, subcontractor and client each read **zero**;
+- a bid-token probe and a portal probe each reach **zero**.
+Each with its own sabotage that must go red. ⚠️ **The employee-to-employee negative is the one that
+matters most** — it is the path the ruling just opened.
 **FILL-16.4** — Production count of anything that would already match the new category (expected zero;
 say so explicitly rather than assuming).
-**FILL-16.5** — PARITY: desktop is primary. `/m` needs at most read access for Owner/Admin, and only if
-it costs nothing.
-
-**ASK-16** — Should an employee be able to see their **own** documents? Narrower default taken: **no**.
-Recommend raising it with Josh, because "where is my signed handbook" is a reasonable question from a
-crew member and the answer today would be "ask the office".
+**FILL-16.5** — PARITY: ⚠️ **`/m` is now required, not optional.** Crew are on phones — an employee
+reading their own signed handbook will do it there. Desktop carries upload and the Owner/Admin notice;
+`/m` carries the employee's own read.
 
 ## 12. The daily log, brought up to the paper form
 
