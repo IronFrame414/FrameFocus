@@ -149,8 +149,50 @@ no CI needed.
 
 # PART TWO — the new features
 
-⚠️ **Order: 12 → 11 → 14 → 13.** Smallest and least risky first; the estimate widening last, where a stop
-costs least.
+⚠️ **Order: 16 → 12 → 11 → 14 → 13.** Smallest and least risky first; the estimate widening last, where a
+stop costs least.
+
+## 16. Files and photos on an employee's record
+
+[Josh, 2026-09-29] So a signed employee handbook, and anything else specific to a person, can be kept
+against that person rather than against a project.
+
+⚠️ **This is the most sensitive store in the application.** It will hold employment documents —
+handbooks, acknowledgements, certifications, licences, and whatever Josh files next. Treat every
+question here as a security question first and a feature second.
+
+⚠️ **The failure mode to design against, by name:** two days ago `GET /api/bid/[token]/files` handed
+signed URLs for every staff-uploaded file on an estimate to anyone holding a bid token, because a route
+authorised the token and not the file. **An employee document must be structurally unable to reach any
+external surface** — no bid token, no client portal, no proposal payload, no share link.
+
+**Ruled — narrowest defaults, all reversible:**
+- **Owner and Admin only**, read and write. ⚠️ Not PM, not the Project Executive, not the employee
+  themselves. Widening later is one line; a disciplinary note read by a foreman cannot be un-read.
+- Its **own storage prefix and its own category**, never a project category. ⚠️ **Category, never MIME.**
+- ⚠️ **Never appears** in project Files, project Photos, the client portal, a proposal, a bid scope, or
+  any share surface. Prove each of those by a negative test, not by inspection.
+- **Files survive the person.** Deactivating, banning or removing an employee must not delete or orphan
+  their documents — there are retention reasons to keep a signed handbook after someone leaves.
+- Uses `runUploadBatch` and `upload-batch-list` per `#2-s180u`. ⚠️ Not another bespoke upload path.
+
+**FILL-16.1** — Where an employee record lives today (`profiles` / `company_members`) and what surface
+shows it. The upload belongs on that surface.
+**FILL-16.2** — Every existing route and query that returns `files` rows. ⚠️ **Audit by what is CALLED,
+not by what matches a filter** — enumerate the callers and state the full count. Each one either excludes
+this category or is proven unable to reach it.
+**FILL-16.3** — ⚠️ **Negative tests, written without returning rows, one per excluded role**: PM,
+Project Executive, foreman, crew, subcontractor and client each refused, counted with the service role.
+Plus a bid-token probe and a portal probe proving neither can reach an employee file. Each with its own
+sabotage that must go red.
+**FILL-16.4** — Production count of anything that would already match the new category (expected zero;
+say so explicitly rather than assuming).
+**FILL-16.5** — PARITY: desktop is primary. `/m` needs at most read access for Owner/Admin, and only if
+it costs nothing.
+
+**ASK-16** — Should an employee be able to see their **own** documents? Narrower default taken: **no**.
+Recommend raising it with Josh, because "where is my signed handbook" is a reasonable question from a
+crew member and the answer today would be "ask the office".
 
 ## 12. The daily log, brought up to the paper form
 
