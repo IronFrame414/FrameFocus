@@ -1,5 +1,6 @@
 import { Document, Image, Page, StyleSheet, Text, View } from '@react-pdf/renderer';
 import type { ProposalData } from './proposal-data';
+import { ScopeTextPdf } from './scope-text-pdf';
 import { resolveProposalFormat, proposalRenderPlan } from '@framefocus/shared/utils/proposal-format';
 
 // Spec 2 (4E) — branded React-PDF proposal. Rendered server-side
@@ -199,9 +200,9 @@ export function ProposalDocument({ data }: { data: ProposalData }) {
         {(estimate.scopeSummary || estimate.scopeSections.length > 0) && (
           <View>
             <Text style={[styles.sectionTitle, { color: accent }]}>Scope of Work</Text>
-            {estimate.scopeSummary && (
-              <Text style={[styles.paragraph, { marginBottom: 6 }]}>{estimate.scopeSummary}</Text>
-            )}
+            {/* C-12 [S115] — headings, bullets and bold, not literal ## and *.
+                Same parse as the signing page (scope-text-html.tsx). */}
+            <ScopeTextPdf text={estimate.scopeSummary} />
             {estimate.scopeSections.map((section, i) => (
               <View key={i} style={{ marginBottom: 6 }}>
                 {section.title.trim().length > 0 && (

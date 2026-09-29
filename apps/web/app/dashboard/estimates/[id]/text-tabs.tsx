@@ -16,6 +16,7 @@ import { color, font } from '@/lib/theme';
 import { fmtMoney } from '../labels';
 import Link from 'next/link';
 import { ProposalFormatPicker } from './proposal-format-picker';
+import { ScopeTextHtml } from '@/lib/proposal/scope-text-html';
 import type { TabProps } from './estimate-builder';
 
 const inputStyle: React.CSSProperties = {
@@ -579,8 +580,36 @@ export function ScopeTab({ data, canEdit, reload }: TabProps) {
         onBlur={() => persist(summary, sections)}
         rows={3}
         placeholder="A short high-level overview of the work…"
-        style={{ ...inputStyle, resize: 'vertical', fontFamily: 'inherit', marginBottom: '1rem' }}
+        style={{ ...inputStyle, resize: 'vertical', fontFamily: 'inherit', marginBottom: '0.25rem' }}
       />
+      {/* C-12 [S115] — authors were typing markdown into this box with nothing
+          saying whether it would be read. It now is (the PDF, the signing page
+          and both project overviews share one parse); this line says so, and
+          the preview shows what the client will see. */}
+      <div
+        data-testid="scope-summary-format-hint"
+        style={{ fontSize: '0.75rem', color: '#7b8699', marginBottom: '1rem' }}
+      >
+        Formatting: <code>## Heading</code> · <code>- bullet</code> · <code>1. numbered</code> ·{' '}
+        <code>**bold**</code> · a blank line starts a new paragraph.
+      </div>
+      {summary.trim().length > 0 && (
+        <div style={{ marginBottom: '1rem' }}>
+          <div style={{ fontSize: '0.75rem', color: '#7b8699', marginBottom: '0.25rem' }}>
+            On the proposal:
+          </div>
+          <ScopeTextHtml
+            text={summary}
+            testId="scope-summary-preview"
+            style={{
+              fontSize: '0.875rem',
+              border: '1px solid #e5e7eb',
+              borderRadius: '6px',
+              padding: '0.5rem 0.75rem',
+            }}
+          />
+        </div>
+      )}
 
       {/* Build tools — generate from the priced work, or pull a saved section. */}
       {canEdit && (
