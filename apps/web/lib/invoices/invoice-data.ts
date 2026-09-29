@@ -8,6 +8,7 @@ import {
   type PresentedInvoice,
 } from '@framefocus/shared/utils/invoice-derivation';
 import { lineInstrumentKey } from '@/lib/services/invoices-shared';
+import { projectNameAt } from '@/lib/projects/name-at';
 import type { InvoiceLineType } from '@/lib/services/invoices-shared';
 
 // 7D §11/§13 — data assembly for the invoice PDF. Mirrors co-data.ts: pull the
@@ -197,7 +198,18 @@ export async function getInvoicePdfData(
       notes: invoice.notes,
     },
     project: projectRes.data
-      ? { name: projectRes.data.name, number: projectRes.data.project_number }
+      ? {
+          // [S118 item 14] An issued invoice keeps the name it was sent under.
+          name: await projectNameAt(
+            supabase,
+            invoice.project_id,
+            invoice.status === 'draft' || invoice.status === 'pending_approval'
+              ? null
+              : invoice.sent_at ?? invoice.approved_at ?? invoice.created_at,
+            projectRes.data.name
+          ),
+          number: projectRes.data.project_number,
+        }
       : null,
     client,
     presented: presentInvoice(lines, level),

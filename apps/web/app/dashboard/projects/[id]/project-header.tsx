@@ -6,6 +6,8 @@ import type { ProjectWithContact } from '@/lib/services/projects';
 import { PROJECT_STATUS_LABELS } from '@/lib/services/projects-client';
 import { LIEN_RELEASE_ROLES } from '@/lib/services/lien-releases-shared';
 import { badgeStyle, color, font, h2Style, primaryButtonStyle } from '@/lib/theme';
+import { canRenameProject } from '@/lib/projects/rename-access';
+import { RenameProject } from './rename-project';
 
 interface ProjectHeaderProps {
   project: ProjectWithContact;
@@ -203,6 +205,7 @@ export function ProjectHeader({ project, canManage, role }: ProjectHeaderProps) 
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <h2 style={{ ...h2Style, fontSize: '25px' }}>{project.name}</h2>
+          {canRenameProject(role) ? <RenameProject projectId={project.id} name={project.name} /> : null}
           <span
             style={{ ...badgeStyle, backgroundColor: badge.bg, color: badge.fg }}
           >
