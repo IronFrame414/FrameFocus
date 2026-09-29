@@ -2,6 +2,17 @@
 const isDev = process.env.NODE_ENV === 'development';
 
 const nextConfig = {
+  // [S119 E-2] `/m` → `/m/timeclock` answered HERE, before middleware and before
+  // the /m layout. The installed PWA's start_url stays '/m' (lib/crew-manifest.ts —
+  // changing it would move every field user's home-screen icon, ruled out at S164),
+  // so a cold launch still makes two requests, but the first now costs no Supabase
+  // call. _Superseded:_ app/m/page.tsx's server redirect() was the only answer, and
+  // it ran the middleware's auth reads and the /m layout's reads first (measured
+  // S119: 6 Supabase calls, depth 4, ~350 ms server) just to say "go elsewhere".
+  // app/m/page.tsx stays as the fallback. Temporary (307), query string kept.
+  async redirects() {
+    return [{ source: '/m', destination: '/m/timeclock', permanent: false }];
+  },
   transpilePackages: ['@framefocus/shared', '@framefocus/supabase', '@framefocus/ui'],
   experimental: {
     // Next 14.2: outputFileTracingIncludes lives under `experimental` (it moved
