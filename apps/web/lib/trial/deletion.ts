@@ -361,6 +361,9 @@ export const COMPANY_TABLES: string[] = [
   // estimate_award_bases + estimate_sub_bid_requests (hang off estimates), and
   // scope_library (company-scoped template library). Walked explicitly, before
   // estimates, per the proposal_views precedent.
+  // [S119 D-2] estimate_assignments references estimates (deferred FK) and
+  // company_members (NO ACTION), so it goes before both.
+  'estimate_assignments',
   'estimate_events', 'estimate_award_bases', 'estimate_sub_bid_requests', 'scope_library',
   'estimate_sub_bids', 'estimate_line_rows', 'estimate_line_items',
   // proposal_views cascades with estimates (20261052); listed anyway so the
