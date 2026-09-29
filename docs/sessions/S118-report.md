@@ -328,3 +328,49 @@ Branch `feature/s118-employee-documents`.
   policies, the 3 storage policies, bucket private, both function md5s, 0 rows — ✅; **fingerprint == baseline**,
   ledger 266.
 - CI **36592370782** on `407e4ac5` (base = main `b3da5fae`).
+
+### ✅ Item 16 MERGED to main as `128a7043` (R8)
+- CI **36592370782** on `407e4ac5` (base = main `b3da5fae`): lint/type success; E2E 649 → **628 passed, 21
+  skipped** (41.3m); tally 630 `✓`, **0 `✘`**; `s118-employee-documents` 4 `✓`. Migration on production first.
+
+### Item 5 + item 12 phase 1 — stacked, CI in flight
+- ⚠️ **Found while proving item 5 — a LIVE defect in the service-role client.** `/bid/[token]` rendered the
+  OPEN bid form for a CANCELLED bid on a second visit. Measured: the RPC returned `status: cancelled` while the
+  page showed the estimate heading and "Your bid"; `.next/cache/fetch-cache` held 13
+  `get_sub_bid_request` responses with `revalidate: 31536000` — Next 14's data cache was keeping supabase-js
+  (fetch) reads made through `getSupabaseAdmin()` in a server component that reads no cookies/headers.
+  `export const dynamic = 'force-dynamic'` on the page did NOT stop it (an entry was written after that
+  build) — reverted. **Fix at the source:** `lib/supabase-admin.ts` passes `global.fetch` with
+  `cache: 'no-store'`, so no service-role read is ever served from the data cache (also covers
+  `/sign-co/[token]`, the one other admin-reading page with no opt-out). After: fetch-cache **0** entries;
+  e2e **2 passed twice**. **Sabotage** (no-store removed) → the cancelled-token test **red**; restored
+  `cmp`-identical, rebuilt.
+- Item 5 e2e `s118-bid-documents` 2/2 (the shared doc listed + opened — PNG fixture, since a PDF downloads
+  headless and leaves no URL; the untagged staff file not listed; cancelled → closed card, no list, route ≠
+  200). `#169` moved to CLOSED.
+- **Item 12 phase 1** (`feature/s118-daily-log-fk-names`, `48082b3c`): every `daily_logs → company_members`
+  embed names `!daily_logs_author_member_id_fkey` (3, all in `lib/services/daily-logs.ts`; app-wide search
+  found no other). Verified working on the pre-migration schema. **Why a phase:** item 12 adds a SECOND FK
+  (`office_reviewed_by`); measured on rebuild-test after applying it (and a PostgREST schema reload): the
+  bare embed → **PGRST201**, the named embeds → ok. Shipping the migration before this code would have broken
+  every daily-log read on production — the same failure the S116 delivery fix closed.
+- Stack: phase 1 → item 5 (two deep, no migration). `lint-job.sh`: 145 / 1970, all 0. CI **36600278121** on
+  `89094add` (base = main `128a7043`) — run against a rebuild-test that ALREADY carries `20262070000000`, so a
+  green run proves phase 1 against two FKs.
+
+### Item 12 — the daily log, brought up to the paper form: built, applied to rebuild-test (not production)
+- Migration `20262070000000`: 17 nullable columns on `daily_logs` (10 checks, `photos_sent_at`,
+  `tasks_tomorrow_date`, `tasks_day_after`, `tasks_day_after_date`, `blockers`, `office_reviewed_at/_by`) —
+  **no defaults**, so the 13 existing logs are not recorded as "not swept"; `enforce_daily_logs_column_scope`
+  + one block (office_* moves only for Owner/Admin/PM/PE); `mark_daily_log_reviewed()` (DEFINER, role +
+  `can_view_project`); table `daily_log_material_needs` (RLS mirrors `daily_log_crew`; soft delete; column
+  guard on `ordered_*`); `set_daily_log_material_ordered()`. No constraint over existing rows;
+  `material_needed` untouched.
+- One shared form component (`components/field/daily-log-closeout-fields.tsx`) in BOTH the desktop and /m
+  forms; one shared view (`daily-log-closeout-view.tsx`) on BOTH detail pages with the office's marks; PDF
+  gains A/C/D/E + the review line; "Not reviewed" badges on both lists; offline: A/C/E ride the queued insert
+  (the executor upserts the whole payload), D lines warn like crew hours. Deletion + export lists updated.
+- Types: only item 12's blocks (+148). `tsc` 0. Live + e2e written, **run after the current CI** (rebuild-test
+  busy).
+- **Production order:** merge the phase-1 stack → confirm the Vercel deployment of `main` → only then apply
+  `20262070000000` to production → then item 12's own CI/merge.
