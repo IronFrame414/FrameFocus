@@ -308,3 +308,20 @@ rebuild-test; same scripts, same identities (`josh+qa-admin`, `josh+crew`), proj
   specs asserting a bare `/m`: none failed in that run. Local on E's build: m-capture + slow-spots 30/30.
 - C+D's CI (**36641118449** on `1c389d1c`) is running first — their migrations are already on production, so
   their code should reach main first. E's second run follows (one run at a time on rebuild-test).
+
+### ✅ Items C + D MERGED to main as `ab2b406e` (R8)
+- CI **36641118449** GREEN on `1c389d1c` (base = main `27ba82ed`): vitest 148 / 2022; E2E **642 passed, 22
+  skipped, 0 `✘`** (`s119-pe-estimates` 3/3, `s118-project-rename` 2/2, `desktop-pe-estimates-s115` 3/3).
+  `git diff ab2b406e 1c389d1c` → empty. Both migrations were on production first (§C/§D verified).
+- ⚠️ Slip in the merge message: its fingerprint reads "490/297→302/349/1074" — triggers are **302** (this report
+  and the runbook carry the right values). Not amended (main is pushed).
+
+### ✅ ITEM A — owner sign-up through the REAL `/sign-up` form, after the fix: PROVEN
+- `S119_ONBOARDING=1` on E's production build (main `ab2b406e` + E): **a ✓** — company, owner profile, one
+  member row, subscription `trialing`; confirmed via the service role, password sign-in → `/onboarding`; **b ✓**
+  (invite). 2/2. Rebuild-test residue after teardown: S119 companies 0, profiles 0, auth users 0, estimates 0,
+  assignments 0. Stop rule 7 never tripped: both onboarding paths work end to end after the fix.
+
+### Item E — second CI
+- Rebased onto main `ab2b406e`; lint-job **0/0/0** (148 / 2022); local `next build` **BUILD_EXIT=0**. CI
+  **36644578588** on `a379b73b`.
