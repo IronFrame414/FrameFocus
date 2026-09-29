@@ -42,7 +42,7 @@ export async function middleware(request: NextRequest) {
 
   const pathname = request.nextUrl.pathname;
 
-  // ⚠️ H-1b [S115, NOT MERGED — awaits Josh, ASK-H1-CLAIMS]. getClaims()
+  // H-1b [S115; RULED Josh, S116 Q9 — merge]. getClaims()
   // verifies the access token LOCALLY against the project's ES256 JWKS (cached
   // module-wide by auth-js), ~1 ms, where getUser() asks the Auth server,
   // ~50–70 ms — on every middleware run, 6–11 per screen load. It still
