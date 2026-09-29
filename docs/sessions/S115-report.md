@@ -318,3 +318,25 @@ Q13. [ASK-C12-SENT] C-12's renderer change will also change how ALREADY-SENT but
     Options: A) yes — they become readable  B) freeze old proposals' look
     My recommendation: A.
 ```
+
+---
+
+## Phase 3
+
+### Part 1 — H-1 middleware — branch `feature/s115-h1-middleware` @ `341f6229`
+- **Matcher: not narrowed** — measured not broad (explicit allow-list; see Phase 1). Narrowing further would drop a route that needs the session refresh.
+- **Built:** the lock RPC and the profile read run in one `Promise.all`; the card-gate read and the subscription read run in one `Promise.all`. Every decision reads the same values in the same order (lock → role guard → card gate → subscription). Owner `/dashboard`: 5 sequential round trips → 3; other dashboard roles 4 → 3. `middleware.ts` is not Prettier-clean on main → hand-formatted, diff 49+/19−, only the touched blocks.
+- **Measured the call, not the page** — temporary uncommitted wrapper stamping `x-mw-ms` on every middleware response; built once from `origin/main:apps/web/middleware.ts`, once from this branch; `next build` exit 0 both; 30 requests each as `josh+qa-admin` (`scratchpad/mw-compare.sh`, `mw-time.mjs`):
+
+| request | before median (p10/p90) | after median (p10/p90) |
+| --- | --- | --- |
+| document `/dashboard/projects/:id` | 168 ms (152/304) | **120 ms** (111/148) |
+| prefetch RSC `/dashboard/projects/:id/budget` | 159 ms (141/179) | **128 ms** (114/173) |
+| `/api/chat/threads` (path unchanged: getUser + lock only) | 75 ms (67/94) | 80 ms (74/95) — control, no change expected |
+  Wrapper removed; `cmp` against the saved after-file identical; `grep -c x-mw-ms middleware.ts` → 0. Codespace→rebuild-test hops; on Vercel the absolute numbers are smaller, the saving is one round trip per middleware run (×19–32 runs per screen).
+- **Negative tests** `e2e/s115-middleware-gate.spec.ts`: signed-out `/dashboard`, `/dashboard/projects`, a project, `/dashboard/billing`, `/dashboard/team` → `/sign-in`; `/m` → `/sign-in?next=%2Fm`; `/api/chat/threads` → 401; `/sign-in` 200 with form; `/terms`, `/privacy` 200 not redirected; `/bid/<fake>`, `/sign/<fake>` not sent to `/sign-in`. **12 passed** (`E2E_EXIT=0`) on the production build.
+- **Sabotage:** signed-out redirect target `'/sign-in'` → `'/terms'` (anchor matched exactly once) → rebuilt (exit 0) → **5 failed / 7 passed** (the 5 `/dashboard` cases), `E2E_EXIT=1`. Restored from the saved copy, `cmp` identical, `grep -c "appUrl('/terms'"` → 0; rebuilt (exit 0); **12 passed**.
+- Signed-in halves ride existing specs unmodified: role guard `desktop-dashboard-guard.spec.ts`, trial lock `desktop-trial-screens.spec.ts` (run in CI).
+- ⚠️ **Slip:** the H-1 commit was pushed without `[skip ci]` while main's CI (36500016295) was still in E2E. The run 36502727258 could not be cancelled (`gh run cancel` → HTTP 403, token lacks the permission). The two suites overlap for ~10 minutes. A red in either inside that window is treated as a suspected concurrency false red, re-run before any conclusion, and not counted toward stop rule 7.
+- ⚠️ Instrument slip, no effect on results: two `pgrep -f` kill loops matched their own shell (exit 144) — the CLAUDE.md trap. The sabotage restore had already completed and read back identical. Replaced by `scratchpad/stop3000.sh` (kills the PID `ss` reports listening on :3000).
+- **getClaims (Q9):** not built into this branch.
