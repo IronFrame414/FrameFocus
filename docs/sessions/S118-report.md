@@ -403,3 +403,44 @@ Branch `feature/s118-employee-documents`.
   `schema_fingerprint()` == committed baseline** (463 `b4e86072…` / 293 `530741c6…` / 339 `c643725b…` / 1035
   `f0445bd7…`, latest `20262070000000`).
 - Rebased onto main `f92f88ad`; lint-job 0/0/0 (145 / 1973). CI **36604993783** requested on `76deba31`.
+
+### Item 11 — the material sign-out: built, applied to rebuild-test (not production), e2e pending
+Branch `feature/s118-material-signout`, stacked on item 12. Migration `20262080000000`.
+- **Record:** `material_signouts` (sections 1–6 of the paper form as columns; signatures as PNG data URLs,
+  the house `draw|type` convention); `material_signout_photos` (`stage` release|return, `taken_by_member_id`,
+  timestamp; `file_id` UNIQUE, so a retried link cannot attach one file twice). Own file category
+  `material_signout` (seed redefinition = live body + one row; backfill `ON CONFLICT DO NOTHING`, one row per
+  company). **No UPDATE / DELETE policy on either table**: every state change is
+  `record_material_signout_receipt()` or `close_material_signout()` (DEFINER, role + project + state
+  re-checked); the PDF pointer is set by the service role.
+- ⚠️ **At least one release photo before the receiving party signs — enforced in the function**; the UI has
+  no receiver control until a release photo exists, and no skip control anywhere.
+- ⚠️ **Two photo sets, never merged:** the stage follows the state (release while pending, return while
+  open; the release set freezes when the receiver signs); rendered side by side on the record and the PDF,
+  each photo with who took it and when.
+- **FILL-11.1 (signature):** the portal's `SignatureCapture` IS reusable (draw-or-type, trimmed-canvas PNG,
+  `typedSignatureToDataUrl`, consent gate; storage = data URL in a text column, as proposals/COs). Not
+  rebuilt: moved unchanged to `components/signature/` (byte-identical, `cmp`), the portal re-exports it. It
+  then needed two changes, each forced by an existing guard: its six words became a `labels` prop (the /m
+  anti-rot guard forbids hard-coded text on /m; the portal must never import translations — the portal passes
+  its English words, byte-identical to before), and its two inputs went 14 → 16px (`m6m-field-font-size`,
+  iOS focus zoom) — **a visible change in the client portal: the signature name fields are 2px larger.**
+- **FILL-11.2 (parity):** ONE list, ONE new-form and ONE record component, rendered by thin routes on /m
+  (`/m/p/:id/signouts…`) and desktop (Field tab → Sign-outs). Surfacing: /m Field hub gains a 5th tile (badge
+  = active count, danger when any overdue; `m-hubs` A-13b and `m-photos` A-12d inverted 4 → 5, superseded
+  text quoted); desktop Field landing (daily logs) shows an attention strip when any is active.
+- PDF: both photo sets captioned by stage (6 embedded per set, so release can never crowd out return),
+  regenerated at the receipt and at the close, one current file, category `material_signout`.
+- **Proofs so far:** live **46/46** (create/read/close total maps; no UPDATE/DELETE path; photo-before-
+  signature; stage follows state; wrong category / other project refused; the stored acknowledgement ==
+  the UI's text; never in `PHOTO_VIEW_FILTER` with a control that is). **Sabotage** (photo check off + close
+  widened to foreman/crew + release-after-open allowed) → **5 red**; restored, md5 snapshot identical. Unit
+  **24/24** (close total map + junk roles; overdue; UI text == migration `c_ack` byte for byte). lint-job
+  0/0/0 (146 / 2006); `next build` 0. Baseline regenerated (467/297/343/1064). Runbook §10 written.
+- **Unattended decisions (narrower, reversible):** (1) a `pending_receipt` state before `open` — the record
+  must exist for release photos to hang off before the receiver signs; it is shown as "Awaiting signature"
+  on every list and badge. (2) "Anyone who reaches the Field tab" = the six staff roles; a subcontractor
+  creates none. (3) The acknowledgement is stored by the database, never sent by the client. (4) The WP
+  release and return signatures attest to one plain sentence each (`signout.releaseConsent`,
+  `signout.returnConsent`) because the shared capture's consent gate is not optional. (5) The PDF route
+  regenerates for anyone who can READ the record (it renders what the record says).
