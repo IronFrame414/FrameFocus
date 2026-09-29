@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase-server';
+import { createClient, getRequestUser } from '@/lib/supabase-server';
 
 /**
  * The caller's own `profiles` row.
@@ -37,9 +37,7 @@ export type MyProfile = {
 export async function getMyProfile(): Promise<MyProfile | null> {
   const supabase = await createClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getRequestUser();
   if (!user) return null;
 
   const { data } = await supabase

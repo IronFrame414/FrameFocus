@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase-server';
+import { createClient, getRequestUser } from '@/lib/supabase-server';
 import type { Database } from '@framefocus/shared/types/database';
 import {
   DEFAULT_TIME_SETTINGS,
@@ -58,9 +58,7 @@ export type CompanyData = Pick<
 export async function getCompany(): Promise<CompanyData | null> {
   const supabase = await createClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getRequestUser();
   if (!user) return null;
 
   const { data: profile } = await supabase
@@ -109,9 +107,7 @@ export type TimeTrackingSettings = Omit<
 export async function getTimeTrackingSettings(): Promise<TimeTrackingSettings | null> {
   const supabase = await createClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getRequestUser();
   if (!user) return null;
 
   const { data } = await supabase
@@ -208,9 +204,7 @@ export type EstimatingSettings = Omit<
 export async function getEstimatingSettings(): Promise<EstimatingSettings | null> {
   const supabase = await createClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getRequestUser();
   if (!user) return null;
 
   // RLS scopes companies to the caller's own row.
@@ -272,9 +266,7 @@ export type ProposalSettings = Omit<
 export async function getProposalSettings(): Promise<ProposalSettings | null> {
   const supabase = await createClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getRequestUser();
   if (!user) return null;
 
   const { data } = await supabase
@@ -305,9 +297,7 @@ export type GLMappingSettings = Pick<
 export async function getGLMappingSettings(): Promise<GLMappingSettings | null> {
   const supabase = await createClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getRequestUser();
   if (!user) return null;
 
   const { data } = await supabase

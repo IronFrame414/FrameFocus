@@ -1,6 +1,6 @@
 import 'server-only';
 import { cache } from 'react';
-import { createClient } from '@/lib/supabase-server';
+import { createClient, getRequestUser } from '@/lib/supabase-server';
 import { asLang, type Lang } from '@/lib/i18n/lang';
 import { makeT, type T } from '@/lib/i18n/messages';
 
@@ -11,9 +11,7 @@ import { makeT, type T } from '@/lib/i18n/messages';
  */
 export const getMyLanguage = cache(async (): Promise<Lang> => {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getRequestUser();
   if (!user) return 'en';
   const { data } = await supabase
     .from('profiles')

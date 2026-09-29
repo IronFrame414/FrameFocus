@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { seesProjectMoney } from '@framefocus/shared/constants/roles';
-import { createClient } from '@/lib/supabase-server';
+import { createClient, getRequestUser } from '@/lib/supabase-server';
 import { notFound, redirect } from 'next/navigation';
 import { getProject } from '@/lib/services/projects';
 import { effectiveBudget, getBudgetRollup, type InstrumentGroup } from '@/lib/services/budget';
@@ -82,17 +82,21 @@ function instrumentLabel(group: InstrumentGroup): string {
 export default async function BudgetAndCostPage({ params }: { params: { id: string } }) {
   const supabase = await createClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getRequestUser();
   if (!user) redirect('/sign-in');
 
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('role')
-    .eq('user_id', user.id)
-    .eq('is_deleted', false)
-    .single();
+  // H-2 [S115] — stage 1: the role and the project row, together. The role
+  // guard and the 404 below are judged in the same order as before; nothing
+  // money-bearing is fetched until both have passed (stage 2).
+  const [{ data: profile }, project] = await Promise.all([
+    supabase
+      .from('profiles')
+      .select('role')
+      .eq('user_id', user.id)
+      .eq('is_deleted', false)
+      .single(),
+    getProject(params.id),
+  ]);
   const role = profile?.role ?? '';
 
   // Crew has no money screen (7A Q3) — own expense rows live on /dashboard/expenses.
@@ -109,33 +113,55 @@ export default async function BudgetAndCostPage({ params }: { params: { id: stri
   const seesCommitted = seesMoney || role === 'project_manager'; // A-3 widened floor
   const seesPayables = seesCommitted;
 
-  const project = await getProject(params.id);
   if (!project) notFound();
 
   // P11: fixed-price contract value is binding; cost-plus/T&M carry an
   // OPTIONAL user-entered projection — display-only, never margin/variance.
   const isFixed = project.project_type === 'fixed_price';
 
-  const [rollup, contract, jobCost, expenses, payables] = await Promise.all([
+  // H-2 [S115] — stage 2: ONE Promise.all. These eleven reads used to run as
+  // one batch of five and then six more awaited one after another; each
+  // depends only on the project id and the role gates computed above, so they
+  // now run together. Every gate is the same condition it was — the comments
+  // on each figure below still describe who sees it and why.
+  const [
+    rollup,
+    contract,
+    jobCost,
+    expenses,
+    payables,
+    income,
+    contractBilling,
+    coBilling,
+    selBilling,
+    depositCredits,
+    members,
+  ] = await Promise.all([
     getBudgetRollup(params.id),
     seesMoney ? getRevisedContract(params.id) : Promise.resolve(null),
     getJobCostRollup(params.id),
     getExpenses({ project_id: params.id }),
     seesPayables ? getPayablesSummary(params.id) : Promise.resolve(null),
+    seesMoney ? getProjectIncome(params.id) : Promise.resolve(null),
+    seesMoney && isFixed ? getContractBilling(params.id) : Promise.resolve(null),
+    seesMoney ? getChangeOrderBilling(params.id) : Promise.resolve(null),
+    seesMoney ? getSelectionBilling(params.id) : Promise.resolve(null),
+    seesMoney ? getDepositCredits(params.id) : Promise.resolve([]),
+    seesMoney ? getMembers() : Promise.resolve([]),
   ]);
 
   // §2 [S97] — standalone invoice lines as INCOME. Owner/Admin only: this is a
   // SELL figure ABOUT THE JOB, so it sits with contract value and budget under
   // the Financial Visibility Floor. §12a's carve-out lets a PM see amounts ON
   // an invoice they can reach; it does not extend to a job-level roll-up.
-  const income = seesMoney ? await getProjectIncome(params.id) : null;
+  // (`income` is fetched in stage 2 above.)
 
   // §3 / acceptance #4 [S97] — what is left to invoice on the ORIGINAL
   // contract, with a sent deposit already deducted. Fully DERIVED (see
   // getContractBilling): void or refund the deposit and this figure returns on
   // its own, because nothing was ever copied. Fixed-price only — a cost-plus or
   // T&M deposit is §3a's credit balance and is deliberately not shown here.
-  const contractBilling = seesMoney && isFixed ? await getContractBilling(params.id) : null;
+  // (`contractBilling` is fetched in stage 2 above.)
 
   // §3a [S97] — the DEPOSIT CREDIT BALANCE, so a cost-plus/T&M job reads as
   // consistently as a fixed-price one: fixed-price shows what is left to bill,
@@ -154,20 +180,18 @@ export default async function BudgetAndCostPage({ params }: { params: { id: stri
   // derived COs are billed as incurred and negative COs are credits, so
   // neither gets a number. NOT gated on the project's own type — a fixed-price
   // job can carry a cost-plus CO and vice versa (P4).
-  const coBilling = seesMoney ? await getChangeOrderBilling(params.id) : null;
+  // (`coBilling` is fetched in stage 2 above.)
 
   // [S175 stage 5] Approved SELECTIONS — the third term in revised contract
   // value (Q4: the signature is the binding instrument) and, like the COs, a
   // figure with its own remaining. getSelectionBilling is the READ of the
   // ceiling enforce_selection_billing_ceiling() enforces; the two share one
   // definition of "billed against this selection".
-  const selBilling = seesMoney ? await getSelectionBilling(params.id) : null;
-
-  const depositCredits = seesMoney ? await getDepositCredits(params.id) : [];
+  // (`selBilling` and `depositCredits` are fetched in stage 2 above.)
   const undrawnDeposit = Math.round(
     depositCredits.reduce((sum, d) => sum + d.remaining, 0) * 100
   ) / 100;
-  const members = seesMoney ? await getMembers() : [];
+  // (`members` is fetched in stage 2 above.)
   const memberNames: Record<string, string> = Object.fromEntries(
     members.map((m) => [m.id, m.display_name])
   );

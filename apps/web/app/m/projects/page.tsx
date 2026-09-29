@@ -54,27 +54,19 @@ export default async function MobileProjectsPage({
   // ONE unfiltered fetch. The chips narrow it below rather than each issuing a
   // differently-filtered query, which is what keeps the header's `{n} active`
   // honest across every chip (§8a) and keeps the punch lookup to one round trip.
-  const t = await getMobileT();
-  const chips: readonly Chip[] = [
-    { value: null, label: t('field.chip.all'), testKey: 'All' },
-    { value: 'active', label: t('field.projects.chipActive'), testKey: 'Active' },
-    { value: 'mine', label: t('field.chip.mine'), testKey: 'Mine' },
-    { value: 'on_hold', label: t('field.projects.chipOnHold'), testKey: 'On hold' },
-  ];
-  // daysLeftLabel() (mobile-ui.tsx) with its text translated; the em-dash stays.
-  const daysLeftText = (n: number | null) =>
-    n === null ? '—' : t('field.projects.daysLeft', { n });
-
-  const projects = await getProjects();
-
-  const [timeSettings, mineIds, punch, openSession] = await Promise.all([
+  //
+  // H-2 [S115] — the translator, the project list and the three reads that need
+  // neither (tz, the "mine" ids, the open session) are fetched TOGETHER; only
+  // the punch counts wait, because they need the project ids.
+  const [t, projects, timeSettings, mineIds, openSession] = await Promise.all([
+    getMobileT(),
+    getProjects(),
     // Company-tz calendar day [S106] — the days-left basis. A UTC derivation
     // shifted every card's countdown by one every evening west of UTC.
     getCompanyTimeSettings(),
     // Only paid for when the chip needs it — every other chip filters on a
     // column already in hand.
     active === 'mine' ? getMyAssignedProjectIds() : Promise.resolve(null),
-    getOpenPunchCounts(projects.map((p) => p.id)),
     // ---------------------------------------------------------------------
     // §4.2's "currently clocked into" card — the caller's OPEN SEGMENT.
     //
@@ -91,6 +83,17 @@ export default async function MobileProjectsPage({
     // ---------------------------------------------------------------------
     getOpenSession(),
   ]);
+  const chips: readonly Chip[] = [
+    { value: null, label: t('field.chip.all'), testKey: 'All' },
+    { value: 'active', label: t('field.projects.chipActive'), testKey: 'Active' },
+    { value: 'mine', label: t('field.chip.mine'), testKey: 'Mine' },
+    { value: 'on_hold', label: t('field.projects.chipOnHold'), testKey: 'On hold' },
+  ];
+  // daysLeftLabel() (mobile-ui.tsx) with its text translated; the em-dash stays.
+  const daysLeftText = (n: number | null) =>
+    n === null ? '—' : t('field.projects.daysLeft', { n });
+
+  const punch = await getOpenPunchCounts(projects.map((p) => p.id));
 
   // getOpenSession() returns the session with its segments; the OPEN one is the
   // segment with no end. This is clock-modal.tsx:149's expression — the copy

@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase-server';
+import { createClient, getRequestUser } from '@/lib/supabase-server';
 import type { Database } from '@framefocus/shared/types/database';
 
 type MemberRow = Database['public']['Tables']['company_members']['Row'];
@@ -69,9 +69,7 @@ export async function getMember(id: string): Promise<CompanyMember | null> {
  */
 export async function getMyMember(): Promise<CompanyMember | null> {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getRequestUser();
   if (!user) return null;
 
   const { data: profile } = await supabase

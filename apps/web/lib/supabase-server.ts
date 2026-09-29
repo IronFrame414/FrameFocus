@@ -1,4 +1,5 @@
 import { createServerClient } from '@supabase/ssr';
+import type { User } from '@supabase/supabase-js';
 import { cookies } from 'next/headers';
 import { cache } from 'react';
 
@@ -44,4 +45,30 @@ export const createClient = cache(async () => {
       },
     }
   );
+});
+
+// H-2 [S115] — ONE Auth-server round trip per REQUEST, not one per caller.
+//
+// Measured on the project overview: the middleware, the dashboard layout, the
+// project layout, the page and two "my" services each called
+// `supabase.auth.getUser()` — 6 calls to the Auth server for one render (7 on
+// Photos). They cannot overlap: auth-js runs every auth operation on a client
+// through one queue, and every PostgREST query waits on that same queue for its
+// session, so each getUser() in flight stalls every query behind it.
+//
+// `getUser()` (the Auth server's verdict), NOT `getSession()` (a cookie read):
+// the layouts' redirects depend on a session the server still honours. This
+// only stops asking the same question six times in one request.
+//
+// Same scoping as `createClient` above, and for the same security reason:
+// `cache()` memoizes for ONE request's render, so a different caller never sees
+// this caller's user. `s115-request-user.test.ts` fails if that regresses.
+// Outside a render (Route Handlers) `cache()` does not memoize, so a handler
+// calling this simply gets a fresh getUser() each time — never a stale one.
+export const getRequestUser = cache(async (): Promise<User | null> => {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  return user;
 });

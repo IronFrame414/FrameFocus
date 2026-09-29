@@ -1,6 +1,6 @@
 import { LanguageProvider } from '@/components/i18n/language-provider';
 import { asLang } from '@/lib/i18n/lang';
-import { createClient } from '@/lib/supabase-server';
+import { createClient, getRequestUser } from '@/lib/supabase-server';
 import { redirect } from 'next/navigation';
 import { getOpenSession } from '@/lib/services/time-tracking';
 import { getMyMember } from '@/lib/services/members';
@@ -15,9 +15,7 @@ import { FileSheetProvider } from '@/components/files/file-sheet';
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getRequestUser();
 
   if (!user) {
     redirect('/sign-in');
