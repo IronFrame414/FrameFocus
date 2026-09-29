@@ -6,7 +6,7 @@
 // exclusions and how long the bid holds go straight to submit_sub_bid_reply,
 // which lands them as a comparable estimate_sub_bids row with no retyping.
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase-browser';
 import { font } from '@/lib/theme';
 
@@ -50,6 +50,70 @@ const card: React.CSSProperties = {
 };
 const label: React.CSSProperties = { display: 'block', fontSize: '0.78rem', color: '#5b6472', marginBottom: '0.25rem', fontWeight: 600 };
 const input: React.CSSProperties = { width: '100%', padding: '0.55rem 0.7rem', border: '1px solid #d5dae4', borderRadius: '8px', fontSize: '0.9rem', fontFamily: font.mono };
+
+// [S118 item 5, #169] THE SCOPE DOCUMENTS STAFF SHARED WITH BIDDERS. The route
+// (GET /api/bid/[token]/files) serves ONLY files tagged bid-scope and staff-
+// uploaded, and refuses a closed or expired token (bid_token_state) — the list
+// here is whatever it returns, nothing more. Its URLs live 300 s, so a click
+// re-fetches the list and opens a fresh one rather than a stale link.
+interface BidDoc {
+  id: string;
+  file_name: string;
+  file_size: number | null;
+  mime_type: string | null;
+  url: string | null;
+}
+
+const kb = (n: number | null) => (n == null ? '' : n < 1024 * 1024 ? `${Math.max(1, Math.round(n / 1024))} KB` : `${(n / 1024 / 1024).toFixed(1)} MB`);
+
+function BidDocuments({ token }: { token: string }) {
+  const [docs, setDocs] = useState<BidDoc[] | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  async function load(): Promise<BidDoc[] | null> {
+    const res = await fetch(`/api/bid/${token}/files`, { cache: 'no-store' });
+    if (!res.ok) return null;
+    const body = (await res.json()) as { files?: BidDoc[] };
+    return body.files ?? [];
+  }
+
+  useEffect(() => {
+    let live = true;
+    void load().then((d) => {
+      if (!live) return;
+      if (d === null) setFailed(true);
+      else setDocs(d);
+    });
+    return () => {
+      live = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token]);
+
+  async function open(id: string) {
+    const fresh = await load();
+    const url = fresh?.find((d) => d.id === id)?.url;
+    if (url) window.open(url, '_blank', 'noopener');
+    else setFailed(true);
+  }
+
+  if (docs === null && !failed) return null;
+  if (docs !== null && docs.length === 0) return null;
+  return (
+    <div data-testid="bid-docs" style={{ background: '#f8fafc', border: '1px solid #e4e8ef', borderRadius: '10px', padding: '12px 14px', marginBottom: '1rem' }}>
+      <div style={label}>Scope documents</div>
+      {failed && <div style={{ fontSize: '0.8rem', color: '#c0362c' }}>The documents could not be loaded. Refresh the page to try again.</div>}
+      {(docs ?? []).map((d) => (
+        <div key={d.id} data-testid="bid-doc" style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', fontSize: '0.85rem', padding: '3px 0' }}>
+          <button type="button" onClick={() => void open(d.id)} style={{ background: 'none', border: 'none', padding: 0, color: '#2f49d1', cursor: 'pointer', textAlign: 'left', fontSize: '0.85rem' }}>
+            {d.file_name}
+          </button>
+          <span style={{ color: '#5b6472', whiteSpace: 'nowrap' }}>{kb(d.file_size)}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 function Frame({ children }: { children: React.ReactNode }) {
   return (
@@ -186,6 +250,8 @@ export function BidReplyClient({ request }: { request: BidRequestView }) {
         {request.message && (
           <p style={{ fontSize: '0.85rem', color: '#5b6472', marginTop: 0 }}>{request.message}</p>
         )}
+        {/* [S118 item 5] Only while open — the expired/closed card above returns first. */}
+        <BidDocuments token={request.token} />
         <div style={{ display: 'flex', gap: '1.25rem', flexWrap: 'wrap', fontSize: '0.8rem', color: '#5b6472', marginBottom: '1.25rem' }}>
           {request.allowance_amount != null && (
             <span>Allowance carried <strong style={{ fontFamily: font.mono, color: '#0f1729' }}>{money(request.allowance_amount)}</strong></span>
