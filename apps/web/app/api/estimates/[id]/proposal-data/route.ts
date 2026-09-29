@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
 import { getProposalData } from '@/lib/proposal/proposal-data';
+import { canReadEstimates } from '@/lib/estimate-access';
 
 // 19a Review & Send — the server-side proposal data for the sheet's preview
 // pane. It calls the SAME getProposalData the /proposal route uses, with the
@@ -25,7 +26,8 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     .eq('user_id', user.id)
     .eq('is_deleted', false)
     .single();
-  if (!profile || !['owner', 'admin', 'project_manager'].includes(profile.role)) {
+  // [S115 R11] + the Project Executive (read). RLS still decides WHICH estimates.
+  if (!profile || !canReadEstimates(profile.role)) {
     console.warn(`[proposal-data] forbidden role for estimate ${params.id}: ${profile?.role}`);
     return NextResponse.json({ error: 'You cannot view this proposal.' }, { status: 403 });
   }

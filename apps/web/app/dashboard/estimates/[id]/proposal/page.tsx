@@ -6,6 +6,7 @@ import {
   DEFAULT_PROPOSAL_SUBJECT,
 } from '@/lib/proposal/proposal-defaults';
 import { ProposalPreviewClient } from './proposal-preview-client';
+import { canReadEstimates } from '@/lib/estimate-access';
 
 // Spec 2 (4E E4) — full-page proposal preview. RLS scopes the fetch
 // (Owner/Admin company-wide, PM own only); the Send buttons are
@@ -29,7 +30,9 @@ export default async function ProposalPreviewPage({ params }: PageProps) {
     .eq('user_id', user.id)
     .eq('is_deleted', false)
     .single();
-  if (!profile || !['owner', 'admin', 'project_manager'].includes(profile.role)) {
+  // [S115 R11] + the Project Executive: preview and PDF only — `isManager`
+  // below stays Owner/Admin, so no send control (R1 carve-out 2).
+  if (!profile || !canReadEstimates(profile.role)) {
     redirect('/dashboard');
   }
 

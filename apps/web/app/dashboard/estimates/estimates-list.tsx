@@ -78,11 +78,14 @@ function clientActivity(e: Estimate, stats?: ProposalViewStats): string {
 
 export function EstimatesList({
   metrics,
+  canCreate = true,
 }: {
   /** §8.2 — server-computed over the caller-visible set. winRate is the RULED
    *  12-month window (null = nothing sent in the window; the card renders an
    *  em-dash, not a fake 0%). */
   metrics: { winRate: number | null; cohortSize: number; expiringSoon: number };
+  /** [S115 R11] false for the read-only Project Executive — no create controls. */
+  canCreate?: boolean;
 }) {
   const router = useRouter();
   const [estimates, setEstimates] = useState<Estimate[]>([]);
@@ -128,9 +131,11 @@ export function EstimatesList({
     <div>
       <ListPageHeader title="Estimates" subtitle="Build, send, and track estimates">
         <ListSearchInput value={search} onChange={setSearch} placeholder="Search name or number…" />
-        <Link href="/dashboard/estimates/new" style={primaryButtonStyle}>
-          + New Estimate
-        </Link>
+        {canCreate && (
+          <Link href="/dashboard/estimates/new" style={primaryButtonStyle}>
+            + New Estimate
+          </Link>
+        )}
       </ListPageHeader>
 
       <MetricStrip metrics={stripMetrics} />
@@ -172,9 +177,11 @@ export function EstimatesList({
       ) : estimates.length === 0 ? (
         <div style={{ ...cardStyle, padding: '48px', textAlign: 'center', color: color.muted }}>
           No estimates yet.{' '}
-          <Link href="/dashboard/estimates/new" style={{ color: color.primary }}>
-            Create your first estimate
-          </Link>
+          {canCreate && (
+            <Link href="/dashboard/estimates/new" style={{ color: color.primary }}>
+              Create your first estimate
+            </Link>
+          )}
         </div>
       ) : (
         <div style={{ ...cardStyle, overflow: 'hidden' }}>
