@@ -15,6 +15,7 @@ export default function FileRowActions({
   annotated = false,
   markup = null,
   projectId,
+  canTrash,
 }: {
   fileId: string;
   filePath: string;
@@ -28,6 +29,8 @@ export default function FileRowActions({
    */
   markup?: unknown;
   projectId: string;
+  /** [S118 #171] canTrashFile(role): foreman/crew/sub are not offered Delete — the database refuses it. */
+  canTrash: boolean;
 }) {
   const router = useRouter();
   const confirm = useConfirm();
@@ -96,9 +99,11 @@ export default function FileRowActions({
       <button onClick={handleDownload} disabled={busy} style={btnStyle} data-testid={`file-view-${fileId}`}>
         View
       </button>
-      <button onClick={handleDelete} disabled={busy} style={{ ...btnStyle, color: '#c00' }}>
-        Delete
-      </button>
+      {canTrash && (
+        <button onClick={handleDelete} disabled={busy} style={{ ...btnStyle, color: '#c00' }}>
+          Delete
+        </button>
+      )}
     </div>
   );
 }

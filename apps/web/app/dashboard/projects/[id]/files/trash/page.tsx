@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase-server';
 import { getFiles } from '@/lib/services/files';
 import TrashRow from './trash-row';
+import { canTrashFile } from '@/lib/photos/delete-permission';
 import { EmptyTrashButton } from './empty-trash-button';
 
 export default async function ProjectFilesTrashPage({
@@ -26,6 +27,8 @@ export default async function ProjectFilesTrashPage({
   if (!profile) redirect('/sign-in');
 
   const canPermanentDelete = profile.role === 'owner' || profile.role === 'admin';
+  // [S118 #171] Restore moves a file OUT of Trash — the same rule the database enforces.
+  const canRestore = canTrashFile(profile.role);
 
   // Fetch only soft-deleted files for this project. [M3-05, S157]
   // This asked for `include_deleted: true` and filtered in memory, which pulled
@@ -86,7 +89,7 @@ export default async function ProjectFilesTrashPage({
           </thead>
           <tbody>
             {deletedFiles.map((f) => (
-              <TrashRow key={f.id} file={f} canPermanentDelete={canPermanentDelete} />
+              <TrashRow key={f.id} file={f} canPermanentDelete={canPermanentDelete} canRestore={canRestore} />
             ))}
           </tbody>
         </table>

@@ -19,9 +19,11 @@
 //
 // ⚠️ THIS HIDES A CONTROL; IT PROTECTS NO ROW. The database decides:
 // `files_update_non_client` (20260822000000) and `files_update_project_executive`
-// (20261940000000). RLS is WIDER than this list today — a foreman, crew member
-// or subcontractor can soft-delete a photo on a project they can view (filed as
-// debt). A
+// (20261940000000). [S118 #171] The DATABASE now enforces this same list for
+// moving ANY file to or from Trash (`enforce_files_column_scope`,
+// 20262030000000). _Superseded, quoted:_ "RLS is WIDER than this list today — a
+// foreman, crew member or subcontractor can soft-delete a photo on a project they
+// can view (filed as debt)." A
 // frozen site-visit photo is refused by `files_z_site_visit_freeze` whatever this
 // says, and `softDeleteFile` reports that refusal (it counts the row it changed).
 export const PHOTO_DELETE_ROLES: readonly string[] = [
@@ -33,4 +35,14 @@ export const PHOTO_DELETE_ROLES: readonly string[] = [
 
 export function canDeletePhoto(role: string | null | undefined): boolean {
   return typeof role === 'string' && PHOTO_DELETE_ROLES.includes(role);
+}
+
+/**
+ * [S118 #171] Who may move ANY file to or from Trash — the same list, because the
+ * database enforces one list for both (20262030000000). Read by the Files-tab
+ * Delete and the Trash page's Restore, so no screen offers a control the
+ * database refuses.
+ */
+export function canTrashFile(role: string | null | undefined): boolean {
+  return canDeletePhoto(role);
 }

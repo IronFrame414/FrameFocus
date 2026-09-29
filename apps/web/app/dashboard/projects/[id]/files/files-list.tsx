@@ -24,11 +24,14 @@ export default function FilesList({
   projectId,
   activeTags,
   categoryLabels,
+  canTrash,
 }: {
   files: FileRecord[];
   projectId: string;
   activeTags: TagOption[];
   categoryLabels: Record<string, string>;
+  /** [S118 #171] canTrashFile(role) — offers Delete only where the database allows it. */
+  canTrash: boolean;
 }) {
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
@@ -126,6 +129,7 @@ export default function FilesList({
                   projectId={projectId}
                   activeTags={activeTags}
                   categoryLabel={categoryLabels[f.category] ?? f.category}
+                  canTrash={canTrash}
                 />
               ))}
             </tbody>
