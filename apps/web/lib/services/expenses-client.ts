@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase-browser';
 import { readBudgeted } from '@/lib/services/budget-shared';
 import type { Database } from '@framefocus/shared/types/database';
 import { uploadFile } from '@/lib/services/files-client';
+import { applied, DISCARDED } from './mutation-result';
 import type { Expense, ExpenseCategory, ExpenseListItem, ExpenseStatus } from '@/lib/services/expenses';
 export type { Expense, ExpenseCategory, ExpenseListItem, ExpenseStatus } from '@/lib/services/expenses';
 
@@ -443,20 +444,39 @@ export async function uploadExpenseReceipt(
   projectId: string,
   expenseId: string
 ): Promise<CreateResult> {
-  const uploaded = await uploadFile(file, { project_id: projectId, category: 'receipts' });
+  const uploaded = await uploadExpenseReceiptFile(file, projectId);
   if (!uploaded.success || !uploaded.id) return uploaded;
-
-  const supabase = createClient();
-  const link: FileUpdate = { expense_id: expenseId };
-  const { error } = await supabase.from('files').update(link).eq('id', uploaded.id);
-  if (error) {
+  const linked = await linkExpenseReceipt(uploaded.id, expenseId);
+  if (!linked.success) {
     return {
       success: false,
       id: uploaded.id,
-      error: `Receipt uploaded but not linked: ${error.message}`,
+      error: `Receipt uploaded but not linked: ${linked.error}`,
     };
   }
   return uploaded;
+}
+
+/**
+ * [S116 F-12] The two halves of uploadExpenseReceipt, for a retrying batch
+ * (`makeAttachWorker`): a receipt whose link failed is re-LINKED on retry,
+ * never uploaded twice.
+ */
+export function uploadExpenseReceiptFile(file: File, projectId: string) {
+  return uploadFile(file, { project_id: projectId, category: 'receipts' });
+}
+
+export async function linkExpenseReceipt(
+  fileId: string,
+  expenseId: string
+): Promise<{ success: boolean; error?: string }> {
+  const supabase = createClient();
+  const link: FileUpdate = { expense_id: expenseId };
+  // [S116] `.select('id')` + applied() — an RLS-discarded link is a failure.
+  const { data, error } = await supabase.from('files').update(link).eq('id', fileId).select('id');
+  if (error) return { success: false, error: error.message };
+  if (!applied(data)) return { success: false, error: DISCARDED };
+  return { success: true };
 }
 
 // ----------------------------------------------------------------------------

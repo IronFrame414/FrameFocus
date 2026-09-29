@@ -17,6 +17,8 @@ import {
   updateSelectionOption,
 } from '@/lib/services/selections-client';
 import { uploadFile } from '@/lib/services/files-client';
+import { doneIds, hasUnfinished, useUploadBatches } from '@/lib/uploads/use-upload-batches';
+import { UploadBatchList } from '@/components/uploads/upload-batch-list';
 import { CatalogPicker } from '@/app/dashboard/estimates/[id]/catalog-picker';
 import type { CostCatalogItem } from '@/lib/services/cost-catalog-client';
 import { OptionThumb, StatusPill, UrlThumb } from '../selections-tab';
@@ -452,8 +454,21 @@ function Thread({ selection, projectId, myProfileId, thread, canPost, run }: { s
   const [body, setBody] = useState('');
   const [link, setLink] = useState('');
   const [files, setFiles] = useState<File[]>([]);
-  const paths = useImagePaths((f) => setFiles((p) => [...p, f]));
-  async function post() {
+  // While a batch is pending, the photo set is fixed: a photo added now would not be in its retry.
+  const batchPending = useRef(false);
+  const paths = useImagePaths((f) => { if (!batchPending.current) setFiles((p) => [...p, f]); });
+  // [S116 F-12, #2-s180u] The photos go through the shared queue (≤3 in flight)
+  // and the message posts only once they have ALL landed, or when the author
+  // chooses to send without the missing ones. A second Send while photos are
+  // missing retries ONLY those — a photo that landed is never uploaded again.
+  // _Superseded, quoted:_ `for (const f of files) { const r = await
+  // uploadFile(…); if (r.success && r.id) ids.push(r.id); }` — a failed photo
+  // was dropped SILENTLY and the message posted without it.
+  const batches = useUploadBatches();
+  const hasBatch = batches.items('thread').length > 0;
+  batchPending.current = hasBatch;
+  const uploadThreadPhoto = (f: File) => uploadFile(f, { project_id: projectId, category: 'photos', tags: ['selection-thread'] });
+  async function post(sendWithoutMissing = false) {
     if (!body.trim() && files.length === 0) return;
     let threadId = thread.threadId;
     if (!threadId) {
@@ -461,13 +476,14 @@ function Thread({ selection, projectId, myProfileId, thread, canPost, run }: { s
       if (!t.success || !t.id) return run(async () => ({ success: false, error: t.error ?? 'Could not open the thread' }));
       threadId = t.id;
     }
-    const ids: string[] = [];
-    for (const f of files) {
-      const r = await uploadFile(f, { project_id: projectId, category: 'photos', tags: ['selection-thread'] });
-      if (r.success && r.id) ids.push(r.id);
+    let rows = batches.items('thread');
+    if (!sendWithoutMissing && files.length > 0) {
+      rows = hasBatch ? await batches.retry('thread') : await batches.start('thread', files, uploadThreadPhoto);
+      if (hasUnfinished(rows)) return;
     }
+    const ids = doneIds(rows);
     const r = await run(() => postSelectionMessage({ thread_id: threadId!, author_profile_id: myProfileId, body: body.trim() || '(photo)', link_url: link.trim() || null, photo_file_ids: ids }));
-    if ((r as { success: boolean }).success) { setBody(''); setLink(''); setFiles([]); }
+    if ((r as { success: boolean }).success) { setBody(''); setLink(''); setFiles([]); batches.clear('thread'); }
   }
   return (
     <section style={card} data-testid="sel-thread">
@@ -489,10 +505,14 @@ function Thread({ selection, projectId, myProfileId, thread, canPost, run }: { s
           <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
             <input style={{ ...input, width: 'auto', flex: 1, minWidth: 160 }} placeholder="Link (optional)" value={link} onChange={(e) => setLink(e.target.value)} data-testid="sel-msg-link" />
             <button type="button" style={btn} onClick={() => paths.inputRef.current?.click()}>Attach photo</button>
-            <input ref={paths.inputRef} type="file" accept="image/*" multiple hidden onChange={(e) => { setFiles((p) => [...p, ...Array.from(e.target.files ?? [])]); e.target.value = ''; }} />
+            <input ref={paths.inputRef} type="file" accept="image/*" multiple hidden disabled={hasBatch} onChange={(e) => { setFiles((p) => [...p, ...Array.from(e.target.files ?? [])]); e.target.value = ''; }} />
             {files.length > 0 && <span style={{ fontSize: '0.75rem', color: '#6b7280' }}>{files.length} photo{files.length === 1 ? '' : 's'} attached</span>}
-            <button type="button" style={btnPrimary} onClick={post} data-testid="sel-msg-send">Send</button>
+            <button type="button" style={btnPrimary} onClick={() => void post()} disabled={batches.anyBusy} data-testid="sel-msg-send">Send</button>
           </div>
+          <UploadBatchList items={batches.items('thread')} busy={batches.busy('thread')} onRetry={() => void post()} testId="sel-msg-batch" />
+          {hasBatch && !batches.anyBusy && hasUnfinished(batches.items('thread')) && (
+            <button type="button" style={btn} onClick={() => void post(true)} data-testid="sel-msg-send-without">Send without the missing photos</button>
+          )}
         </div>
       )}
     </section>

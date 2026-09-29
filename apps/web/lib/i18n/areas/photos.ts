@@ -226,6 +226,17 @@ export const en = {
   'photos.sv.noneOpen': 'No open site visits.',
   'photos.sv.finished': 'Finished · waiting for the office · {n}',
   'photos.sv.becameEstimates': 'Became estimates · {n}',
+  // ── the shared multi-file upload list (components/uploads/upload-batch-list) ──
+  'photos.batch.queued': 'Waiting',
+  'photos.batch.uploading': 'Uploading…',
+  'photos.batch.done': 'Uploaded',
+  'photos.batch.failed': 'Failed',
+  'photos.batch.skipped': 'Not attempted',
+  'photos.batch.count': '{done} of {total} uploaded',
+  'photos.batch.failedList': '{n} of {total} could not be uploaded: {names}.',
+  'photos.batch.skippedList': '{n} not attempted ({reason}): {names}.',
+  'photos.batch.retryOne': 'Retry the failed file',
+  'photos.batch.retryMany': 'Retry the {n} failed files',
 } as const;
 
 export const es: Record<keyof typeof en, string> = {
@@ -446,4 +457,14 @@ export const es: Record<keyof typeof en, string> = {
   'photos.sv.noneOpen': 'No hay visitas de obra abiertas.',
   'photos.sv.finished': 'Terminadas · esperando a la oficina · {n}',
   'photos.sv.becameEstimates': 'Pasaron a presupuestos · {n}',
+  'photos.batch.queued': 'En espera',
+  'photos.batch.uploading': 'Subiendo…',
+  'photos.batch.done': 'Subido',
+  'photos.batch.failed': 'Falló',
+  'photos.batch.skipped': 'No se intentó',
+  'photos.batch.count': '{done} de {total} subidos',
+  'photos.batch.failedList': '{n} de {total} no se pudieron subir: {names}.',
+  'photos.batch.skippedList': '{n} sin intentar ({reason}): {names}.',
+  'photos.batch.retryOne': 'Reintentar el archivo que falló',
+  'photos.batch.retryMany': 'Reintentar los {n} archivos que fallaron',
 };

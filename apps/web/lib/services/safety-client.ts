@@ -3,6 +3,7 @@ import type { Database } from '@framefocus/shared/types/database';
 import type { IncidentStatus } from '@framefocus/shared';
 import type { IncidentCreateInput } from '@framefocus/shared/validation/safety';
 import { uploadFile } from '@/lib/services/files-client';
+import { applied, DISCARDED } from './mutation-result';
 export type {
   SafetyIncident,
   IncidentDetail,
@@ -182,20 +183,39 @@ export async function uploadIncidentPhoto(
   projectId: string,
   incidentId: string
 ): Promise<{ success: boolean; id?: string; error?: string }> {
-  const uploaded = await uploadFile(file, { project_id: projectId, category: 'safety' });
+  const uploaded = await uploadIncidentPhotoFile(file, projectId);
   if (!uploaded.success || !uploaded.id) return uploaded;
-
-  const supabase = createClient();
-  const link = { safety_incident_id: incidentId } as unknown as FilesUpdate;
-  const { error } = await supabase.from('files').update(link).eq('id', uploaded.id);
-  if (error) {
+  const linked = await linkIncidentPhoto(uploaded.id, incidentId);
+  if (!linked.success) {
     return {
       success: false,
       id: uploaded.id,
-      error: `Photo uploaded but not linked: ${error.message}`,
+      error: `Photo uploaded but not linked: ${linked.error}`,
     };
   }
   return uploaded;
+}
+
+/**
+ * [S116 F-12] The two halves of uploadIncidentPhoto, for a retrying batch
+ * (`makeAttachWorker`): a photo whose link failed is re-LINKED on retry,
+ * never uploaded twice.
+ */
+export function uploadIncidentPhotoFile(file: File, projectId: string) {
+  return uploadFile(file, { project_id: projectId, category: 'safety' });
+}
+
+export async function linkIncidentPhoto(
+  fileId: string,
+  incidentId: string
+): Promise<{ success: boolean; error?: string }> {
+  const supabase = createClient();
+  const link = { safety_incident_id: incidentId } as unknown as FilesUpdate;
+  // [S116] `.select('id')` + applied() — an RLS-discarded link is a failure.
+  const { data, error } = await supabase.from('files').update(link).eq('id', fileId).select('id');
+  if (error) return { success: false, error: error.message };
+  if (!applied(data)) return { success: false, error: DISCARDED };
+  return { success: true };
 }
 
 export async function softDeleteIncident(id: string): Promise<MutationResult> {

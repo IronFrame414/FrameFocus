@@ -18,6 +18,9 @@ import { ErrorNotice, useOnline } from '@/app/m/write-ui';
 import { VoiceNotes } from './voice-notes';
 import { resolveSiteVisitMedia } from '@/lib/site-visits/media';
 import { addedAfterSend, isFrozenCapture, type Phase } from '@/lib/site-visits/photos';
+import { hasUnfinished, useUploadBatches } from '@/lib/uploads/use-upload-batches';
+import type { UploadOutcome } from '@/lib/uploads/upload-batch';
+import { UploadBatchList } from '@/components/uploads/upload-batch-list';
 import Link from 'next/link';
 import type { EstimateFileListResponse } from '@/lib/api-contracts/estimate-files';
 import { useT } from '@/components/i18n/language-provider';
@@ -329,20 +332,27 @@ export function SiteVisitRecord({
   ).length;
 
   const fileInput = useRef<HTMLInputElement>(null);
-  async function onPhotos(files: FileList | null) {
-    if (!files || files.length === 0) return;
-    setError(null);
-    let held = 0;
-    for (const file of Array.from(files)) {
-      const id = crypto.randomUUID();
-      const r = online ? await uploadSiteVisitPhoto(estimateId, file, file.name, id) : { success: false };
-      if (r.success) continue;
-      // A weak signal reads as online and fails — the same fallback as M6M
-      // capture: ANY failure is held, never dropped.
-      if (!offlineSync) {
-        setError(t('visit.photo.cannotHold'));
-        continue;
-      }
+  // [S116 F-12, #2-s180u] Through the shared queue (≤3 in flight, each file
+  // named, "Retry" for the ones that did not land). Each file keeps ONE id for
+  // life — the id is what makes the upload route and the offline replay
+  // idempotent — so a Retry of a file that is also held offline can never
+  // store it twice, and a file is held at most once.
+  // _Superseded, quoted:_ a serial `for` loop minting a fresh
+  // `crypto.randomUUID()` per attempt, with a held count and no retry.
+  const batches = useUploadBatches();
+  const photoIds = useRef(new Map<File, string>());
+  const heldFiles = useRef(new Set<File>());
+  async function uploadOnePhoto(file: File): Promise<UploadOutcome> {
+    let id = photoIds.current.get(file);
+    if (!id) {
+      id = crypto.randomUUID();
+      photoIds.current.set(file, id);
+    }
+    const r = online ? await uploadSiteVisitPhoto(estimateId, file, file.name, id) : { success: false as const, error: undefined };
+    if (r.success) return { success: true, id };
+    // A weak signal reads as online and fails — the same fallback as M6M
+    // capture: ANY failure is held, never dropped.
+    if (offlineSync && !heldFiles.current.has(file)) {
       await offlineSync.enqueue({
         entry_id: crypto.randomUUID(),
         target_id: id,
@@ -351,10 +361,35 @@ export function SiteVisitRecord({
         payload: { kind: 'photo', estimate_id: estimateId, id, blob: file, file_name: file.name },
         captured_at: new Date().toISOString(),
       });
-      held += 1;
+      heldFiles.current.add(file);
     }
-    if (fileInput.current) fileInput.current.value = '';
+    return { success: false, error: r.error };
+  }
+  function reportHeld(rows: { file: File; status: string }[]) {
+    const unfinished = rows.filter((r) => r.status === 'failed' || r.status === 'skipped');
+    if (unfinished.length === 0) return;
+    if (!offlineSync) {
+      setError(t('visit.photo.cannotHold'));
+      return;
+    }
+    const held = unfinished.filter((r) => heldFiles.current.has(r.file)).length;
     if (held > 0) setError(t(held === 1 ? 'visit.photo.heldOne' : 'visit.photo.heldMany', { n: held }));
+  }
+  async function onPhotos(files: FileList | null) {
+    if (!files || files.length === 0) return;
+    setError(null);
+    const picked = Array.from(files);
+    if (fileInput.current) fileInput.current.value = '';
+    const out = await batches.start('photos', picked, uploadOnePhoto);
+    reportHeld(out);
+    if (!hasUnfinished(out)) batches.clear('photos');
+    await loadFiles();
+  }
+  async function retryPhotos() {
+    setError(null);
+    const out = await batches.retry('photos');
+    reportHeld(out);
+    if (!hasUnfinished(out)) batches.clear('photos');
     await loadFiles();
   }
 
@@ -483,6 +518,14 @@ export function SiteVisitRecord({
         {promoted && office ? (
           <p className="mt-[6px] text-[13px] text-m6m-muted">{t('visit.photos.filesTabStays')}</p>
         ) : null}
+        <div className="mt-[10px]">
+          <UploadBatchList
+            items={batches.items('photos')}
+            busy={batches.busy('photos')}
+            onRetry={() => void retryPhotos()}
+            testId="sv-photo-batch"
+          />
+        </div>
         {/* [S110 ruling 3] ADDING stays open at every status. */}
         {canWrite ? (
           <label className="mt-[10px] flex h-[52px] cursor-pointer items-center justify-center rounded-[14px] bg-m6m-blue text-[16px] font-bold text-white">

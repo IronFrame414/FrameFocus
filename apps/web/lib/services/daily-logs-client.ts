@@ -3,6 +3,7 @@ import type { Database } from '@framefocus/shared/types/database';
 import { uploadFile } from '@/lib/services/files-client';
 import type { DailyLog, DayPresence } from '@/lib/services/daily-logs';
 import { SIGNED_URL_TTL_SECONDS } from './signed-url-ttl';
+import { applied, DISCARDED } from './mutation-result';
 export type { DailyLog, DailyLogDetail, DayPresence, LogPhoto } from '@/lib/services/daily-logs';
 
 // 6B Daily Logs — client mutations (6B-1 spec §4). RLS enforces authority:
@@ -212,18 +213,39 @@ export async function uploadDailyLogPhoto(
   projectId: string,
   logId: string
 ): Promise<{ success: boolean; id?: string; error?: string }> {
-  const uploaded = await uploadFile(file, { project_id: projectId, category: 'daily_logs' });
+  const uploaded = await uploadDailyLogPhotoFile(file, projectId);
   if (!uploaded.success || !uploaded.id) return uploaded;
+  const linked = await linkDailyLogPhoto(uploaded.id, logId);
+  if (!linked.success) {
+    return { success: false, id: uploaded.id, error: `Photo uploaded but not linked: ${linked.error}` };
+  }
+  return uploaded;
+}
 
+/**
+ * [S116 F-12] The two halves of uploadDailyLogPhoto, for a retrying batch
+ * (`makeAttachWorker`, lib/uploads/upload-batch.ts): a photo whose upload
+ * landed but whose link failed is re-LINKED on retry, never uploaded twice.
+ */
+export function uploadDailyLogPhotoFile(file: File, projectId: string) {
+  return uploadFile(file, { project_id: projectId, category: 'daily_logs' });
+}
+
+export async function linkDailyLogPhoto(
+  fileId: string,
+  logId: string
+): Promise<{ success: boolean; error?: string }> {
   const supabase = createClient();
   // daily_log_id (migration 20260721080000) is not in database.ts until the
   // next type regen — swap to a plain typed update then.
   const link = { daily_log_id: logId } as unknown as Database['public']['Tables']['files']['Update'];
-  const { error } = await supabase.from('files').update(link).eq('id', uploaded.id);
-  if (error) {
-    return { success: false, id: uploaded.id, error: `Photo uploaded but not linked: ${error.message}` };
-  }
-  return uploaded;
+  // [S116] `.select('id')` + applied(): an RLS-discarded link is a failure,
+  // not a silent success (mutation-result.ts). _Superseded, quoted:_
+  // `const { error } = await supabase.from('files').update(link).eq('id', uploaded.id);`
+  const { data, error } = await supabase.from('files').update(link).eq('id', fileId).select('id');
+  if (error) return { success: false, error: error.message };
+  if (!applied(data)) return { success: false, error: DISCARDED };
+  return { success: true };
 }
 
 /** Toggle files.client_visible (flag only in v1 — portal enforcement is M9). */

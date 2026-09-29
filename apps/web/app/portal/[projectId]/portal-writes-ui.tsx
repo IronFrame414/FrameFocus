@@ -6,6 +6,9 @@ import SignatureCanvas from 'react-signature-canvas';
 import { CONSENT_TEXT } from '@/lib/proposal/proposal-defaults';
 import { typedSignatureToDataUrl } from '@/lib/signature-image';
 import { cardStyle, color, font } from '@/lib/theme';
+import type { UploadOutcome } from '@/lib/uploads/upload-batch';
+import { doneIds, hasUnfinished, useUploadBatches } from '@/lib/uploads/use-upload-batches';
+import { UploadBatchList } from '@/components/uploads/upload-batch-list';
 
 /**
  * M9 stage 5 — the client's two write surfaces, rendered.
@@ -345,7 +348,18 @@ export function CoSignPanel({
  * and note stay tied together — one unit, not two records."* A composer that
  * uploaded photos as they were picked and posted the note separately would
  * satisfy the sentence in the UI and break it in the data.
+ *
+ * [S116 F-12, #2-s180u] The photos now go through the shared upload queue
+ * (`runUploadBatch`: ≤3 in flight, each photo named, Retry for just the ones
+ * that failed) via `POST /api/portal/photos`, and the message posts ONLY once
+ * they have all landed — or when she chooses to send without the missing ones.
+ * The unit holds in the data: the message is written after its photos are real,
+ * and carries exactly the ones that landed. _Superseded, quoted:_ `for (const f
+ * of files) form.append('photos', f);` — one request, failing the whole send at
+ * the first bad photo, with no retry.
  */
+const MAX_COMPOSER_PHOTOS = 6;
+
 export function ClientComposer({ projectId }: { projectId: string }) {
   const router = useRouter();
   const [body, setBody] = useState('');
@@ -353,18 +367,46 @@ export function ClientComposer({ projectId }: { projectId: string }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [warning, setWarning] = useState<string | null>(null);
+  const batches = useUploadBatches();
+  const hasBatch = batches.items('photos').length > 0;
 
   const ready = body.trim().length > 0 || files.length > 0;
 
-  async function send() {
+  async function uploadOne(file: File): Promise<UploadOutcome> {
+    const form = new FormData();
+    form.set('projectId', projectId);
+    form.set('photo', file);
+    const res = await fetch('/api/portal/photos', { method: 'POST', body: form });
+    const payload = (await res.json().catch(() => ({}))) as { id?: string; error?: string };
+    if (!res.ok || !payload.id) {
+      return { success: false, error: payload.error ?? `Upload failed (${res.status})` };
+    }
+    return { success: true, id: payload.id };
+  }
+
+  async function send(sendWithoutMissing = false) {
     setError(null);
     setWarning(null);
+    if (files.length > MAX_COMPOSER_PHOTOS) {
+      setError(`Please send at most ${MAX_COMPOSER_PHOTOS} photos at a time.`);
+      return;
+    }
     setBusy(true);
     try {
+      let rows = batches.items('photos');
+      if (!sendWithoutMissing && files.length > 0) {
+        rows = hasBatch
+          ? await batches.retry('photos')
+          : await batches.start('photos', files, uploadOne);
+        // Nothing is posted while a photo is missing: the list names it, with
+        // Retry, and "Send without" if she would rather not wait.
+        if (hasUnfinished(rows)) return;
+      }
+
       const form = new FormData();
       form.set('projectId', projectId);
       form.set('body', body);
-      for (const f of files) form.append('photos', f);
+      for (const id of doneIds(rows)) form.append('fileIds', id);
 
       const res = await fetch('/api/portal/messages', { method: 'POST', body: form });
       const payload = await res.json();
@@ -377,6 +419,7 @@ export function ClientComposer({ projectId }: { projectId: string }) {
       if (payload.warning) setWarning(payload.warning);
       setBody('');
       setFiles([]);
+      batches.clear('photos');
       router.refresh();
     } finally {
       setBusy(false);
@@ -405,12 +448,40 @@ export function ClientComposer({ projectId }: { projectId: string }) {
           type="file"
           accept="image/*"
           multiple
+          // While a batch is pending the set is fixed: its Retry re-sends only
+          // the missing ones, and a newly picked photo would not be among them.
+          disabled={hasBatch}
+          data-testid="portal-composer-input"
           onChange={(e) => setFiles(Array.from(e.target.files ?? []))}
           style={{ fontSize: '12.5px', color: color.bodyAlt }}
         />
-        <button type="button" onClick={send} disabled={!ready || busy} style={buttonStyle(ready && !busy)}>
+        <button
+          type="button"
+          onClick={() => void send()}
+          disabled={!ready || busy}
+          style={buttonStyle(ready && !busy)}
+          data-testid="portal-composer-send"
+        >
           {busy ? 'Sending…' : 'Send'}
         </button>
+      </div>
+      <div style={{ marginTop: '8px' }}>
+        <UploadBatchList
+          items={batches.items('photos')}
+          busy={batches.busy('photos')}
+          onRetry={() => void send()}
+          testId="portal-composer-batch"
+        />
+        {hasBatch && !busy && hasUnfinished(batches.items('photos')) && (
+          <button
+            type="button"
+            onClick={() => void send(true)}
+            data-testid="portal-composer-send-without"
+            style={{ ...buttonStyle(true), marginTop: '6px' }}
+          >
+            Send without the missing photos
+          </button>
+        )}
       </div>
       {files.length > 0 && (
         <p style={{ fontSize: '12px', color: color.muted, margin: '8px 0 0' }}>

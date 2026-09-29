@@ -12,12 +12,16 @@ import {
   updateIncident,
   setIncidentInjuries,
   setIncidentWitnesses,
-  uploadIncidentPhoto,
+  uploadIncidentPhotoFile,
+  linkIncidentPhoto,
   generateIncidentPdf,
   type InjuryRowInput,
   type PersonRowInput,
 } from '@/lib/services/safety-client';
 import { useAlert } from '@/components/confirm/confirm-provider';
+import { makeAttachWorker } from '@/lib/uploads/upload-batch';
+import { hasUnfinished, useUploadBatches } from '@/lib/uploads/use-upload-batches';
+import { UploadBatchList } from '@/components/uploads/upload-batch-list';
 
 // 6C §U — incident create/edit form (path A — no handoff design; mobile
 // foundation). Injured parties and witnesses are member-OR-outsider rows
@@ -199,6 +203,15 @@ export function IncidentForm({
   const [askWitnesses, setAskWitnesses] = useState(initialWitnesses.length > 0);
   const [witnesses, setWitnesses] = useState<PersonRowState[]>(initialWitnesses.map(toRowState));
   const [pendingPhotos, setPendingPhotos] = useState<File[]>([]);
+  // [S116 F-12, #2-s180u] The photos upload through the shared queue (≤3 in
+  // flight, each failure named). An incident that saved with photos still
+  // missing STAYS here with "Retry" (only those, against the SAME incident —
+  // never a second report) and "Continue to the incident".
+  const batches = useUploadBatches();
+  const [savedIncident, setSavedIncident] = useState<{
+    id: string;
+    emailErrors?: string[];
+  } | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -296,32 +309,52 @@ export function IncidentForm({
     }
 
     if (targetId) {
-      const failed: string[] = [];
-      if (effectiveProjectId) {
-        for (const file of pendingPhotos) {
-          const result = await uploadIncidentPhoto(file, effectiveProjectId, targetId);
-          if (!result.success) failed.push(`${file.name}: ${result.error ?? 'upload failed'}`);
+      // [S116 F-12] _Superseded, quoted:_ a serial `for` loop over
+      // uploadIncidentPhoto, then `alert("The incident saved, but N photo(s) did
+      // not attach")` and a redirect — no retry, and a photo that uploaded but
+      // did not LINK was left as an unlinked `files` row.
+      if (effectiveProjectId && pendingPhotos.length > 0) {
+        const incidentForPhotos = targetId;
+        const photoProjectId = effectiveProjectId;
+        const out = await batches.start(
+          'photos',
+          pendingPhotos,
+          makeAttachWorker(
+            (file) => uploadIncidentPhotoFile(file, photoProjectId),
+            (fileId) => linkIncidentPhoto(fileId, incidentForPhotos)
+          )
+        );
+        if (hasUnfinished(out)) {
+          setSavedIncident({ id: targetId, emailErrors: createEmailErrors });
+          setSaving(false);
+          return;
         }
       }
-      if (failed.length > 0) {
-        void alert(
-          `The incident saved, but ${failed.length} photo(s) did not attach:\n${failed.join('\n')}`
-        );
-      }
-      // Edits (and post-create photo attaches) regenerate the PDF (§7).
-      if (mode === 'edit' || pendingPhotos.length > 0) {
-        await generateIncidentPdf(targetId);
-      }
-      if (createEmailErrors && createEmailErrors.length > 0) {
-        void alert(
-          `Incident recorded, but some notifications failed (retry is available to Owner/Admin on the incident page):\n${createEmailErrors.join('\n')}`
-        );
-      }
-      router.push(`/dashboard/field-ops/safety/${targetId}`);
-      router.refresh();
+      await finish(targetId, createEmailErrors);
       return;
     }
     setSaving(false);
+  }
+
+  async function finish(targetId: string, createEmailErrors?: string[]) {
+    setSaving(true);
+    // Edits (and post-create photo attaches) regenerate the PDF (§7).
+    if (mode === 'edit' || pendingPhotos.length > 0) {
+      await generateIncidentPdf(targetId);
+    }
+    if (createEmailErrors && createEmailErrors.length > 0) {
+      void alert(
+        `Incident recorded, but some notifications failed (retry is available to Owner/Admin on the incident page):\n${createEmailErrors.join('\n')}`
+      );
+    }
+    router.push(`/dashboard/field-ops/safety/${targetId}`);
+    router.refresh();
+  }
+
+  async function retryPhotos() {
+    if (!savedIncident) return;
+    const out = await batches.retry('photos');
+    if (!hasUnfinished(out)) await finish(savedIncident.id, savedIncident.emailErrors);
   }
 
   return (
@@ -501,14 +534,37 @@ export function IncidentForm({
         </div>
       ) : null}
 
-      <button
-        type="button"
-        disabled={saving}
-        onClick={() => void handleSave()}
-        className="self-start rounded-[9px] bg-[#c0362c] px-[16px] py-[10px] text-[13px] font-semibold text-white transition-colors hover:bg-[#a52d24] disabled:opacity-50"
-      >
-        {saving ? 'Saving…' : mode === 'create' ? 'File incident report' : 'Save changes'}
-      </button>
+      {batches.items('photos').length > 0 ? (
+        <div className={card}>
+          <UploadBatchList
+            items={batches.items('photos')}
+            busy={batches.busy('photos')}
+            onRetry={() => void retryPhotos()}
+            testId="incident-photos-batch"
+          />
+        </div>
+      ) : null}
+      {savedIncident ? (
+        // The incident IS recorded: a second save would file a second report.
+        <button
+          type="button"
+          data-testid="incident-photos-continue"
+          disabled={saving || batches.busy('photos')}
+          onClick={() => void finish(savedIncident.id, savedIncident.emailErrors)}
+          className="self-start rounded-[9px] border border-[#e0e4ea] bg-white px-[16px] py-[10px] text-[13px] font-semibold text-[#14213d] disabled:opacity-50"
+        >
+          The incident is recorded — continue without the missing photos
+        </button>
+      ) : (
+        <button
+          type="button"
+          disabled={saving || batches.anyBusy}
+          onClick={() => void handleSave()}
+          className="self-start rounded-[9px] bg-[#c0362c] px-[16px] py-[10px] text-[13px] font-semibold text-white transition-colors hover:bg-[#a52d24] disabled:opacity-50"
+        >
+          {saving ? 'Saving…' : mode === 'create' ? 'File incident report' : 'Save changes'}
+        </button>
+      )}
       {mode === 'create' ? (
         <p className="-mt-2 text-[11px] text-[#9aa1ac]">
           Filing notifies everyone above your role immediately, and files a PDF to the Safety
