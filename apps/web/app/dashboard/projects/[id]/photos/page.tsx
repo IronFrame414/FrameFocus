@@ -145,6 +145,9 @@ export default async function ProjectPhotosPage({
                 <Link
                   key={p.id}
                   href={`/dashboard/projects/${params.id}/files/${p.id}/markup`}
+                  // H-5 [S115] — one prefetch PER TILE ran the middleware for a
+                  // 249 B payload with no page data; none now.
+                  prefetch={false}
                   style={{
                     position: 'relative',
                     display: 'block',

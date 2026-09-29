@@ -19,7 +19,10 @@ import {
   UsersRound,
   type LucideIcon,
 } from 'lucide-react';
-import { ROLE_LABELS, type CompanyRole } from '@framefocus/shared';
+// H-4 [S115] — by path, not the package barrel: the barrel re-exports every Zod
+// schema, which put zod (~13 KB gz) in the shell every dashboard page loads.
+import { ROLE_LABELS } from '@framefocus/shared/constants/roles';
+import type { CompanyRole } from '@framefocus/shared/types/roles';
 import { SURFACE_TOGGLE_ROLES } from '@/lib/device';
 import { setSurfaceAndGo } from '@/lib/surface-client';
 import { brand } from '@/lib/brand';
@@ -228,6 +231,10 @@ export function DashboardShell({
       <Link
         key={item.href}
         href={item.href}
+        // H-5 [S115] — no prefetch: with no loading.tsx, a dynamic-route prefetch
+        // returns 249 B and no page data (measured), yet runs the middleware and
+        // its Supabase round trips — ×12 sidebar items on every screen load.
+        prefetch={false}
         data-testid={`nav-item-${item.href}`}
         className={
           active
