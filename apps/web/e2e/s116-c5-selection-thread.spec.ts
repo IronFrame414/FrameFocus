@@ -289,6 +289,8 @@ test.describe('S116 C-5 · selection thread photos through the shared upload que
 
     await signInAs(page, OWNER);
     await page.goto(`/dashboard/projects/${PROJECT}/selections/${selectionId}`);
+    // Hydration first: a file change fired before React attaches onChange is lost.
+    await page.waitForLoadState('networkidle');
     const thread = page.getByTestId('sel-thread');
     await expect(thread).toBeVisible();
     await expect(page.getByTestId('sel-msg')).toHaveCount(0);

@@ -505,7 +505,8 @@ function Thread({ selection, projectId, myProfileId, thread, canPost, run }: { s
           <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
             <input style={{ ...input, width: 'auto', flex: 1, minWidth: 160 }} placeholder="Link (optional)" value={link} onChange={(e) => setLink(e.target.value)} data-testid="sel-msg-link" />
             <button type="button" style={btn} onClick={() => paths.inputRef.current?.click()}>Attach photo</button>
-            <input ref={paths.inputRef} type="file" accept="image/*" multiple hidden disabled={hasBatch} onChange={(e) => { setFiles((p) => [...p, ...Array.from(e.target.files ?? [])]); e.target.value = ''; }} />
+            {/* [S116 F-12] The picked files are read BEFORE the value is cleared. _Superseded, quoted:_ `setFiles((p) => [...p, ...Array.from(e.target.files ?? [])]); e.target.value = '';` — the updater can run after the clear and read an empty FileList, so "Attach photo" silently attached nothing (caught by this branch's proof spec). */}
+            <input ref={paths.inputRef} type="file" accept="image/*" multiple hidden disabled={hasBatch} onChange={(e) => { const picked = Array.from(e.target.files ?? []); setFiles((p) => [...p, ...picked]); e.target.value = ''; }} />
             {files.length > 0 && <span style={{ fontSize: '0.75rem', color: '#6b7280' }}>{files.length} photo{files.length === 1 ? '' : 's'} attached</span>}
             <button type="button" style={btnPrimary} onClick={() => void post()} disabled={batches.anyBusy} data-testid="sel-msg-send">Send</button>
           </div>
