@@ -113,3 +113,51 @@ key numbers re-queried below where stated).
      service role, and the record's author may set `pdf_file_id` (not in the column-scope triggers).
   Both are fixed inside item 16's migration where they touch an external surface (1), and filed for
   item-16 hardening (2) — see item 16 build.
+
+### ✅ Items 1–3: R10 + C-5 MERGED to main as `5b5cc366` (+ Josh's S118 item-16 spec, `3ef23838`)
+- CI **36572995329** on `d0348da7` (base = main `6aad413c`): lint/type success; E2E 645 → **624 passed,
+  21 skipped** (35.5m); tally 626 `✓`, **0 `✘`**; all 9 `s116-c5-*` `✓`. `git diff d0348da7 HEAD --stat`
+  → empty. R10's migration was already on production (verified 12/12) → R8 condition 3 held.
+- `3ef23838`: the R10 branch's docs tail (`12a2b7cb`, `69a7c39b` — S118 item 16) merged, delta
+  `docs/specs/S118-ship-today.md` only (exemption; command in the merge message).
+
+### Item 6 — drift baseline: regenerated, and production now matches it EXACTLY
+- `#1-s112f`'s ruled fix ("replay the files into a throwaway Postgres") is **not buildable here**: no
+  Docker, no local Postgres (`which docker postgres psql` → none). ⚠️ Unattended decision: took the
+  existing, self-checking script instead, at the one moment it is legitimate — **rebuild-test's ledger
+  equals this tree's migration files exactly** (`comm` of 262 file versions vs 262 ledger rows: 0 / 0),
+  and `db-fingerprint.mjs` re-asserts its 6-dimension agreement before writing ("agreement confirmed on
+  all six replayable dimensions"). Alternative: build a PGlite replay (stubbing Supabase's auth/storage
+  schemas and roles) — not attempted today; `#1-s112f` stays open for that.
+- New baseline (`aa015abd`, both copies byte-identical): policies 458 `4c627cb4…`, triggers 287
+  `4c7920f6…`, functions 333 `7497bfda…`, constraints 1017 `710ff1e9…`, latest `20262020000000`.
+
+### ✅ Item 4 — the four owed migrations APPLIED TO PRODUCTION, verified by object
+Runbook `docs/sessions/S118-PRODUCTION-RUNBOOK.md` (expected md5s derived from the files; method
+controlled against R10's four known values). Script `scratchpad/prod-section.sh`: holds the other owed
+files out of the directory, links production, dry run must list **exactly** the section's file (else
+exit 3), push, then ALWAYS relinks rebuild-test and restores the held files.
+- Pre-check (production): newest `20262020000000`, ledger 258, owed 0, `get_sub_bid_request`
+  `c642b6e8…`, new fns 0, anon/auth EXECUTE false/true; fingerprint: policies/triggers/constraints
+  already = baseline, functions 330 `a419e54a…`.
+- **§1 `20261850000000`**: dry run `[20261850000000_s112_bid_token_status.sql]`, PUSH_EXIT=0; verify:
+  ledger 1, `get_sub_bid_request` `58081a23e0965204635e2586403c8747`, anon false, auth true — ✅.
+- **§2 `20261860000000`**: dry run exactly its file, PUSH_EXIT=0; verify: ledger 1, `bid_token_state`
+  `2c549142…`, `get_sub_bid_request` `01e71e66…`, `close_sub_bid_request` `8584a714…`,
+  state DEFINER true, close DEFINER false, state anon/auth/service false/false/true, close anon/auth
+  false/true — ✅ (11/11).
+- **§3 `20261890000000`**: exactly its file, PUSH_EXIT=0; verify: ledger 1, `bid_token_state`
+  `4ad866c4…` (= rebuild-test), grants false/false/true — ✅.
+- **§4 `20261900000000`**: exactly its file, PUSH_EXIT=0; verify: ledger 1, `anon_execute_exposure`
+  `79d76176…`, DEFINER, anon/auth/service false/false/true, **returns exactly 3 rows**
+  (`get_invitation_by_token`, `get_invitation_status`, `submit_sub_bid_reply`) — ✅.
+- **Final: production `schema_fingerprint()` == the committed baseline on every dimension** (458
+  `4c627cb4`, 287 `4c7920f6`, 333 `7497bfda`, 1017 `710ff1e9`, latest `20262020000000`); ledger **262**.
+  The drift detector's false alarm is gone. Every section relinked `nmyphyhmfttxkdoposvf` (read back).
+- Rebuild-test live proofs on the rebased tree: `s112-bid-token-status.live` + `s112-anon-execute-guard.live`
+  + `s107-bid-upload-e2e.live` → **35 passed**; unit `s112-anon-execute-guard` + `s107-bidder-file-visibility`
+  → **17 passed**.
+- Landing chores: stale "NOTHING ON `main` SETS IT YET" comment updated (quoted); `#1-bidtok`/`#2-bidtok`
+  → **#173 / #174** (next free #175). `lint-job.sh`: 144 files / 1960 passed, all 0.
+- CI once on the stacked head `c7ba2eb5` (`feature/s118-acl-guard` ⊃ `feature/s118-bid-token-status`
+  `f41f5df0`, all `[skip ci]`) → run **36578623899**.
