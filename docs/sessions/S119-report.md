@@ -157,3 +157,13 @@ Head `feature/s119-material-signout` (item 11 restacked on A; clean rebase).
   EXECUTE **0** ✅, rows **0/0** ✅.
 - **Final: production `schema_fingerprint()` == committed baseline** on all four dimensions + latest ✅.
   Every section relinked `nmyphyhmfttxkdoposvf` (read back each time).
+
+### Stack A+B — CI
+- Run **36628474518** on `35d0ae38` (base = main `9616de1d`): lint/type **success**; E2E **637 passed, 21
+  skipped, 1 failed** (3 `✘` = one test + 2 retries): `s119-onboarding` a — `over_email_send_rate_limit`
+  from rebuild-test's auth mailer (the owner sign-up form always sends a confirmation mail). Not a code
+  failure; the same test was already blocked locally by the same limit.
+- ⚠️ Unattended decision: test a is **gated** (`S119_ONBOARDING=1`, the `s112-anon-exercise` pattern) and
+  will be run by hand once the window resets. Alternative: keep it in CI and accept a flaky red. Test b
+  (real `/invite/accept`, also a browser `signUp`) passed in CI and stays ungated.
+- lint-job 0/0/0 (147 / 2008). Second run **36633531126** on `0cad9176`.
