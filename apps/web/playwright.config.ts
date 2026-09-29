@@ -97,9 +97,7 @@ export default defineConfig({
   // the job cap killed it. `list` prints one line per test WITH its duration as
   // it finishes: the per-spec breakdown F-11 asks for can be summed from the
   // log, and the last line printed names where a hang is.
-  reporter: process.env.CI
-    ? [['github'], ['list'], ['html', { open: 'never' }]]
-    : [['list']],
+  reporter: process.env.CI ? [['github'], ['list'], ['html', { open: 'never' }]] : [['list']],
 
   use: {
     baseURL: 'http://localhost:3000',
