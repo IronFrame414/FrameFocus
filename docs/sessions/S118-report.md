@@ -245,3 +245,32 @@ Branch `feature/s118-ruled-fixes` (from main, rebased onto `09da7bca`).
   `('owner','admin','project_manager')`. The PE's existing SELECT arm needs a project, so it can never see a
   new estimate. ⚠️ Found: `convert_estimate_to_project` lets a PM convert ANY estimate (no author check).
   Tests that flip: `s115-estimate-access.test.ts` AUTHOR map, `desktop-pe-estimates-s115.spec.ts:77-85`.
+
+### ✅ Item 7 MERGED to main as `b3da5fae` (R8)
+- CI **36585189209** on `af0af714` (base = main `09da7bca`): lint/type success; E2E 645 → **624 passed, 21
+  skipped** (41.8m); tally 626 `✓`, **0 `✘`**. Migrations were on production first (verified). `git diff
+  af0af714 HEAD --stat` → empty.
+
+### ✅ Item 8 — the cost catalog: IMPORTED ON PRODUCTION (importer code on `feature/s118-catalog-import`, CI pending)
+- Importer (`scripts/import-cost-catalog.mjs`, rebased onto main): **`--markup-percent` required** — cost →
+  integer cents → `floor((cents × (100+p) + 50) / 100)` → dollars, i.e. **round half up to the cent**,
+  integer arithmetic (no float drift). **Five worked examples** (printed by every run):
+  `0.29 × 1.05 = 0.3045 → 0.30`; `4.18 → 4.3890 → 4.39`; `12.92 → 13.5660 → 13.57`;
+  `33.60 → 35.2800 → 35.28`; `649.00 → 681.4500 → 681.45`. Half-cent cases exist in the file (6): e.g.
+  `1.90 → 1.995 → 2.00`, `0.50 → 0.525 → 0.53` (rounded UP).
+- **`--sql-out`** mode emits ONE idempotent `INSERT … SELECT … WHERE NOT EXISTS` (same normalised-name rule)
+  for a named company and `created_by` — the SAME rows, no sign-in, no service key. Used for production,
+  where no user password is held.
+- **Idempotency proved on rebuild-test** (Ridgeline Builders, TEST CO 2, owner `josh+qa-b-owner`):
+  signed-in run 1 → INSERTED 282 (catalog 0 → 282); run 2 → WOULD INSERT 0, INSERTED 0 (282). Costs landed
+  as computed (0.30 / 13.57 / 681.45; total 10,493.99). SQL mode: deleted → **0**; SQL run A → **282**; SQL run
+  B → **282**; same total 10,493.99, 282 rows `created_by` = the owner. Cleaned back to **0** (as found).
+- **Production** (Management API; runner `scratchpad/prod-import.sh` behind `import-guard.cjs`, which refuses
+  any file that is not exactly one generated `INSERT INTO public.cost_catalog` — ⚠️ first version of the guard
+  was caught PASSING a `DROP TABLE` control (shell-escaped regex); rewritten as a script and re-tested: 3
+  controls refused (DROP outside literal, two inserts, no header), both real files pass):
+  - Pre-count (read-only): each company would gain **282** (no name collisions); live before: **Worth
+    Properties 8**, **H&H Signature Renovations 35** (+1 deleted).
+  - After: **Worth Properties 290 (+282)**, **H&H Signature Renovations 317 (+282)**; re-count "would insert"
+    → **0** for both (idempotent). Spot check both companies: PEX rings **0.30**, 40-gal water heater **681.45**.
+  - `created_by` = each company's owner (`10d59c4b…` Worth, `789eb4ec…` H&H).
