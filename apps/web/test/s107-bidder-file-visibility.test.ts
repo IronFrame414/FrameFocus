@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { BID_SCOPE_TAG, SUB_UPLOAD_TAG, bidderCanSeeFile } from '@/lib/services/sub-bid-files';
+import { BID_SCOPE_TAG, SUB_UPLOAD_TAG, bidderCanSeeFile, canShareWithBidders } from '@/lib/services/sub-bid-files';
 
 // S107 Part B — WHO SEES WHAT ON AN ANONYMOUS PAGE.
 //
@@ -57,5 +57,12 @@ describe('bidderCanSeeFile — the anonymous bidder sees SHARED scope docs and n
   it('the share tag is exact, not fuzzy', () => {
     expect(bidderCanSeeFile({ created_by: 'staff-uuid', tags: ['bid-scope-draft'] })).toBe(false);
     expect(bidderCanSeeFile({ created_by: 'staff-uuid', tags: [BID_SCOPE_TAG] })).toBe(true);
+  });
+
+  it('only PDFs and images can be shared — never audio, never a sub upload', () => {
+    expect(canShareWithBidders({ mime_type: 'application/pdf' })).toBe(true);
+    expect(canShareWithBidders({ mime_type: 'image/jpeg' })).toBe(true);
+    expect(canShareWithBidders({ mime_type: 'audio/webm' })).toBe(false);
+    expect(canShareWithBidders({ mime_type: 'application/pdf', tags: [SUB_UPLOAD_TAG] })).toBe(false);
   });
 });

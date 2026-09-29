@@ -24,6 +24,8 @@ export interface EstimateFileListItem {
   /** [S110 A] captured through the site-visit record — the only files a
    *  foreman or crew member may read on an estimate. */
   site_visit_capture: boolean;
+  /** [S112] tagged `bid-scope`: served to the estimate's bidders on /bid. */
+  shared_with_bidders: boolean;
 }
 
 export interface EstimateFileListResponse {

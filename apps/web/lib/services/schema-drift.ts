@@ -115,6 +115,10 @@ export interface DriftOutcome {
   drift: DriftFinding[];
   baselineLatestMigration: string | null;
   liveLatestMigration: string | null;
+  /** How many anon-executable functions the catalog reported (allowlisted or not). */
+  anonExecutable: number;
+  /** Anon-executable functions OUTSIDE the allowlist. Any entry fails the run. */
+  anonViolations: string[];
   /** Non-fatal notes — e.g. the notify target not existing on this database. */
   notes: string[];
   notified: number;
@@ -144,19 +148,92 @@ export function compareFingerprints(
   return { drift, checked: DIMENSIONS.length };
 }
 
-export async function runSchemaDrift(
-  admin: SupabaseClient<Database>
-): Promise<DriftOutcome> {
+// ===========================================================================
+// S112 — THE ANON EXECUTE GUARD. A second, independent check in the same tick.
+// ===========================================================================
+// ⚠️ WHY IT IS HERE. 20261870000000 took anon's EXECUTE from 272 functions to
+// 3, and fixed the postgres default that granted it. It could NOT fix
+// supabase_admin's default, which still grants anon EXECUTE on every function
+// supabase_admin creates in public — `ALTER DEFAULT PRIVILEGES FOR ROLE
+// supabase_admin` is refused (42501) to the migration role. See
+// 20261900000000 for the measurement. The fingerprint above cannot see this:
+// GRANTS are outside it by design. So the grant set is checked on its own.
+//
+// ⚠️ SIGNATURES, NOT NAMES. An overload `submit_sub_bid_reply(text)` added
+// beside the real one would pass a name-only allowlist while exposing a new
+// body. Changing an argument list here is a reviewed code change, which is
+// exactly the friction a new anon entry point should carry.
+export const ANON_EXECUTE_ALLOWLIST: readonly string[] = [
+  // app/invite/accept/accept-invite.tsx — both invitation reads, logged out.
+  'get_invitation_by_token(invite_token uuid)',
+  'get_invitation_status(invite_token uuid)',
+  // app/bid/[token]/bid-reply-client.tsx — the sub's bid, logged out.
+  'submit_sub_bid_reply(p_token text, p_bid_amount numeric, p_labor_amount numeric, ' +
+    'p_material_amount numeric, p_scope_coverage_percent numeric, p_exclusions text, ' +
+    'p_holds_until date)',
+];
+
+export interface AnonExposureRow {
+  signature: string;
+  owner: string;
+  security_definer: boolean;
+  extension: string | null;
+}
+
+/** Pure, so the harness can drive it with hand-built rows and see it FIRE. */
+export function compareAnonExposure(rows: readonly AnonExposureRow[]): string[] {
+  return rows
+    .filter((r) => !ANON_EXECUTE_ALLOWLIST.includes(r.signature))
+    .map(
+      (r) =>
+        `${r.signature} [owner ${r.owner}${r.security_definer ? ', SECURITY DEFINER' : ''}` +
+        `${r.extension ? `, extension ${r.extension}` : ''}]`
+    );
+}
+
+export async function runSchemaDrift(admin: SupabaseClient<Database>): Promise<DriftOutcome> {
   const outcome: DriftOutcome = {
     ok: true,
     checked: 0,
     drift: [],
     baselineLatestMigration: (baseline as unknown as Fingerprint).latest_migration ?? null,
     liveLatestMigration: null,
+    anonExecutable: 0,
+    anonViolations: [],
     notes: [],
     notified: 0,
     errors: [],
   };
+
+  // [S112] The anon guard runs FIRST and on its own, so a fingerprint failure
+  // below cannot hide it, and a stale fingerprint baseline cannot either.
+  // `as never` until database.ts is regenerated: rebuild-test currently carries
+  // six unmerged branch migrations, so `npm run db:types` would import their
+  // types onto this branch. Regenerate when rebuild-test equals main again.
+  const { data: exposure, error: exposureError } = await admin.rpc(
+    'anon_execute_exposure' as never
+  );
+  if (exposureError) {
+    outcome.ok = false;
+    outcome.errors.push(`anon_execute_exposure() failed: ${exposureError.message}`);
+    console.error('[schema-drift] anon exposure RPC failed', {
+      route: 'GET /api/cron/schema-drift',
+      check: 'admin.rpc(anon_execute_exposure)',
+      message: exposureError.message,
+    });
+  } else {
+    const rows = (exposure ?? []) as unknown as AnonExposureRow[];
+    outcome.anonExecutable = rows.length;
+    outcome.anonViolations = compareAnonExposure(rows);
+    if (outcome.anonViolations.length > 0) {
+      outcome.ok = false;
+      console.error('[schema-drift] ANON CAN EXECUTE A FUNCTION OUTSIDE THE ALLOWLIST', {
+        route: 'GET /api/cron/schema-drift',
+        violations: outcome.anonViolations,
+      });
+    }
+  }
+  const anonFailed = outcome.anonViolations.length > 0;
 
   // ⚠️ THE ERROR IS READ, NOT DISCARDED. A destructure of `data` alone would
   // make "the RPC is missing" and "no drift" the same silent success — which is
@@ -170,32 +247,36 @@ export async function runSchemaDrift(
       check: 'admin.rpc(schema_fingerprint)',
       message: error.message,
     });
-    return outcome;
+    // [S112] An anon violation is still notified when the fingerprint fails.
+    if (!anonFailed) return outcome;
+  } else {
+    const actual = data as unknown as Fingerprint;
+    outcome.liveLatestMigration = actual?.latest_migration ?? null;
+
+    const { drift, checked } = compareFingerprints(baseline as unknown as Fingerprint, actual);
+    outcome.checked = checked;
+    outcome.drift = drift;
+    // [S112] `&&`, not `=`: an anon violation or RPC error above already set it false.
+    outcome.ok = outcome.ok && drift.length === 0;
   }
+  const drift = outcome.drift;
 
-  const actual = data as unknown as Fingerprint;
-  outcome.liveLatestMigration = actual?.latest_migration ?? null;
-
-  const { drift, checked } = compareFingerprints(baseline as unknown as Fingerprint, actual);
-  outcome.checked = checked;
-  outcome.drift = drift;
-  outcome.ok = drift.length === 0;
-
-  if (drift.length === 0) return outcome;
+  if (drift.length === 0 && !anonFailed) return outcome;
 
   // ⚠️ THE FULL DETAIL GOES TO THE SERVER LOG AND THE RESPONSE BODY — NEVER
   // INTO THE NOTIFICATION. Which policy predicate changed is a map of the
   // Financial Visibility Floor; a notification row is tenant-readable data.
-  console.error('[schema-drift] DRIFT DETECTED', {
-    route: 'GET /api/cron/schema-drift',
-    baselineLatestMigration: outcome.baselineLatestMigration,
-    liveLatestMigration: outcome.liveLatestMigration,
-    dimensions: drift.map((d) => ({
-      dimension: d.dimension,
-      expected: d.expected,
-      actual: d.actual,
-    })),
-  });
+  if (drift.length > 0)
+    console.error('[schema-drift] DRIFT DETECTED', {
+      route: 'GET /api/cron/schema-drift',
+      baselineLatestMigration: outcome.baselineLatestMigration,
+      liveLatestMigration: outcome.liveLatestMigration,
+      dimensions: drift.map((d) => ({
+        dimension: d.dimension,
+        expected: d.expected,
+        actual: d.actual,
+      })),
+    });
 
   if (!DRIFT_NOTIFY_COMPANY_ID) {
     outcome.notes.push(
@@ -234,15 +315,23 @@ export async function runSchemaDrift(
     admin,
     companyId: DRIFT_NOTIFY_COMPANY_ID,
     type: 'schema_drift',
-    recipients: [{ profileId: owner.id, role: 'owner', email: owner.email, firstName: owner.first_name }],
-    render: () => ({
-      title: 'Database schema drift detected',
-      // ⚠️ NO DRIFT DETAIL. Deliberate — see above.
-      body: 'The live database no longer matches the committed schema fingerprint. Check the schema-drift cron log.',
-    }),
+    recipients: [
+      { profileId: owner.id, role: 'owner', email: owner.email, firstName: owner.first_name },
+    ],
+    // ⚠️ NO DETAIL in either message. Deliberate — see above. For the anon
+    // guard doubly so: the list is a map of what the public key can call.
+    render: () =>
+      anonFailed
+        ? {
+            title: 'Database security check failed',
+            body: 'The public (anon) key can call a database function outside the allowlist. Check the schema-drift cron log.',
+          }
+        : {
+            title: 'Database schema drift detected',
+            body: 'The live database no longer matches the committed schema fingerprint. Check the schema-drift cron log.',
+          },
     tag: 'schema-drift',
   });
   outcome.notified = result.written;
   return outcome;
 }
-

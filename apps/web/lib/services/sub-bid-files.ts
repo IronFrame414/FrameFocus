@@ -44,7 +44,29 @@ export function bidderCanSeeFile(file: {
   if (!file.created_by) return false;
   const tags = file.tags ?? [];
   if (tags.includes(SUB_UPLOAD_TAG)) return false;
+  // [S112, RULED Josh] 3. — and it must have been SHARED WITH BIDDERS.
   return tags.includes(BID_SCOPE_TAG);
+}
+
+/**
+ * [S112, RULED Josh] THE INTERIM FOR BID FILES — only what staff explicitly
+ * shared. _Superseded:_ every staff-uploaded file on the estimate was served,
+ * and "every staff file" measured as: every Files-tab attachment, every
+ * SITE-VISIT PHOTO of the client's property, and every site-visit VOICE NOTE
+ * (both routes stamp created_by). Bidders on any line got all of it.
+ *
+ * Staff set this tag with "Share with bidders" on the estimate Files tab; only
+ * PDFs and images can carry it (so never a voice note). Tagging by LINE is the
+ * proper fix and is tech debt #174 (was #2-bidtok).
+ *
+ * [S118] The tag constant itself is declared once, above (the S114 hotfix
+ * block); this branch's duplicate declaration was dropped in the rebase.
+ *
+ * May staff mark this file as shared with bidders? PDFs and images only.
+ */
+export function canShareWithBidders(file: { mime_type: string; tags?: string[] | null }): boolean {
+  if ((file.tags ?? []).includes(SUB_UPLOAD_TAG)) return false;
+  return file.mime_type === 'application/pdf' || file.mime_type.startsWith('image/');
 }
 
 /**
@@ -52,9 +74,10 @@ export function bidderCanSeeFile(file: {
  * same value `feature/s112-bid-token-status` introduces, so that branch lands on
  * top of this without renaming anything.
  *
- * ⚠️ NOTHING ON `main` SETS IT YET. The "Share with bidders" control ships with
- * that branch (PART E). Until then the bid documents endpoint returns an empty
- * list, which is deliberate: nothing on the bid page calls it, so no user loses
- * anything, and the exposure is closed now rather than when PART E merges.
+ * [S118] That branch has now landed: "Share with bidders" on the estimate Files
+ * tab (`POST /api/estimates/[id]/files/[fileId]/share`) sets this tag.
+ * _Superseded, quoted:_ "⚠️ NOTHING ON `main` SETS IT YET. The \"Share with
+ * bidders\" control ships with that branch (PART E). Until then the bid documents
+ * endpoint returns an empty list, which is deliberate …"
  */
 export const BID_SCOPE_TAG = 'bid-scope';
