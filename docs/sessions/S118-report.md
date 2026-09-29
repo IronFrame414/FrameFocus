@@ -204,3 +204,44 @@ Branch `feature/s118-ruled-fixes` (from main, rebased onto `09da7bca`).
   carry `budgeted_amount = (0)::numeric` ✅; §7 md5s `a60cf25a…`/`4f7f172c…`, INVOKER ✅. **Final:
   production fingerprint == baseline** (456/287/333/1017, latest `20262050000000`), ledger 265.
 - CI **36585189209** on `af0af714` (base = main `09da7bca`).
+
+### Item 5 — bid page document list: built, branch `feature/s118-bid-docs` (`82d2fe4f`), not yet run
+- `BidDocuments` in `app/bid/[token]/bid-reply-client.tsx`: lists what `GET /api/bid/[token]/files` returns
+  (bid-scope, staff-uploaded only — the route is unchanged); a click re-fetches for a fresh 300 s URL;
+  never rendered on the expired/closed card. e2e `s118-bid-documents.spec.ts`: shared doc listed + opens;
+  **untagged staff file on the same estimate NOT listed**; cancelled token → closed card, no list, route ≠ 200.
+  No migration.
+
+### PART TWO audits (read-only agents; key claims to be re-checked in each build)
+- **FILL-12** — a daily log today is **stored only**: no notification, no reviewed columns; the one alert is
+  for a MISSING log. Paper vs app: A (10 checks) missing; photos-sent time missing (created_at is sync time);
+  B = `work_performed`; C = `tasks_tomorrow` (no date, no day-after); D = `material_needed` free text (not on
+  /m); E missing; footer "completed by" = author, "office reviewed" missing. **App-only list for Josh
+  (unchanged):** weather; material used; equipment used; notes; hazard flag + notes (+ incident offer on /m);
+  crew present with hours from time tracking; subs + hours + note; per-photo share-with-client flag; the
+  generated PDF; the day's deliveries (desktop detail + PDF); `material_needed` free text; editable log date
+  (desktop). PARITY gaps today: /m lacks weather, material needed, notes, sub note; /m never makes the PDF.
+  Unattended defaults for the build: ten nullable checks (A); a user-stamped `photos_sent_at` on the log (not
+  a new `files` column); blockers as text (E); `office_reviewed_*` via a SECURITY DEFINER function + an
+  "unreviewed" list (no new notification type); section D a child table `daily_log_material_needs` with an
+  office-only `ordered_*` set by function/column-scope trigger (Owner/Admin/PM/PE); no notification on
+  "ordered"; the new fields on BOTH forms; existing /m gaps listed, not built.
+- **FILL-11** — signature capture is reusable (`SignatureCapture` in `portal-writes-ui.tsx:88`, draw/type,
+  consent prop; server `completeSignatureSchema`; signatures stored as base64 text + IP/UA on the session row).
+  Move it to `components/signature/`, re-export from the portal file. No open/overdue banners exist on the
+  Field tab today. New category needs `seed_file_categories` + a per-company backfill (`ON CONFLICT DO
+  NOTHING`) in the migration — an additive row insert, not a constraint. Defaults: staff only (no subs);
+  `pending_receipt` state so photos precede the receiver's signature; return photos by anyone who can create;
+  the source form's fields verbatim; PDF appears in project Documents (like delivery/safety PDFs).
+- **FILL-14** — **no rename UI exists; the database already lets Owner, Admin, an assigned PM and an assigned
+  PE update `projects.name`** (`projects_update_authorized` has no WITH CHECK; `enforce_projects_column_scope`
+  does not freeze `name`). ~218 non-test lines read/use the name; 10 denormalised copies (archive,
+  notifications.title — 195/374 rows, email_logs, spec-sheet file name, lien `filled_values`, stored PDFs,
+  QuickBooks memos rebuilt from the live row on each sync, estimates.name). Build: freeze `name` to
+  Owner/Admin in the column-scope trigger (a narrowing the rule requires) + the rename control.
+- **Item 13** — **21** PM-admitting write policies on the 8 core estimate tables (re-measured by replaying
+  live `pg_policies`; matches S115), +2 on `files`, 0 in negated forms; the inner `e.created_by = auth.uid()`
+  author floor works for any role. Also **9 SECURITY DEFINER functions + 1 trigger** check
+  `('owner','admin','project_manager')`. The PE's existing SELECT arm needs a project, so it can never see a
+  new estimate. ⚠️ Found: `convert_estimate_to_project` lets a PM convert ANY estimate (no author check).
+  Tests that flip: `s115-estimate-access.test.ts` AUTHOR map, `desktop-pe-estimates-s115.spec.ts:77-85`.
