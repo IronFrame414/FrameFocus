@@ -131,3 +131,50 @@ Branch for this log and the spec fold: `feature/s115-report` (docs-only).
 | today's owner chain | 337 ms (sum of medians, run 2) → 204 ms parallelised → 152 ms with getClaims | same |
 | JWT signing | both projects serve an **ES256** JWKS → `getClaims()` verifies locally; auth-js caches the JWKS in a module-level `GLOBAL_JWKS`, so a warm isolate makes no network call | `curl https://<ref>.supabase.co/auth/v1/.well-known/jwks.json`; `grep -n GLOBAL_JWKS node_modules/@supabase/auth-js/dist/module/GoTrueClient.js` |
 ⚠️ Instrument caveat: these are Codespace→Supabase round trips, **not** Vercel→Supabase (same region per D-4, so each hop there is smaller). The **count** (5 sequential per request) is exact; the ms are relative. Production could not be timed server-side: I hold no production credentials, by design.
+
+### Phase 1 — H-1 (continued): how many times middleware runs for ONE screen load
+Instrument: local **production** build (`next build` → `BUILD_EXIT=0`; `next start -p 3000`) against rebuild-test, Playwright/CDP, signed in as `josh+qa-admin@worthprop.com`, project `4a4f8567…` ("QA A — isolation fixture", the company's heaviest: 85 live `files` rows, chosen by `scratchpad/pick-project.mjs` over 17 projects). Script: `scratchpad/nav-measure.mjs` (counts every request whose path the matcher catches). ⚠️ Local server + Codespace→Supabase, not Vercel; counts are exact, ms are relative.
+
+| screen | middleware runs per cold load | of which |
+| --- | --- | --- |
+| project overview | **19** | 1 document + ~16 `<Link>` **prefetch** RSC requests (sidebar nav ×12, project tabs) + `/api/chat/threads` |
+| project Photos | **32** | 1 document + prefetches incl. **one per photo tile** (`/files/<id>/markup`) and 5× the Photos tab itself + 4× `/api/chat/threads` |
+| project Budget | **23** | same shape |
+| `/m` (→ `/m/timeclock`) | **5** | |
+| `/m/projects` | **11** | |
+Each run costs 4 (5 for an owner) sequential Supabase round trips **before** the request is served, and each dashboard prefetch also renders the dashboard layout. With 0 `loading.tsx` files in the app (`find app -name loading.tsx` → 0), a dynamic-route prefetch carries no page data, so these prefetches buy little.
+
+### Phase 1 — H-2 (measured; Explore agent + my baseline timings)
+| what | number | command |
+| --- | --- | --- |
+| `loading.tsx` / `error.tsx` in `app/` | 0 / 0 | `find app -name loading.tsx` |
+| `<Suspense>` on these routes | 0 (2 files app-wide: invite/accept, sign-in form) | `grep -rl Suspense app components` |
+| React `cache()` | 2: `createClient` (one client per request) and `getMyLanguage`; **no cache for getUser / profile / getProject / company settings** | grep `cache` from 'react' |
+| `auth.getUser()` call sites | 156 in `app/`, 35 in `lib/` | grep |
+| `getUser()` per request | overview **6**, Photos **7**, Budget **6**, `/m/timeclock` 4 (+2 via the `/m` redirect), `/m/projects` 4 | traced |
+| sequential page round trips (worst case, owner) | overview **13**, Budget **~36**, Photos 2 (+2 queued auth), `/m/projects` 5, `/m/timeclock` 4 | traced |
+| duplicates per overview request | `profiles` ×5, `companies` ×5, `projects` ×3 | traced |
+| auth-js lock | every PostgREST call awaits `auth.getSession()` through the same per-client queue that `getUser()` holds for its whole network call (`GoTrueClient.js:2229-2269,2444`) → repeated getUser calls serialize everything behind them (inferred from the library, not measured) | read |
+
+**Baseline (before), same instrument as the after-measurement will use** — median of 3 cold loads, `RUNS=3 PID=4a4f8567… node scratchpad/nav-measure.mjs josh+qa-admin@worthprop.com`, exit 0:
+| screen | server TTFB ms | load ms | JS KB (transferred) | total KB | requests | middleware runs |
+| --- | --- | --- | --- | --- | --- | --- |
+| overview | 1054 | 1268 | 266.5 | 411.6 | 54 | 19 |
+| Photos | 675 | 828 | 253.9 | 405.8 | 72 | 32 |
+| Budget | 1154 | 1317 | 258.4 | 408.5 | 57 | 23 |
+| `/m` → `/m/timeclock` | 621 | 1077 | 229.8 | 360.5 | 39 | 5 |
+| `/m/projects` | 430 | 561 | 223.5 | 354.7 | 38 | 11 |
+
+### Phase 1 — H-4 (first pass)
+| what | number | command |
+| --- | --- | --- |
+| First Load JS shared by all | 87.8 kB; middleware bundle 92.9 kB | `next build` output (`scratchpad/build-base.log`) |
+| heaviest routes (First Load) | `/dashboard/estimates/[id]` 286 kB, `/dashboard/settings` 249, `/dashboard/expenses` 229, `…/deliveries/[poId]` 223, `…/safety/[incidentId]` 214 | same, 269 routes sorted |
+| JS transferred on the H screens | 224–267 KB per cold load (table above) — no 45 MB-class outlier | CDP `encodedDataLength`, resourceType Script |
+
+### Phase 1 — F-11 (measured)
+| what | number | command |
+| --- | --- | --- |
+| E2E job, 3 recent green runs | 44.7 / 45.5 / 42.8 min wall; **"Run Playwright tests" step 41.2 / 42.1 / 40.3 min**; build 1.3–2.0; install+npm ci ~1 | `gh run view <id> --json jobs` for 36496252226, 36488865320, 36439127547 |
+| tests | **612** (591 passed, 21 skipped), **1 worker** | run log: "Running 612 tests using 1 worker" / "591 passed (41.2m)" |
+| per-spec breakdown | **not measurable from CI**: `reporter` in CI is `[['github'],['html']]` (`playwright.config.ts:94`); the html report uploads only on failure. The `github` reporter prints no per-test lines — which is also why a hung run and a slow run look identical | `grep -n reporter apps/web/playwright.config.ts` |
