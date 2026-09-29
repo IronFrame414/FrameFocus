@@ -97,3 +97,25 @@ After: ledger 1; `public.employee_documents` exists, RLS on; table policies **4*
 `set_employee_documents_updated_by` = `f8eaaeebfdf0752c0774d472ddddc742`; rows 0.
 Final: fingerprint = committed baseline — policies 460 `1e17fe2f…`, triggers 290 `16c49e44…`, functions 335
 `cf7bbdb0…`, constraints 1026 `5f3997d3…`, latest `20262060000000`; ledger 266.
+
+## Item 12 — daily log close-out (branch `feature/s118-daily-log-closeout`)
+
+⚠️ Order: phase 1 (every `daily_logs -> company_members` embed names its FK) must be LIVE on production
+(merged to main and deployed by Vercel) BEFORE this migration, because its second FK makes a bare embed
+PGRST201.
+
+Pre-check (production, read-only, measured): ledger 266, newest `20262060000000`; `daily_logs` columns 21;
+`enforce_daily_logs_column_scope` md5 `ba211f64…`; `daily_log_material_needs` absent; functions
+`mark_daily_log_reviewed` / `set_daily_log_material_ordered` 0; `daily_logs` rows 0. Every new column is
+nullable with no CHECK over existing rows.
+
+### §9 — `20262070000000_s118_daily_log_closeout`
+After: ledger 267; `daily_logs` columns **38** (+17); `public.daily_log_material_needs` exists, RLS on,
+policies **3** (`…_select_visible`, `…_insert_authorized`, `…_update_authorized`; no DELETE); md5
+`enforce_daily_logs_column_scope` = `ca0ef1a958de20e6a5880fcf15bb1383`, `mark_daily_log_reviewed` =
+`d2843d267e474b87ef9ab58951b3f351`, `set_daily_log_material_needs_updated_by` =
+`f8eaaeebfdf0752c0774d472ddddc742`, `enforce_daily_log_material_needs_column_scope` =
+`7d3ca70959aa944fc2ed68774c4d3c25`, `set_daily_log_material_ordered` = `510583d8f74880a9b06a8f120e35c2b9`
+(file-derived; all five equal rebuild-test's measured values); rows 0.
+Final: fingerprint = committed baseline — policies 463 `b4e86072…`, triggers 293 `530741c6…`, functions 339
+`c643725b…`, constraints 1035 `f0445bd7…`, latest `20262070000000`.
