@@ -38,6 +38,8 @@ import { ReviewSendSheet } from './review-send-sheet';
 import { useConfirm } from '@/components/confirm/confirm-provider';
 import { color } from '@/lib/theme';
 import { requireEstimateNumber } from '@/lib/estimate-number';
+import type { EstimatePeAccess } from '@/lib/services/estimate-assignments';
+import { EstimatePeAccessControl } from './pe-access-control';
 
 // [S115 R11] project_executive READS (lib/estimate-access.ts) — never edits.
 export type BuilderRole = 'owner' | 'admin' | 'project_manager' | 'project_executive';
@@ -97,6 +99,10 @@ interface EstimateBuilderProps {
   siteVisit: SiteVisitDetail | null;
   /** site_visit_access() said this viewer may write to the visit record. */
   siteVisitCanWrite: boolean;
+  /** [S119 D-2] A PE: pe_assigned_estimate() said this estimate is assigned to it. */
+  peAssigned?: boolean;
+  /** [S119 D-2] Owner/Admin: the current PE assignment and the PEs to pick from. */
+  peAccess?: EstimatePeAccess | null;
 }
 
 export function EstimateBuilder({
@@ -107,6 +113,8 @@ export function EstimateBuilder({
   estimatorName,
   siteVisit,
   siteVisitCanWrite,
+  peAssigned = false,
+  peAccess = null,
 }: EstimateBuilderProps) {
   const router = useRouter();
   const confirm = useConfirm();
@@ -170,10 +178,12 @@ export function EstimateBuilder({
   }
 
   const { estimate } = data;
-  // [S115 R11] A Project Executive only ever reaches a CONVERTED estimate (RLS),
-  // which is never a draft; the role check makes read-only explicit rather than
-  // an accident of the status.
-  const canEdit = estimate.status === 'draft' && role !== 'project_executive';
+  // [S119 D-2] A Project Executive edits a draft ASSIGNED to it (estimate_assignments),
+  // exactly as a PM edits its own; an estimate it reaches through its project
+  // (converted, R11) stays read-only. _Superseded, quoted:_ "A Project Executive
+  // only ever reaches a CONVERTED estimate (RLS) … role !== 'project_executive'".
+  const isPe = role === 'project_executive';
+  const canEdit = estimate.status === 'draft' && (!isPe || peAssigned);
   const isManager = role === 'owner' || role === 'admin';
 
   async function runAction(fn: () => Promise<{ success: boolean; error?: string }>) {
@@ -410,7 +420,8 @@ export function EstimateBuilder({
             </div>
           </div>
           <div style={{ display: 'flex', gap: '0.5rem', flexShrink: 0 }}>
-            {(estimate.status === 'draft' || estimate.status === 'review') && (
+            {/* [S119 D-2] a PE builds; it does not send (proposal routes: Owner/Admin). */}
+            {!isPe && (estimate.status === 'draft' || estimate.status === 'review') && (
               <button
                 type="button"
                 data-testid="est-review-send"
@@ -430,7 +441,8 @@ export function EstimateBuilder({
               </button>
             )}
             {statusActionButton()}
-            {estimate.status !== 'accepted' && (
+            {/* [S119 D-1] the PE does not convert (convert_estimate_to_project refuses it). */}
+            {!isPe && estimate.status !== 'accepted' && (
               <ConvertToProject
                 estimateId={estimate.id}
                 estimateNumber={requireEstimateNumber(estimate)}
@@ -442,14 +454,22 @@ export function EstimateBuilder({
           </div>
         </div>
 
-        {/* Post-signature conversion prompt (5A §8; also shows the converted link) */}
-        <ConvertToProject
-          estimateId={estimate.id}
-          estimateNumber={requireEstimateNumber(estimate)}
-          status={estimate.status}
-          projectId={estimate.project_id}
-          variant="banner"
-        />
+        {/* Post-signature conversion prompt (5A §8; also shows the converted link).
+            [S119 D-1] a PE sees only the converted link, never the prompt. */}
+        {(!isPe || estimate.project_id) && (
+          <ConvertToProject
+            estimateId={estimate.id}
+            estimateNumber={requireEstimateNumber(estimate)}
+            status={estimate.status}
+            projectId={estimate.project_id}
+            variant="banner"
+          />
+        )}
+
+        {/* [S119 D-2] Owner/Admin: which Project Executive this estimate is assigned to. */}
+        {isManager && peAccess && (
+          <EstimatePeAccessControl estimateId={estimate.id} access={peAccess} />
+        )}
 
         {actionError && (
           <div
@@ -680,7 +700,7 @@ export function EstimateBuilder({
           <DetailsTab
             {...tabProps}
             onDelete={isManager ? handleDelete : undefined}
-            onClone={() => setCloneOpen(true)}
+            onClone={isPe ? undefined : () => setCloneOpen(true)}
             statusAction={statusActionButton()}
           />
         )}

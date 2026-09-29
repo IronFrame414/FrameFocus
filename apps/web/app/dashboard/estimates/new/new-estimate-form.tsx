@@ -14,7 +14,8 @@ import { ContactAddressPicker } from '../contact-address-picker';
 // 4D entry form. "Clone from existing" routes through cloneEstimate
 // (4K) instead of createEstimate — same redirect either way.
 
-export function NewEstimateForm() {
+/** [S119 D-1] `canClone` is false for a Project Executive: clone_estimate refuses it. */
+export function NewEstimateForm({ canClone = true }: { canClone?: boolean }) {
   const router = useRouter();
   const [contactId, setContactId] = useState<string | null>(null);
   const [addressId, setAddressId] = useState<string | null>(null);
@@ -95,26 +96,28 @@ export function NewEstimateForm() {
         />
       </div>
 
-      <div style={{ marginBottom: '1.5rem' }}>
-        <label style={labelStyle}>Clone from existing? (optional)</label>
-        <select
-          value={cloneSourceId}
-          onChange={(e) => setCloneSourceId(e.target.value)}
-          style={inputStyle}
-        >
-          <option value="">Start from scratch</option>
-          {pastEstimates.map((est) => (
-            <option key={est.id} value={est.id}>
-              {est.estimate_number} — {est.name}
-            </option>
-          ))}
-        </select>
-        {cloneSourceId && (
-          <p style={{ fontSize: '0.75rem', color: '#6b7280', marginTop: '0.25rem' }}>
-            Items, terms, scope, and pricing copy over. Sub bids and notes do not.
-          </p>
-        )}
-      </div>
+      {canClone && (
+        <div style={{ marginBottom: '1.5rem' }}>
+          <label style={labelStyle}>Clone from existing? (optional)</label>
+          <select
+            value={cloneSourceId}
+            onChange={(e) => setCloneSourceId(e.target.value)}
+            style={inputStyle}
+          >
+            <option value="">Start from scratch</option>
+            {pastEstimates.map((est) => (
+              <option key={est.id} value={est.id}>
+                {est.estimate_number} — {est.name}
+              </option>
+            ))}
+          </select>
+          {cloneSourceId && (
+            <p style={{ fontSize: '0.75rem', color: '#6b7280', marginTop: '0.25rem' }}>
+              Items, terms, scope, and pricing copy over. Sub bids and notes do not.
+            </p>
+          )}
+        </div>
+      )}
 
       {error && (
         <div

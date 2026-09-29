@@ -74,14 +74,17 @@ test.afterAll(async () => {
 test.describe('R11 · the Project Executive reads its projects’ estimates', () => {
   test.setTimeout(120_000);
 
-  test('the nav offers Estimates, and the list opens (no redirect) without create controls', async ({
+  // ⚠️ INVERTED IN PLACE [S119 D-2, Josh 2026-09-29: "PE can create."]. This test
+  // said: title "… the list opens (no redirect) without create controls";
+  // assertion `getByRole('link', { name: '+ New Estimate' })).toHaveCount(0)`.
+  test('the nav offers Estimates, and the list opens (no redirect) WITH the create control [S119 D-2]', async ({
     page,
   }) => {
     await signInAs(page, PE);
     await expect(page.getByRole('link', { name: 'Estimates', exact: true }).first()).toBeVisible();
     await page.goto('/dashboard/estimates');
     await expect(page).toHaveURL(/\/dashboard\/estimates$/);
-    await expect(page.getByRole('link', { name: '+ New Estimate' })).toHaveCount(0);
+    await expect(page.getByRole('link', { name: '+ New Estimate' })).toHaveCount(1);
   });
 
   test('its project’s estimate opens READ-ONLY, and its proposal preview renders', async ({

@@ -8,8 +8,11 @@ import { canAuthorEstimates, canReadEstimates } from '@/lib/estimate-access';
 //
 // READ: + project_executive [R11, Josh 2026-09-28] — which estimates it sees is
 // RLS's answer (converted, on an assigned project), not this list's.
-// AUTHOR: unchanged — the PE builds nothing and sends nothing (ASK-20, taken A;
-// R1 carve-out 2 keeps sending, which starts the client contract, off it).
+// AUTHOR: + project_executive [S119 D-2, Josh 2026-09-29: "PE can create."] — which
+// estimates it may BUILD is RLS's answer (assigned to it), not this list's; it still
+// sends nothing (proposal routes stay Owner/Admin). _Superseded, quoted:_ "AUTHOR:
+// unchanged — the PE builds nothing and sends nothing (ASK-20, taken A; R1
+// carve-out 2 keeps sending, which starts the client contract, off it)."
 const READ: Record<CompanyRole, boolean> = {
   owner: true,
   admin: true,
@@ -23,7 +26,7 @@ const READ: Record<CompanyRole, boolean> = {
 const AUTHOR: Record<CompanyRole, boolean> = {
   owner: true,
   admin: true,
-  project_executive: false,
+  project_executive: true, // [S119 D-2] _was:_ `project_executive: false,`
   project_manager: true,
   foreman: false,
   crew_member: false,

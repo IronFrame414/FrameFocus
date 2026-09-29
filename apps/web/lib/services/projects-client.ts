@@ -91,6 +91,24 @@ export async function createProject(project: {
   return { success: true, id: data.id };
 }
 
+/**
+ * [S118 item 14] Rename a project — Owner/Admin; the database refuses anyone
+ * else (enforce_projects_column_scope) and logs every rename
+ * (project_name_history), which is how sent documents keep their name.
+ */
+export async function renameProject(
+  id: string,
+  name: string
+): Promise<{ success: boolean; error?: string }> {
+  const trimmed = name.trim();
+  if (!trimmed) return { success: false, error: 'A project needs a name.' };
+  const supabase = createClient();
+  const { data, error } = await supabase.from('projects').update({ name: trimmed }).eq('id', id).select('id');
+  if (error) return { success: false, error: error.message };
+  if (!applied(data)) return { success: false, error: DISCARDED };
+  return { success: true };
+}
+
 export async function updateProject(
   id: string,
   updates: Record<string, unknown>

@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@framefocus/shared/types/database';
 import { hasMarkup, derivativePathFor } from '@framefocus/shared/utils/markup';
+import { projectNameAt } from '@/lib/projects/name-at';
 import { contactDisplayName } from '@framefocus/shared/utils/contact-name';
 
 // Signed-artifact spec §6 — assembles everything the CO renderer needs as one
@@ -240,7 +241,17 @@ export async function getChangeOrderData(
     },
     contractorSignature,
     clientSignature,
-    project: project ? { name: project.name } : null,
+    // [S118 item 14] A sent CO (and its signed copy) keeps the name it was sent under.
+    project: project
+      ? {
+          name: await projectNameAt(
+            supabase,
+            co.project_id,
+            co.status === 'draft' ? null : co.sent_at ?? co.signed_at ?? co.created_at,
+            project.name
+          ),
+        }
+      : null,
     client,
     lineItems,
   };

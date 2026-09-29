@@ -32,7 +32,8 @@ import { useConfirm } from '@/components/confirm/confirm-provider';
 
 interface DetailsTabProps extends TabProps {
   onDelete?: () => void;
-  onClone: () => void;
+  /** Absent for a Project Executive [S119 D-1]: clone_estimate refuses it. */
+  onClone?: () => void;
   statusAction: React.ReactNode;
 }
 
@@ -556,7 +557,9 @@ export function DetailsTab({
         {/* 19b — a SENT estimate that didn't win is marked lost (not deleted), so
             win rate stays honest. Reuses the declined status with a DISTINCT
             reason set via the mark_estimate_lost RPC [R12/Q6]. */}
-        {(estimate.status === 'sent' || estimate.status === 'expired') && (
+        {/* [S119 D-1] not offered to a PE: mark_estimate_lost refuses it. */}
+        {role !== 'project_executive' &&
+          (estimate.status === 'sent' || estimate.status === 'expired') && (
           <MarkLostCard estimateId={estimate.id} onDone={reload} />
         )}
 
@@ -591,25 +594,27 @@ export function DetailsTab({
                 zIndex: 10,
               }}
             >
-              <button
-                type="button"
-                onClick={() => {
-                  setMenuOpen(false);
-                  onClone();
-                }}
-                style={{
-                  display: 'block',
-                  width: '100%',
-                  textAlign: 'left',
-                  padding: '0.5rem 0.75rem',
-                  fontSize: '0.875rem',
-                  background: 'none',
-                  border: 'none',
-                  cursor: 'pointer',
-                }}
-              >
-                Clone this estimate
-              </button>
+              {onClone && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    onClone();
+                  }}
+                  style={{
+                    display: 'block',
+                    width: '100%',
+                    textAlign: 'left',
+                    padding: '0.5rem 0.75rem',
+                    fontSize: '0.875rem',
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Clone this estimate
+                </button>
+              )}
               {onDelete && (
                 <button
                   type="button"

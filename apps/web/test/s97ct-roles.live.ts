@@ -540,7 +540,13 @@ describe('6. Invoices tab', () => {
     // and crew never sees it). The 'Change Orders' assertion is the
     // counter-vacuity guard: it proves the sub-row actually rendered.
     let pathname = '/dashboard/projects/x/budget';
-    vi.doMock('next/navigation', () => ({ usePathname: () => pathname }));
+    // [S119 C] + useRouter: the header now renders the Rename control (Owner/Admin),
+    // which holds a router. Render-only here; nothing is clicked.
+    // _Superseded, quoted:_ `vi.doMock('next/navigation', () => ({ usePathname: () => pathname }));`
+    vi.doMock('next/navigation', () => ({
+      usePathname: () => pathname,
+      useRouter: () => ({ refresh: () => {}, push: () => {} }),
+    }));
     vi.doMock('next/link', () => ({
       default: ({ children, href }: { children: unknown; href: string }) =>
         ({ type: 'a', props: { href, children }, key: null, $$typeof: Symbol.for('react.element') }),
@@ -719,7 +725,10 @@ describe('7. §12a carve-out — invoice amounts yes, contract value no', () => 
       const { error } = await session[role]
         .from('projects')
         .update({
-          name: `QA A — isolation fixture`,
+          // [S118 item 14] the name is written UNCHANGED: a rename is now
+          // Owner/Admin only (s118-project-rename.live.ts holds the total map).
+          // _Superseded, quoted:_ name: `QA A — isolation fixture` for all three.
+          name: before!.name,
           internal_notes: `ordinary update by ${role}`,
           target_end_date: '2027-01-31',
         })

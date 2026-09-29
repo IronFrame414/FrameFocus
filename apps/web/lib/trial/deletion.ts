@@ -361,6 +361,9 @@ export const COMPANY_TABLES: string[] = [
   // estimate_award_bases + estimate_sub_bid_requests (hang off estimates), and
   // scope_library (company-scoped template library). Walked explicitly, before
   // estimates, per the proposal_views precedent.
+  // [S119 D-2] estimate_assignments references estimates (deferred FK) and
+  // company_members (NO ACTION), so it goes before both.
+  'estimate_assignments',
   'estimate_events', 'estimate_award_bases', 'estimate_sub_bid_requests', 'scope_library',
   'estimate_sub_bids', 'estimate_line_rows', 'estimate_line_items',
   // proposal_views cascades with estimates (20261052); listed anyway so the
@@ -397,7 +400,8 @@ export const COMPANY_TABLES: string[] = [
   'subcontractor_financials', 'subcontractor_compliance_documents',
   // file_categories sits between files and projects: files reference it
   // (files_category_fkey) and its per-job rows reference projects (20261039).
-  'files', 'file_categories', 'projects',
+  // [S118 item 14] the rename log references projects.
+  'files', 'file_categories', 'project_name_history', 'projects',
   // contacts_dedupe_log (20261265000000) — append-only audit of the one-time
   // email dedupe; company-scoped, walked before contacts [S103].
   'contacts_dedupe_log',

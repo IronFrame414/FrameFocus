@@ -125,7 +125,12 @@ beforeAll(async () => {
     { table: 'change_order_line_rows', key: 'id', cols: 'id, line_item_id', project: (r) => g(co, g(coli, r.line_item_id)), money: false },
     { table: 'invoices', key: 'id', cols: 'id, project_id', project: (r) => r.project_id as string, money: true },
     { table: 'invoice_lines', key: 'id', cols: 'id, invoice_id', project: (r) => g(inv, r.invoice_id), money: true },
-    // Q7: an estimate with no project is the sales stage — never visible.
+    // [S119 D-2] An estimate is ALSO visible to a PE when it is ASSIGNED to it
+    // (estimates_select_pe_assigned) — a second read path this map does not model.
+    // This row measures path 2 only (the project arm), so the test below first
+    // asserts the PE holds NO live estimate assignment; path 1 is proven in
+    // s119-pe-estimate-assignment.live.ts. _Superseded, quoted:_ "Q7: an estimate
+    // with no project is the sales stage — never visible."
     { table: 'estimates', key: 'id', cols: 'id, project_id', project: (r) => (r.project_id as string) ?? null, money: false },
     { table: 'client_contract_amounts', key: 'client_contract_id', cols: 'client_contract_id', project: (r) => g(cc, r.client_contract_id), money: false },
     { table: 'retainage_releases', key: 'id', cols: 'id, project_id', project: (r) => r.project_id as string, money: false },
@@ -155,6 +160,12 @@ describe('FILL-7.2 — every Floor table: exactly its own projects, zero elsewhe
   });
 
   it('per table: PE rows == owner rows on assigned projects (none missing, none extra)', async () => {
+    // [S119 D-2] precondition: no estimate is assigned to this PE, so `estimates`
+    // is governed by the project arm alone (see the dims comment).
+    const { count: peEstimateAssignments } = await admin
+      .from('estimate_assignments').select('id', { count: 'exact', head: true })
+      .eq('member_id', peMemberId).eq('is_deleted', false);
+    expect(peEstimateAssignments, 'the fixture PE holds an estimate assignment — this map would misread it').toBe(0);
     let ownerOffTotal = 0;
     const missingMoney: string[] = [];
     for (const d of dims) {

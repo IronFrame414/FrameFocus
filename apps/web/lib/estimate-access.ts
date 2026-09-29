@@ -15,6 +15,12 @@
 // builder is editable for it anyway. Sending stays Owner/Admin in the API
 // (R1 carve-out 2: no contract authority).
 //
+// [S119 D-2, Josh 2026-09-29] The PE now CREATES estimates and builds the ones
+// ASSIGNED to it (estimate_assignments; creating assigns the creator). Which
+// estimates it may edit is still the database's answer (pe_assigned_estimate),
+// not this list's. It still does not send (proposal routes: Owner/Admin).
+// _Superseded, quoted:_ "READ ONLY. The PE reads; it does not author, edit or send."
+//
 // ⚠️ THIS GATES SCREENS; RLS GATES ROWS. Widening this list never shows a PE a
 // row the database withholds.
 
@@ -26,8 +32,14 @@ export const ESTIMATE_READ_ROLES: readonly string[] = [
   'project_executive',
 ];
 
-/** May create estimates and author them (unchanged: S111 Q7). */
-export const ESTIMATE_AUTHOR_ROLES: readonly string[] = ['owner', 'admin', 'project_manager'];
+/** May create estimates and author them. + project_executive [S119 D-2]; _superseded:_
+ *  `['owner', 'admin', 'project_manager']` (S111 Q7). */
+export const ESTIMATE_AUTHOR_ROLES: readonly string[] = [
+  'owner',
+  'admin',
+  'project_manager',
+  'project_executive',
+];
 
 export function canReadEstimates(role: string | null | undefined): boolean {
   return typeof role === 'string' && ESTIMATE_READ_ROLES.includes(role);
