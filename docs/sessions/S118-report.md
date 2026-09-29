@@ -274,3 +274,57 @@ Branch `feature/s118-ruled-fixes` (from main, rebased onto `09da7bca`).
   - After: **Worth Properties 290 (+282)**, **H&H Signature Renovations 317 (+282)**; re-count "would insert"
     → **0** for both (idempotent). Spot check both companies: PEX rings **0.30**, 40-gal water heater **681.45**.
   - `created_by` = each company's owner (`10d59c4b…` Worth, `789eb4ec…` H&H).
+
+### Item 16 — employee documents: ON PRODUCTION (verified), CI in flight
+Branch `feature/s118-employee-documents`.
+- ⚠️ **Unattended design decision:** its OWN table `employee_documents` + a PRIVATE bucket
+  `employee-documents`, not a category in `files`. Why: the audit counted **59** readers of `files` /
+  `project-files` (52 app call sites + 7 SQL functions); **12 could return a person-scoped `files` row, 1 more
+  was fragile** — including `selection_option_images`, which signs any pointed-at file into the CLIENT PORTAL.
+  A separate store is read by none of them, so "structurally unable to reach any external surface" holds by
+  construction; it also avoids widening `files_owner_arm_check` (a constraint over every existing production
+  row — stop rule 2). Alternative: `files` + a category + 12 caller exclusions + a CHECK widening. "Its own
+  storage prefix and its own category" is met in spirit (own bucket, own table); "category, never MIME" holds.
+- RULED rules as built: WRITE Owner/Admin (row + object); READ Owner/Admin + the employee's OWN live rows
+  (`member_id = get_my_member_id()`) and objects (storage EXISTS on the row + the same member check); no DELETE
+  policy on table or bucket (**files survive the person**); a trigger keeps a document on a crew member of the
+  same company and forbids moving it to another person/company/object. Unattended (narrower): crew members only
+  (a subcontractor member is another company's person); a leaver (banned/deactivated) reads nothing, the office
+  still does (`/dashboard/team/[id]/documents` opens for a removed person — the edit page's redirect is the
+  S175 edit gate, not a documents gate); company export excludes them; company deletion covers table + bucket
+  (`deletion.ts` + `deleteStorage`).
+- Surfaces: desktop `/dashboard/team/[id]/documents` (Owner/Admin) — the **notice at the top, not
+  dismissible**: "<name> can see everything filed here. Do not file anything you would not show them."; upload
+  through `runUploadBatch` + `UploadBatchList`; open/remove. **`/m/account` and `/dashboard/account`** — ONE
+  `MyDocuments` component (PARITY; `/m` translated EN/ES). A "Documents" link on the person's edit page.
+- **FILL-16.1/16.2** — see the audit entry above (59 callers, 12+1). **FILL-16.4 (production, read-only,
+  before):** table 0, bucket 0, objects 0, `files` matching `%employ%` 0, `file_categories` matching 0, policies
+  0 — **zero, stated, not assumed.**
+- **FILL-16.3 — live `s118-employee-documents` 39 passed** on rebuild-test: control (service role) crew 2 /
+  foreman 1 / leaver 1; **crew reads its own 2 and ZERO of the foreman's, cannot sign the foreman's object;
+  foreman reads its own 1 and ZERO of the crew member's**; an unfiltered read returns only one's own; total
+  role map on the crew member's documents (O/A/own read + sign; PM, PE, foreman, sub, client ZERO); writes
+  total map (row + object) O/A only, counted with the service role, no returning; the employee cannot
+  rename/trash or overwrite (upsert) their own; Owner cannot re-point to another person or file against a
+  subcontractor member; no hard delete; deactivated member → row + object kept, Owner still reads/signs;
+  nothing lands in `files`/`project-files`; **bid-token probe** (the real route, in-process, positive control
+  served) and **portal probe** (as the linked client: documents/photos/shared files returned something, none
+  an employee document; table 0 rows; signed URL null).
+- **Sabotage, each restored:** S1 own-read widened to company-wide → **9 red** (incl. both
+  employee-to-employee negatives and the portal probe); S2 storage read widened to the company folder → **8
+  red** (incl. both employee-to-employee signing negatives); S3 PM admitted to row + object writes → **2 red**
+  (exactly the PM write rows). All 7 policies restored **identical** (md5 snapshot `cmp`). One stray object
+  left by S3 (an upload with no row) found by a bucket-vs-rows reconciliation and removed → objects 0, rows 0.
+- e2e `s118-employee-documents` **4 passed** (production build): notice visible, contains the words, has no
+  control inside it, precedes the upload button; 2 files through the queue → +2 rows (service role) and 2
+  objects under that person; a PM is redirected off the page; **/m: the crew member sees their own handbook and
+  not the foreman's**; project Files and Photos pages show none. (One test bug fixed: storage `search` is a
+  prefix match.)
+- Types: only the `employee_documents` block kept (63 lines) — the regenerated file also carried unrelated
+  drift (`s112_anon_lockdown_backup`, `anon_execute_exposure`, `pe_can_upload_project_file`, a missing
+  `test_invite_lookup`), left for their own branches. `lint-job.sh`: 145 files / 1970 passed, all 0 (the `/m`
+  i18n guard included). Baseline 460/290/335/1026, latest `20262060000000`.
+- **Production §8:** dry run exactly its file, PUSH_EXIT 0, relinked; verify: ledger 1, RLS on, the 4 table
+  policies, the 3 storage policies, bucket private, both function md5s, 0 rows — ✅; **fingerprint == baseline**,
+  ledger 266.
+- CI **36592370782** on `407e4ac5` (base = main `b3da5fae`).
