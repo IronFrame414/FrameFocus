@@ -133,3 +133,37 @@ Branch for this log: `feature/s116-report` (docs-only, from `main` = `0de7b883`)
   would not satisfy the ruling that names it. Adds no authority she lacks via her own session.
 - `lint-job.sh`: TYPE 0, LINT 0, TEST 0 — **141 files / 1919 passed**, 0 cache hits (the `/m` i18n
   guard included).
+
+### 6. R10 — green on rebuild-test, waiting on Josh's production step (NOT merged)
+- Rebased onto `8ad95990` (clean); force-pushed with lease → `e77b3ea1`. Migration file md5
+  `e4713911aeeebfc77b808fdcb8b184d9` before and after the rebase (identical).
+- Runbook (`docs/sessions/S115-PRODUCTION-RUNBOOK.md`, on `feature/s115-report`) expected values re-read
+  on rebuild-test via `scripts/live-sql.mjs`: ledger_row 1, column 1, rows_not_false 0, pbi_policies 2,
+  md5_issued `cd98c2cc…`, md5_can_edit `cde4b466…`, md5_add `675545c2…`, md5_update `03790772…`,
+  secdef_count 4 — **all match** the runbook's table.
+
+### Prepared (no DB): H-5, H-1b, R11 rebased onto `8ad95990`, pushed with lease, heads `[skip ci]`
+- H-1b's middleware comment updated from "NOT MERGED — awaits Josh" to "RULED [Josh, S116 Q9 — merge]";
+  `tsc` exit 0. Its negative tests run on the rebased tree before its CI request (DB is busy with
+  C-11's CI now).
+- Verified no CI run was triggered by these pushes (`gh run list`: newest is C-11's).
+
+### Q5 — write-up (NOT built)
+**The question.** R11's use case — the PE "builds the budget jointly and presents the proposal PDF" —
+happens **before** conversion, when `estimates.project_id` is NULL. "Scoped to its own projects"
+therefore reaches nothing at that stage. R11's read slice (queue item 5) covers only converted
+estimates on assigned projects.
+- **A — converted only (what R11's read slice delivers).** No migration. The PE never sees a lead
+  estimate. Cost: the stated use case is not met.
+- **B — the PM's author-floor model.** The PE may create estimates and sees those it authored.
+  Migration: one PE arm on each of the **21** estimate write policies (measured S115 by replaying every
+  policy statement) + 1 read policy; app: `/estimates/new` and the builder's edit gate open to PE;
+  `canAuthorEstimates` widens. Test: total role maps + a live off-project negative written without
+  `.select()` (S181c rule). Recommendation in S115: **B** — one arm per existing policy, mirrors the PM
+  exactly, no new concept.
+- **C — per-estimate assignment.** New table ("this PE is on this estimate"), new UI to assign,
+  policies keyed on it. Most precise, most work; R11's caveat mentions it as a later flag.
+- **D — all company estimates.** Contradicts R1 ("nothing at company level") — listed for
+  completeness only.
+- Also open inside B/C: may the PE **send** a proposal for signature (R1 carve-out 2 keeps send at
+  Owner/Admin today)?
