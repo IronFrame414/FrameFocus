@@ -121,3 +121,39 @@ write WITHOUT `.select()`, counted with the service role; each probe resets the 
   rebase, 5 commits; S118 branch left untouched). Why: rebuild-test carries 2080 too, so an A-only
   baseline cannot be generated from rebuild-test = tree; both carry migrations; two deep. Production
   order: §A1 2075 → §A2 2076 → §B 2080, then one CI on the head, then merge.
+
+### Stack A+B — proofs on the stacked head, then PRODUCTION §A1 / §A2 / §B — ✅ all verified
+Head `feature/s119-material-signout` (item 11 restacked on A; clean rebase).
+- `next build` (production) **BUILD_EXIT=0**. e2e on that build: `s118-material-signouts` **3/3** (the
+  e2e S118 left pending: /m photos-first then receiver signs; /m tile badge + return photo, no close
+  control; desktop overdue + owner records the return); `s119-onboarding` **b 1/1** (real
+  `/invite/accept` form → `crew_member` in the inviting company, invitation `accepted`, signs in →
+  `/dashboard`); **a: not run to completion** — GoTrue refused first `@example.invalid`
+  (`email_address_invalid`; address moved to the fixture sink domain) then rebuild-test's
+  `over_email_send_rate_limit`. The owner branch of `handle_new_user` is proven by the live test
+  (createUser = the same trigger branch with the same metadata); retried below when the window resets.
+  `m-hubs` + `m-photos` (item 11's 4→5 inversions) **76/76**. Live `s118-material-signouts` **46/46**;
+  unit `s118-material-signout` + `s119-deletion-ban-first` **26/26**.
+- Baseline regenerated (rebuild-test ledger 270 == tree 270, `comm` empty): policies **465**
+  `78afbec3…` (467 − the 2 dropped), triggers 297 `8e6055f8…`, functions 343 `d851c0dd…`, constraints
+  1064 `743aaef5…`, latest `20262080000000`. `lint-job.sh` **0/0/0**, 147 files / **2008** tests (`--force`).
+- Item B checks: release photo enforced **in `record_material_signout_receipt`** (refuses without a live
+  `stage='release'` photo, :252-257); INSERT policy pins `status='pending_receipt'`,
+  `receiver_signed_at IS NULL`, `pdf_file_id IS NULL`; no UPDATE/DELETE policy; the only "skip" in the
+  sign-out UI is the comment stating there is none (`signout-detail.tsx:37`).
+- **§A1** `20262075000000`: dry run exactly `[20262075000000_s119_profile_insert_floor.sql]` (first push
+  attempt: pooler connection dropped, PUSH_EXIT 1 — production re-read unchanged, ledger 267 / 9
+  policies — retried). PUSH_EXIT 0. Verified: ledger **268** ✅, row 1 ✅, policies on
+  profiles+companies **7** ✅, `profiles` INSERT **0** ✅, `companies` INSERT **0** ✅, named policies **0** ✅,
+  table note present ✅, auth users without a profile **0** ✅.
+- **§A2** `20262076000000`: dry run exactly its file, PUSH_EXIT 0. Verified: ledger **269** ✅, row 1 ✅,
+  md5 **`6e8d61aa…`** ✅, DEFINER ✅, anon **false** ✅, authenticated **true** ✅.
+- **§B** `20262080000000` (S118 §10): pre-check ledger 269, newest `20262076000000`, companies 2,
+  category 0, tables absent, seed `d190b5b7…` — all as expected; migration file byte-identical to the
+  S118 branch and its file-derived md5s = §10's values. (First dry run: pooler drop, listed nothing,
+  exit 3, nothing pushed — retried.) Dry run exactly its file, PUSH_EXIT 0. Verified: ledger **270** ✅,
+  RLS on both ✅, policies = the 4 insert/select (no update/delete) ✅, category rows **2** ✅, md5s
+  close `3e961632…` / receipt `b9dff991…` / seed `e2d89996…` / both updated_by `f8eaaeeb…` ✅, anon
+  EXECUTE **0** ✅, rows **0/0** ✅.
+- **Final: production `schema_fingerprint()` == committed baseline** on all four dimensions + latest ✅.
+  Every section relinked `nmyphyhmfttxkdoposvf` (read back each time).
