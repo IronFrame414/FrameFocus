@@ -6877,6 +6877,54 @@ export type Database = {
           },
         ]
       }
+      project_name_history: {
+        Row: {
+          company_id: string
+          created_at: string
+          id: string
+          new_name: string
+          old_name: string
+          project_id: string
+          renamed_at: string
+          renamed_by: string | null
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          id?: string
+          new_name: string
+          old_name: string
+          project_id: string
+          renamed_at?: string
+          renamed_by?: string | null
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          id?: string
+          new_name?: string
+          old_name?: string
+          project_id?: string
+          renamed_at?: string
+          renamed_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_name_history_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_name_history_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       project_qb_exclusions: {
         Row: {
           company_id: string
@@ -11119,6 +11167,10 @@ export type Database = {
       project_has_unsigned_contract: {
         Args: { p_project_id: string }
         Returns: boolean
+      }
+      project_name_at: {
+        Args: { p_at: string; p_project_id: string }
+        Returns: string
       }
       promote_site_visit: { Args: { p_estimate_id: string }; Returns: string }
       prune_proposal_views: { Args: never; Returns: number }

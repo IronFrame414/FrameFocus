@@ -244,13 +244,15 @@ describe('SENT documents keep their name; a DRAFT shows the live one', () => {
     const past = new Date(Date.now() - 3_600_000).toISOString();
     const { data: sent, error: sErr } = await admin
       .from('invoices')
-      .insert({ company_id: companyId, project_id: id, status: 'sent', sent_at: past, title: `${MARKER} sent` })
+      // author_member_id is NOT NULL and the service role has no member to default from
+      // (first run: 23502). The Owner authors the fixtures.
+      .insert({ company_id: companyId, project_id: id, status: 'sent', sent_at: past, title: `${MARKER} sent`, author_member_id: member.owner })
       .select('id')
       .single();
     if (sErr) throw new Error(sErr.message);
     const { data: draft } = await admin
       .from('invoices')
-      .insert({ company_id: companyId, project_id: id, status: 'draft', title: `${MARKER} draft` })
+      .insert({ company_id: companyId, project_id: id, status: 'draft', title: `${MARKER} draft`, author_member_id: member.owner })
       .select('id')
       .single();
     await session.owner.from('projects').update({ name: `${MARKER} inv renamed` }).eq('id', id);
@@ -266,7 +268,7 @@ describe('SENT documents keep their name; a DRAFT shows the live one', () => {
     const past = new Date(Date.now() - 3_600_000).toISOString();
     const { data: co, error } = await admin
       .from('change_orders')
-      .insert({ company_id: companyId, project_id: id, co_number: `CO-${MARKER}`, title: `${MARKER} co`, status: 'sent', sent_at: past })
+      .insert({ company_id: companyId, project_id: id, co_number: `CO-${MARKER}`, title: `${MARKER} co`, status: 'sent', sent_at: past, author_member_id: member.owner })
       .select('id')
       .single();
     if (error) throw new Error(error.message);
