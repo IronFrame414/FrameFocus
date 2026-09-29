@@ -111,9 +111,28 @@ export default async function ProjectsPage({
     for (const [id, rc] of Object.entries(map)) {
       revisedContracts[id] = rc.revised;
     }
-    for (const p of projects) {
+    // H-5 [S115] — THE SAME CALLS, NO LONGER ONE AFTER ANOTHER. Measured on the
+    // Company A owner (46 projects): 356 Supabase calls in a chain 263 deep,
+    // ~12 s server time, because each project's report waited for the last.
+    // The ruling above stands — no batch helper, the per-project report as it
+    // is — only the waiting changed: at most PROFIT_CONCURRENCY reports run at
+    // once (bounded, so a large company does not open hundreds of requests),
+    // and the results are then read IN PROJECT ORDER, so every sum below is
+    // the same arithmetic in the same order as before.
+    const PROFIT_CONCURRENCY = 6;
+    const reports: Awaited<ReturnType<typeof getProfitabilityReport>>[] = new Array(projects.length);
+    let next = 0;
+    await Promise.all(
+      Array.from({ length: Math.min(PROFIT_CONCURRENCY, projects.length) }, async () => {
+        while (next < projects.length) {
+          const i = next++;
+          reports[i] = await getProfitabilityReport(projects[i].id);
+        }
+      })
+    );
+    for (const [i, p] of projects.entries()) {
       if (p.status === 'active') contractValueActive += revisedContracts[p.id] ?? 0;
-      const report = await getProfitabilityReport(p.id);
+      const report = reports[i];
       if (!report) {
         marginPercent[p.id] = null;
         continue;
