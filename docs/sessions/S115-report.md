@@ -178,3 +178,143 @@ Each run costs 4 (5 for an owner) sequential Supabase round trips **before** the
 | E2E job, 3 recent green runs | 44.7 / 45.5 / 42.8 min wall; **"Run Playwright tests" step 41.2 / 42.1 / 40.3 min**; build 1.3–2.0; install+npm ci ~1 | `gh run view <id> --json jobs` for 36496252226, 36488865320, 36439127547 |
 | tests | **612** (591 passed, 21 skipped), **1 worker** | run log: "Running 612 tests using 1 worker" / "591 passed (41.2m)" |
 | per-spec breakdown | **not measurable from CI**: `reporter` in CI is `[['github'],['html']]` (`playwright.config.ts:94`); the html report uploads only on failure. The `github` reporter prints no per-test lines — which is also why a hung run and a slow run look identical | `grep -n reporter apps/web/playwright.config.ts` |
+
+---
+
+## Phase 2 — every question, in full (unattended: written, pushed, then Phase 3 proceeds under the narrower-default rule)
+
+R9 verified built before asking: `lib/chat/photos.ts:85` `.eq('category', 'photos')`.
+
+```
+Q1. [ASK-19] R10 lets Owner/Admin/PM/PE add and edit a project's ORIGINAL budget lines "until the first invoice is
+    issued". Measured: an invoice is issued when it leaves draft/pending_approval for 'sent' (sent_at set, number
+    assigned). After that it can be 'paid' or 'voided'. Does a VOIDED invoice still count as "the first invoice was
+    issued" (the window never reopens), or does voiding every issued invoice reopen budget editing?
+    Options: A) any invoice with sent_at set, voided included — once issued, closed for good
+             B) only a live sent/paid invoice — void-and-reissue reopens the window
+    My recommendation: A — it is the narrower window, a void is an accounting event not an undo, and B lets a
+    budget be rewritten after the client has seen a bill.
+    TAKEN (unattended, narrower): A.
+
+Q2. [ASK-R10-PM] R10 includes the Project Manager. But an original line's only money is
+    project_budget_amounts.budgeted_amount, which the Financial Visibility Floor (RULED S150) withholds from a PM for
+    read AND write — PMs see actual + committed cost only. How should the PM take part?
+    Options: A) PM gets no budget-line editing (Owner/Admin/PE only) until you rule
+             B) PM may add lines and edit their description/cost code, never the amount (it cannot see it)
+             C) PM may type an amount it can never read back (write-only through a function)
+             D) open budgeted_amount to the PM — this changes the Floor
+    My recommendation: B — it gives the PM the structural half without touching the Floor; C is a trap (a figure
+    you cannot see is a figure you cannot check); D is a Floor ruling, not an R10 detail.
+    TAKEN (unattended): A — the narrowest; stop rule 4 forbids D, and B/C need your word. PM arm withheld.
+
+Q3. [ASK-R10-SCOPE] R10 overturns the S97 immutability ruling (20260818000000: "the absence of UPDATE and DELETE
+    policies on this table is deliberate… a new line via a change order") for ORIGINAL lines. Confirm the scope:
+    edit = description, cost code and amount of original lines, plus ADD new original lines; NO delete of any line;
+    change-order lines and ad-hoc/Miscellaneous lines stay immutable exactly as today.
+    Options: A) as stated  B) also allow deleting an original line that has no actuals/commitments
+    My recommendation: A — delete is not in R10's words, and a line with charges cannot be deleted anyway (FK).
+    TAKEN (unattended, narrower): A.
+
+Q4. [ASK-20] R11: which estimate surfaces does the Project Executive reach, and may it SEND an estimate to a client?
+    Measured: the PE can ALREADY read, in the database, the converted estimate of each project it is assigned to —
+    lines, markup % and cost basis included (estimates_select_project_executive, 20261830000000; child tables follow
+    by containment). What blocks it is the app: 4 page redirects, the proposal-data API (403) and the nav entry.
+    Options: A) read-only: estimate list (its projects only), builder in read-only mode, proposal preview, PDF
+                download — no edit, no send
+             B) A plus edit (needs the 21-policy write widening + a migration)
+             C) B plus send to the client
+    My recommendation: A now — it delivers "the estimate behind the PDF he hands over" with no migration; sending a
+    proposal for signature is contract-adjacent (R1 carve-out 2), so C should be its own ruling.
+    TAKEN (unattended, narrower): A.
+
+Q5. [ASK-R11-PRECONVERSION] R11's use case — "builds the budget jointly and presents the proposal PDF" — happens
+    BEFORE the estimate becomes a project. Before conversion an estimate has project_id NULL, so "scoped to its own
+    projects" covers nothing at that stage. Which do you want?
+    Options: A) PE sees an estimate only once it is converted onto an assigned project (what A in Q4 delivers)
+             B) PE may create estimates and sees the ones it authored (the PM's author-floor model) — migration,
+                21 write policies + 1 read policy
+             C) a per-estimate assignment (new table: "this PE is on this estimate") — migration, new UI
+             D) PE sees all company estimates (company-level — contradicts R1 "nothing at company level")
+    My recommendation: B — it mirrors the PM exactly, is one arm per existing policy, and covers "builds jointly"
+    without a new concept. The per-assignment flag noted in R11's caveat stays unbuilt.
+    TAKEN (unattended): A only; B/C/D prepared as a write-up, not built (a migration widening 21 policies on an
+    unruled question is the "irreversible/stop-list" class for this session).
+
+Q6. [ASK-21] C-12: the scope Summary is a plain textarea with no hint; authors type markdown (## headings, * bullets)
+    and every surface prints it raw — and the client signing page collapses it into one paragraph. Should the
+    summary be markdown, or should authors get a formatting control?
+    Options: A) render a small markdown subset (headings, bullets, numbered lists, bold, paragraphs) identically on
+                every surface — PDF, signing page, builder preview, project overview desktop and /m — and label the
+                textarea "Formatting: ## heading, - bullet, **bold**"
+             B) a formatting toolbar (bold/heading/list buttons) that writes the same subset
+             C) strip the markup and show plain text
+    My recommendation: A — the text already in the database becomes readable on every surface at once; B can be
+    layered on A later because it would write the same syntax.
+    TAKEN (unattended): A.
+
+Q7. [ASK-22] F-11: the E2E step takes 40–42 min of a 50-min job (612 tests, 1 worker). Raise, shard or split?
+    Options: A) raise timeout-minutes 50 → 75 and add a per-test 'list' reporter (per-test progress + durations
+                in the log, so a hang is distinguishable from slowness)
+             B) shard across N jobs — but workers:1 exists because specs share rebuild-test state; concurrent suites
+                have already produced two false reds
+             C) split the slowest specs into a second job (needs the per-spec timings that A produces)
+    My recommendation: A now, C next session from A's timings.
+    TAKEN (unattended, narrower): A.
+
+Q8. [ASK-H3-STALETIMES] H-3 says `feature/s112-staletimes-hold` "raises the router cache above its 30-second default,
+    so returning to a page is instant". It does the opposite: it sets staleTimes.dynamic to 0, so every revisit
+    refetches (measured S112: 52 → 369 ms unthrottled, 51 → 639 ms Fast 3G, 51 → 2,129 ms Slow 3G). It fixes a
+    CORRECTNESS problem (a page you just changed showing stale) at a speed cost. The ruled condition for revisiting
+    it — loading feedback on /m — is met once m-loading ships.
+    Options: A) do not ship it; keep Next's 30 s default (revisits instant; mutating screens refresh themselves)
+             B) ship dynamic: 0 as held (always fresh, every revisit slower)
+             C) RAISE dynamic above 30 s (faster still) — contradicts the S112 ruling that the cache must never hand
+                back a page the user just changed
+    My recommendation: A — in a PART whose goal is speed, B is a measured regression; the markup-save reorder
+    already fixed the case that prompted it.
+    TAKEN (unattended): nothing shipped (A); stopped and reported per the spec's "a measurement contradicts a RULED
+    line → STOP" rule.
+
+Q9. [ASK-H1-CLAIMS] H-1: the matcher is NOT broad — it is an explicit allow-list that already excludes static
+    assets, images, fonts and every public route, so there is nothing to narrow. The cost is inside: 4–5 sequential
+    Supabase round trips per middleware run (getUser → lock RPC → profiles → companies → subscriptions), and one
+    screen load runs middleware 19–32 times. Built and merged-eligible: run the independent queries together
+    (5 sequential → 3; decisions and their order unchanged). Separately built, NOT merged: replace the Auth-server
+    call getUser() with getClaims() (local ES256 signature check, ~1 ms vs ~50–70 ms) everywhere except
+    /sign-in and /sign-up, where the authoritative call stays (a revoked session must not bounce between /sign-in
+    and /dashboard). Every layout still calls getUser(), so who reaches a page is unchanged.
+    Options: A) merge the getClaims branch  B) keep getUser in middleware
+    My recommendation: A — Supabase's own guidance for middleware; the layouts remain the authoritative check.
+    TAKEN (unattended): B for now (stop rule 6 — an auth-gate change beyond matcher narrowing waits for you).
+
+Q10. [ASK-H5-PREFETCH] Every <Link> in the dashboard sidebar and project tabs, and every photo tile, prefetches its
+    route on load; each prefetch runs middleware (4–5 round trips) and renders the dashboard layout. With no
+    loading.tsx anywhere, a dynamic-route prefetch carries no page data, so it buys almost nothing. Turn it off?
+    Options: A) prefetch={false} on sidebar/tab links and photo tiles
+             B) keep prefetch, add loading.tsx boundaries — but S112 measured loading.tsx breaking 404 and
+                redirect semantics under /m (CI 6 red) and the same applies under /dashboard
+    My recommendation: A. See the H-5 ranked list for the measured effect.
+
+Q11. [ASK-C11-ROLES] C-11: who may delete a project photo? CLAUDE.md's approvals table says "Delete files: Owner,
+    Admin, PM ✓; Foreman —", and R1 gives the PE everything a PM has on its projects. /m today shows Delete to
+    Owner/Admin only; desktop shows nothing. The database is wider still: RLS lets a PM, foreman and crew member
+    soft-delete a photo on a project they can view.
+    Options: A) Owner/Admin/PM/PE on both surfaces (the approvals table + R1), one shared rule
+             B) Owner/Admin only on both surfaces (today's /m)
+    My recommendation: A, and separately floor the foreman/crew soft-delete in RLS (filed as debt, needs your word).
+    TAKEN: A — it is the written rule, not an unruled choice; the widening on /m for PM is the PARITY fix.
+
+Q12. [ASK-F12-ORDER] F-12: `feature/s114-c5-multi-upload` touches 11 components, covers only 7 of #2-s180u's 8
+    (the portal composer is missing), and does the ruled step 2 (adding `multiple` to new inputs) in the same
+    commit as step 1 — the ruling says step 1 first, then step 2. Proofs present: 0 of 8. It also has a duplicate-
+    on-retry risk (a photo that uploads but fails to link is uploaded again on retry, leaving an unlinked row).
+    Options: A) split it: step 1 (the 8, incl. portal) with 8 per-surface proofs merges first; step 2 after
+             B) keep the one commit and add proofs for all 11
+    My recommendation: A — it is the ruled order.
+
+Q13. [ASK-C12-SENT] C-12's renderer change will also change how ALREADY-SENT but unsigned proposals look on the
+    signing page (it renders from live data), and a re-generated PDF of an existing estimate. Stored PDFs of signed
+    contracts are files and are NOT re-rendered. Acceptable?
+    Options: A) yes — they become readable  B) freeze old proposals' look
+    My recommendation: A.
+```
