@@ -232,6 +232,8 @@ export function ProjectHeader({ project, canManage, role }: ProjectHeaderProps) 
             <Link
               key={section.label}
               href={hrefFor(section.tabs[0].slug)}
+              // H-5 [S115] — see dashboard-shell.tsx: the prefetch carried no data.
+              prefetch={false}
               data-testid={`project-section-${section.label.toLowerCase()}`}
               style={{
                 padding: '10px 16px',
@@ -271,6 +273,7 @@ export function ProjectHeader({ project, canManage, role }: ProjectHeaderProps) 
               <Link
                 key={tab.slug}
                 href={hrefFor(tab.slug)}
+                prefetch={false}
                 data-testid={`project-subtab-${tab.slug === '' ? 'overview' : tab.slug}`}
                 style={{
                   padding: '9px 12px',
