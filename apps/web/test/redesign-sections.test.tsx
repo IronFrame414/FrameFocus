@@ -29,8 +29,12 @@ import { renderToStaticMarkup } from 'react-dom/server';
 // assertion.
 
 let pathname = '/dashboard/projects/p1';
+// [S119 C] + useRouter: the header now renders the Rename control for Owner/Admin,
+// which holds a router (render-only here). _Superseded, quoted:_ the mock returned
+// `{ usePathname: () => pathname }` only.
 vi.mock('next/navigation', () => ({
   usePathname: () => pathname,
+  useRouter: () => ({ refresh: () => {}, push: () => {} }),
 }));
 
 import { ProjectHeader } from '@/app/dashboard/projects/[id]/project-header';
