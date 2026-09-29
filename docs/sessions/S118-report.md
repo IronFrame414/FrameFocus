@@ -68,3 +68,48 @@ key numbers re-queried below where stated).
   must fail on the unique key. Fix shape for Josh: `WITH CHECK (user_id = auth.uid() AND company_id
   IS NULL AND role …)` or route profile creation only through `handle_new_user` / the invite
   function; and reorder `deletion.ts` to delete the auth user first.
+
+### Item 4 — stranded branches (rebased locally, not yet pushed/merged)
+- Measured (read-only agent, re-checked where noted): `s112-bid-token-status` 7 ahead / 331 behind;
+  `s112-default-acl-guard` 4 / 318; `s112-catalog-importer` 3 / 331 (clean rebase).
+- **Stop check — `bid-scope` tag: MATCH (no stop).** After my rebase: `route.ts:3` imports
+  `BID_SCOPE_TAG`; `route.ts:115` `.contains('tags', [BID_SCOPE_TAG])`; `route.ts:129`
+  `.filter(bidderCanSeeFile)`; `sub-bid-files.ts:48` `return tags.includes(BID_SCOPE_TAG)`;
+  `sub-bid-files.ts:82` `export const BID_SCOPE_TAG = 'bid-scope'` — **one** declaration (the branch's
+  duplicate dropped). The branch only tightens: `bid_token_state()` refuses closed tokens (403).
+- Conflicts resolved by hand at 4 of 7 commits (`scratchpad/resolve.cjs`, per block): import union
+  then main's import once `bidTokenIsOpen` was removed; main's S114 comment kept; branch's
+  `canShareWithBidders` kept; test file: branch import + main's comments + main's extra
+  `['sub-bid-upload-draft'] → false` + branch's "only PDFs and images" test; `TECH_DEBT.md` union.
+  → `feature/s118-bid-token-status` (7 commits). `tsc` 0; `s107-bidder-file-visibility` **8 passed**.
+- ACL guard: the branch's two docs commits add then delete the same file (net zero) → skipped; the
+  two code commits cherry-picked onto the bid-token head → `feature/s118-acl-guard`; all 4 files
+  **byte-identical** to the original branch (`git diff --quiet`).
+- Migrations (none constrains existing rows; all CREATE OR REPLACE / new functions):
+  1850 `get_sub_bid_request` closed-token shape; 1860 `bid_token_state()` (service_role only),
+  `get_sub_bid_request` uses it, `close_sub_bid_request()` (INVOKER, authenticated); 1890
+  `bid_token_state` keeps the winner after conversion; 1900 `anon_execute_exposure()` (service_role).
+  Rebuild-test has all four. ⚠️ The new files route calls `bid_token_state` — code must not reach
+  production before 1860 (R8 condition 3).
+
+### Item 16 — FILL-16.1 / 16.2 (read-only audit agent; my verification pending in the build)
+- **FILL-16.1:** a person is `profiles` (login, role; soft delete + ~100-year ban on desktop removal via
+  `softDeleteTeamMember`) + `company_members` (member row; `profile_id` unique; trigger
+  `sync_member_deleted_from_profile`). `/m` deactivation flips only `company_members.is_deleted` (no
+  ban). Nothing cascades to `files`. Surfaces: desktop `dashboard/team/[id]` (Owner/Admin; redirects
+  away from a soft-deleted person — conflicts with "files survive the person"), `/m/team/[memberId]`
+  (every role but subcontractor can open a coworker's card), `/m/account` + `dashboard/account` (self).
+- **FILL-16.2:** **59 callers** (52 app call sites reading `files` or signing/downloading
+  `project-files`, + 7 SQL functions), enumerated by call site (grep of `.from('files')`, embeds,
+  `.storage.from(`, `createSignedUrl(s)`, `.download(`, `pg_proc` bodies; views 0). **12 could return a
+  person-scoped row + 1 fragile** (`getFiles` with `project_id` optional). Today only Owner/Admin can
+  SELECT a `files` row with `project_id` and `estimate_id` both NULL (`files_select_non_client`).
+- ⚠️ **Two pre-existing findings (exist before any employee doc):**
+  1. **`selection_option_images`** (SECURITY DEFINER) joins `files` by the pointer
+     `selection_options.image_file_id` with **no company or category check**, signed with the service
+     role, served to the **client portal** and embedded in the emailed spec sheet. Any Owner/Admin/PM
+     (PE on its projects) may set that pointer to any UUID → **the bid-token failure class.**
+  2. **PDF regeneration deletes what `pdf_file_id` points at** (daily log, incident, delivery) with the
+     service role, and the record's author may set `pdf_file_id` (not in the column-scope triggers).
+  Both are fixed inside item 16's migration where they touch an external surface (1), and filed for
+  item-16 hardening (2) — see item 16 build.
