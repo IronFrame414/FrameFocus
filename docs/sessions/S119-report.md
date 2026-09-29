@@ -72,3 +72,52 @@ write WITHOUT `.select()`, counted with the service role; each probe resets the 
 - Fix (`20262076000000`): both joins require `f.company_id`/`f.project_id` = the selection's,
   `f.category = 'photos'`, and the path's first two folders = company/project. Tags NOT checked
   (author-editable; S172 fixtures carry none) — alternative recorded.
+
+### ITEM A — built, applied to rebuild-test, proofs (branch `feature/s119-profile-insert-floor`, `5682d82b`)
+- **A-1 fix** `20262075000000_s119_profile_insert_floor.sql`: DROP `profiles_insert_authenticated` and
+  `companies_insert_unaffiliated`. ⚠️ Unattended decision: **drop, not constrain** — neither policy serves
+  any caller (measured above); a constrained policy still admits a row nobody writes. Alternative (not
+  built): `WITH CHECK (user_id = auth.uid() AND company_id IS NULL AND role …)`.
+- **A-2 fix** `20262076000000_s119_selection_images_scope.sql` (above).
+- Rebuild-test: `section.sh` (rebuilt `prod-section.sh`: link → read back → dry run must list exactly the
+  file → push → ALWAYS relink rebuild-test + read back). 2075: dry run `[20262075000000_…]`, PUSH_EXIT 0;
+  2076: dry run `[20262076000000_…]`, PUSH_EXIT 0; relinked `nmyphyhmfttxkdoposvf` both times.
+- **AFTER the fix, the same probes:** admin insert → **42501; profiles 0; target members 0**; owner →
+  **42501; 0**; company → **42501; rows 0**; control (has a profile) → 42501, profiles unchanged 1.
+  A-2: owner/PM/linked client each → **["good"]** only; client signer → **1** signed URL (the legit one).
+  Battery `s119-profile-insert-floor` + `s119-selection-images-scope` + `s152-m1-fixes` + `s151-m1-audit`
+  + `s135-invite-fallthrough` + `s171-selections-lifecycle` → **68/68**.
+- **Sabotage** (old `profiles_insert_authenticated` + `companies_insert_unaffiliated` re-created and the
+  old function body re-applied, byte-exact from `20261028000000`; snapshot policies 7→9, fn md5 →
+  `ea83f07b…`) → **8 red / 15 green**: exactly admin, owner, company, s152 B2, A-2 owner/PM/linked, signer.
+  Restored from the migration files → snapshot `cmp`-identical (policies `7b43888f…` n=7, fn
+  `6e8d61aa…`), anon EXECUTE false / authenticated true / DEFINER; re-run **12/12**.
+- `s152-m1-fixes.live.ts` **B2 inverted in place** (old title and assertion quoted in the file); s151's
+  cross-reference comment updated.
+- **Signup / invite-accept (stop rule 7):** `handle_new_user` path green before AND after in the live
+  file (group S: owner signup → company + owner profile + member + `trialing`, password sign-in, role
+  owner; invited signup → invited company + `crew_member` + member + invitation `accepted`, sign-in).
+  Browser e2e `s119-onboarding.spec.ts` (real `/sign-up` and `/invite/accept` forms) — run below.
+- **`deletion.ts`** — ⚠️ Unattended decision (the instruction as written is not buildable: 193 NO ACTION
+  FKs to `auth.users`): new `banAuthUsers()` bans every login (`876000h`, as a removed team member)
+  **after the archive gate and before `deleteRows`**; a failed ban holds the job `pending` (stops with
+  the alarm at MAX_ATTEMPTS) and **deletes nothing**. So no login ever outlives its profile un-banned.
+  Alternative (not built): GoTrue soft-delete of the auth user first. Unit `s119-deletion-ban-first`
+  (recording fake; asserts ORDER and that the run reached both deletes, else vacuous) **2/2**; sabotage
+  (main's `deletion.ts`) → **2 red**; restored `cmp`, 2/2. Live `s138-trial-deletion-run` +
+  `tenant-deletion-procedure` (the real walk on rebuild-test) → **19/19**.
+  Residual (filed with the item's landing): after `profiles` is gone, a retry re-reads user ids from
+  `profiles` → [] → an auth user whose delete failed is never retried (it stays banned).
+- **A-3 debt filed** `#1-s119a`…`#5-s119a` (TECH_DEBT.md; converted at landing). ⚠️ **For Josh:
+  `#1-s119a` (PDF regeneration) is CROSS-TENANT DELETION by reading, not "within-company":** the
+  stale-file cleanup deletes by id with the service role, `pdf_file_id` is author-settable and the FK is
+  checked without RLS. Reachable only with a known foreign file UUID. Filed, not fixed, per the ruling;
+  the 3-line fix is in the entry.
+- ⚠️ Tooling defect found and fixed: a worktree whose `node_modules` is a symlink resolves
+  `@framefocus/shared` to the MAIN checkout (on an old branch) → A's first `next build` failed on a type
+  from the wrong tree. `wt-deps.sh` now gives each worktree its own `@framefocus/*` links. The live/DB
+  results above do not depend on it; the unit suite is re-run under lint-job on the corrected tree.
+- ⚠️ Plan: **Item B (item 11, `20262080000000`) stacked on A** as `feature/s119-material-signout` (clean
+  rebase, 5 commits; S118 branch left untouched). Why: rebuild-test carries 2080 too, so an A-only
+  baseline cannot be generated from rebuild-test = tree; both carry migrations; two deep. Production
+  order: §A1 2075 → §A2 2076 → §B 2080, then one CI on the head, then merge.
