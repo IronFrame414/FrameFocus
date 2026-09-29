@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { adminClient, COMPANY_A } from './hub-fixture';
+import { adminClient, COMPANY_A, CREW_MEMBER } from './hub-fixture';
 import { signInAs } from './sign-in-as';
 
 // C-11 [S115] — "There is a delete button on project photos and clicking it
@@ -58,17 +58,21 @@ async function isDeleted(id: string): Promise<boolean | undefined> {
 }
 
 test.beforeAll(async () => {
-  // Any live Company A project; ordered, so the pick is stable run to run.
-  const { data, error } = await admin
-    .from('projects')
-    .select('id')
-    .eq('company_id', COMPANY_A)
+  // A live Company A project the CREW identity is assigned to, so its page
+  // renders for crew (a crew member cannot open an unassigned project, and an
+  // unrendered page would make "no Delete button" vacuous). Ordered, so stable.
+  const { data: asg, error } = await admin
+    .from('project_assignments')
+    .select('project_id, created_at, projects!inner(is_deleted, company_id)')
+    .eq('member_id', CREW_MEMBER)
     .eq('is_deleted', false)
+    .eq('projects.is_deleted', false)
+    .eq('projects.company_id', COMPANY_A)
     .order('created_at', { ascending: true })
     .limit(1)
     .single();
-  if (error || !data) throw new Error(`no Company A project: ${error?.message}`);
-  projectId = data.id as string;
+  if (error || !asg) throw new Error(`no Company A project assigned to crew: ${error?.message}`);
+  projectId = asg.project_id as string;
 });
 
 test.afterAll(async () => {
