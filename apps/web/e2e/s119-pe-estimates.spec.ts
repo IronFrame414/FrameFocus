@@ -60,14 +60,20 @@ test.beforeAll(async () => {
   companyId = (p as { company_id: string }).company_id;
   const { data: m } = await admin.from('company_members').select('id').eq('profile_id', (p as { id: string }).id).single();
   peMember = (m as { id: string }).id;
+  // A contact WITH a job-site address: the form requires one (first run stalled on
+  // the unfilled "Job-site address *" — validation, not permission).
+  const { data: addr } = await admin
+    .from('contact_addresses')
+    .select('contact_id')
+    .eq('company_id', companyId)
+    .eq('is_deleted', false)
+    .order('contact_id')
+    .limit(1)
+    .single();
   const { data: c } = await admin
     .from('contacts')
     .select('id, last_name')
-    .eq('company_id', companyId)
-    .eq('is_deleted', false)
-    .not('last_name', 'is', null)
-    .order('id')
-    .limit(1)
+    .eq('id', (addr as { contact_id: string }).contact_id)
     .single();
   contact = { id: (c as { id: string }).id, search: (c as { last_name: string }).last_name };
   await sweep();
@@ -89,6 +95,9 @@ test.describe('S119 D-2 · the PE and its estimates', () => {
     await page.getByPlaceholder('Search contacts…').click();
     await page.getByPlaceholder('Search contacts…').fill(contact.search);
     await page.getByText(contact.search, { exact: false }).first().dispatchEvent('mousedown');
+    const address = page.locator('main select').first();
+    await expect(address.locator('option')).not.toHaveCount(1);
+    await address.selectOption({ index: 1 });
     await page.getByPlaceholder('e.g. Bishop Kitchen & Flooring Reno').fill(`${MARKER} by-pe ${STAMP}`);
     await page.getByRole('button', { name: 'Create Estimate' }).click();
     await page.waitForURL(/\/dashboard\/estimates\/[0-9a-f-]{36}$/, { timeout: 30_000 });
