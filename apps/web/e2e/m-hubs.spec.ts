@@ -526,16 +526,19 @@ test.describe('M-3 · Project sections hub', () => {
 // M-7 · §4.7
 // ===========================================================================
 test.describe('M-7 · Field', () => {
-  test('A-13b · a 2-column grid of exactly four tiles, each with its badge slot', async ({
+  // [S118 item 11] INVERTED: five tiles — Sign-outs joins the grid (an open
+  // sign-out nobody is shown is one nobody closes). _Superseded, quoted:_
+  // "a 2-column grid of exactly four tiles" / toHaveCount(4).
+  test('A-13b · a 2-column grid of exactly five tiles, each with its badge slot', async ({
     page,
   }) => {
     await page.goto('/m/field');
     const tiles = page.getByTestId('m-field-grid').locator('a');
-    await expect(tiles).toHaveCount(4);
+    await expect(tiles).toHaveCount(5);
 
     const labels = (await tiles.allInnerTexts()).map((t) => t.trim().split('\n')[0]);
     expect(labels).toEqual(
-      expect.arrayContaining(['Daily logs', 'Deliveries', 'Safety', 'Photos'])
+      expect.arrayContaining(['Daily logs', 'Deliveries', 'Safety', 'Photos', 'Sign-outs'])
     );
 
     const cols = await page

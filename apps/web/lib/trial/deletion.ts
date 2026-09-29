@@ -351,6 +351,8 @@ export const COMPANY_TABLES: string[] = [
   'purchase_order_edits',
   'delivery_items', 'deliveries', 'purchase_order_item_assignments', 'purchase_order_items', 'purchase_orders',
   'daily_log_crew', 'daily_log_sub_entries', 'daily_log_material_needs', 'daily_logs', // [S118 item 12] + material_needs
+  // [S118 item 11] photos (FK files, signouts) before the record; both before files/projects.
+  'material_signout_photos', 'material_signouts',
   'safety_incident_injuries', 'safety_incident_witnesses', 'safety_incidents',
   'punch_list_items', 'punch_lists',
   'task_dependencies', 'tasks', 'phases', 'inspections', 'schedule_entries',
@@ -617,6 +619,37 @@ export async function deleteStorage(
   return { removed, failures };
 }
 
+/**
+ * ⚠️ [S119 A-1] Revoke every login BEFORE any row goes.
+ *
+ * The walk deletes `profiles` (deleteRows) and only then the auth users
+ * (deleteAuthUsers). If that second step fails, the login outlives its profile —
+ * a profile-less login, which is exactly the caller S118 item 9 showed could
+ * insert its own Admin profile into any company. The policy is closed
+ * (20262075000000); this closes the state that fed it.
+ *
+ * Why a ban, not "delete the auth user first" (what S119 asked for): 193 NO
+ * ACTION foreign keys point at auth.users from tenant tables (created_by,
+ * updated_by, …) [measured S119], so deleting the auth user before the rows fails
+ * for anyone who ever wrote a row. A trial lock already bans everyone; a PAID
+ * cancellation bans all but clients (banCompanyUsers excludeClients) — those
+ * client logins are the ones this catches. Same duration as a removed team
+ * member (team.ts). Idempotent: re-banning a banned user is a no-op.
+ */
+export async function banAuthUsers(
+  admin: SupabaseClient<Database>,
+  userIds: string[]
+): Promise<{ banned: number; failures: string[] }> {
+  let banned = 0;
+  const failures: string[] = [];
+  for (const id of userIds) {
+    const { error } = await admin.auth.admin.updateUserById(id, { ban_duration: '876000h' });
+    if (!error) banned += 1;
+    else failures.push(`ban ${id}: ${error.message}`);
+  }
+  return { banned, failures };
+}
+
 /** Delete the auth users of a company. Ruled: they go [Josh, S137].
  *  Failures returned, same reasoning as deleteStorage. */
 export async function deleteAuthUsers(
@@ -859,6 +892,32 @@ export async function runTrialDeletion(
           row.company_id,
           `Signed-document archive failed after ${attempts} attempts: ` +
             `${archive.failures.length} failures. Nothing was deleted for this company.`
+        );
+      }
+      continue;
+    }
+
+    // [S119 A-1] No login may outlive its profile: ban them all first, and hold
+    // the job — before a single row goes — if any ban fails. On a retry after
+    // `profiles` is gone, userIds is empty and this is a no-op.
+    const lock = await banAuthUsers(admin, userIds);
+    if (lock.failures.length > 0) {
+      const stop = attempts >= MAX_ATTEMPTS;
+      await admin
+        .from('deletion_jobs')
+        .update({
+          state: stop ? 'stopped' : 'pending',
+          tables_done: tablesDone,
+          last_error: JSON.stringify({ ban: lock.failures }).slice(0, 2000),
+        })
+        .eq('id', jobId);
+      if (stop) {
+        outcome.stopped += 1;
+        await alertDeletionStopped(
+          admin,
+          row.company_id,
+          `Could not revoke ${lock.failures.length} login(s) after ${attempts} attempts. ` +
+            `Nothing was deleted for this company.`
         );
       }
       continue;

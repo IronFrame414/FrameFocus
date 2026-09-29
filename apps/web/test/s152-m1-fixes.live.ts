@@ -121,7 +121,17 @@ describe('S152-B — companies INSERT is restricted to unaffiliated callers', ()
     expect(landed, 'an affiliated Owner minted a second company').toEqual([]);
   });
 
-  it('B2 — a brand-new authenticated user with NO profile CAN still insert', async () => {
+  // ⚠️ INVERTED IN PLACE [S119 A-1, Josh ruled yes 2026-09-29]. This test said:
+  //   title:   "B2 — a brand-new authenticated user with NO profile CAN still insert"
+  //   assert:  toHaveLength(1), "an unaffiliated caller was refused — the policy is
+  //            tighter than ruled and would break signup"
+  // Its premise was false: signup never evaluates this policy (handle_new_user() is
+  // SECURITY DEFINER owned by postgres, rolbypassrls — this migration's own header,
+  // 20261004000000, says so). And the caller it admitted is exactly the
+  // profile-less login that S118 item 9 showed could then insert its own ADMIN
+  // profile. 20262075000000 drops the policy; signup is proven unaffected in
+  // s119-profile-insert-floor.live.ts group S.
+  it('B2 — a brand-new authenticated user with NO profile can NO LONGER insert [S119 A-1]', async () => {
     // The other arm, and the one that proves the policy did not simply close the
     // door. Without it, B1/B1b pass on `WITH CHECK (false)`, which would break
     // any future company-less flow and would look identical from B1 alone.
@@ -171,8 +181,8 @@ describe('S152-B — companies INSERT is restricted to unaffiliated callers', ()
     const { data: landed } = await admin.from('companies').select('id').eq('name', name);
     expect(
       landed,
-      'an unaffiliated caller was refused — the policy is tighter than ruled and would break signup'
-    ).toHaveLength(1);
+      'a profile-less caller created a company — companies_insert_unaffiliated is back'
+    ).toHaveLength(0);
   });
 });
 

@@ -35,9 +35,12 @@ const HAZARD_FILTERS = [
 export default function DailyLogsList({
   project,
   logs,
+  notice,
 }: {
   project: { id: string; name: string };
   logs: DailyLogListItem[];
+  /** [S118 item 11] the Field landing's attention strip (open sign-outs). */
+  notice?: React.ReactNode;
 }) {
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('all');
@@ -82,6 +85,7 @@ export default function DailyLogsList({
       </ListPageHeader>
 
       <FieldTabs projectId={project.id} active="daily-logs" />
+      {notice}
 
       <div className="mt-4">
         <MetricStrip metrics={stripMetrics} />

@@ -95,6 +95,8 @@ export const EXPORT_CATEGORIES: ExportCategory[] = [
       'safety_incidents',
       'safety_incident_injuries',
       'safety_incident_witnesses',
+      'material_signouts', // [S118 item 11]
+      'material_signout_photos', // [S118 item 11]
     ],
     referencesFiles: true,
   },

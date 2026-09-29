@@ -9,6 +9,8 @@ const TABS = [
   { key: 'daily-logs', label: 'Daily Logs', segment: 'daily-logs' },
   { key: 'deliveries', label: 'Deliveries', segment: 'deliveries' },
   { key: 'safety', label: 'Safety', segment: 'safety' },
+  // [S118 item 11] the material sign-out form.
+  { key: 'signouts', label: 'Sign-outs', segment: 'signouts' },
 ] as const;
 
 export type FieldTabKey = (typeof TABS)[number]['key'];

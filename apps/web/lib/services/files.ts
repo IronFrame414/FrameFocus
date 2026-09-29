@@ -37,6 +37,10 @@ export type FileCategory =
   // `app/dashboard/projects/[id]/files/upload/upload-form.tsx` for that
   // reason — see the migration header before adding it.
   | 'selections'
+  // 'material_signout' added by 20262080000000 (S118 item 11) — sign-out release
+  // and return photos and the record PDF. Its own key so the Photos view never
+  // lists pallet shots; app-written, so it is not in the upload picker.
+  | 'material_signout'
   | 'other';
 
 /**

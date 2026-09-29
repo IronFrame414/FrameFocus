@@ -5906,6 +5906,293 @@ export type Database = {
           },
         ]
       }
+      material_signout_photos: {
+        Row: {
+          caption: string | null
+          company_id: string
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          file_id: string
+          id: string
+          is_deleted: boolean
+          signout_id: string
+          sort_order: number
+          stage: string
+          taken_by_member_id: string | null
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          caption?: string | null
+          company_id?: string
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          file_id: string
+          id?: string
+          is_deleted?: boolean
+          signout_id: string
+          sort_order?: number
+          stage: string
+          taken_by_member_id?: string | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          caption?: string | null
+          company_id?: string
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          file_id?: string
+          id?: string
+          is_deleted?: boolean
+          signout_id?: string
+          sort_order?: number
+          stage?: string
+          taken_by_member_id?: string | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "material_signout_photos_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "material_signout_photos_file_id_fkey"
+            columns: ["file_id"]
+            isOneToOne: true
+            referencedRelation: "files"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "material_signout_photos_signout_id_fkey"
+            columns: ["signout_id"]
+            isOneToOne: false
+            referencedRelation: "material_signouts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "material_signout_photos_taken_by_member_id_fkey"
+            columns: ["taken_by_member_id"]
+            isOneToOne: false
+            referencedRelation: "company_members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      material_signouts: {
+        Row: {
+          color_pattern: string | null
+          company_id: string
+          condition_at_release: string
+          condition_at_return: string | null
+          condition_notes: string | null
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          dimensions: string | null
+          expected_return_date: string
+          id: string
+          is_deleted: boolean
+          item_number: string | null
+          job_address: string | null
+          job_name: string
+          manufacturer: string | null
+          material_type: string
+          model_sku: string | null
+          pdf_file_id: string | null
+          project_id: string
+          quantity: string
+          receiver_company: string
+          receiver_consent_text: string | null
+          receiver_contact_name: string | null
+          receiver_driver_name: string | null
+          receiver_phone: string | null
+          receiver_signature_data: string | null
+          receiver_signature_type: string | null
+          receiver_signed_at: string | null
+          receiver_signer_ip: string | null
+          receiver_signer_name: string | null
+          receiver_signer_user_agent: string | null
+          receiver_title: string | null
+          receiver_vehicle: string | null
+          released_by_member_id: string
+          released_signature_data: string
+          released_signature_type: string
+          released_signed_at: string
+          released_signer_name: string
+          released_title: string | null
+          return_location: string | null
+          return_notes: string | null
+          return_signature_data: string | null
+          return_signature_type: string | null
+          return_signed_at: string | null
+          return_signer_name: string | null
+          returned_date: string | null
+          returned_time: string | null
+          returned_to_member_id: string | null
+          signout_date: string
+          status: string
+          updated_at: string
+          updated_by: string | null
+          work_to_be_performed: string | null
+        }
+        Insert: {
+          color_pattern?: string | null
+          company_id?: string
+          condition_at_release: string
+          condition_at_return?: string | null
+          condition_notes?: string | null
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          dimensions?: string | null
+          expected_return_date: string
+          id?: string
+          is_deleted?: boolean
+          item_number?: string | null
+          job_address?: string | null
+          job_name: string
+          manufacturer?: string | null
+          material_type: string
+          model_sku?: string | null
+          pdf_file_id?: string | null
+          project_id: string
+          quantity: string
+          receiver_company: string
+          receiver_consent_text?: string | null
+          receiver_contact_name?: string | null
+          receiver_driver_name?: string | null
+          receiver_phone?: string | null
+          receiver_signature_data?: string | null
+          receiver_signature_type?: string | null
+          receiver_signed_at?: string | null
+          receiver_signer_ip?: string | null
+          receiver_signer_name?: string | null
+          receiver_signer_user_agent?: string | null
+          receiver_title?: string | null
+          receiver_vehicle?: string | null
+          released_by_member_id?: string
+          released_signature_data: string
+          released_signature_type: string
+          released_signed_at?: string
+          released_signer_name: string
+          released_title?: string | null
+          return_location?: string | null
+          return_notes?: string | null
+          return_signature_data?: string | null
+          return_signature_type?: string | null
+          return_signed_at?: string | null
+          return_signer_name?: string | null
+          returned_date?: string | null
+          returned_time?: string | null
+          returned_to_member_id?: string | null
+          signout_date: string
+          status?: string
+          updated_at?: string
+          updated_by?: string | null
+          work_to_be_performed?: string | null
+        }
+        Update: {
+          color_pattern?: string | null
+          company_id?: string
+          condition_at_release?: string
+          condition_at_return?: string | null
+          condition_notes?: string | null
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          dimensions?: string | null
+          expected_return_date?: string
+          id?: string
+          is_deleted?: boolean
+          item_number?: string | null
+          job_address?: string | null
+          job_name?: string
+          manufacturer?: string | null
+          material_type?: string
+          model_sku?: string | null
+          pdf_file_id?: string | null
+          project_id?: string
+          quantity?: string
+          receiver_company?: string
+          receiver_consent_text?: string | null
+          receiver_contact_name?: string | null
+          receiver_driver_name?: string | null
+          receiver_phone?: string | null
+          receiver_signature_data?: string | null
+          receiver_signature_type?: string | null
+          receiver_signed_at?: string | null
+          receiver_signer_ip?: string | null
+          receiver_signer_name?: string | null
+          receiver_signer_user_agent?: string | null
+          receiver_title?: string | null
+          receiver_vehicle?: string | null
+          released_by_member_id?: string
+          released_signature_data?: string
+          released_signature_type?: string
+          released_signed_at?: string
+          released_signer_name?: string
+          released_title?: string | null
+          return_location?: string | null
+          return_notes?: string | null
+          return_signature_data?: string | null
+          return_signature_type?: string | null
+          return_signed_at?: string | null
+          return_signer_name?: string | null
+          returned_date?: string | null
+          returned_time?: string | null
+          returned_to_member_id?: string | null
+          signout_date?: string
+          status?: string
+          updated_at?: string
+          updated_by?: string | null
+          work_to_be_performed?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "material_signouts_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "material_signouts_pdf_file_id_fkey"
+            columns: ["pdf_file_id"]
+            isOneToOne: false
+            referencedRelation: "files"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "material_signouts_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "material_signouts_released_by_member_id_fkey"
+            columns: ["released_by_member_id"]
+            isOneToOne: false
+            referencedRelation: "company_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "material_signouts_returned_to_member_id_fkey"
+            columns: ["returned_to_member_id"]
+            isOneToOne: false
+            referencedRelation: "company_members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       member_burden_settings: {
         Row: {
           burden_multiplier: number
@@ -7777,6 +8064,24 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      s112_anon_lockdown_backup: {
+        Row: {
+          fn: string
+          proacl: string | null
+          recorded_at: string
+        }
+        Insert: {
+          fn: string
+          proacl?: string | null
+          recorded_at?: string
+        }
+        Update: {
+          fn?: string
+          proacl?: string | null
+          recorded_at?: string
+        }
+        Relationships: []
       }
       safety_incident_injuries: {
         Row: {
@@ -10432,6 +10737,15 @@ export type Database = {
         Args: { p_budget_item_id: string }
         Returns: number
       }
+      anon_execute_exposure: {
+        Args: never
+        Returns: {
+          extension: string
+          owner: string
+          security_definer: boolean
+          signature: string
+        }[]
+      }
       apply_change_order_budget: {
         Args: { p_change_order_id: string }
         Returns: number
@@ -10564,6 +10878,19 @@ export type Database = {
           p_new_subcategory_id: string
         }
         Returns: string
+      }
+      close_material_signout: {
+        Args: {
+          p_condition_at_return: string
+          p_return_notes: string
+          p_returned_date: string
+          p_returned_time: string
+          p_signature_data: string
+          p_signature_type: string
+          p_signer_name: string
+          p_signout_id: string
+        }
+        Returns: undefined
       }
       close_sub_bid_request: {
         Args: { p_request_id: string; p_status: string }
@@ -10760,6 +11087,7 @@ export type Database = {
         Returns: boolean
       }
       pe_can_see_payment: { Args: { p_payment_id: string }; Returns: boolean }
+      pe_can_upload_project_file: { Args: { p_name: string }; Returns: boolean }
       pe_on_budget_item: {
         Args: { p_budget_item_id: string }
         Returns: boolean
@@ -10880,6 +11208,18 @@ export type Database = {
           p_payment_account_id?: string
         }
         Returns: Json
+      }
+      record_material_signout_receipt: {
+        Args: {
+          p_ip: string
+          p_signature_data: string
+          p_signature_type: string
+          p_signer_name: string
+          p_signout_id: string
+          p_title: string
+          p_user_agent: string
+        }
+        Returns: undefined
       }
       reorder_estimate_line_rows: {
         Args: { p_line_item_id: string; p_ordered_ids: string[] }
