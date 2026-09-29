@@ -86,3 +86,50 @@ Branch for this log: `feature/s116-report` (docs-only, from `main` = `0de7b883`)
   **0**; PE `project_assignments` → 2, both `is_deleted=true` created 2026-09-26 (pre-existing).
 - `lint-job.sh`: TYPE 0, LINT 0, TEST 0 — **141 files / 1922 passed**, 0 cache hits.
 - Commit `e3a87a1e`; CI request `dd39458e` → run **36551156531** (base = main `8ad95990`).
+
+### Docs (on `feature/s115-report`, commit `144c2779`)
+- **Q8** recorded against the S112 hold: `docs/sessions/S112-router-staleness.md` gains "DECIDED — NOT
+  SHIPPED [Josh, S116 Q8]" with the numbers and "reopen only as a correctness decision". The S114
+  spec's H-3 line corrected in place, the wrong text quoted ("raises Next's client router cache above
+  its 30-second default, so returning to a page you just visited is instant instead of a refetch").
+- Debt filed (branch-scoped, converted when `s115-report` lands): **`#1-s115r`** — RLS
+  `files_update_non_client` lets PM/**foreman/crew/subcontractor** soft-delete any photo on a project
+  they can view (wider than the Q11 rule); **`#2-s115r`** — `project_budget_amounts` direct UPDATE
+  (Owner/Admin `20260816000000`, PE `20261910000000`) bypasses R10's invoice lock. Neither is a
+  policy change made unattended. ⚠️ Caught in my own draft: I had written that crew's markup/tags
+  saves ride `files_update_non_client` — not verified, so the entry now says "likely … NOT verified;
+  enumerate first".
+
+### 7. F-12 — C-5 step 1 rebuilt, branch `feature/s116-c5-step1` (from main `8ad95990`), `72a55123`
+- **The eight** (`#2-s180u`): desktop daily log (`field-ops/.../log-form.tsx`), desktop incident
+  (`components/field/incident-form.tsx`), desktop check-in, delivery edit, expense receipts
+  (`components/expenses/expense-capture-form.tsx`), selection thread (`selection-sheet.tsx`),
+  site-visit record (desktop + `/m`), **client portal composer** (`portal-writes-ui.tsx`). Each now
+  runs `runUploadBatch` (≤3 in flight, every file attempted, each failure named) and renders
+  `UploadBatchList` with Retry. `multiple` added to **no** new input (step 2 is a separate branch).
+- **Duplicate-on-retry fixed first:** the three helpers split into `upload…File` + `link…` (link now
+  `.select('id')` + `applied()`, so an RLS-discarded link is a failure, not a silent success);
+  `makeAttachWorker` remembers an uploaded-but-unlinked id and a retry re-LINKS it. Unit
+  `test/s116-attach-worker.test.ts` **4 passed**; **sabotage** (`uploadedNotLinked.set` removed) →
+  **1 failed / 3 passed** ("RETRY re-links the SAME uploaded file"), restored, `cmp` identical, 4/4.
+- Shared state: `lib/uploads/use-upload-batches.ts` (keyed batches; each keeps its worker, so Retry
+  re-runs only its failed rows against the same record). `UploadBatchList` now reads `t()` —
+  `/m` renders it via the site-visit record and the anti-rot guard allows no literal; English is
+  byte-identical, Spanish added.
+- Record-first forms (log, incident): a save with photos missing **stays on the screen** with Retry
+  and "continue without the missing photos"; Save is replaced so a second click cannot create a
+  second record. Selection thread + portal: the message posts only once its photos have landed, or
+  on "Send without the missing photos". Site visit: each file keeps ONE id for life (the id is the
+  route's and the offline replay's idempotency key) and is held offline at most once.
+- ⚠️ **Unattended decision — portal composer.** It sent note + N photos in ONE multipart request by
+  design (R11 §7.2 "one unit"). A per-file queue needs per-file requests, so: new
+  `POST /api/portal/photos` (one photo, **her session, same two RLS gates, no service role** — the
+  code moved verbatim into `lib/services/portal-photo-upload.ts`), and `POST /api/portal/messages`
+  now takes `fileIds` and **verifies each is hers (`created_by = auth.uid()`), this project,
+  `photos`, client-visible, live, and on no other message** — because
+  `chat_message_photos_insert_client` checks the MESSAGE is hers, not the FILE (read live). An old page
+  posting inline photos gets a 400 "reload", never a silent drop. The message is still written only
+  after its photos are real. Alternative not taken: leave the composer on its single request — that
+  would not satisfy the ruling that names it. Adds no authority she lacks via her own session.
+- `lint-job.sh`: TYPE 0, LINT 0, TEST 0 — **141 files / 1919 passed**, 0 cache hits (the `/m` i18n
+  guard included).
