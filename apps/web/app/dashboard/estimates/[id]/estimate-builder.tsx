@@ -39,7 +39,8 @@ import { useConfirm } from '@/components/confirm/confirm-provider';
 import { color } from '@/lib/theme';
 import { requireEstimateNumber } from '@/lib/estimate-number';
 
-export type BuilderRole = 'owner' | 'admin' | 'project_manager';
+// [S115 R11] project_executive READS (lib/estimate-access.ts) — never edits.
+export type BuilderRole = 'owner' | 'admin' | 'project_manager' | 'project_executive';
 
 export interface TabProps {
   data: EstimateWithChildren;
@@ -169,7 +170,10 @@ export function EstimateBuilder({
   }
 
   const { estimate } = data;
-  const canEdit = estimate.status === 'draft';
+  // [S115 R11] A Project Executive only ever reaches a CONVERTED estimate (RLS),
+  // which is never a draft; the role check makes read-only explicit rather than
+  // an accident of the status.
+  const canEdit = estimate.status === 'draft' && role !== 'project_executive';
   const isManager = role === 'owner' || role === 'admin';
 
   async function runAction(fn: () => Promise<{ success: boolean; error?: string }>) {

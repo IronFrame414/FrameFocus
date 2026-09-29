@@ -4,6 +4,7 @@ import { EstimatesList } from './estimates-list';
 import Link from 'next/link';
 import { listSiteVisits, type SiteVisit } from '@/lib/services/site-visits';
 import { contactDisplayName } from '@framefocus/shared/utils/contact-name';
+import { canAuthorEstimates, canReadEstimates } from '@/lib/estimate-access';
 
 // [S108 Spec A] Open site visits — recorded, not yet estimates. Shown ABOVE
 // the list and never inside it: no number, $0 totals, and excluded from the
@@ -63,7 +64,8 @@ export default async function EstimatesPage() {
     .single();
 
   // §4.13: Foreman/Crew have no estimates access (RLS also blocks).
-  if (!profile || !['owner', 'admin', 'project_manager'].includes(profile.role)) {
+  // [S115 R11] + the Project Executive, read-only (lib/estimate-access.ts).
+  if (!profile || !canReadEstimates(profile.role)) {
     redirect('/dashboard');
   }
 
@@ -102,6 +104,7 @@ export default async function EstimatesPage() {
       <SiteVisitsPanel visits={openVisits} />
       <EstimatesList
         metrics={{ winRate, cohortSize: cohort.length, expiringSoon }}
+        canCreate={canAuthorEstimates(profile.role)}
       />
     </>
   );

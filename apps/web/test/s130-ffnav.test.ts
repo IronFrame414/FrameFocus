@@ -106,13 +106,20 @@ describe('A-N6 — this work changed NO gate', () => {
   // widened gate is invisible until someone sees a page they should not.
   const gateFor = (label: string) => entries().find((e) => e.label === label)?.roles ?? null;
 
-  it('Estimates stays owner/admin/project_manager; Cost Catalog adds project_executive (S114, read only)', () => {
+  it('Estimates and Cost Catalog add project_executive (S114 catalog, S115 R11 estimates — both read only)', () => {
     // ⚠️ WAS: 'Estimates and Cost Catalog stay owner/admin/project_manager', with
     // both labels expected to equal "'owner', 'admin', 'project_manager'".
     // [S114 PART A] S111 Q3 RULED the Project Executive READS the catalog (no
     // write); the nav now offers it. Estimates is unchanged (S111 Q7: no
     // sales-stage access).
-    expect(gateFor('Estimates'), 'Estimates').toBe("'owner', 'admin', 'project_manager'");
+    // ⚠️ [S115 R11] INVERTED IN PLACE. Superseded assertion, quoted:
+    //   expect(gateFor('Estimates'), 'Estimates').toBe("'owner', 'admin', 'project_manager'");
+    // R11 [Josh, 2026-09-28] overturns S111 Q7 for the PE's OWN projects: it
+    // reads the estimate behind the proposal it presents (lib/estimate-access.ts;
+    // RLS shows it only converted estimates on assigned projects).
+    expect(gateFor('Estimates'), 'Estimates').toBe(
+      "'owner', 'admin', 'project_executive', 'project_manager'"
+    );
     expect(gateFor('Cost Catalog'), 'Cost Catalog').toBe(
       "'owner', 'admin', 'project_executive', 'project_manager'"
     );

@@ -4,6 +4,8 @@ import { getCompanyTimezone } from '@/lib/services/company';
 import { getUploaderNames } from '@/lib/services/photos';
 import { getSiteVisit, getSiteVisitAccess } from '@/lib/services/site-visits';
 import { EstimateBuilder } from './estimate-builder';
+import { canReadEstimates } from '@/lib/estimate-access';
+import type { BuilderRole } from './estimate-builder';
 
 interface PageProps {
   params: { id: string };
@@ -24,7 +26,8 @@ export default async function EstimateBuilderPage({ params }: PageProps) {
     .eq('is_deleted', false)
     .single();
 
-  if (!profile || !['owner', 'admin', 'project_manager'].includes(profile.role)) {
+  // [S115 R11] + the Project Executive, read-only (lib/estimate-access.ts).
+  if (!profile || !canReadEstimates(profile.role)) {
     redirect('/dashboard');
   }
 
@@ -63,7 +66,7 @@ export default async function EstimateBuilderPage({ params }: PageProps) {
   return (
     <EstimateBuilder
       estimateId={params.id}
-      role={profile.role as 'owner' | 'admin' | 'project_manager'}
+      role={profile.role as BuilderRole}
       userId={user.id}
       companyTimeZone={companyTimeZone}
       estimatorName={estimatorName}

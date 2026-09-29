@@ -107,7 +107,9 @@ const NAV_ITEMS: {
     href: '/dashboard/estimates',
     label: 'Estimates',
     icon: FileText,
-    roles: ['owner', 'admin', 'project_manager'],
+    // [S115 R11] + project_executive: read-only, and RLS shows it only the
+    // estimates behind its assigned projects (lib/estimate-access.ts).
+    roles: ['owner', 'admin', 'project_executive', 'project_manager'],
     section: null,
   },
   // [S110 B, RULED Josh Q5 → A] — SITE VISITS, top level, for EVERY internal
