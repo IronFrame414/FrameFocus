@@ -206,7 +206,7 @@ export function IncidentForm({
   // [S116 F-12, #2-s180u] The photos upload through the shared queue (≤3 in
   // flight, each failure named). An incident that saved with photos still
   // missing STAYS here with "Retry" (only those, against the SAME incident —
-  // never a second report) and "Continue to the incident".
+  // never a second report) and a button to continue without them.
   const batches = useUploadBatches();
   const [savedIncident, setSavedIncident] = useState<{
     id: string;

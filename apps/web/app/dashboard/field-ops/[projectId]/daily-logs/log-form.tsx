@@ -77,7 +77,7 @@ export function LogForm({
   // [S116 F-12, #2-s180u] The photos upload through the shared queue (≤3 in
   // flight, each failure named). A log that saved with photos still missing
   // STAYS on this screen with "Retry" (only the missing ones, against the SAME
-  // log — never a second log) and "Continue to the log".
+  // log — never a second log) and a button to continue without them.
   const batches = useUploadBatches();
   const [savedLogId, setSavedLogId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
