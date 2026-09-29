@@ -167,3 +167,41 @@ Head `feature/s119-material-signout` (item 11 restacked on A; clean rebase).
   will be run by hand once the window resets. Alternative: keep it in CI and accept a flaky red. Test b
   (real `/invite/accept`, also a browser `signUp`) passed in CI and stays ungated.
 - lint-job 0/0/0 (147 / 2008). Second run **36633531126** on `0cad9176`.
+
+### ITEM E — item 15, the remaining slow spots: built and proven (branch `feature/s119-slow-spots`, `82d42a84`)
+Instruments rebuilt (S118's were lost): `fetch-log.cjs` (`--require` preload, every server fetch to
+`*.supabase.co` with start/end) + `server-measure.mjs` (one document GET at a time; calls, auth calls,
+sequential depth = longest chain where each call starts after the previous ended, server wall; warm run
+discarded, median of 5), and `nav-measure.mjs` (Playwright, fresh context with the session cookies;
+document requests, total requests, requests whose PATH the middleware matcher catches, `/api/chat/threads`
+calls in the first 10 s, TTFB, load). Local production build (`BUILD_EXIT=0` both sides) against
+rebuild-test; same scripts, same identities (`josh+qa-admin`, `josh+crew`), project `4a4f8567…`.
+
+| measurement | before (stack head) | after |
+| --- | --- | --- |
+| Budget page: Supabase calls / sequential depth / server wall (median 5) | 40 / **9** (8–11) / **907 ms** | 40 / **7** (7–7) / **535 ms** (514–953) |
+| `/m` redirect response itself: calls / depth / wall | 6 / 4 / 347 ms | **0 / 0 / 2 ms** |
+| `/m` cold launch (crew): doc requests / TTFB / load (median 5) | 2 / 877 / 1051 ms | 2 / **462** / **618 ms** |
+| Photos first load (admin): `/api/chat/threads` calls | **2** (S115 measured 4; H-5 removed the rest) | **1** |
+- **E-1** (money code): `getBudgetRollup` = three concurrent chains (lines ∥ COs; expenses → {contracts ∥
+  allocations ∥ payments}; selection subcategories), service depth 8 → 3; `getJobCostRollup` = expense
+  chain ∥ labor chain, 6 → 3. Same queries, filters and derivations. **Proofs:** both rollups dumped for
+  all **17** Sabal Point projects × Owner/PM/foreman (102 entries, 202,757 bytes) on the old code and the
+  new → **`cmp` byte-identical**. Control: payments read sabotaged to return nothing → dumps differ (27
+  fields); `budget.ts` restored `cmp`-identical. Money suites `s175-stage5-selection-money` +
+  `s97ct-budget-floor` **47/47 before and after**. Page depth stops at 7 because other reads in the page's
+  `Promise.all` are now the longest chain.
+- ⚠️ Found on main: `s175-stage5-selection-money` F1/F2 were **red** (its `supabase-server` mock lacked
+  `getRequestUser`, which S115 H-2 put on the profitability path; live suites are not in CI). Mock fixed
+  in this branch (superseded line quoted); 47/47 includes them.
+- **E-2:** `start_url` stays `/m` (S164 ruled out moving installed icons; without an `id` the start URL is
+  the PWA's identity). ⚠️ Unattended decision: `next.config.js` `redirects()` answers `/m` → `/m/timeclock`
+  (307) **before middleware and the /m layout**; `app/m/page.tsx` stays as the fallback. Alternative not
+  taken: a middleware rewrite (one request, but the URL stays `/m` and the shell derives its tab and
+  title from the pathname). The cold launch still makes two requests; the first now costs nothing.
+  Note: `nav-measure`'s "middleware" column counts matcher-matching PATHS, so it reads 5 both sides; the
+  server log shows the `/m` hop now makes 0 Supabase calls.
+- **E-3:** `ChatPanel` fetched the badge from two mount effects; the `!open` effect already fires on
+  mount → the duplicate removed (superseded effect quoted).
+- e2e `s119-slow-spots` **2/2**; **sabotage** (both files back to their old versions, rebuilt) → **2 red**
+  (`/sign-in` ≠ `/m/timeclock`; 2 ≠ 1 calls); restored `cmp`-identical. No migration.
