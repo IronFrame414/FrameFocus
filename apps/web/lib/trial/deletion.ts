@@ -434,6 +434,10 @@ export const COMPANY_TABLES: string[] = [
   // precedent) [Q4].
   'client_access_events',
   'push_subscriptions', 'notifications', 'invitations',
+  // S118 item 16 — employee_documents.member_id references company_members with
+  // NO ACTION (documents survive the PERSON), so they must go before members when
+  // the whole COMPANY goes. Their objects live in the employee-documents bucket.
+  'employee_documents',
   'company_members', 'profiles', 'subscriptions',
 ];
 
@@ -568,7 +572,7 @@ export async function detachSurvivors(
 }
 
 /**
- * Remove every storage object under the company prefix, in all three buckets.
+ * Remove every storage object under the company prefix, in all four buckets (employee-documents added S118; was "all three").
  *
  * ⚠️ FAILURES ARE RETURNED, NEVER SWALLOWED [§4 of the analysis, ruled]. The
  * previous shape ignored a failed remove() and read a failed list() as an
@@ -583,7 +587,8 @@ export async function deleteStorage(
 ): Promise<{ removed: number; failures: string[] }> {
   let removed = 0;
   const failures: string[] = [];
-  for (const bucket of ['project-files', 'company-logos', 'exports']) {
+  // [S118 item 16] + employee-documents. _Superseded, quoted:_ `['project-files', 'company-logos', 'exports']`
+  for (const bucket of ['project-files', 'company-logos', 'exports', 'employee-documents']) {
     // Recursive walk: list() is one level at a time.
     const stack = [companyId];
     const paths: string[] = [];

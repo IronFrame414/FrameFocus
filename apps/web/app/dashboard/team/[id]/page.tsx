@@ -96,6 +96,16 @@ export default async function TeamMemberEditPage({ params }: { params: { id: str
   return (
     <div className="p-6 max-w-4xl mx-auto">
       <h1 className="text-2xl font-bold mb-4">Edit Team Member</h1>
+      {/* S118 item 16 — documents filed against this person (Owner/Admin). */}
+      <p className="mb-4 text-sm">
+        <Link
+          href={`/dashboard/team/${target.id}/documents`}
+          className="font-semibold text-blue-700 hover:underline"
+          data-testid="team-member-documents-link"
+        >
+          Documents
+        </Link>
+      </p>
       {isSelf ? (
         // Team → Edit is for editing OTHERS; your own name lives on the Account
         // page — the ONE self-edit path (S177). Keeping the block (rather than

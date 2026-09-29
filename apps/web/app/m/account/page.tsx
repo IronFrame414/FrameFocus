@@ -4,6 +4,8 @@ import { getCompany } from '@/lib/services/company';
 import { NameForm } from '@/components/account/name-form';
 import { PasswordForm } from '@/components/account/password-form';
 import { LanguageForm } from '@/components/account/language-form';
+import { MyDocuments } from '@/components/employee-documents/my-documents';
+import { getMyEmployeeDocuments } from '@/lib/services/employee-documents';
 import { getMobileT } from '@/lib/i18n/server';
 import { SetMobileHeader } from '../mobile-header';
 
@@ -12,7 +14,12 @@ import { SetMobileHeader } from '../mobile-header';
 // Shares the ONE NameForm + updateMyName and, since S109 #162, the ONE
 // PasswordForm + changeMyPassword with the desktop page (parity S122).
 export default async function MobileAccountPage() {
-  const [profile, company, t] = await Promise.all([getMyProfile(), getCompany(), getMobileT()]);
+  const [profile, company, t, myDocuments] = await Promise.all([
+    getMyProfile(),
+    getCompany(),
+    getMobileT(),
+    getMyEmployeeDocuments(),
+  ]);
   if (!profile) redirect('/sign-in');
 
   return (
@@ -34,6 +41,11 @@ export default async function MobileAccountPage() {
       {/* S110 H, ruling 1 — the language toggle, same form as the desktop page. */}
       <section className="mt-[14px] rounded-[15px] border border-m6m-border bg-m6m-card p-[16px]">
         <LanguageForm initial={profile.language} />
+      </section>
+      {/* S118 item 16 — the employee's OWN documents, read-only. Crew are on
+          phones: this is where a signed handbook is read. */}
+      <section className="mt-[14px] rounded-[15px] border border-m6m-border bg-m6m-card p-[16px]">
+        <MyDocuments documents={myDocuments} />
       </section>
     </div>
   );

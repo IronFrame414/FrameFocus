@@ -21,6 +21,11 @@ const core = {
   // ── account (shared: /m/account and /dashboard/account) ──
   'account.title': 'Your account',
   'account.password': 'Password',
+  // S118 item 16 — documents the office filed against you (read-only).
+  'account.docs.title': 'My documents',
+  'account.docs.none': 'Nothing has been filed for you yet.',
+  'account.docs.open': 'Open',
+  'account.docs.openFailed': 'This document could not be opened.',
   'account.language': 'Language',
   'account.language.help':
     'The app on your phone, and anything your team writes, will show in this language. Estimates, invoices and anything sent to a client stay in English.',
@@ -72,6 +77,10 @@ export type MsgKey = keyof typeof en;
 const coreEs: Record<keyof typeof core, string> = {
   'account.title': 'Tu cuenta',
   'account.password': 'Contraseña',
+  'account.docs.title': 'Mis documentos',
+  'account.docs.none': 'Todavía no se ha archivado nada para ti.',
+  'account.docs.open': 'Abrir',
+  'account.docs.openFailed': 'No se pudo abrir este documento.',
   'account.language': 'Idioma',
   'account.language.help':
     'La aplicación en tu teléfono, y lo que escribe tu equipo, se mostrarán en este idioma. Los presupuestos, las facturas y todo lo que se envía a un cliente siguen en inglés.',

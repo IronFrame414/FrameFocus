@@ -3,6 +3,8 @@ import { getMyProfile } from '@/lib/services/profiles';
 import { NameForm } from '@/components/account/name-form';
 import { PasswordForm } from '@/components/account/password-form';
 import { LanguageForm } from '@/components/account/language-form';
+import { MyDocuments } from '@/components/employee-documents/my-documents';
+import { getMyEmployeeDocuments } from '@/lib/services/employee-documents';
 
 // Personal account — self-service, EVERY role (no role gate; the dashboard layout
 // already requires a session). Name [Josh, S177] and, since S109 #162, password —
@@ -11,7 +13,7 @@ import { LanguageForm } from '@/components/account/language-form';
 // disabled email/avatar fields. Email is an auth surface (a Supabase re-confirmation flow), not a
 // profile field; notification preferences have no table.
 export default async function AccountPage() {
-  const profile = await getMyProfile();
+  const [profile, myDocuments] = await Promise.all([getMyProfile(), getMyEmployeeDocuments()]);
   if (!profile) redirect('/sign-in');
 
   return (
@@ -33,6 +35,10 @@ export default async function AccountPage() {
       <h2 className="mt-8 text-lg font-semibold text-gray-900">Language</h2>
       <div className="mt-3 rounded-xl border border-gray-200 bg-white p-6">
         <LanguageForm initial={profile.language} />
+      </div>
+      {/* S118 item 16 — the same component /m/account renders (PARITY). */}
+      <div className="mt-8 rounded-xl border border-gray-200 bg-white p-6">
+        <MyDocuments documents={myDocuments} />
       </div>
     </div>
   );
