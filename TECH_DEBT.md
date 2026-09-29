@@ -12,9 +12,11 @@
 > register) is the assignment authority, unchanged from CLAUDE.md's rule that *main's file is the
 > authority*. **Numbers are IMMUTABLE — never reused, reassigned, or compacted — and they span all
 > THREE files.** The next free number is **one above the highest number appearing in ANY of the
-> three files**. The highest currently allocated is **#174** (in this file — S118, `#173`–`#174`, 2026-09-29,
+> three files**. The highest currently allocated is **#180** (in this file — S119, `#175`–`#180`, 2026-09-29,
+> converted from `#1-s119a`–`#5-s119a` plus `#180` filed at landing when `feature/s119-profile-insert-floor`
+> landed), so the next free number is **#181**. _Superseded, quoted: "The highest currently allocated is **#174** (in this file — S118, `#173`–`#174`, 2026-09-29,
 > converted from `#1-bidtok`/`#2-bidtok` when `feature/s112-bid-token-status` landed), so the next free
-> number is **#175**. _Superseded, quoted: "The highest currently allocated is **#172** (in this file —
+> number is **#175**."_ _Earlier superseded, quoted: "The highest currently allocated is **#172** (in this file —
 > S116, `#171`–`#172`, 2026-09-29, converted from `#1-s115r`/`#2-s115r` when `feature/s115-report`
 > landed), so the next free number is **#173**."_ _Earlier superseded, quoted: "The highest currently allocated is **#170** (in this file — S114 PART C,
 > `#166`–`#170`, 2026-09-28, converted from `#1-s114c`–`#5-s114c` when `feature/s114-c-no-migration`
@@ -2435,7 +2437,7 @@ direct path today. Closing it = dropping/narrowing those UPDATE arms so the func
 (check every writer first: conversion, CO apply, the recompute triggers — S115 mapped 6). Policy change →
 needs Josh's word; not done unattended. Land after R10 is on production.
 
-## `#1-s119a` — ⚠️ PDF regeneration hard-deletes whatever `pdf_file_id` points at — and that pointer can name ANOTHER company's file
+## `#175` (was `#1-s119a`) — ⚠️ PDF regeneration hard-deletes whatever `pdf_file_id` points at — and that pointer can name ANOTHER company's file
 
 Filed S119 ITEM A-3 (S118 item 16 audit). `apps/web/lib/services/daily-log-pdf-service.ts:176-185`,
 `delivery-pdf-service.ts:176-185`, `incident-pdf-service.ts:117-126`: the stale-artifact cleanup reads
@@ -2449,7 +2451,7 @@ foreign file's UUID (not enumerable through RLS). Fix shape (3 services, no migr
 freeze `pdf_file_id` to the service role in the column-scope triggers. **Not fixed today:** the S119
 ruling is "file, do not fix" for this list; the premise difference is raised with Josh in the S119 report.
 
-## `#2-s119a` — `email_has_account` answers "does this email have an account" to any Owner/Admin
+## `#176` (was `#2-s119a`) — `email_has_account` answers "does this email have an account" to any Owner/Admin
 
 Filed S119 ITEM A-3 (S118 item 9). `supabase/migrations/20260916000000_email_has_account.sql:35`
 (SECURITY DEFINER; EXECUTE `authenticated`). Anyone can become an Owner by signing up, so this is an
@@ -2457,7 +2459,7 @@ account-existence oracle for any address. **Not fixed today:** it discloses exis
 content, no tenant data), and the invite flow depends on it; a rate limit or a same-company scope is a
 design decision for Josh.
 
-## `#3-s119a` — `record_client_payment` does not check `p_contact_id`'s company when there are no applications
+## `#177` (was `#3-s119a`) — `record_client_payment` does not check `p_contact_id`'s company when there are no applications
 
 Filed S119 ITEM A-3 (S118 item 9). `supabase/migrations/20261830000000_s111_project_executive_floor_reads.sql:159`
 (live body; inserts `p_contact_id` at :204, and compares it only per application at :238). With
@@ -2465,7 +2467,7 @@ Filed S119 ITEM A-3 (S118 item 9). `supabase/migrations/20261830000000_s111_proj
 id — an FK-valid, RLS-invisible row in their own company. **Not fixed today:** within-company integrity,
 no disclosure; money code (stop rule 3 territory) wants its own session and tests.
 
-## `#4-s119a` — `create_safety_incident` trusts the member ids in its JSON
+## `#178` (was `#4-s119a`) — `create_safety_incident` trusts the member ids in its JSON
 
 Filed S119 ITEM A-3 (S118 item 9). Live 7-arg SECURITY INVOKER body
 `supabase/migrations/20260722020000_6c_create_incident_fn.sql:12`; the dead 6-arg DEFINER overload
@@ -2473,13 +2475,24 @@ Filed S119 ITEM A-3 (S118 item 9). Live 7-arg SECURITY INVOKER body
 member ids in `p_injuries` / `p_witnesses` are not checked against the incident's company. **Not fixed
 today:** the live path is INVOKER, so child-row RLS still applies; integrity only, no disclosure.
 
-## `#5-s119a` — Two payment functions say "belongs to another company" instead of "not found"
+## `#179` (was `#5-s119a`) — Two payment functions say "belongs to another company" instead of "not found"
 
 Filed S119 ITEM A-3 (S118 item 9). Live on production (by `prosrc`): `apply_client_credit`
 (`20260804000000_7e_payments.sql:642`) and `record_client_payment`
 (`20261830000000_s111_project_executive_floor_reads.sql:226`). The message confirms that a foreign
 invoice id exists. **Not fixed today:** ids are random UUIDs (no enumeration); wording-only change,
 batched with the next payments migration.
+
+## `#180` — Trial deletion: an auth user whose delete fails AFTER `profiles` is gone is never retried
+
+Filed S119 ITEM A-1 (found while building the ban-first step). `apps/web/lib/trial/deletion.ts`
+`runTrialDeletion`: user ids are re-read from `profiles` on every run. Once `deleteRows` has removed
+`profiles`, a retry reads `[]`, so an auth user whose `deleteUser` failed is never retried and the job
+completes with `auth_done = true`. Since S119 that login is BANNED before any row goes (`banAuthUsers`),
+so it cannot sign in — the exposure S118 item 9 named is closed; what remains is an orphaned auth row
+and a dishonest `auth_done`. Fix shape: persist the user ids on `deletion_jobs` (a nullable column) at
+the first run. **Not fixed today:** needs a migration on a live table and its own test; the security half
+is closed.
 
 ## Process notes
 
