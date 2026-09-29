@@ -68,6 +68,16 @@ ruled and coming). Once a tap is acknowledged at once, a 0.6–2 s fetch is a no
 a dead tap. Re-measure with the same harness (`nav-cost.mjs`, §1), then decide. Until then this
 branch is a measured option, not debt.
 
+**⚠️ DECIDED — NOT SHIPPED [Josh, S116 Q8, 2026-09-29].** The revisit condition was met (S115 H-3
+shipped `/m`'s pending bar, main `0de7b883`) and Josh ruled **not** to ship this branch. The numbers
+stand: `staleTimes.dynamic: 0` makes **every** revisit refetch — 52 → 369 ms unthrottled, 51 → 639 ms
+Fast 3G, 51 → 2,129 ms Slow 3G. It is a **correctness** fix bought with speed, and the markup-save
+reorder (§2) already fixed the case that prompted it. **It does not make navigation faster; it makes
+it slower.** Do not un-park it as a speed fix: the S114 spec's H-3 line that said it "raises Next's
+client router cache above its 30-second default" was wrong and is corrected in place there. Reopen
+only as a correctness decision, with a named stale-after-mutation case that `router.refresh()` on the
+mutating screen cannot fix.
+
 ## 2. The reorder — `markup-canvas.tsx`: push first, then refresh
 
 `action-queue.js` discards a pending action when a navigation arrives. The old

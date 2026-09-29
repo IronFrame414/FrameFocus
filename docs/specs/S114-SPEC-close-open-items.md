@@ -800,9 +800,13 @@ classic). Fix the waterfalls; report the before and after in milliseconds.
 **H-3. Navigation feel — the work is already built and parked.**
 Two branches were held as a **pair** a week ago and neither shipped:
 - `feature/s112-m-loading` — loading feedback on `/m`. Pushed without CI, unverified (S113 B-7).
-- `feature/s112-staletimes-hold` — raises Next's client router cache above its 30-second default, so
-  returning to a page you just visited is instant instead of a refetch. ⚠️ **Held by ruling until `/m`
-  had loading feedback**, which is what the first branch provides.
+- `feature/s112-staletimes-hold` — **sets `staleTimes.dynamic` to 0 (from Next's 30-second default),
+  so every revisit refetches: a correctness fix bought with speed** (S112-router-staleness §1: 52 → 369
+  ms unthrottled, 51 → 2,129 ms Slow 3G). ⚠️ **Held by ruling until `/m` had loading feedback**, which is
+  what the first branch provides. **NOT SHIPPED [Josh, S116 Q8]** — see S112-router-staleness.md
+  "DECIDED". _Corrected in place [S116]; the line as written said: "raises Next's client router cache
+  above its 30-second default, so returning to a page you just visited is instant instead of a
+  refetch." Measured S115 H-3: it does the opposite._
 **Ship them in that order.** Verify the first, then un-park the second and state the ruling's condition
 as met.
 

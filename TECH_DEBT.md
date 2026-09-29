@@ -2393,6 +2393,31 @@ staff surface decides by `category` (R7, RULED: a scanned plan or photographed p
 client sees a photographed permit among the photos. Fix: the portal reads the same category rule
 (`PHOTO_VIEW_FILTER` / `getDocumentFiles`, `lib/services/files.ts`), with its own `client_visible` filter kept.
 
+## `#1-s115r` — RLS lets foreman, crew and subcontractors soft-delete project photos (wider than any written rule)
+
+Found S115 C-11, measured S116 against rebuild-test's live `pg_policies`. **`files_update_non_client`**
+(`20260822000000:98-100`) admits `project_manager`, `foreman`, `crew_member` and `subcontractor` to UPDATE any
+`files` row on a project `can_view_project()` admits, for every category except
+`contracts`/`change_orders`/`invoices` — so any of them can set `is_deleted = true` on a photo. The written rule
+is **Owner/Admin/PM/PE** [Josh, S116 Q11; CLAUDE.md approvals "Delete files"; R1], and the UI (`canDeletePhoto`,
+`lib/photos/delete-permission.ts`) offers delete to exactly those. **A hidden button protects no row.** The
+same policy likely carries crew's legitimate photo writes (markup, tags — NOT verified; enumerate the
+`files` UPDATE call sites a crew identity reaches before narrowing), so the floor is probably a column- or
+transition-scoped guard on `is_deleted` (a RESTRICTIVE policy or a BEFORE UPDATE trigger refusing
+`is_deleted` false→true unless the role is O/A/PM/PE), not "no UPDATE for crew". Policy change → migration → needs Josh's word;
+not done unattended. Check `files_z_site_visit_freeze` (a RESTRICTIVE policy on the same column) for the shape.
+
+## `#2-s115r` — `project_budget_amounts` can be UPDATEd directly with no invoice lock (R10's lock binds only its functions)
+
+Found S115 R10. R10 (`20262020000000`, branch `feature/s115-r10-budget-edit`) makes original budget lines
+editable until the first invoice is issued, **through two SECURITY DEFINER functions** that enforce the lock.
+But the pre-existing policies on `project_budget_amounts` — Owner/Admin INSERT/UPDATE (`20260816000000`) and PE
+INSERT/UPDATE on its projects (`20261910000000:105,107`) — still let those roles UPDATE `budgeted_amount`
+**directly**, before or after an invoice, on any line (original, change-order or ad-hoc). No UI uses the
+direct path today. Closing it = dropping/narrowing those UPDATE arms so the functions are the only writer
+(check every writer first: conversion, CO apply, the recompute triggers — S115 mapped 6). Policy change →
+needs Josh's word; not done unattended. Land after R10 is on production.
+
 ## Process notes
 
 When closing an item:
