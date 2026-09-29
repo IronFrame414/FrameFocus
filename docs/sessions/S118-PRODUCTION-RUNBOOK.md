@@ -119,3 +119,23 @@ policies **3** (`…_select_visible`, `…_insert_authorized`, `…_update_autho
 (file-derived; all five equal rebuild-test's measured values); rows 0.
 Final: fingerprint = committed baseline — policies 463 `b4e86072…`, triggers 293 `530741c6…`, functions 339
 `c643725b…`, constraints 1035 `f0445bd7…`, latest `20262070000000`.
+
+## Item 11 — material sign-out (branch `feature/s118-material-signout`)
+
+Pre-check (production, read-only, measured): ledger must read 267, newest `20262070000000` (item 12 first);
+companies **2**; `file_categories` key `material_signout` **0**; `material_signouts` and
+`material_signout_photos` absent; `seed_file_categories` md5 `d190b5b7d0d5e59873094129c107a4c9`. The only
+write to existing data is the additive category backfill (`INSERT … ON CONFLICT DO NOTHING`, one row per
+company); no constraint over existing rows.
+
+### §10 — `20262080000000_s118_material_signouts`
+After: ledger 268; both tables exist, RLS on; policies **2 + 2** (`material_signouts_select_staff` r,
+`material_signouts_insert_staff` a; `material_signout_photos_select_staff` r,
+`material_signout_photos_insert_staff` a; NO update/delete on either); `file_categories` key
+`material_signout` = **2** (= companies); md5 `record_material_signout_receipt` =
+`b9dff991bfedf6715da5c210effe4a03`, `close_material_signout` = `3e961632098ae2ccc19bd80a5fae4f84`,
+`seed_file_categories` = `e2d89996459ada902eefe3bab8a3e356`, `set_material_signouts_updated_by` and
+`set_material_signout_photos_updated_by` = `f8eaaeebfdf0752c0774d472ddddc742` (file-derived; all five equal
+rebuild-test's measured values); anon EXECUTE on the two new functions **0**; rows 0 / 0.
+Final: fingerprint = committed baseline — policies 467 `6ecc8ac3…`, triggers 297 `8e6055f8…`, functions 343
+`85f3a10a…`, constraints 1064 `743aaef5…`, latest `20262080000000`.
