@@ -59,8 +59,14 @@ export type DeliverySummary = Pick<
   'id' | 'vendor_name' | 'delivery_date' | 'has_exceptions' | 'notes'
 >;
 
+// [S116] `!deliveries_received_by_fkey` names WHICH company_members relationship.
+// 20260902000000 added `deliveries.checked_in_by` (a second FK to company_members),
+// after which the bare `receiver:company_members(display_name)` embed is ambiguous:
+// PostgREST refuses it (PGRST201), so every read through this select returned
+// null — delivery list, detail, edit (404) and PDF ("Delivery not found").
+// _Superseded, quoted:_ `receiver:company_members(display_name)`.
 const DELIVERY_SELECT =
-  '*, items:delivery_items(*), receiver:company_members(display_name)';
+  '*, items:delivery_items(*), receiver:company_members!deliveries_received_by_fkey(display_name)';
 
 function activeItems(items: DeliveryItemRow[]): DeliveryItemRow[] {
   return items.filter((i) => !i.is_deleted);
