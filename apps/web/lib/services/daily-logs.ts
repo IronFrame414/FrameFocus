@@ -29,9 +29,27 @@ export interface DailyLogSubEntry {
   member: { display_name: string } | null;
 }
 
+/** [S118 item 12] Section D — one "needed on site, not here now" line. */
+export interface DailyLogMaterialNeedRow {
+  id: string;
+  item: string;
+  qty: number | null;
+  unit: string | null;
+  needed_by: string | null;
+  vendor_source: string | null;
+  sort_order: number;
+  ordered_at: string | null;
+  is_deleted: boolean;
+  orderer: { display_name: string } | null;
+}
+
 export interface DailyLogDetail extends DailyLogListItem {
   crew: DailyLogCrewEntry[];
   sub_entries: DailyLogSubEntry[];
+  /** [S118 item 12] Who marked it office-reviewed (null until then). */
+  reviewer: { display_name: string } | null;
+  /** [S118 item 12] Section D lines, live only, in sort order. */
+  material_needs: DailyLogMaterialNeedRow[];
 }
 
 /** One member's presence + derived hours for a project-day (RPC, §5). */
@@ -68,7 +86,10 @@ type UntypedRpc = (
 const DETAIL_SELECT =
   '*, author:company_members!daily_logs_author_member_id_fkey(display_name), ' +
   'crew:daily_log_crew(id, member_id, is_deleted, member:company_members(display_name)), ' +
-  'sub_entries:daily_log_sub_entries(id, member_id, hours, note, is_deleted, member:company_members(display_name))';
+  'sub_entries:daily_log_sub_entries(id, member_id, hours, note, is_deleted, member:company_members(display_name)), ' +
+  // [S118 item 12] the office reviewer (FK named — see above) and section D.
+  'reviewer:company_members!daily_logs_office_reviewed_by_fkey(display_name), ' +
+  'material_needs:daily_log_material_needs(id, item, qty, unit, needed_by, vendor_source, sort_order, ordered_at, is_deleted, orderer:company_members(display_name))';
 
 /** Per-project list, newest first (§3a). */
 export async function getDailyLogs(projectId: string): Promise<DailyLogListItem[]> {
@@ -101,6 +122,9 @@ export async function getDailyLog(id: string): Promise<DailyLogDetail | null> {
   const detail = data as unknown as DailyLogDetail;
   detail.crew = detail.crew.filter((c) => !c.is_deleted);
   detail.sub_entries = detail.sub_entries.filter((s) => !s.is_deleted);
+  detail.material_needs = (detail.material_needs ?? [])
+    .filter((n) => !n.is_deleted)
+    .sort((a, b) => a.sort_order - b.sort_order);
   return detail;
 }
 
@@ -205,6 +229,8 @@ export interface MobileLogRow {
   project_number: string | null;
   author_name: string | null;
   photo_count: number;
+  /** [S118 item 12] null until the office marks it reviewed. */
+  office_reviewed_at: string | null;
 }
 
 export interface MobileLogFeed {
@@ -233,7 +259,7 @@ export async function getMobileDailyLogs(filters?: {
 
   let query = supabase
     .from('daily_logs')
-    .select('id, log_date, work_performed, project_id, author:company_members!daily_logs_author_member_id_fkey(display_name), project:projects(name, project_number)')
+    .select('id, log_date, work_performed, project_id, office_reviewed_at, author:company_members!daily_logs_author_member_id_fkey(display_name), project:projects(name, project_number)')
     .eq('is_deleted', false)
     .order('log_date', { ascending: false })
     .order('created_at', { ascending: false });
@@ -249,6 +275,7 @@ export async function getMobileDailyLogs(filters?: {
     log_date: string;
     work_performed: string | null;
     project_id: string;
+    office_reviewed_at: string | null;
     author: { display_name: string } | null;
     project: { name: string; project_number: string | null } | null;
   };
@@ -279,6 +306,7 @@ export async function getMobileDailyLogs(filters?: {
     project_number: r.project?.project_number ?? null,
     author_name: r.author?.display_name ?? null,
     photo_count: counts.get(r.id) ?? 0,
+    office_reviewed_at: r.office_reviewed_at,
   }));
 
   // ⚠️ `{n} this week` counts THE UNFILTERED WEEK, not the filtered rows.

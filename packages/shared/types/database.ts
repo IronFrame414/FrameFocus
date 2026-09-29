@@ -2488,6 +2488,88 @@ export type Database = {
           },
         ]
       }
+      daily_log_material_needs: {
+        Row: {
+          company_id: string
+          created_at: string
+          created_by: string | null
+          daily_log_id: string
+          deleted_at: string | null
+          id: string
+          is_deleted: boolean
+          item: string
+          needed_by: string | null
+          ordered_at: string | null
+          ordered_by: string | null
+          qty: number | null
+          sort_order: number
+          unit: string | null
+          updated_at: string
+          updated_by: string | null
+          vendor_source: string | null
+        }
+        Insert: {
+          company_id?: string
+          created_at?: string
+          created_by?: string | null
+          daily_log_id: string
+          deleted_at?: string | null
+          id?: string
+          is_deleted?: boolean
+          item: string
+          needed_by?: string | null
+          ordered_at?: string | null
+          ordered_by?: string | null
+          qty?: number | null
+          sort_order?: number
+          unit?: string | null
+          updated_at?: string
+          updated_by?: string | null
+          vendor_source?: string | null
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          created_by?: string | null
+          daily_log_id?: string
+          deleted_at?: string | null
+          id?: string
+          is_deleted?: boolean
+          item?: string
+          needed_by?: string | null
+          ordered_at?: string | null
+          ordered_by?: string | null
+          qty?: number | null
+          sort_order?: number
+          unit?: string | null
+          updated_at?: string
+          updated_by?: string | null
+          vendor_source?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "daily_log_material_needs_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "daily_log_material_needs_daily_log_id_fkey"
+            columns: ["daily_log_id"]
+            isOneToOne: false
+            referencedRelation: "daily_logs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "daily_log_material_needs_ordered_by_fkey"
+            columns: ["ordered_by"]
+            isOneToOne: false
+            referencedRelation: "company_members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       daily_log_sub_entries: {
         Row: {
           company_id: string
@@ -2558,6 +2640,17 @@ export type Database = {
       daily_logs: {
         Row: {
           author_member_id: string
+          blockers: string | null
+          closeout_cords_clear: boolean | null
+          closeout_cut_station_clean: boolean | null
+          closeout_debris_hauled: boolean | null
+          closeout_first_task_staged: boolean | null
+          closeout_floors_swept: boolean | null
+          closeout_materials_covered: boolean | null
+          closeout_site_secured: boolean | null
+          closeout_tools_secured: boolean | null
+          closeout_utilities_off: boolean | null
+          closeout_work_protected: boolean | null
           company_id: string
           created_at: string | null
           created_by: string | null
@@ -2571,9 +2664,15 @@ export type Database = {
           material_needed: string | null
           material_used: string | null
           notes: string | null
+          office_reviewed_at: string | null
+          office_reviewed_by: string | null
           pdf_file_id: string | null
+          photos_sent_at: string | null
           project_id: string
+          tasks_day_after: string | null
+          tasks_day_after_date: string | null
           tasks_tomorrow: string | null
+          tasks_tomorrow_date: string | null
           updated_at: string | null
           updated_by: string | null
           weather: string | null
@@ -2581,6 +2680,17 @@ export type Database = {
         }
         Insert: {
           author_member_id?: string
+          blockers?: string | null
+          closeout_cords_clear?: boolean | null
+          closeout_cut_station_clean?: boolean | null
+          closeout_debris_hauled?: boolean | null
+          closeout_first_task_staged?: boolean | null
+          closeout_floors_swept?: boolean | null
+          closeout_materials_covered?: boolean | null
+          closeout_site_secured?: boolean | null
+          closeout_tools_secured?: boolean | null
+          closeout_utilities_off?: boolean | null
+          closeout_work_protected?: boolean | null
           company_id?: string
           created_at?: string | null
           created_by?: string | null
@@ -2594,9 +2704,15 @@ export type Database = {
           material_needed?: string | null
           material_used?: string | null
           notes?: string | null
+          office_reviewed_at?: string | null
+          office_reviewed_by?: string | null
           pdf_file_id?: string | null
+          photos_sent_at?: string | null
           project_id: string
+          tasks_day_after?: string | null
+          tasks_day_after_date?: string | null
           tasks_tomorrow?: string | null
+          tasks_tomorrow_date?: string | null
           updated_at?: string | null
           updated_by?: string | null
           weather?: string | null
@@ -2604,6 +2720,17 @@ export type Database = {
         }
         Update: {
           author_member_id?: string
+          blockers?: string | null
+          closeout_cords_clear?: boolean | null
+          closeout_cut_station_clean?: boolean | null
+          closeout_debris_hauled?: boolean | null
+          closeout_first_task_staged?: boolean | null
+          closeout_floors_swept?: boolean | null
+          closeout_materials_covered?: boolean | null
+          closeout_site_secured?: boolean | null
+          closeout_tools_secured?: boolean | null
+          closeout_utilities_off?: boolean | null
+          closeout_work_protected?: boolean | null
           company_id?: string
           created_at?: string | null
           created_by?: string | null
@@ -2617,9 +2744,15 @@ export type Database = {
           material_needed?: string | null
           material_used?: string | null
           notes?: string | null
+          office_reviewed_at?: string | null
+          office_reviewed_by?: string | null
           pdf_file_id?: string | null
+          photos_sent_at?: string | null
           project_id?: string
+          tasks_day_after?: string | null
+          tasks_day_after_date?: string | null
           tasks_tomorrow?: string | null
+          tasks_tomorrow_date?: string | null
           updated_at?: string | null
           updated_by?: string | null
           weather?: string | null
@@ -2638,6 +2771,13 @@ export type Database = {
             columns: ["company_id"]
             isOneToOne: false
             referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "daily_logs_office_reviewed_by_fkey"
+            columns: ["office_reviewed_by"]
+            isOneToOne: false
+            referencedRelation: "company_members"
             referencedColumns: ["id"]
           },
           {
@@ -10585,6 +10725,10 @@ export type Database = {
         Args: { p_item_ids: string[]; p_po_id: string }
         Returns: undefined
       }
+      mark_daily_log_reviewed: {
+        Args: { p_log_id: string; p_reviewed: boolean }
+        Returns: undefined
+      }
       mark_estimate_lost: {
         Args: { p_estimate_id: string; p_reason_code: string }
         Returns: undefined
@@ -10814,6 +10958,10 @@ export type Database = {
           mime_type: string
           option_id: string
         }[]
+      }
+      set_daily_log_material_ordered: {
+        Args: { p_need_id: string; p_ordered: boolean }
+        Returns: undefined
       }
       set_line_override_cost: {
         Args: { p_cost: number; p_line_id: string }

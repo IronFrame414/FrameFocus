@@ -113,6 +113,15 @@ export default function DailyLogsList({
                   </span>
                 </div>
                 <div className="flex items-center gap-2">
+                  {/* [S118 item 12] Not yet reviewed by the office — /m's feed shows the same. */}
+                  {!log.office_reviewed_at ? (
+                    <span
+                      data-testid="log-unreviewed"
+                      className="rounded-full bg-[#eef2ff] px-[10px] py-[3px] text-[11px] font-semibold text-[#3949ab]"
+                    >
+                      Not reviewed
+                    </span>
+                  ) : null}
                   {log.hazards_present ? (
                     <span className="rounded-full bg-[#fdf6ec] px-[10px] py-[3px] text-[11px] font-semibold text-[#8a5a12]">
                       Hazard flagged

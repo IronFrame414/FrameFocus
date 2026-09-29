@@ -8,6 +8,7 @@ import {
   createDailyLog,
   listProjectDayPresence,
   uploadDailyLogPhoto,
+  setDailyLogMaterialNeeds,
   type DayPresence,
   type SubEntryInput,
 } from '@/lib/services/daily-logs-client';
@@ -15,6 +16,13 @@ import { useOfflineSync } from '../../offline-sync';
 import { buildDailyLogEntry, buildPhotoEntry } from '@/lib/offline/capture';
 import { SetMobileHeader } from '../../mobile-header';
 import { useT } from '@/components/i18n/language-provider';
+import { DailyLogCloseoutFields } from '@/components/field/daily-log-closeout-fields';
+import {
+  cleanNeeds,
+  emptyCloseout,
+  type CloseoutFields,
+  type MaterialNeedInput,
+} from '@/lib/daily-logs/closeout';
 
 // M6M §4.12.3 — the 7c form. Work performed is THE required field (the D-30
 // CHECK behind it rejects NULL and blank alike); crew hours are READ-ONLY,
@@ -82,6 +90,9 @@ export function LogForm({
   const [materials, setMaterials] = useState('');
   const [equipment, setEquipment] = useState('');
   const [tomorrow, setTomorrow] = useState('');
+  // [S118 item 12] The paper close-out form — the SAME component the desktop form renders.
+  const [closeout, setCloseout] = useState<CloseoutFields>(emptyCloseout());
+  const [needs, setNeeds] = useState<MaterialNeedInput[]>([]);
   const [hazard, setHazard] = useState(false);
   const [hazardNotes, setHazardNotes] = useState('');
   const [photos, setPhotos] = useState<File[]>([]);
@@ -93,6 +104,8 @@ export function LogForm({
     hazard: boolean;
     queued: boolean;
     rosterDropped: boolean;
+    /** [S118 item 12] Section D lines cannot ride the offline queue. */
+    needsDropped?: boolean;
   } | null>(null);
 
   // Crew & hours — "auto from clock", read-only (§4.12.3). The 6A presence RPC
@@ -144,6 +157,10 @@ export function LogForm({
             tasks_tomorrow: tomorrow.trim() || null,
             hazards_present: hazard,
             hazard_notes: hazard ? hazardNotes.trim() : null,
+            // [S118 item 12] A / C / E ride the same insert (plain columns).
+            ...closeout,
+            tasks_day_after: closeout.tasks_day_after?.trim() || null,
+            blockers: closeout.blockers?.trim() || null,
           },
           captured_at,
         })
@@ -169,6 +186,7 @@ export function LogForm({
         queued: true,
         rosterDropped:
           presence.length > 0 || subEntries.some((s) => s.member_id && s.hours > 0),
+        needsDropped: cleanNeeds(needs).length > 0,
       });
       return;
     }
@@ -183,6 +201,9 @@ export function LogForm({
         tasks_tomorrow: tomorrow.trim() || null,
         hazards_present: hazard,
         hazard_notes: hazard ? hazardNotes.trim() : null,
+        ...closeout,
+        tasks_day_after: closeout.tasks_day_after?.trim() || null,
+        blockers: closeout.blockers?.trim() || null,
       },
       presence.map((p) => p.member_id),
       subEntries.filter((s) => s.member_id && s.hours > 0)
@@ -193,6 +214,10 @@ export function LogForm({
       setError(result.error ?? t('field.log.saveFailed'));
       return;
     }
+
+    // [S118 item 12] Section D lines, bound to THIS log.
+    const needsResult = await setDailyLogMaterialNeeds(result.id, cleanNeeds(needs), []);
+    if (!needsResult.success) setError(needsResult.error ?? t('field.log.saveFailed'));
 
     // Photos bind to THIS log via daily_log_id — uploaded after the row
     // exists, through the shared uploadFile path (HEIC conversion included).
@@ -227,6 +252,14 @@ export function LogForm({
             className="mt-[10px] rounded-[10px] border border-m6m-border bg-m6m-strip-bg px-[12px] py-[8px] text-[13px] text-m6m-navy"
           >
             {t('field.log.rosterDropped')}
+          </p>
+        ) : null}
+        {done.needsDropped ? (
+          <p
+            data-testid="m-log-needs-dropped"
+            className="mt-[10px] rounded-[10px] border border-m6m-border bg-m6m-strip-bg px-[12px] py-[8px] text-[13px] text-m6m-navy"
+          >
+            {t('field.needs.offlineDropped')}
           </p>
         ) : null}
         {done.hazard && projectId ? (
@@ -511,6 +544,16 @@ export function LogForm({
             className="w-full rounded-[10px] border border-m6m-border px-[12px] py-[8px] text-[16px]"
           />
         </Disclosure>
+      </section>
+
+      {/* [S118 item 12] The paper close-out form: A, C (dates), D, E. */}
+      <section className="mt-[14px]">
+        <DailyLogCloseoutFields
+          value={closeout}
+          onChange={setCloseout}
+          needs={needs}
+          onNeedsChange={setNeeds}
+        />
       </section>
 
       {/* The hazard toggle card. Notes required with the flag (DB CHECK). */}

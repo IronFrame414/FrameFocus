@@ -350,7 +350,7 @@ export const COMPANY_TABLES: string[] = [
   // purchase_orders, or the PO delete is blocked and the audit rows orphan [S103].
   'purchase_order_edits',
   'delivery_items', 'deliveries', 'purchase_order_item_assignments', 'purchase_order_items', 'purchase_orders',
-  'daily_log_crew', 'daily_log_sub_entries', 'daily_logs',
+  'daily_log_crew', 'daily_log_sub_entries', 'daily_log_material_needs', 'daily_logs', // [S118 item 12] + material_needs
   'safety_incident_injuries', 'safety_incident_witnesses', 'safety_incidents',
   'punch_list_items', 'punch_lists',
   'task_dependencies', 'tasks', 'phases', 'inspections', 'schedule_entries',

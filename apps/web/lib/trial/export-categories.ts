@@ -87,6 +87,7 @@ export const EXPORT_CATEGORIES: ExportCategory[] = [
       'daily_logs',
       'daily_log_crew',
       'daily_log_sub_entries',
+      'daily_log_material_needs', // [S118 item 12]
       'punch_lists',
       'punch_list_items',
       'deliveries',

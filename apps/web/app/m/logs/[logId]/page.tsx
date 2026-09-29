@@ -2,6 +2,9 @@
 import { UserText } from '@/components/i18n/user-text';
 import { notFound } from 'next/navigation';
 import { getDailyLog, getLogPhotos } from '@/lib/services/daily-logs';
+import { getMyProfile } from '@/lib/services/profiles';
+import { DailyLogCloseoutView } from '@/components/field/daily-log-closeout-view';
+import { closeoutFromLog, isDailyLogOffice } from '@/lib/daily-logs/closeout';
 import { getProject } from '@/lib/services/projects';
 import { SetMobileHeader } from '../../mobile-header';
 import { DetailCard, DetailField, EmptyState, SectionLabel } from '../../mobile-ui';
@@ -83,10 +86,11 @@ export default async function DailyLogDetailPage({
   // readable page that the list it came from does not show.
   if (!log || log.is_deleted) notFound();
 
-  const [project, photos, t] = await Promise.all([
+  const [project, photos, t, me] = await Promise.all([
     getProject(log.project_id),
     getLogPhotos(log.id),
     getMobileT(),
+    getMyProfile(),
   ]);
 
   const crew = log.crew.filter((c) => c.member);
@@ -146,6 +150,18 @@ export default async function DailyLogDetailPage({
           <DetailField label={t('field.logDetail.tasksTomorrow')} value={log.tasks_tomorrow ? <UserText text={log.tasks_tomorrow} /> : null} />
           <DetailField label={t('field.logDetail.weather')} value={log.weather} />
         </DetailCard>
+      </div>
+
+      <div className="mt-[16px]">
+        {/* [S118 item 12] The paper close-out form + the office's marks — the SAME component /m renders. */}
+        <DailyLogCloseoutView
+          logId={log.id}
+          closeout={closeoutFromLog(log)}
+          needs={log.material_needs}
+          reviewedAt={log.office_reviewed_at}
+          reviewerName={log.reviewer?.display_name ?? null}
+          canOffice={isDailyLogOffice(me?.role)}
+        />
       </div>
 
       {/* CREW — names only. See the header: there is no hours column here. */}

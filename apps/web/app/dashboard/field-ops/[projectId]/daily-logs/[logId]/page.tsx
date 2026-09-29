@@ -1,4 +1,6 @@
 // S110 H, ruling 3 — what the crew typed, in the READER's language (desktop too).
+import { DailyLogCloseoutView } from '@/components/field/daily-log-closeout-view';
+import { closeoutFromLog, isDailyLogOffice } from '@/lib/daily-logs/closeout';
 import { UserText } from '@/components/i18n/user-text';
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
@@ -183,6 +185,16 @@ export default async function DailyLogDetailPage({
             <FreeTextCard title="Equipment used" value={log.equipment_used} />
             <FreeTextCard title="Tasks for tomorrow" value={log.tasks_tomorrow} />
           </div>
+
+          {/* [S118 item 12] The paper close-out form + the office's marks — the SAME component /m renders. */}
+          <DailyLogCloseoutView
+            logId={log.id}
+            closeout={closeoutFromLog(log)}
+            needs={log.material_needs}
+            reviewedAt={log.office_reviewed_at}
+            reviewerName={log.reviewer?.display_name ?? null}
+            canOffice={isDailyLogOffice(profile.role)}
+          />
 
           {/* Notes — in the data spec (§6.7a) though absent from the 4c mock;
               rendered full-width under the 2×2 per 6B-1 §3. */}

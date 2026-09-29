@@ -4,6 +4,8 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { randomUUID } from 'crypto';
 import type { Database } from '@framefocus/shared/types/database';
 import { DailyLogDocument, type DailyLogPdfData } from '@/lib/daily-logs/daily-log-template';
+import { CLOSEOUT_ITEMS, type CloseoutKey } from '@/lib/daily-logs/closeout';
+import { format } from '@/lib/i18n/messages';
 import {
   getDailyLog,
   getLogPhotos,
@@ -90,6 +92,26 @@ export async function regenerateDailyLogPdf(
     notes: log.notes,
     hazardsPresent: log.hazards_present,
     hazardNotes: log.hazard_notes,
+    // [S118 item 12] The paper close-out form (English labels from the shared list).
+    closeout: CLOSEOUT_ITEMS.map((i) => ({
+      label: format('en', i.labelKey),
+      value: (log[i.key as CloseoutKey] as boolean | null) ?? null,
+    })),
+    photosSentAt: log.photos_sent_at,
+    tasksTomorrowDate: log.tasks_tomorrow_date,
+    tasksDayAfter: log.tasks_day_after,
+    tasksDayAfterDate: log.tasks_day_after_date,
+    needs: log.material_needs.map((n) => ({
+      item: n.item,
+      qty: n.qty,
+      unit: n.unit,
+      neededBy: n.needed_by,
+      vendor: n.vendor_source,
+      orderedBy: n.ordered_at ? (n.orderer?.display_name ?? 'office') : null,
+    })),
+    blockers: log.blockers,
+    officeReviewedBy: log.office_reviewed_at ? (log.reviewer?.display_name ?? 'office') : null,
+    officeReviewedAt: log.office_reviewed_at,
     crew: log.crew.map((c) => {
       const p = hoursByMember.get(c.member_id);
       return {

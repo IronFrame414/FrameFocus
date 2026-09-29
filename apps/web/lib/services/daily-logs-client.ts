@@ -4,6 +4,7 @@ import { uploadFile } from '@/lib/services/files-client';
 import type { DailyLog, DayPresence } from '@/lib/services/daily-logs';
 import { SIGNED_URL_TTL_SECONDS } from './signed-url-ttl';
 import { applied, DISCARDED } from './mutation-result';
+import type { CloseoutFields, MaterialNeedInput } from '@/lib/daily-logs/closeout';
 export type { DailyLog, DailyLogDetail, DayPresence, LogPhoto } from '@/lib/services/daily-logs';
 
 // 6B Daily Logs — client mutations (6B-1 spec §4). RLS enforces authority:
@@ -28,6 +29,9 @@ export interface DailyLogFields {
   hazards_present: boolean;
   hazard_notes?: string | null;
 }
+// [S118 item 12] + the paper form's A/C/E columns (never the office_* ones — those
+// move only through markDailyLogReviewed). The type is widened, not replaced.
+export type DailyLogFormFields = DailyLogFields & Partial<CloseoutFields>;
 
 export interface SubEntryInput {
   /** Present when editing an existing row; absent for new rows. */
@@ -48,7 +52,7 @@ type UntypedRpc = (
  */
 export async function createDailyLog(
   projectId: string,
-  fields: DailyLogFields,
+  fields: DailyLogFormFields,
   crewMemberIds: string[],
   subEntries: SubEntryInput[]
 ): Promise<CreateResult> {
@@ -82,7 +86,7 @@ export async function createDailyLog(
 
 export async function updateDailyLog(
   id: string,
-  updates: Partial<DailyLogFields>
+  updates: Partial<DailyLogFormFields>
 ): Promise<MutationResult> {
   const supabase = createClient();
   // BEFORE UPDATE trigger `daily_logs_set_updated_by` handles updated_by.
@@ -284,4 +288,76 @@ export async function getFileSignedUrl(
     .from('project-files')
     .createSignedUrl(filePath, SIGNED_URL_TTL_SECONDS, downloadName ? { download: downloadName } : undefined);
   return data?.signedUrl ?? null;
+}
+
+// ─── [S118 item 12] Section D and the office's marks ────────────────────────
+
+/**
+ * Reconcile a log's section-D lines to `rows` (the author's edit): insert the
+ * new, update the kept, SOFT-delete the removed (`existingIds` not in `rows`).
+ * Never touches ordered_* — the office's mark survives the author's edits.
+ */
+export async function setDailyLogMaterialNeeds(
+  logId: string,
+  rows: MaterialNeedInput[],
+  existingIds: string[]
+): Promise<MutationResult> {
+  const supabase = createClient();
+  const keep = new Set(rows.filter((r) => r.id).map((r) => r.id as string));
+  for (const [i, r] of rows.entries()) {
+    const fields = {
+      item: r.item,
+      qty: r.qty,
+      unit: r.unit,
+      needed_by: r.needed_by,
+      vendor_source: r.vendor_source,
+      sort_order: i,
+    };
+    if (r.id) {
+      const { data, error } = await supabase
+        .from('daily_log_material_needs')
+        .update(fields)
+        .eq('id', r.id)
+        .select('id');
+      if (error) return { success: false, error: error.message };
+      if (!applied(data)) return { success: false, error: DISCARDED };
+    } else {
+      const { error } = await supabase
+        .from('daily_log_material_needs')
+        .insert({ daily_log_id: logId, ...fields });
+      if (error) return { success: false, error: error.message };
+    }
+  }
+  for (const id of existingIds.filter((x) => !keep.has(x))) {
+    const { data, error } = await supabase
+      .from('daily_log_material_needs')
+      .update({ is_deleted: true, deleted_at: new Date().toISOString() })
+      .eq('id', id)
+      .select('id');
+    if (error) return { success: false, error: error.message };
+    if (!applied(data)) return { success: false, error: DISCARDED };
+  }
+  return { success: true };
+}
+
+/** The office (Owner/Admin/PM/PE) marks a log reviewed, or clears it. The DB decides who. */
+export async function markDailyLogReviewed(logId: string, reviewed: boolean): Promise<MutationResult> {
+  const supabase = createClient();
+  const { error } = await supabase.rpc('mark_daily_log_reviewed', {
+    p_log_id: logId,
+    p_reviewed: reviewed,
+  });
+  if (error) return { success: false, error: error.message };
+  return { success: true };
+}
+
+/** The office marks a section-D line ordered (RULED actionable), or clears it. */
+export async function setMaterialNeedOrdered(needId: string, ordered: boolean): Promise<MutationResult> {
+  const supabase = createClient();
+  const { error } = await supabase.rpc('set_daily_log_material_ordered', {
+    p_need_id: needId,
+    p_ordered: ordered,
+  });
+  if (error) return { success: false, error: error.message };
+  return { success: true };
 }

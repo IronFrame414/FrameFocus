@@ -6,6 +6,7 @@ import { getDailyLog } from '@/lib/services/daily-logs';
 import { getMembers, getMyMember } from '@/lib/services/members';
 import { FieldTabs } from '@/components/field/field-tabs';
 import { LogForm } from '../../log-form';
+import { closeoutFromLog } from '@/lib/daily-logs/closeout';
 
 // 6B-1 §4 — edit form. Authority mirrors the live daily_logs UPDATE policy
 // (Phase 3 Q1): the author, or Owner/Admin. The page gate is UX; RLS is the
@@ -96,6 +97,15 @@ export default async function EditDailyLogPage({
           member_id: s.member_id,
           hours: s.hours,
           note: s.note,
+        }))}
+        initialCloseout={closeoutFromLog(log)}
+        initialNeeds={log.material_needs.map((n) => ({
+          id: n.id,
+          item: n.item,
+          qty: n.qty,
+          unit: n.unit,
+          needed_by: n.needed_by,
+          vendor_source: n.vendor_source,
         }))}
       />
     </div>
