@@ -175,6 +175,17 @@ jobs:
   #                    round-trips thousands of times — NOT more tests. So this
   #                    ceiling will keep being outgrown as modules add policy,
   #                    and raising it is a treadmill, not a fix.
+  #   50 -> 75 [S115, F-11]: main was CANCELLED at the 50-min cap on
+  #                    2026-09-28; an identical re-run took 42 min. Three green
+  #                    runs measured from the Actions API: "Run Playwright tests"
+  #                    41.2 / 42.1 / 40.3 min, job 42.8-45.5 min, 612 tests on 1
+  #                    worker — 5-8 minutes of headroom, so a false red was a
+  #                    matter of time, and each one costs a full re-run. Same
+  #                    treadmill as above, taken knowingly as the NARROWER
+  #                    default while Josh rules ASK-22 (raise / shard / split).
+  #                    Paired with a per-test `list` reporter
+  #                    (playwright.config.ts) so the log finally shows WHERE the
+  #                    minutes go — and a hung run no longer looks like a slow one.
   #
   # 50 is deliberately generous: because every run has been capped, the TRUE
   # full duration is unknown (only "> 32m35s"). 50 lets the next run finish AND
@@ -247,7 +258,7 @@ jobs:
   e2e:
     name: E2E (Playwright)
     runs-on: ubuntu-latest
-    timeout-minutes: 50
+    timeout-minutes: 75
     steps:
       - uses: actions/checkout@v4
 

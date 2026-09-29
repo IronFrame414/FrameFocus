@@ -91,7 +91,13 @@ export default defineConfig({
   // run: a passing test never spends its budget.
   timeout: (process.env.CI ? 60 : 30) * 1000,
 
-  reporter: process.env.CI ? [['github'], ['html', { open: 'never' }]] : [['list']],
+  // F-11 [S115] — `list` ADDED IN CI. `github` prints only annotations and the
+  // html report uploads only on failure, so a green run left no record of which
+  // spec took the minutes, and a hung run and a slow run looked identical until
+  // the job cap killed it. `list` prints one line per test WITH its duration as
+  // it finishes: the per-spec breakdown F-11 asks for can be summed from the
+  // log, and the last line printed names where a hang is.
+  reporter: process.env.CI ? [['github'], ['list'], ['html', { open: 'never' }]] : [['list']],
 
   use: {
     baseURL: 'http://localhost:3000',
