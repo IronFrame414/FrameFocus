@@ -340,3 +340,29 @@ Q13. [ASK-C12-SENT] C-12's renderer change will also change how ALREADY-SENT but
 - ⚠️ **Slip:** the H-1 commit was pushed without `[skip ci]` while main's CI (36500016295) was still in E2E. The run 36502727258 could not be cancelled (`gh run cancel` → HTTP 403, token lacks the permission). The two suites overlap for ~10 minutes. A red in either inside that window is treated as a suspected concurrency false red, re-run before any conclusion, and not counted toward stop rule 7.
 - ⚠️ Instrument slip, no effect on results: two `pgrep -f` kill loops matched their own shell (exit 144) — the CLAUDE.md trap. The sabotage restore had already completed and read back identical. Replaced by `scratchpad/stop3000.sh` (kills the PID `ss` reports listening on :3000).
 - **getClaims (Q9):** not built into this branch.
+
+### Part 6 — F-11, built early (order deviation, recorded) — branch `feature/s115-f11-ci-timeout` @ `b6e58b0d`
+- Built out of order because every later part's CI run sits 3–8 minutes under the 50-minute cap; a cancel would cost a full re-run each time. Two lines, reversible.
+- `ci.yml` e2e `timeout-minutes: 50 → 75`, with a `50 -> 75 [S115, F-11]` line added to the existing 20→35→50 history block (the file already calls this a treadmill; recorded as the narrower default pending ASK-22). Sharding stays ruled out by that block (`workers: 1` is load-bearing).
+- `playwright.config.ts`: CI reporter `[['github'], ['html']]` → `[['github'], ['list'], ['html']]` — one line per test with its duration, so the per-spec breakdown can be summed from the log and a hang shows its last line.
+- Checks: `CI=1 npx playwright test --list` exit 0 (612 tests listed); YAML parsed with `js-yaml` → e2e timeout 75; `tsc --noEmit` exit 0; `playwright.config.ts` is Prettier-clean on main → the reporter line was re-formatted to Prettier's one-line form (second commit), verified with the repo's Prettier 3.8.1 via `--stdin-filepath`.
+- ⚠️ Instrument slip caught: I first ran Prettier on a `/tmp` copy of main's files (the listed "wrong scope" trap — no repo config there, so it reported main as unformatted). Re-checked every file with `git show origin/main:<f> | npx prettier --check --stdin-filepath <f>`.
+
+### Part 2 — H-2 waterfalls — branch `feature/s115-h2-waterfalls` @ `4527302a`
+**Built:** `getRequestUser()` (per-request `cache`) replaces the getUser pattern in 8 files (dashboard + /m layouts, overview + budget pages, `getMyMember`, 5 functions in `company.ts`, `getMyProfile`, `getMyLanguage`); `getProject` memoized per request; project layout fetches project ∥ role; **overview**: 11 sequential awaits → 2 stages (guards, then everything in one `Promise.all`); **budget**: 1 + 6 sequential money reads → 1 `Promise.all` of 11, every gate condition unchanged; `/m` layout starts `getMembers`/`getUnreadCount` before the profile read (the dashboard layout's existing Option 2); `/m/projects` fetches translator ∥ projects ∥ tz ∥ mine ∥ session, only punch counts wait. Guards are judged in the original order and nothing money-bearing starts before they pass. Formatting: 8 of 12 files Prettier-clean on main stay clean; 4 that were not (budget page, overview page, company.ts, members.ts) hand-formatted, changed-line counts match the edits (+43/−19, +58/−45, +6/−16, +2/−4).
+
+**Measured — deterministic, server side, same instrument both times** (`scratchpad/h2-compare.sh`): a `--require` preload logs every server-side fetch to `*.supabase.co` with start/end; one document request at a time per screen, 5 runs each, `josh+qa-admin`, project `4a4f8567…`. "Sequential depth" = the longest chain of Supabase calls where each starts after the previous ended (the waterfall). Built from `origin/main`'s versions of the 12 files (`git checkout origin/main -- <files>`, BUILD_EXIT=0) and from HEAD (BUILD_EXIT=0); restored with `git checkout HEAD -- <files>` → 0 lines differ from HEAD.
+
+| screen | Supabase calls (before → after) | Auth-server calls | **sequential depth** | server wall, median of 5 |
+| --- | --- | --- | --- | --- |
+| project overview | 27 → 27 | 1 → 1 | **7 → 5** | 705 → **532 ms** |
+| project Photos | 15 → 15 | 1 → 1 | 3 → 3 | 427 → 415 ms |
+| project Budget | 39 → 39 | 1 → 1 | **16 → 8** | 1155 → **899 ms** |
+| `/m/timeclock` | 13 → 13 | 1 → 1 | 5 → 4 | 389 → 346 ms |
+| `/m/projects` | 12 → 12 | 1 → 1 | 5 → 4 | 612 → 520 ms |
+(Middleware runs in the edge sandbox and is not in these counts; it is measured under H-1.)
+
+⚠️ **Correction to Phase 1's H-2 row.** The agent-traced "getUser per request: 6–7" is **not** what reaches the network: the preload saw **one** Auth-server call per render **before** the change too, because Next 14's patched `fetch` memoizes identical GETs within one render (the same reason `profiles`×5 costs fewer calls than it reads). So `getRequestUser` saved **no** network call; it only removes queued duplicate awaits. The measured gain is the **depth** (the `Promise.all` restructuring), not the call count. Photos had no page-level waterfall to remove.
+- Unit: `test/s115-request-user.test.ts` 3/3 (+ `supabase-server.identity.test.ts` 2/2), `VITEST_EXIT=0`. Sabotage: `getRequestUser` as a module-level memo (a cross-caller singleton) → **2 failed / 1 passed**, restored, `cmp` identical, 3/3.
+- `tsc --noEmit` exit 0; `next build` BUILD_EXIT=0.
+- **Remaining depth on Budget (8)** is inside services (`getBudgetRollup` 8 serial, `getJobCostRollup` 6 serial) → H-5 ranked list.
