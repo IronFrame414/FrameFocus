@@ -59,3 +59,27 @@ rebuild-test); SECURITY DEFINER; EXECUTE anon false / authenticated false / serv
 `4c627cb4f3b361f4e9280067a2c154f2`, triggers 287 `4c7920f63724f4b0c054975e508c4e0a`, functions 333
 `7497bfda26bce431bd9a2d7fdece1fe3`, constraints 1017 `710ff1e9e4ab072278e3eb671bddc26e`, latest
 `20262020000000`; ledger_total 262.
+
+## Item 7 — the three ruled fixes (branch `feature/s118-ruled-fixes`)
+
+Pre-check (production, read-only), measured before §5: newest `20262020000000`; md5
+`enforce_files_column_scope` `21bee5d9725b0a020158b64b8b9a8d7d`, `setup_payment_schedule`
+`d606120d8ec0cd8975009eca19749644`, `revise_sub_contract_schedule` `04e54d2db7a6815eef477350d6d5b8cc`
+(all three = the files and rebuild-test before the change); `project_budget_amounts` policies 6 (2 UPDATE);
+`#167` affected contracts **0** (live subcontracts 0). No section adds a constraint over existing rows.
+
+### §5 — `20262030000000_s118_file_trash_floor`
+After: ledger 1; md5 `enforce_files_column_scope` = `e333c3be04bde2b741ace17abc028c81` (= rebuild-test);
+still SECURITY DEFINER; `files` policies unchanged.
+
+### §6 — `20262040000000_s118_budget_amounts_direct_write_closed`
+After: ledger 1; `project_budget_amounts` policies **4**, UPDATE **0**; both INSERT arms' WITH CHECK
+contain `budgeted_amount = 0`; SELECT arms unchanged.
+
+### §7 — `20262050000000_s118_payment_schedule_stage_label`
+After: ledger 1; md5 `setup_payment_schedule` = `a60cf25a66e6e1adf561b73382e62cd8`,
+`revise_sub_contract_schedule` = `4f7f172c1db77e4f7b911f99960fe4aa` (= rebuild-test); both SECURITY INVOKER.
+
+### Final — fingerprint = committed baseline (`feature/s118-ruled-fixes`): policies 456
+`67a3bcae0714563f1ee68a5e3be380fc`, triggers 287 `4c7920f6…`, functions 333 `9e6d0d6a34d8e589ba6f7ed99e72265b`,
+constraints 1017 `710ff1e9…`, latest `20262050000000`; ledger 265.
