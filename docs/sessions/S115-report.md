@@ -457,3 +457,8 @@ Middleware verifies the JWT locally with `getClaims()` except on `/sign-in` and 
 
 ### CI queue
 F-11 requested: run **36511018774** on `8376c38b` (base = main `a05e10db`). Then, one at a time: H-2 → H-3 → C-12 → C-11 → H-5 → R11 (each rebased on the then-current main). R10 waits for Josh's production step. H-1b (Q9) and F-12 are not queued.
+
+### ✅ Part 6 — F-11 MERGED to main as `d91ac955` (R8)
+- CI **36511018774 green** on `8376c38b` (base = main `a05e10db`): Lint & Type Check success; E2E 624 tests → **603 passed, 21 skipped, 0 failed** in **27.9 min** (job 02:06:15 → 02:37:23). No migration. Merge commit `[skip ci]`; tree identity: `git diff 8376c38b HEAD --stat` → empty. No main run started (verified: newest main run still on `a05e10db`).
+- **FILL-F-11.1, finally measured** (the new `list` reporter; 603 test lines parsed from the job log, sum 24.7 min): `m-writes` **3.1 min (13%)**, `desktop-chat-poll` 1.7 (7%), `m-destinations` 1.5 (6%), `m-photos` 1.5 (6%), `m-details` 1.2 (5%), `m-sections` 1.0 (4%), then `m-capture`, `m-shell` 0.8; `desktop-selections`, `desktop-chat-mentions`, `desktop-confirms`, `desktop-trial-screens` 0.7 each; 55 spec files. The whole step fell 40–42 → 27.9 min on this run: not attributable yet — H-1 (merged, faster middleware on every request) and an uncontended rebuild-test are both candidates; one run is not a trend.
+- H-2 rebased onto `d91ac955`, CI requested: run **36513523500** on `d582090f`.
