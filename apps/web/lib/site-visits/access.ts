@@ -73,7 +73,14 @@ export async function resolveEstimateFileAccess(
     .maybeSingle();
   if (est) {
     const ownerAdmin = role === 'owner' || role === 'admin';
-    const canUpload = est.status === 'draft' && (ownerAdmin || est.created_by === userId);
+    // [S119 D-2] + a Project Executive on an estimate ASSIGNED to it (decided by
+    // pe_assigned_estimate()). The owner/admin and author terms are unchanged.
+    let peAssigned = false;
+    if (role === 'project_executive') {
+      const { data: assigned } = await supabase.rpc('pe_assigned_estimate', { p_estimate_id: estimateId });
+      peAssigned = assigned === true;
+    }
+    const canUpload = est.status === 'draft' && (ownerAdmin || est.created_by === userId || peAssigned);
     return { ok: true, mode: 'office', companyId: est.company_id, canUpload, canCapture, scope: 'all' };
   }
 

@@ -6,6 +6,7 @@ import { getSiteVisit, getSiteVisitAccess } from '@/lib/services/site-visits';
 import { EstimateBuilder } from './estimate-builder';
 import { canReadEstimates } from '@/lib/estimate-access';
 import type { BuilderRole } from './estimate-builder';
+import { getEstimatePeAccess, isEstimateAssignedToMe } from '@/lib/services/estimate-assignments';
 
 interface PageProps {
   params: { id: string };
@@ -57,6 +58,15 @@ export default async function EstimateBuilderPage({ params }: PageProps) {
   const siteVisit = await getSiteVisit(params.id);
   const siteVisitAccess = siteVisit ? await getSiteVisitAccess(params.id) : null;
 
+  // [S119 D-2] A PE builds only on an estimate assigned to it; Owner/Admin see who
+  // that is and can change it. Both answers come from the database.
+  const peAssigned =
+    profile.role === 'project_executive' ? await isEstimateAssignedToMe(params.id) : false;
+  const peAccess =
+    profile.role === 'owner' || profile.role === 'admin'
+      ? await getEstimatePeAccess(params.id)
+      : null;
+
   let estimatorName: string | null = null;
   if (est?.created_by) {
     const names = await getUploaderNames([est.created_by]);
@@ -72,6 +82,8 @@ export default async function EstimateBuilderPage({ params }: PageProps) {
       estimatorName={estimatorName}
       siteVisit={siteVisit}
       siteVisitCanWrite={siteVisitAccess !== null}
+      peAssigned={peAssigned}
+      peAccess={peAccess}
     />
   );
 }

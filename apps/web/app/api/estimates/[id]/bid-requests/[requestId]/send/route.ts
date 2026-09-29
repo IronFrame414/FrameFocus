@@ -50,6 +50,19 @@ export async function POST(
     .single();
   if (!est) return NextResponse.json({ error: 'Estimate not found' }, { status: 404 });
 
+  // [S119 D-2] A Project Executive does not send bid requests (it reaches outside
+  // parties); a PE who CREATED the estimate would otherwise pass the author term.
+  if (profile.role === 'project_executive') {
+    console.error('[POST bid-requests/send] refused', {
+      check: 'role project_executive (S119 D-2: no bid requests)',
+      estimateId: params.id,
+    });
+    return NextResponse.json(
+      { error: 'A Project Executive cannot send bid requests.' },
+      { status: 403 }
+    );
+  }
+
   const isOwnerAdmin = profile.role === 'owner' || profile.role === 'admin';
   const canEdit = est.status === 'draft' && (isOwnerAdmin || est.created_by === user.id);
   if (!canEdit) {

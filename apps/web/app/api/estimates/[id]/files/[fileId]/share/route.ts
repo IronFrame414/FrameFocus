@@ -22,6 +22,24 @@ export async function POST(req: Request, { params }: { params: { id: string; fil
 
   const access = await resolveEstimateFileAccess(supabase, user.id, params.id);
   if (!access.ok) return NextResponse.json({ error: access.error }, { status: access.status });
+  // [S119 D-2] A Project Executive builds an assigned estimate but does not reach
+  // outside parties from it: sharing with bidders stays Owner/Admin/authoring PM.
+  const { data: me } = await supabase
+    .from('profiles')
+    .select('role')
+    .eq('user_id', user.id)
+    .eq('is_deleted', false)
+    .maybeSingle();
+  if (me?.role === 'project_executive') {
+    console.error('[POST /api/estimates/[id]/files/[fileId]/share] refused', {
+      check: 'role project_executive (S119 D-2: no sharing with bidders)',
+      estimateId: params.id,
+    });
+    return NextResponse.json(
+      { error: 'A Project Executive cannot change what bidders see.' },
+      { status: 403 }
+    );
+  }
   if (access.mode !== 'office' || !access.canUpload) {
     console.error('[POST /api/estimates/[id]/files/[fileId]/share] refused', {
       check: 'resolveEstimateFileAccess: office mode AND canUpload',
