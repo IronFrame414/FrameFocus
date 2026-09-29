@@ -2402,14 +2402,6 @@ longer depends on it — but any other flow sending `?next=/…` still lands on 
 `https://frame-focus-eight.vercel.app/auth/callback**`), same for the other two hosts; lowercase the Site
 URL. Verify by walking a sign-up confirmation email end to end.
 
-## `#169` (was `#4-s114c`) — The bid page's document list (C-3), owed after PART E
-
-**Converted to `#169` when `feature/s114-c-no-migration` landed** (was `#4-s114c`). The S114 C-3 hotfix (`951d2623`, on `main`)
-made `GET /api/bid/[token]/files` serve only files tagged `bid-scope`; nothing on `main` sets that tag, so it
-returns an empty list and the page still lists nothing. **Build after `feature/s112-bid-token-status` lands**
-(its migrations 1850/1860/1890 on production first): in `bid-reply-client.tsx`, fetch the list, render name +
-size + a link that re-fetches on click (URLs live 300 s), hidden while `expired || closed`. No migration.
-
 ## `#170` (was `#5-s114c`) — The client portal splits photos from files by MIME type (R7 deviation)
 
 **Converted to `#170` when `feature/s114-c-no-migration` landed** (was `#5-s114c`). Found in S114 C-2's audit, not changed:

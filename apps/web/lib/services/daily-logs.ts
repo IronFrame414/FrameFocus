@@ -59,8 +59,14 @@ type UntypedRpc = (
   args?: Record<string, unknown>
 ) => PromiseLike<{ data: unknown; error: { message: string } | null }>;
 
+// [S118 item 12, phase 1] Every daily_logs → company_members embed NAMES its FK. Item 12's
+// migration adds daily_logs.office_reviewed_by, a SECOND FK to company_members; a bare
+// `author:company_members(...)` would then be ambiguous and PostgREST refuses it (PGRST201) —
+// exactly what broke every delivery page after 20260902000000 (fixed S116). Shipped BEFORE that
+// migration so production never runs the bare embed against two FKs. _Superseded, quoted:_
+// `author:company_members(display_name)` (×3 in this file).
 const DETAIL_SELECT =
-  '*, author:company_members(display_name), ' +
+  '*, author:company_members!daily_logs_author_member_id_fkey(display_name), ' +
   'crew:daily_log_crew(id, member_id, is_deleted, member:company_members(display_name)), ' +
   'sub_entries:daily_log_sub_entries(id, member_id, hours, note, is_deleted, member:company_members(display_name))';
 
@@ -69,7 +75,7 @@ export async function getDailyLogs(projectId: string): Promise<DailyLogListItem[
   const supabase = await createClient();
   const { data, error } = await supabase
     .from('daily_logs')
-    .select('*, author:company_members(display_name)')
+    .select('*, author:company_members!daily_logs_author_member_id_fkey(display_name)')
     .eq('project_id', projectId)
     .eq('is_deleted', false)
     .order('log_date', { ascending: false })
@@ -227,7 +233,7 @@ export async function getMobileDailyLogs(filters?: {
 
   let query = supabase
     .from('daily_logs')
-    .select('id, log_date, work_performed, project_id, author:company_members(display_name), project:projects(name, project_number)')
+    .select('id, log_date, work_performed, project_id, author:company_members!daily_logs_author_member_id_fkey(display_name), project:projects(name, project_number)')
     .eq('is_deleted', false)
     .order('log_date', { ascending: false })
     .order('created_at', { ascending: false });
