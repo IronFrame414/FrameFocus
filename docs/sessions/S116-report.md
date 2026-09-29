@@ -211,3 +211,12 @@ estimates on assigned projects.
   middleware recognises a valid session via getClaims; they do not (and cannot) prove it rejects one.
 - `lint-job.sh`: TYPE 0, LINT 0, TEST 0 — 141 / 1922, 0 cache hits. CI request `e8733c90` → run
   **36558892243** (base = main `4d30415c`).
+
+### ✅ 4. H-1b MERGED to main as `160a57d5` (R8, per Q9)
+- CI **36558892243** on `e8733c90` (base = main `4d30415c`): Lint & Type Check success; E2E 631 →
+  **610 passed, 21 skipped** (26.9m); tally 612 `✓`, **0 `✘`**. No migration. `[skip ci]` merge;
+  `git diff e8733c90 HEAD --stat` → empty.
+
+### 5. R11 (read slice) — CI requested; Q5 NOT built
+- Rebased onto `160a57d5` (clean; 11 files, none under `supabase/`). `lint-job.sh`: TYPE 0, LINT 0,
+  TEST 0 — **142 files / 1940 passed**, 0 cache hits. CI request `8e859c6c` → run **36562206482**.
