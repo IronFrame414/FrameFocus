@@ -77,7 +77,10 @@ async function line(estimateId: string): Promise<string> {
     .single();
   const { data, error } = await admin
     .from('estimate_line_items')
-    .insert({ company_id: companyId, estimate_id: estimateId, category_id: (cat as { id: string }).id, name: 'Studs', sort_order: 0 })
+    .insert({ company_id: companyId, estimate_id: estimateId, category_id: (cat as { id: string }).id, name: 'Studs', sort_order: 0,
+      // Flat-priced, so set_line_override_cost reaches its author check (a line
+      // without an override stops at "not a flat-priced line" first — first run).
+      total_price_override: 100 })
     .select('id')
     .single();
   if (error) throw new Error(`line: ${error.message}`);

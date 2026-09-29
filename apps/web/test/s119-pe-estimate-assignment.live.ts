@@ -258,6 +258,8 @@ describe('⚠️ PE-to-PE — each PE reads and writes ZERO of the other\'s (the
     const sw = await peB.rpc('switch_pricing_mode', { p_estimate_id: estA, p_new_mode: 'markup' });
     expect(sw.error?.message ?? '').toMatch(/not found/i);
     const { data: li } = await admin.from('estimate_line_items').select('id').eq('estimate_id', estA).limit(1).single();
+    // Flat-priced, so the function reaches its assignment check (not "not a flat-priced line").
+    await admin.from('estimate_line_items').update({ total_price_override: 100 }).eq('id', (li as { id: string }).id);
     const oc = await peB.rpc('set_line_override_cost', { p_line_id: (li as { id: string }).id, p_cost: 1 });
     expect(oc.error?.message ?? '').toMatch(/not found/i);
   });
