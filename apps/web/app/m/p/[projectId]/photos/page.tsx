@@ -11,6 +11,7 @@ import { PhotoSearch } from './photo-search';
 import { getMobileT, getMyLanguage } from '@/lib/i18n/server';
 import { dateLocale } from '@/lib/i18n/dates';
 import type { T } from '@/lib/i18n/messages';
+import { canDeletePhoto } from '@/lib/photos/delete-permission';
 
 // M6M §4.8 — M-8 · Project photos, the gallery.
 //
@@ -76,7 +77,8 @@ export default async function ProjectPhotosPage({
 
   // A-25d — `files_delete_owner_admin` restricts DELETE to Owner/Admin, and the
   // UI must not offer an action the DB will reject.
-  const canDelete = profile?.role === 'owner' || profile?.role === 'admin';
+  // C-11 [S115] — the shared rule; desktop reads the same one.
+  const canDelete = canDeletePhoto(profile?.role);
 
   const filtered = active ? photos.filter((p) => p.source === active) : photos;
 

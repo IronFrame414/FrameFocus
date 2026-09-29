@@ -399,7 +399,7 @@ export default function MarkupEditor({
             type="button"
             onClick={handleUndo}
             disabled={shapes.length === 0}
-            style={actionBtn}
+            style={shapes.length === 0 ? actionBtnDisabled : actionBtn}
           >
             Undo
           </button>
@@ -407,7 +407,11 @@ export default function MarkupEditor({
             type="button"
             onClick={handleDeleteSelected}
             disabled={!selectedId}
-            style={actionBtn}
+            // C-11 [S115] — this deletes a drawn SHAPE, and with none selected it
+            // was disabled while still styled as live: the "delete button that
+            // does nothing". The photo itself is deleted by "Delete photo" above.
+            title={selectedId ? undefined : 'Select a shape on the photo to delete it'}
+            style={!selectedId ? actionBtnDisabled : actionBtn}
           >
             Delete selected
           </button>
@@ -488,6 +492,13 @@ const actionBtn: React.CSSProperties = {
   border: '1px solid #999',
   borderRadius: '4px',
   cursor: 'pointer',
+};
+
+// C-11 [S115] — a disabled control must LOOK disabled.
+const actionBtnDisabled: React.CSSProperties = {
+  ...actionBtn,
+  opacity: 0.45,
+  cursor: 'not-allowed',
 };
 
 function EditableShape({
