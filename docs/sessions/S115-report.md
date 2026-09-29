@@ -467,3 +467,8 @@ F-11 requested: run **36511018774** on `8376c38b` (base = main `a05e10db`). Then
 - CI **36513523500 green** on `d582090f` (base = main `d91ac955`): Lint & Type Check success; E2E 624 → **603 passed, 21 skipped, 0 failed** (26.4 min). No migration. `[skip ci]` merge; tree identity checked by `scratchpad/merge-next.sh` before push (remote head = tested sha; branch based on current main; `git diff <tested> HEAD --stat` empty, else it resets and stops).
 - H-3 rebased onto `4ac29dc8`, CI requested: run **36515777888** on `f0f8296b`.
 - Pre-rebased C-12, C-11, H-5, R11, R10, H-1b onto `4ac29dc8`: all clean, no conflicts; `tsc --noEmit` exit 0 on each of the five queued ones.
+
+### ✅ Part 3 — H-3 (m-loading) MERGED to main as `0de7b883` (R8)
+- CI **36515777888 green** on `f0f8296b` (base = main `4ac29dc8`): Lint & Type Check success; E2E **625** tests (+1, the R2 punch-row test) → **604 passed, 21 skipped, 0 failed** (29.6 min). No migration. `[skip ci]` merge, tree identity checked by `merge-next.sh`.
+- **The S112 ruling's condition ("/m has loading feedback on navigation") is now MET on main.** The staletimes branch is still not shipped: its premise in H-3 is contradicted (Q8).
+- C-12 rebased onto `0de7b883`, CI requested: run **36518225655** on `a49e33da`.
