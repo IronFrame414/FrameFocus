@@ -12,9 +12,11 @@
 > register) is the assignment authority, unchanged from CLAUDE.md's rule that *main's file is the
 > authority*. **Numbers are IMMUTABLE — never reused, reassigned, or compacted — and they span all
 > THREE files.** The next free number is **one above the highest number appearing in ANY of the
-> three files**. The highest currently allocated is **#172** (in this file — S116, `#171`–`#172`, 2026-09-29,
-> converted from `#1-s115r`/`#2-s115r` when `feature/s115-report` landed), so the next free number is
-> **#173**. _Superseded, quoted: "The highest currently allocated is **#170** (in this file — S114 PART C,
+> three files**. The highest currently allocated is **#174** (in this file — S118, `#173`–`#174`, 2026-09-29,
+> converted from `#1-bidtok`/`#2-bidtok` when `feature/s112-bid-token-status` landed), so the next free
+> number is **#175**. _Superseded, quoted: "The highest currently allocated is **#172** (in this file —
+> S116, `#171`–`#172`, 2026-09-29, converted from `#1-s115r`/`#2-s115r` when `feature/s115-report`
+> landed), so the next free number is **#173**."_ _Earlier superseded, quoted: "The highest currently allocated is **#170** (in this file — S114 PART C,
 > `#166`–`#170`, 2026-09-28, converted from `#1-s114c`–`#5-s114c` when `feature/s114-c-no-migration`
 > landed), so the next free number is **#171**."_ _Earlier superseded, quoted: "The highest currently allocated is **#165** (in this
 > file — S114 PART A, `#164`–`#165`, 2026-09-28, converted from `#1-s114a`/`#2-s114a` when
@@ -704,7 +706,7 @@ top of this file is advanced to `#164` in the same commit, which is what keeps t
 
 > Provisional ids per the S136 rule: never allocate a bare `#N` on a branch.
 
-- **#1-bidtok — link an awarded bid's company to project access, so the winner's /bid token can
+- **#173 (was #1-bidtok; converted when `feature/s112-bid-token-status` landed, S118) — link an awarded bid's company to project access, so the winner's /bid token can
   close on an EVENT, not a timer. FILED by ruling [Josh, S112 bid decision 4].** Today the winner's
   link survives conversion until it expires (≤ 14 days), because "the winner has been granted
   project access" cannot be observed: nothing links a `subcontractors` directory record (who was
@@ -713,7 +715,7 @@ top of this file is advanced to `#164` in the same commit, which is what keeps t
   (20261890000000) gains one clause: closed when the winner's company holds an assignment on the
   converted project.
 
-- **#2-bidtok — tag bid documents BY LINE, so a sub sees only their own trade's scope. FILED by
+- **#174 (was #2-bidtok; converted when `feature/s112-bid-token-status` landed, S118) — tag bid documents BY LINE, so a sub sees only their own trade's scope. FILED by
   ruling [Josh, S112 bid decision 3]: "tagging attachments by line is the proper fix and it is not
   today's work."** The interim that shipped: `/api/bid/[token]/files` serves only files staff
   explicitly shared ("Share with bidders" → the `bid-scope` tag), estimate-wide. Before it, every
