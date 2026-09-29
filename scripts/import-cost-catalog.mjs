@@ -16,6 +16,18 @@
 // DRY RUN BY DEFAULT. Without --apply it reads, validates and reports what it
 // WOULD insert, per category, and writes nothing.
 //
+// [S118 item 8] MARKUP. `--markup-percent <p>` is REQUIRED and applied to every
+// unit_cost: cost → integer cents (the CSV carries 2 decimals), then
+// round_half_up(cents × (100 + p) / 100) → dollars. Integer arithmetic, so no
+// binary-float drift; half a cent always rounds UP (all costs are positive).
+// Five worked examples are printed on every run.
+//
+// [S118 item 8] SQL MODE. `--sql-out <file> --company-id <uuid> --created-by <uuid>`
+// writes ONE idempotent statement (INSERT … SELECT … WHERE NOT EXISTS, same name
+// normalisation as below) instead of signing in — for a database where no user
+// password is held. The rows are the SAME rows this script computes (one code
+// path); only the transport differs. No sign-in, no service key.
+//
 // IDEMPOTENT. A row whose name (trimmed, case-insensitive) already exists in the
 // company's live catalog is skipped, so a second run — or a run after a partial
 // failure — inserts only what is missing. It never updates or deletes.
@@ -25,7 +37,7 @@
 // 2026-09-26) so a bad row is reported before anything is written; if they ever
 // disagree, the insert fails loudly rather than writing a wrong value.
 import { createClient } from '../node_modules/@supabase/supabase-js/dist/index.mjs';
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync, writeFileSync } from 'node:fs';
 
 const CATEGORIES = new Set(['lumber', 'fasteners', 'electrical', 'plumbing', 'finishes', 'concrete', 'drywall', 'roofing', 'paint', 'hardware', 'insulation', 'other']);
 const UNITS = new Set(['each', 'sq_ft', 'linear_ft', 'box', 'bundle', 'bag', 'gallon', 'pair', 'set', 'other']);
@@ -37,9 +49,27 @@ const arg = (name) => { const i = args.indexOf(`--${name}`); return i === -1 ? n
 const APPLY = args.includes('--apply');
 const email = arg('email');
 const csvPath = arg('csv');
+const sqlOut = arg('sql-out');
+const companyIdArg = arg('company-id');
+const createdByArg = arg('created-by');
+const markupArg = arg('markup-percent');
 const password = process.env.CATALOG_IMPORT_PASSWORD;
-if (!email || !csvPath) { console.error('usage: --email <user> --csv <file> [--apply]  (password in CATALOG_IMPORT_PASSWORD)'); process.exit(2); }
-if (!password) { console.error('CATALOG_IMPORT_PASSWORD is not set — the password is never taken as an argument.'); process.exit(2); }
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+if (!csvPath || markupArg === null) { console.error('usage: --csv <file> --markup-percent <p> ( --email <user> [--apply] | --sql-out <file> --company-id <uuid> --created-by <uuid> )'); process.exit(2); }
+const MARKUP = Number(markupArg);
+if (!Number.isInteger(MARKUP) || MARKUP < 0 || MARKUP > 100) { console.error(`--markup-percent must be a whole number 0–100, got "${markupArg}"`); process.exit(2); }
+if (sqlOut) {
+  if (!UUID.test(companyIdArg ?? '') || !UUID.test(createdByArg ?? '')) { console.error('--sql-out needs --company-id and --created-by as UUIDs'); process.exit(2); }
+} else {
+  if (!email) { console.error('--email is required unless --sql-out'); process.exit(2); }
+  if (!password) { console.error('CATALOG_IMPORT_PASSWORD is not set — the password is never taken as an argument.'); process.exit(2); }
+}
+/** round_half_up(cents × (100 + p) / 100), in integer cents → dollars. */
+function markedUp(cost) {
+  const cents = Math.round(cost * 100);
+  const num = cents * (100 + MARKUP);
+  return Math.floor((num + 50) / 100) / 100;
+}
 
 // Environment: the app's own public URL + anon key (what a browser would use).
 const envFile = new URL('../apps/web/.env.local', import.meta.url);
@@ -51,7 +81,7 @@ if (existsSync(envFile)) {
 }
 const URL_ = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const ANON = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-if (!URL_ || !ANON) { console.error('NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY missing'); process.exit(2); }
+if (!sqlOut && (!URL_ || !ANON)) { console.error('NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY missing'); process.exit(2); }
 
 // ── CSV (RFC 4180: quoted fields, doubled quotes, commas inside quotes) ──────
 function parseCsv(text) {
@@ -101,7 +131,8 @@ body.forEach((cols, i) => {
     name: r.name,
     category: r.category,
     unit_of_measure: r.unit_of_measure,
-    unit_cost: Math.round(cost * 100) / 100,
+    unit_cost: markedUp(cost),
+    source_cost: Math.round(cost * 100) / 100,
     item_type: r.item_type || 'material',
     product_url: r.product_url || null,
     last_verified_at: r.last_verified_at || null,
@@ -110,6 +141,38 @@ body.forEach((cols, i) => {
     is_favorite: r.is_favorite.toLowerCase() === 'true',
   });
 });
+
+// ── Worked examples of the markup (always printed) ─────────────────────────
+console.log(`\nMarkup +${MARKUP}% — round half up to the cent (integer cents). Five worked examples:`);
+for (const r of [...valid].sort((a, b) => a.source_cost - b.source_cost).filter((_, i, a) => [0, Math.floor(a.length / 4), Math.floor(a.length / 2), Math.floor((3 * a.length) / 4), a.length - 1].includes(i))) {
+  console.log(`  ${r.source_cost.toFixed(2).padStart(8)} × 1.${String(MARKUP).padStart(2, '0')} = ${(r.source_cost * (100 + MARKUP) / 100).toFixed(4).padStart(10)} → ${r.unit_cost.toFixed(2).padStart(8)}   ${r.name}`);
+}
+for (const r of valid) delete r.source_cost;
+
+// ── SQL mode: one idempotent statement, no sign-in ─────────────────────────
+if (sqlOut) {
+  if (invalid.length) { console.error(`REFUSED: ${invalid.length} invalid rows`); process.exit(1); }
+  const lit = (v) => (v === null ? 'NULL' : typeof v === 'boolean' ? (v ? 'true' : 'false') : typeof v === 'number' ? String(v) : `'${String(v).replace(/'/g, "''")}'`);
+  const cols = ['name', 'category', 'unit_of_measure', 'unit_cost', 'item_type', 'product_url', 'last_verified_at', 'notes', 'cost_code', 'is_favorite'];
+  const values = valid.map((r) => `(${cols.map((c) => lit(r[c])).join(', ')})`).join(',\n  ');
+  const normSql = (x) => `lower(regexp_replace(btrim(${x}), '\\s+', ' ', 'g'))`;
+  const sql = `-- cost_catalog import: ${valid.length} rows, +${MARKUP}%, company ${companyIdArg}, created_by ${createdByArg}. Idempotent by normalised name.
+INSERT INTO public.cost_catalog (company_id, created_by, updated_by, ${cols.join(', ')})
+SELECT '${companyIdArg}'::uuid, '${createdByArg}'::uuid, '${createdByArg}'::uuid,
+       v.name, v.category, v.unit_of_measure, v.unit_cost::numeric, v.item_type, v.product_url, v.last_verified_at::timestamptz, v.notes, v.cost_code, v.is_favorite
+FROM (VALUES
+  ${values}
+) AS v(${cols.join(', ')})
+WHERE NOT EXISTS (
+  SELECT 1 FROM public.cost_catalog k
+  WHERE k.company_id = '${companyIdArg}'::uuid AND k.is_deleted = false
+    AND ${normSql('k.name')} = ${normSql('v.name')}
+);
+`;
+  writeFileSync(sqlOut, sql);
+  console.log(`\nSQL written: ${sqlOut} (${valid.length} candidate rows; existing names are skipped by the statement itself).\n`);
+  process.exit(0);
+}
 
 // ── Sign in AS the company user ─────────────────────────────────────────────
 const db = createClient(URL_, ANON, { auth: { persistSession: false, autoRefreshToken: false } });
