@@ -52,6 +52,35 @@ branch carries is already on production and verified by object. ⚠️ **Applyin
 is Josh's action.** The S181d override was scoped to five named migrations in one session and does not
 carry here.
 
+
+# RULED [Josh, 2026-09-28]
+
+> *[Folded in S115 from `S114 spec additions` (2026-09-28 evening).]*
+
+**R9 — Chat photos stay narrow.** ✅ **Already built** (chat keeps `category = 'photos'`); recorded as a ruling, nothing to build. The chat photo picker, message and thread routes keep
+`category = 'photos'` only. They do **not** take the widened Photos view (`daily_logs`, `safety`).
+Reason, so it is not "fixed" later: a chat thread can include subcontractors and clients, a safety
+image can be an injury photo, and the picker has no knowledge of who is in the thread. Sharing a
+safety image into a conversation is an explicit action from the safety record, where the audience is
+visible — never a side effect of a shared query.
+
+**R10 — Original budget line items are editable inside the project, gated by state.** Owner, Admin,
+Project Manager and Project Executive may add and edit original-budget line items **until the first
+invoice is issued**. After that, changes go through change orders as they do today.
+⚠️ **Not gated on the QuickBooks exclusion flag.** Whether a project syncs to the books has nothing to
+do with who may build its budget; coupling them would be an accident of how the request arose.
+
+**R11 — The Project Executive gets estimate access scoped to its own projects, including markup and
+margin.** [Josh, 2026-09-28] The role is for a profit-sharing partner who builds the budget jointly
+and presents the proposal PDF to the end client. The existing proposal PDF is what he hands over, so
+the role needs the estimate behind it.
+⚠️ **This is a real widening.** PART A grouped estimates as company-level (G3, 40 policies, no arm).
+Opening them project-scoped is its own build, not an addition to R10.
+⚠️ **Recorded caveat:** `project_executive` is a role, not a per-person setting. Everyone holding it
+sees markup and margin on their assigned projects. If the role is later given to someone who is not a
+profit-sharing partner — a client-side project manager, say — that needs a **per-assignment flag**,
+not a second role. The option is noted so it stays open; nothing is built for it now.
+
 ---
 
 # PART A — the Project Executive, finished (`project_executive` operational arms)
@@ -552,6 +581,34 @@ database read exists; the UI fails closed. A ruled behaviour that was never deli
 > - Carried: `project_financials` PE write arms dropped — **C-branch 2** (`20262000000000`, rebuild-test only).
 >   `setup_payment_schedule()` lockout filed `#167` (LIVE DEFECT).
 
+> *[Folded in S115 from `S114 spec additions` (2026-09-28 evening).]*
+
+**C-11. Photo deletion is a dead control.** [Josh, 2026-09-28] There is a delete button on project
+photos and clicking it does nothing. ⚠️ **The fix is the feature, not the button** — deleting a project
+photo must work. Removing the control is not the answer; that is the C-7 shape, where a dead Comments
+button was deleted and the feature Josh asked for quietly became a deferral.
+**FILL-C-11.1** — What happens on click today: is there a handler, does it call anything, does the
+call fail silently, or is the row filtered by RLS and reported as success? ⚠️ The `saveMarkup` defect
+found in C-8 was exactly this shape — an RLS-filtered 0-row write reported as a save.
+**FILL-C-11.2** — What deletion should mean: soft delete, storage object removal, thumbnail and
+derivative cleanup, and what happens to a photo already attached to a daily log, estimate or sent
+document.
+**FILL-C-11.3** — PARITY: `/m` and desktop.
+
+**C-12. Scope of work loses all formatting when sent.** [Josh, 2026-09-28, two screenshots] The scope
+is authored in markdown and the proposal renders it raw: `## Scope of Work`, `### 1.` and `*` bullets
+print as literal characters, and in the sent version the whole thing collapses into a single
+paragraph. Nothing parses it.
+**FILL-C-12.1** — Where the scope text is stored, and every surface that renders it: the builder
+preview, the signing page, the PDF, the client portal, and any email body.
+⚠️ **Audit by what is CALLED.** A fix applied to the signing page and not the PDF is the defect the
+client sees.
+**FILL-C-12.2** — Whether the editor is intended to be markdown at all, or whether authors are typing
+markdown into a plain textarea because nothing told them otherwise. The two have different fixes:
+render it, or give them a formatting control.
+⚠️ **This gates R11's value.** The partner presenting that PDF hands the client a page of `###` and
+asterisks until this is fixed.
+
 ---
 
 # PART D — security and access lifetime
@@ -635,6 +692,28 @@ the ruling where a reader of that file will find it, without editing the migrati
 run and neither company has a catalog. Dry run reporting what it would insert per company, then Josh
 runs it.
 
+> *[Folded in S115 from `S114 spec additions` (2026-09-28 evening).]*
+
+**F-11. CI is close to its ceiling.** [Measured 2026-09-28] The E2E job on `main` was **cancelled at
+the 50-minute `timeout-minutes`**; a re-run of the identical tree took **42 minutes**. Eight minutes of
+headroom, and the suite grows every session. This will start failing randomly and each false red costs
+a full re-run.
+**FILL-F-11.1** — Where the 42 minutes go, by spec file. Then the options with their trade-offs:
+raise the timeout, shard the suite, or split the slowest specs into a second job.
+⚠️ The reporter prints no per-test progress, so a hung run and a slow run look identical from the log.
+Whatever is done, that should change too.
+
+**F-12. C-5 is built and unproven.** `feature/s114-c5-multi-upload`, blocked by `#2-s180u`, which
+requires **one proof per surface** — eight components, eight proofs, each stating what it uploaded and
+what landed. A single batch test is not acceptance.
+⚠️ **Josh's Q7 ruling of 2026-09-28 was given without `#2-s180u` in front of him.** CC found the
+standing ruling afterwards and reverted C-5 off the shipping branch rather than let it through. The
+earlier ruling stands and the later one does not override it.
+
+**F-13. Production auth redirect allow-list.** `…/auth/callback?next=*` does not match
+`?next=/reset-password`, so any flow relying on `?next=<path>` falls back to the Site URL. C-1's fix
+no longer depends on it, but the misconfiguration remains. **Josh's dashboard action**, not a build.
+
 ---
 
 # PART G — only Josh can do these
@@ -670,6 +749,77 @@ that it can create a task, see the schedule and upload a photo; and that it has 
 contract. ⚠️ **PART A is not verified.** (G-1 is done by Josh; G-2's last clause — the forms do not offer
 the role — is superseded by FILL-A-6, which now offers it.)
 
+> *[Folded in S115 from `S114 spec additions` (2026-09-28 evening).]*
+
+G-6 in the additions restates the G-6 above ("Deferred 2026-09-28 … PART A is not verified"); no new content, not duplicated.
+
+**G-7 — C-1 is DEPLOYED-UNPROVEN.** The password-reset fix is on production. The proof that remains is
+Josh's: request the reset email, click the link that actually arrives, set a password, sign in with it,
+**on a second device**. ⚠️ The S112 proof used a link shape the emails never send and passed while the
+flow was broken.
+
+**G-8 — C-6 needs a person looking at a real proposal.** Closed on tests only.
+
+---
+
+# PART H — the app is slow. Fix it.
+
+> *[Folded in S115 from `S114 spec additions` (2026-09-28 evening).]*
+
+[Josh, 2026-09-28] **"Everything. The first is especially slow. Moving between pages is slow as
+well."** Region (D-4) is answered — Supabase and Vercel are in the same region, so a cross-region round
+trip is **not** the cause.
+
+⚠️ **This PART is work, not a measurement pass.** Josh has been told "we need to measure" twice and
+nothing has changed. H-1 to H-3 are concrete and ordered by expected payoff. H-5 exists only to catch
+what they miss.
+
+⚠️ **Do not conflate any of this with the signed-URL lifetime (R5/D-3).** That is how long a revoked
+user keeps reading cached files. Its answer is a number we choose. It has nothing to do with pages
+being slow.
+
+**H-1. The auth round trip in middleware — first load AND every navigation.**
+The standard Next.js + Supabase setup refreshes the session in middleware, which makes a **network call
+to Supabase before the page begins rendering**, on every request the matcher catches. A broad matcher
+means paying that round trip on the first load and again on every navigation — precisely the symptom.
+**FILL-H-1.1** — The middleware file, its `matcher`, and every network call it makes. State the exact
+matcher pattern and what it excludes.
+**FILL-H-1.2** — Time one production request with and without it, server-side. ⚠️ **Measure the call,
+not the page** — a page timing conflates this with everything else.
+**FILL-H-1.3** — Narrow the matcher to routes that actually need a session: exclude static assets,
+images, fonts, and any public route (`/bid/*`, the client portal, `/sign-in`).
+⚠️ **A negative test that a protected route still redirects when signed out.** Narrowing a matcher is
+how an auth gate silently disappears.
+
+**H-2. What the root layout waits for before first paint.**
+**FILL-H-2.1** — Every `await` on the path from root layout to a rendered page, for the three heaviest
+screens. Mark each as **sequential** or **parallel**.
+**FILL-H-2.2** — Any sequential chain that could run together (profile → company → page data is the
+classic). Fix the waterfalls; report the before and after in milliseconds.
+
+**H-3. Navigation feel — the work is already built and parked.**
+Two branches were held as a **pair** a week ago and neither shipped:
+- `feature/s112-m-loading` — loading feedback on `/m`. Pushed without CI, unverified (S113 B-7).
+- `feature/s112-staletimes-hold` — **sets `staleTimes.dynamic` to 0 (from Next's 30-second default),
+  so every revisit refetches: a correctness fix bought with speed** (S112-router-staleness §1: 52 → 369
+  ms unthrottled, 51 → 2,129 ms Slow 3G). ⚠️ **Held by ruling until `/m` had loading feedback**, which is
+  what the first branch provides. **NOT SHIPPED [Josh, S116 Q8]** — see S112-router-staleness.md
+  "DECIDED". _Corrected in place [S116]; the line as written said: "raises Next's client router cache
+  above its 30-second default, so returning to a page you just visited is instant instead of a
+  refetch." Measured S115 H-3: it does the opposite._
+**Ship them in that order.** Verify the first, then un-park the second and state the ruling's condition
+as met.
+
+**H-4. What each screen actually ships.**
+**FILL-H-4.1** — JavaScript transferred per route for the heaviest screens. Photos went from 45.9 MB to
+~2 MB once someone looked; assume there is another of those.
+**FILL-H-4.2** — Anything loaded on every page that only one page needs.
+
+**H-5. The ranked pass — only after H-1 to H-4, and time-boxed.**
+Main screens on production as a real user: time-to-interactive, transferred bytes, request count, and
+the slowest server call, ranked. Photos, project overview, Money and the `/m` hub. ⚠️ **End with a
+ranked list and a decision on each, not a document.**
+
 ---
 
 # ASK — Phase 2
@@ -680,6 +830,36 @@ the role — is superseded by FILL-A-6, which now offers it.)
 **ASK-4** — ASK-D-3: the signed-URL lifetimes.
 **ASK-5** — C-7: build comments, or state the cost and let Josh rule.
 **ASK-6** — Build order **within** each PART. PART A is first by R6; CC proposes the rest, Josh rules.
+
+> *[Folded in S115 from `S114 spec additions` (2026-09-28 evening).]*
+
+**ASK-19** — R10's gate: "until the first invoice is issued" is the proposed state boundary. Confirm
+it, or name the one that fits how you actually work.
+**ASK-20** — R11: which estimate surfaces the role reaches (list, builder, proposal preview, send),
+and whether it may **send** an estimate to a client or only build and export it.
+**ASK-21** — C-12: is the scope editor meant to be markdown, or should authors get a formatting
+control instead?
+**ASK-22** — F-11: raise the timeout, shard, or split the slowest specs.
+
+---
+
+## Production state recorded 2026-09-28
+
+> *[Folded in S115 from `S114 spec additions` (2026-09-28 evening).]*
+
+All five PART A migrations plus `20261990000000`, `20262000000000` and `20262010000000` are on
+production and verified by object, independently, by Josh:
+
+- `newest_migration 20262010000000`; PART A ledger 5, PARTS C/B ledger 3.
+- `pe_read_arms 27`, `pe_write_arms 57` (ends-with pattern `LIKE '%\_project\_executive'` — ⚠️ a
+  contains-pattern gives different counts; state which pattern produced any figure).
+- `project_financials` PE arms: **SELECT only**.
+- `project_qb_exclusions`: RLS on, 3 policies (INSERT owner, UPDATE owner, SELECT owner+admin), 0 rows;
+  resolvers executable by `service_role` only.
+- `create_site_visit` md5 `ad38f7f8b84dc11996e362c4a6ca701d`; `qb_enqueue`
+  `fa91dad71bd86d45268d8786de408d4e`; `qb_enqueue_job_chain` `165f64ca54888feb155f188c3b000e02`.
+- QuickBooks: **disconnected on both companies**, so PART B's Q17 (a)–(e) edge cases are
+  **built to ruling, unproven against live data**.
 
 ---
 

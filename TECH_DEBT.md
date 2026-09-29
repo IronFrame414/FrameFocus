@@ -12,9 +12,11 @@
 > register) is the assignment authority, unchanged from CLAUDE.md's rule that *main's file is the
 > authority*. **Numbers are IMMUTABLE — never reused, reassigned, or compacted — and they span all
 > THREE files.** The next free number is **one above the highest number appearing in ANY of the
-> three files**. The highest currently allocated is **#170** (in this file — S114 PART C, `#166`–`#170`,
-> 2026-09-28, converted from `#1-s114c`–`#5-s114c` when `feature/s114-c-no-migration` landed), so the
-> next free number is **#171**. _Superseded, quoted: "The highest currently allocated is **#165** (in this
+> three files**. The highest currently allocated is **#172** (in this file — S116, `#171`–`#172`, 2026-09-29,
+> converted from `#1-s115r`/`#2-s115r` when `feature/s115-report` landed), so the next free number is
+> **#173**. _Superseded, quoted: "The highest currently allocated is **#170** (in this file — S114 PART C,
+> `#166`–`#170`, 2026-09-28, converted from `#1-s114c`–`#5-s114c` when `feature/s114-c-no-migration`
+> landed), so the next free number is **#171**."_ _Earlier superseded, quoted: "The highest currently allocated is **#165** (in this
 > file — S114 PART A, `#164`–`#165`, 2026-09-28, converted from `#1-s114a`/`#2-s114a` when
 > `feature/s114-pe-operational-arms` landed), so the next free number is **#166**."_ _Earlier superseded, quoted: "The highest currently allocated is **#163** (in this
 > file — the S108 Spec E production-runbook findings, `#159`–`#163`, 2026-09-22), so the next free number
@@ -2392,6 +2394,31 @@ size + a link that re-fetches on click (URLs live 300 s), hidden while `expired 
 staff surface decides by `category` (R7, RULED: a scanned plan or photographed permit is a document). A
 client sees a photographed permit among the photos. Fix: the portal reads the same category rule
 (`PHOTO_VIEW_FILTER` / `getDocumentFiles`, `lib/services/files.ts`), with its own `client_visible` filter kept.
+
+## `#171` (was `#1-s115r`) — RLS lets foreman, crew and subcontractors soft-delete project photos (wider than any written rule)
+
+**Converted to `#171` when `feature/s115-report` landed** (was `#1-s115r`). Found S115 C-11, measured S116 against rebuild-test's live `pg_policies`. **`files_update_non_client`**
+(`20260822000000:98-100`) admits `project_manager`, `foreman`, `crew_member` and `subcontractor` to UPDATE any
+`files` row on a project `can_view_project()` admits, for every category except
+`contracts`/`change_orders`/`invoices` — so any of them can set `is_deleted = true` on a photo. The written rule
+is **Owner/Admin/PM/PE** [Josh, S116 Q11; CLAUDE.md approvals "Delete files"; R1], and the UI (`canDeletePhoto`,
+`lib/photos/delete-permission.ts`) offers delete to exactly those. **A hidden button protects no row.** The
+same policy likely carries crew's legitimate photo writes (markup, tags — NOT verified; enumerate the
+`files` UPDATE call sites a crew identity reaches before narrowing), so the floor is probably a column- or
+transition-scoped guard on `is_deleted` (a RESTRICTIVE policy or a BEFORE UPDATE trigger refusing
+`is_deleted` false→true unless the role is O/A/PM/PE), not "no UPDATE for crew". Policy change → migration → needs Josh's word;
+not done unattended. Check `files_z_site_visit_freeze` (a RESTRICTIVE policy on the same column) for the shape.
+
+## `#172` (was `#2-s115r`) — `project_budget_amounts` can be UPDATEd directly with no invoice lock (R10's lock binds only its functions)
+
+**Converted to `#172` when `feature/s115-report` landed** (was `#2-s115r`). Found S115 R10. R10 (`20262020000000`, branch `feature/s115-r10-budget-edit`) makes original budget lines
+editable until the first invoice is issued, **through two SECURITY DEFINER functions** that enforce the lock.
+But the pre-existing policies on `project_budget_amounts` — Owner/Admin INSERT/UPDATE (`20260816000000`) and PE
+INSERT/UPDATE on its projects (`20261910000000:105,107`) — still let those roles UPDATE `budgeted_amount`
+**directly**, before or after an invoice, on any line (original, change-order or ad-hoc). No UI uses the
+direct path today. Closing it = dropping/narrowing those UPDATE arms so the functions are the only writer
+(check every writer first: conversion, CO apply, the recompute triggers — S115 mapped 6). Policy change →
+needs Josh's word; not done unattended. Land after R10 is on production.
 
 ## Process notes
 
