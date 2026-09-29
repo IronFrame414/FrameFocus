@@ -1,3 +1,4 @@
+import { cache } from 'react';
 import { createClient } from '@/lib/supabase-server';
 import type { Database } from '@framefocus/shared/types/database';
 
@@ -53,8 +54,13 @@ export async function getProjects(filters?: {
 /**
  * Single project by id. Does NOT filter is_deleted (trash-bin pattern —
  * a restore flow must be able to fetch a soft-deleted project).
+ *
+ * H-2 [S115] — memoized per REQUEST (React `cache`, keyed on `id`): the
+ * project layout and the page under it both read the same row, so one render
+ * now makes one round trip for it instead of two. Per-request only, like
+ * `createClient`; outside a render (Route Handlers) it is not memoized.
  */
-export async function getProject(id: string): Promise<ProjectWithContact | null> {
+export const getProject = cache(async (id: string): Promise<ProjectWithContact | null> => {
   const supabase = await createClient();
 
   const { data } = await supabase
@@ -64,7 +70,7 @@ export async function getProject(id: string): Promise<ProjectWithContact | null>
     .single();
 
   return (data as unknown as ProjectWithContact | null) ?? null;
-}
+});
 
 /** Soft-deleted projects for a trash UI (Owner/Admin surface). */
 export async function getProjectTrash(): Promise<ProjectWithContact[]> {

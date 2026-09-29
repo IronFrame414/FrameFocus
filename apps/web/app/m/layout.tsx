@@ -1,7 +1,7 @@
 import { LanguageProvider } from '@/components/i18n/language-provider';
 import { asLang } from '@/lib/i18n/lang';
 import { redirect } from 'next/navigation';
-import { createClient } from '@/lib/supabase-server';
+import { createClient, getRequestUser } from '@/lib/supabase-server';
 import { getMembers } from '@/lib/services/members';
 import { getUnreadCount } from '@/lib/services/notifications';
 import { MobileShell } from './mobile-shell';
@@ -75,13 +75,19 @@ const SIGN_IN_BACK_TO_M = '/sign-in?next=%2Fm';
 export default async function MobileLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getRequestUser();
 
   if (!user) {
     redirect(SIGN_IN_BACK_TO_M);
   }
+
+  // H-2 [S115] — the same move the dashboard layout already makes (Option 2):
+  // these two self-scope through RLS and never read `profile`, so they start
+  // NOW and overlap the profiles read instead of queuing behind it. Neither can
+  // reject (getMembers is caught, getUnreadCount swallows its own errors), so
+  // neither dangles if a redirect below fires first.
+  const membersP = getMembers().catch(() => null);
+  const unreadCountP = getUnreadCount();
 
   // `first_name, last_name` were selected here for the app-bar avatar and are
   // gone with it (D-36). M-30 (§4.13.7) will bind the signed-in name to
@@ -106,11 +112,11 @@ export default async function MobileLayout({ children }: { children: React.React
     supabase.from('companies').select('name').eq('id', profile.company_id).single(),
     // §3.3's Team tile carries "(count)". Through the service layer, never a
     // direct query from a component.
-    getMembers().catch(() => null),
+    membersP,
     // ND-13 — the app-bar bell's badge. getUnreadCount() already swallows its
     // own errors and returns 0, so a failed count hides the badge rather than
     // breaking the shell it renders in: a wrong number is worse than none.
-    getUnreadCount(),
+    unreadCountP,
   ]);
 
   // S109 #161 — the same file sheet as the dashboard (one viewer, both surfaces).

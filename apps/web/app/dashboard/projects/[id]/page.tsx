@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase-server';
+import { createClient, getRequestUser } from '@/lib/supabase-server';
 import {
   seesProjectMoney,
   managesProjectOperations,
@@ -54,57 +54,71 @@ function initialsOf(name: string): string {
 export default async function ProjectOverviewPage({ params }: { params: { id: string } }) {
   const supabase = await createClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getRequestUser();
   if (!user) redirect('/sign-in');
 
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('role')
-    .eq('user_id', user.id)
-    .eq('is_deleted', false)
-    .single();
-  if (!profile) redirect('/dashboard');
-
-  const project = await getProject(params.id);
-  if (!project) notFound();
-
-  const [contract, allCos, phases, tasks, assignments] = await Promise.all([
-    getRevisedContract(params.id),
-    getChangeOrders(params.id),
-    getPhases(params.id),
-    getTasks(params.id),
-    getProjectAssignments(params.id),
+  // H-2 [S115] — TWO STAGES, where there were eleven awaits in a row. Stage 1
+  // is what the guards need (the caller's role, the project row); stage 2 is
+  // everything the page shows, none of which depends on anything but the
+  // project id, the role and `project.source_estimate_id`. The guards run in
+  // the same order as before (no profile → /dashboard, no project → 404), and
+  // nothing in stage 2 starts until both have passed.
+  const [{ data: profile }, project] = await Promise.all([
+    supabase
+      .from('profiles')
+      .select('role')
+      .eq('user_id', user.id)
+      .eq('is_deleted', false)
+      .single(),
+    getProject(params.id),
   ]);
-
-  // Open punch count (plain count — no due-date model, ui-04 §S6).
-  const { count: punchCount } = await supabase
-    .from('punch_list_items')
-    .select('*', { count: 'exact', head: true })
-    .eq('project_id', params.id)
-    .eq('is_deleted', false)
-    .in('status', ['open', 'in_progress']);
-
-  // Estimate link (when converted)
-  let sourceEstimate: { id: string; estimate_number: string } | null = null;
-  if (project.source_estimate_id) {
-    const { data } = await supabase
-      .from('estimates')
-      .select('id, estimate_number')
-      .eq('id', project.source_estimate_id)
-      .single();
-    sourceEstimate = data ?? null;
-  }
+  if (!profile) redirect('/dashboard');
+  if (!project) notFound();
 
   const canTransition = managesProjectOperations(profile.role);
   // [S114 PART B] Owner 'set', Admin 'see', everyone else 'none' — no
   // QuickBooks UI at all (the PE included). RLS is the authority.
   const qbAccess = qbExclusionAccess(profile.role);
-  const [qbExclusion, qbLinked] =
+
+  const [
+    [contract, allCos, phases, tasks, assignments],
+    // Open punch count (plain count — no due-date model, ui-04 §S6).
+    { count: punchCount },
+    // Estimate link (when converted)
+    sourceEstimate,
+    [qbExclusion, qbLinked],
+    // #116 [S103] — see daysToTarget below.
+    { data: coTz },
+    // R16 / Q3.2 [S150] — see the banner below.
+    owesContractSignature,
+  ] = await Promise.all([
+    Promise.all([
+      getRevisedContract(params.id),
+      getChangeOrders(params.id),
+      getPhases(params.id),
+      getTasks(params.id),
+      getProjectAssignments(params.id),
+    ]),
+    supabase
+      .from('punch_list_items')
+      .select('*', { count: 'exact', head: true })
+      .eq('project_id', params.id)
+      .eq('is_deleted', false)
+      .in('status', ['open', 'in_progress']),
+    project.source_estimate_id
+      ? supabase
+          .from('estimates')
+          .select('id, estimate_number')
+          .eq('id', project.source_estimate_id)
+          .single()
+          .then(({ data }): { id: string; estimate_number: string } | null => data ?? null)
+      : Promise.resolve(null),
     qbAccess === 'none'
-      ? [null, 0]
-      : await Promise.all([getProjectQbExclusion(project.id), countQbLinkedRecords(project.id)]);
+      ? Promise.resolve([null, 0] as const)
+      : Promise.all([getProjectQbExclusion(project.id), countQbLinkedRecords(project.id)]),
+    supabase.from('companies').select('timezone').maybeSingle(),
+    projectHasUnsignedContract(project.id),
+  ]);
   // [S111] Owner/Admin, and a Project Executive on its own project (RLS).
   const canSeeFinancials = seesProjectMoney(profile.role);
 
@@ -122,8 +136,7 @@ export default async function ProjectOverviewPage({ params }: { params: { id: st
 
   // #116 [S103]: the COMPANY day for the days-to-target display, not the UTC day
   // (which rolls to tomorrow after ~20:00 EDT). `companies` is RLS-scoped to the
-  // caller's own row, so no id filter.
-  const { data: coTz } = await supabase.from('companies').select('timezone').maybeSingle();
+  // caller's own row, so no id filter. (Fetched in stage 2 above.)
   const today = companyToday(coTz?.timezone ?? 'America/New_York');
   const daysToTarget = project.target_end_date
     ? Math.round(
@@ -228,7 +241,7 @@ export default async function ProjectOverviewPage({ params }: { params: { id: st
   // R16 / Q3.2 [S150] — the persistent unsigned-contract warning. Visible to
   // EVERY role that can reach this page, project_manager included, which is why
   // it goes through the SECURITY DEFINER boolean rather than a contract read.
-  const owesContractSignature = await projectHasUnsignedContract(project.id);
+  // (`owesContractSignature` is fetched in stage 2 above.)
 
   return (
     <div>
