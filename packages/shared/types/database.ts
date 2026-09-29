@@ -3257,6 +3257,67 @@ export type Database = {
           },
         ]
       }
+      estimate_assignments: {
+        Row: {
+          company_id: string
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          estimate_id: string
+          id: string
+          is_deleted: boolean
+          member_id: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          company_id?: string
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          estimate_id: string
+          id?: string
+          is_deleted?: boolean
+          member_id: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          estimate_id?: string
+          id?: string
+          is_deleted?: boolean
+          member_id?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "estimate_assignments_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "estimate_assignments_estimate_id_fkey"
+            columns: ["estimate_id"]
+            isOneToOne: false
+            referencedRelation: "estimates"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "estimate_assignments_member_id_fkey"
+            columns: ["member_id"]
+            isOneToOne: false
+            referencedRelation: "company_members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       estimate_award_bases: {
         Row: {
           awarded_at: string
@@ -11126,6 +11187,10 @@ export type Database = {
       next_project_internal_seq: { Args: never; Returns: number }
       next_project_number: { Args: never; Returns: string }
       owns_open_session: { Args: { p_session_id: string }; Returns: boolean }
+      pe_assigned_estimate: {
+        Args: { p_estimate_id: string }
+        Returns: boolean
+      }
       pe_can_attach_lien_release: {
         Args: { p_release_id: string }
         Returns: boolean

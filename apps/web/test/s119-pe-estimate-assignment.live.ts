@@ -59,6 +59,8 @@ let estUnassigned = '';
 /** A converted estimate on a project PE A is assigned to (path 2), and that assignment. */
 let estOnProject = '';
 let projAssignment = '';
+/** The row existed soft-deleted and was revived for the run: re-delete it after. */
+let projAssignmentRevived = false;
 
 async function sweep(): Promise<void> {
   const { data } = await admin.from('estimates').select('id').like('name', `${MARKER}%`);
@@ -162,6 +164,11 @@ beforeAll(async () => {
     .from('project_assignments').select('id, is_deleted').eq('project_id', projectId).eq('member_id', peAMember).maybeSingle();
   if (existing && !(existing as { is_deleted: boolean }).is_deleted) {
     projAssignment = '';
+  } else if (existing) {
+    // UNIQUE(project_id, member_id) ignores is_deleted (first run: 23505) — revive it.
+    projAssignment = (existing as { id: string }).id;
+    projAssignmentRevived = true;
+    await admin.from('project_assignments').update({ is_deleted: false, deleted_at: null }).eq('id', projAssignment);
   } else {
     const { data: ins, error } = await admin
       .from('project_assignments')
@@ -175,7 +182,11 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await sweep();
-  if (projAssignment) await admin.from('project_assignments').delete().eq('id', projAssignment);
+  if (projAssignment && projAssignmentRevived) {
+    await admin.from('project_assignments').update({ is_deleted: true, deleted_at: new Date().toISOString() }).eq('id', projAssignment);
+  } else if (projAssignment) {
+    await admin.from('project_assignments').delete().eq('id', projAssignment);
+  }
   if (peBInvitation) await admin.from('invitations').delete().eq('id', peBInvitation);
   if (peBUser) {
     const { data: pb } = await admin.from('profiles').select('id').eq('user_id', peBUser).maybeSingle();
@@ -315,14 +326,20 @@ describe('the PE does not send, submit, void, convert or clone', () => {
   });
   it('convert_estimate_to_project refuses PE A, and no project row appears', async () => {
     const r = await peA.rpc('convert_estimate_to_project', { p_estimate_id: estA });
-    expect(r.error).not.toBeNull();
+    // The ROLE refusal, not any error: a wrong argument or a later check would also
+    // be "an error" and the negative would pass for the wrong reason.
+    expect(r.error?.message ?? '').toMatch(/may not convert estimates/);
     const { data } = await admin.from('estimates').select('project_id, status').eq('id', estA).single();
     expect(data).toEqual({ project_id: null, status: 'draft' });
   });
   it('clone_estimate refuses PE A (no new estimate)', async () => {
     const { count: before } = await admin.from('estimates').select('id', { count: 'exact', head: true }).like('name', `${MARKER}%`);
-    const r = await peA.rpc('clone_estimate', { p_estimate_id: estA });
-    expect(r.error).not.toBeNull();
+    // ⚠️ The real signature. The first version passed { p_estimate_id }, which PostgREST
+    // answers "function not found" — an error, so the negative passed VACUOUSLY (S119).
+    const r = await peA.rpc('clone_estimate', {
+      p_source_id: estA, p_contact_id: contactId, p_contact_address_id: null, p_name: `${MARKER} clone-try ${stamp}`,
+    });
+    expect(r.error?.message ?? '').toMatch(/Only Owner, Admin, or PM can clone/);
     const { count: after } = await admin.from('estimates').select('id', { count: 'exact', head: true }).like('name', `${MARKER}%`);
     expect(after).toBe(before);
   });
