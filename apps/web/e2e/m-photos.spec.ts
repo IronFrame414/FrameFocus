@@ -1123,12 +1123,14 @@ test.describe('A-12c / A-12d · every tile now reaches a screen', () => {
     }
   });
 
-  test('A-12d · all FOUR M-7 tiles navigate to a real /m screen', async ({ page }) => {
+  // [S118 item 11] FIVE: the Sign-outs tile joined. _Superseded, quoted:_ "all FOUR M-7 tiles".
+  test('A-12d · all FIVE M-7 tiles navigate to a real /m screen', async ({ page }) => {
     const expected: [string, string][] = [
       ['m-field-tile-logs', `/m/logs?project=${fx.futureProject}`],
       ['m-field-tile-deliveries', `/m/p/${fx.futureProject}/deliveries`],
       ['m-field-tile-safety', `/m/p/${fx.futureProject}/safety`],
       ['m-field-tile-photos', `/m/p/${fx.futureProject}/photos`],
+      ['m-field-tile-signouts', `/m/p/${fx.futureProject}/signouts`],
     ];
     for (const [testId, href] of expected) {
       await page.goto(`/m/field?project=${fx.futureProject}`);

@@ -267,8 +267,10 @@ BEGIN
          receiver_signature_type = p_signature_type,
          receiver_signature_data = p_signature_data,
          receiver_signed_at = now(),
-         receiver_signer_ip = p_ip,
-         receiver_signer_user_agent = p_user_agent,
+         -- Signed on the creator's device: the browser cannot know its own IP, so
+         -- an empty value is stored as NULL, never as ''.
+         receiver_signer_ip = NULLIF(btrim(p_ip), ''),
+         receiver_signer_user_agent = NULLIF(btrim(p_user_agent), ''),
          receiver_consent_text = c_ack
    WHERE id = p_signout_id;
 END;

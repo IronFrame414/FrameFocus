@@ -1,13 +1,15 @@
 // Aliased: lucide's `Image` renders as `<Image>`, which jsx-a11y/alt-text reads
 // as an <img> missing its alt. It is an icon glyph, already aria-hidden inside
 // Tile. Renaming is cheaper and more honest than disabling the rule.
-import { ClipboardList, ImageIcon, ShieldAlert, Truck } from 'lucide-react';
+import { ClipboardList, ImageIcon, PackageOpen, ShieldAlert, Truck } from 'lucide-react';
 import { getProjects } from '@/lib/services/projects';
 import { getOpenSession } from '@/lib/services/time-tracking';
 import { getDailyLogs } from '@/lib/services/daily-logs';
 import { getProjectDeliveries, getOrderlessDeliveries } from '@/lib/services/deliveries';
 import { getIncidentsForProject } from '@/lib/services/safety';
 import { getFiles } from '@/lib/services/files';
+import { getMaterialSignouts, signoutToday } from '@/lib/services/material-signouts';
+import { isActive, isOverdue } from '@/lib/material-signouts/signout';
 import { SetMobileHeader } from '../mobile-header';
 import { EmptyState, Tile, TileGrid } from '../mobile-ui';
 import { ProjectContextRow, type ProjectChoice } from './project-context-row';
@@ -15,7 +17,7 @@ import Link from 'next/link';
 import { getMobileT } from '@/lib/i18n/server';
 
 // [S108 Spec A] A site visit has NO project, so its entry sits OUTSIDE the
-// project-scoped tile grid (whose four tiles m-hubs.spec.ts pins) and shows
+// project-scoped tile grid (whose five tiles m-hubs.spec.ts pins) and shows
 // whether or not any project exists.
 function SiteVisitEntry({ label }: { label: string }) {
   return (
@@ -35,6 +37,11 @@ function SiteVisitEntry({ label }: { label: string }) {
 // The mobile equivalent of the desktop Field Ops hub: a project context row
 // over a 2-column grid of four 76px tiles — Daily logs · Deliveries · Safety ·
 // Photos, each with its attention badge (A-13b).
+//
+// [S118 item 11] A FIFTH tile, Sign-outs (the material sign-out form), because
+// an open sign-out nobody is shown is one nobody closes. Its badge counts the
+// ACTIVE records (awaiting signature, or out) and turns danger when any is
+// overdue. _Superseded, quoted:_ "exactly four tiles" (A-13b).
 //
 // ---------------------------------------------------------------------------
 // THREE OF THE FOUR TILES REUSE AN EXISTING ROUTE — §4.11.10, A-12e.
@@ -118,12 +125,14 @@ export default async function MobileFieldPage({
     );
   }
 
-  const [logs, withPo, orderless, incidents, photos] = await Promise.all([
+  const [logs, withPo, orderless, incidents, photos, signouts, today] = await Promise.all([
     getDailyLogs(current.id),
     getProjectDeliveries(current.id),
     getOrderlessDeliveries(current.id),
     getIncidentsForProject(current.id),
     getFiles({ project_id: current.id, photo_view: true }), // [S114 C-2] = the Photos view
+    getMaterialSignouts(current.id),
+    signoutToday(),
   ]);
 
   // ATTENTION BADGES, bound to the same expressions the destination screens use
@@ -138,6 +147,9 @@ export default async function MobileFieldPage({
     (d.items ?? []).some((i) => Number(i.qty_damaged) > 0)
   ).length;
   const openIncidents = incidents.filter((i) => i.status === 'open').length;
+  // Sign-outs  ACTIVE records (the same isActive/isOverdue the list renders).
+  const activeSignouts = signouts.filter(isActive).length;
+  const overdueSignouts = signouts.filter((s) => isOverdue(s, today)).length;
 
   const client =
     [current.contact?.first_name, current.contact?.last_name].filter(Boolean).join(' ').trim() ||
@@ -195,6 +207,14 @@ export default async function MobileFieldPage({
           icon={<ImageIcon size={20} strokeWidth={2} />}
           badge={String(photos.length)}
           tone="mono"
+        />
+        <Tile
+          testId="m-field-tile-signouts"
+          href={`/m/p/${current.id}/signouts`}
+          label={t('signout.tile')}
+          icon={<PackageOpen size={20} strokeWidth={2} />}
+          badge={activeSignouts > 0 ? String(activeSignouts) : null}
+          tone={overdueSignouts > 0 ? 'danger' : 'amber'}
         />
       </TileGrid>
     </div>

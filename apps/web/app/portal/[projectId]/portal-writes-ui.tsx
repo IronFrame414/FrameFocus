@@ -6,9 +6,10 @@ import { CONSENT_TEXT } from '@/lib/proposal/proposal-defaults';
 import { color, font } from '@/lib/theme';
 import {
   Panel,
-  SignatureCapture,
+  SignatureCapture as BaseSignatureCapture,
   buttonStyle,
   secondaryButtonStyle,
+  type SignatureCaptureLabels,
 } from '@/components/signature/signature-capture';
 import type { UploadOutcome } from '@/lib/uploads/upload-batch';
 import { doneIds, hasUnfinished, useUploadBatches } from '@/lib/uploads/use-upload-batches';
@@ -36,7 +37,24 @@ import { UploadBatchList } from '@/components/uploads/upload-batch-list';
  * the portal callers import from here unchanged.
  */
 
-export { Panel, SignatureCapture, buttonStyle, secondaryButtonStyle };
+export { Panel, buttonStyle, secondaryButtonStyle };
+
+// The portal is English only (ruling 5): the capture's own words, as they read
+// before the move, byte for byte.
+const PORTAL_SIGNATURE_LABELS: SignatureCaptureLabels = {
+  fullName: 'Your full name',
+  typeIt: 'Type it',
+  drawIt: 'Draw it',
+  typePlaceholder: 'Type your name',
+  drawFirst: 'Please draw your signature first.',
+  cancel: 'Cancel',
+};
+
+export function SignatureCapture(
+  props: Omit<React.ComponentProps<typeof BaseSignatureCapture>, 'labels'>
+) {
+  return <BaseSignatureCapture {...props} labels={PORTAL_SIGNATURE_LABELS} />;
+}
 
 // ───────────────────────────────────────────────────────────────────────────
 export function CoSignPanel({

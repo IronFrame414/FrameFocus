@@ -75,6 +75,22 @@ export const secondaryButtonStyle: React.CSSProperties = {
  * from either route surfaces in the panel carrying the SERVER's own sentence.
  * The selection RPC's refusals are written to be read by a person.
  */
+/**
+ * [S118 item 11] The capture's OWN words, supplied by the caller. /m renders
+ * this component and must translate it (the /m anti-rot guard); the client portal
+ * renders it and must NEVER reach a translation (ruling 5). So the words are a
+ * prop: the portal passes `PORTAL_SIGNATURE_LABELS` (English, portal-side), /m
+ * passes t(). What the capture DOES is still not a parameter.
+ */
+export interface SignatureCaptureLabels {
+  fullName: string;
+  typeIt: string;
+  drawIt: string;
+  typePlaceholder: string;
+  drawFirst: string;
+  cancel: string;
+}
+
 export function SignatureCapture({
   title,
   defaultName,
@@ -84,6 +100,7 @@ export function SignatureCapture({
   onSubmit,
   onCancel,
   testId,
+  labels,
 }: {
   title: string;
   defaultName: string;
@@ -97,6 +114,7 @@ export function SignatureCapture({
   }) => Promise<string | null>;
   onCancel: () => void;
   testId?: string;
+  labels: SignatureCaptureLabels;
 }) {
   const [method, setMethod] = useState<'draw' | 'type'>('type');
   const [signerName, setSignerName] = useState(defaultName);
@@ -118,7 +136,7 @@ export function SignatureCapture({
     if (method === 'draw') {
       const pad = padRef.current;
       if (!pad || pad.isEmpty()) {
-        setError('Please draw your signature first.');
+        setError(labels.drawFirst);
         return;
       }
       signatureData = pad.getTrimmedCanvas().toDataURL('image/png');
@@ -145,7 +163,7 @@ export function SignatureCapture({
       </p>
 
       <label style={{ display: 'block', fontSize: '12.5px', color: color.bodyAlt, marginBottom: '4px' }}>
-        Your full name
+        {labels.fullName}
       </label>
       <input
         value={signerName}
@@ -154,7 +172,7 @@ export function SignatureCapture({
         style={{
           width: '100%',
           padding: '8px 10px',
-          fontSize: '14px',
+          fontSize: '16px', // [S118 item 11] ≥16px: /m renders this now (iOS focus zoom)
           borderRadius: '8px',
           border: `1px solid ${color.inputBorder}`,
           marginBottom: '12px',
@@ -178,7 +196,7 @@ export function SignatureCapture({
               cursor: 'pointer',
             }}
           >
-            {m === 'type' ? 'Type it' : 'Draw it'}
+            {m === 'type' ? labels.typeIt : labels.drawIt}
           </button>
         ))}
       </div>
@@ -199,12 +217,12 @@ export function SignatureCapture({
           <input
             value={typed}
             onChange={(e) => setTyped(e.target.value)}
-            placeholder="Type your name"
+            placeholder={labels.typePlaceholder}
             data-testid={testId ? `${testId}-typed` : undefined}
             style={{
               width: '100%',
               padding: '8px 10px',
-              fontSize: '14px',
+              fontSize: '16px', // [S118 item 11] ≥16px (iOS focus zoom)
               borderRadius: '8px',
               border: `1px solid ${color.inputBorder}`,
             }}
@@ -272,7 +290,7 @@ export function SignatureCapture({
           {busy ? busyLabel : submitLabel}
         </button>
         <button type="button" onClick={onCancel} style={secondaryButtonStyle}>
-          Cancel
+          {labels.cancel}
         </button>
       </div>
     </Panel>
