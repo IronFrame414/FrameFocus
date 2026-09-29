@@ -472,3 +472,9 @@ F-11 requested: run **36511018774** on `8376c38b` (base = main `a05e10db`). Then
 - CI **36515777888 green** on `f0f8296b` (base = main `4ac29dc8`): Lint & Type Check success; E2E **625** tests (+1, the R2 punch-row test) → **604 passed, 21 skipped, 0 failed** (29.6 min). No migration. `[skip ci]` merge, tree identity checked by `merge-next.sh`.
 - **The S112 ruling's condition ("/m has loading feedback on navigation") is now MET on main.** The staletimes branch is still not shipped: its premise in H-3 is contradicted (Q8).
 - C-12 rebased onto `0de7b883`, CI requested: run **36518225655** on `a49e33da`.
+
+### Part 4 — C-12: CI RED once (unit), fixed, re-queued
+- CI **36518225655 on `a49e33da`: FAILURE** — E2E green (625 → 604 passed, 21 skipped, 0 failed, 39.0 min) but **Lint & Type Check red**: `test/s110-m-i18n-guard.test.ts` — "lib/proposal/scope-text-html.tsx: 6 hard-coded strings, allowed 0 … L45 "0 0 0.5em" · L45 "0.5em 0" · L47 "heading" · L58 "bullets" · L68 "numbered" · L80 "paragraph"". The `/m` anti-rot guard scans every file `/m` can render for string literals inside JSX expressions; the new renderer is reachable from `/m`'s overview. None are user-facing (switch-case kind names, CSS values).
+- ⚠️ **My miss:** I ran only my own test files locally, not the unit suite CI runs. Fix: the per-block rendering moved to a plain `renderBlock()` outside the JSX tree (same output). **From here every branch runs `scratchpad/lint-job.sh` before CI** — the CI job's three commands (`npm run type-check`, `turbo run lint --force`, `turbo run test --force`) with real exit codes, no cache.
+- C-12 after fix: type-check 0, lint 0, vitest **140 files / 1912 passed** (0 cached). C-11, H-5, R11, R10: all three commands exit 0.
+- Not stop rule 7 (one red, cause fixed). Re-queued: run **36521623763** on `47bb3da6` (base = main `0de7b883`).
