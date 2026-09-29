@@ -297,3 +297,14 @@ rebuild-test; same scripts, same identities (`josh+qa-admin`, `josh+crew`), proj
   4 ✅, PE policies **20** ✅, trigger ✅, all 7 md5s = file ✅, anon false / auth true ✅, rows 0 ✅. **Production
   fingerprint == committed baseline** (490 `1c0ca77c` / 302 `2fcd222a` / 349 `985d5448` / 1074 `c32e668a`, latest
   `20262100000000`) ✅. Relinked `nmyphyhmfttxkdoposvf` after each.
+
+### Item E — CI
+- Run **36637306745** on `d068b672` (base = main `27ba82ed`): vitest 147 / 2008; E2E **637 passed, 1 flaky
+  (m-photos A-1b, passed on retry), 22 skipped, 1 failed**: `m-capture.spec.ts:967` "the control case" —
+  `toHaveURL(/\/m$/)` received `/m/timeclock`. Cause: the old assertion matched a TRANSIENT url
+  (`router.push('/m')` committed `/m`, then the page's server `redirect()` moved it on); with E-2 the RSC
+  fetch gets the 307 first, so the address bar goes straight to `/m/timeclock`. The user lands on the
+  timeclock both before and after. Fixed by asserting the landing, inverted in place (quoted). Sweep of other
+  specs asserting a bare `/m`: none failed in that run. Local on E's build: m-capture + slow-spots 30/30.
+- C+D's CI (**36641118449** on `1c389d1c`) is running first — their migrations are already on production, so
+  their code should reach main first. E's second run follows (one run at a time on rebuild-test).
