@@ -4,6 +4,7 @@ import { getMyProfile } from '@/lib/services/profiles';
 import { PhotoViewer, type ViewerPhoto } from './viewer';
 import { getMobileT } from '@/lib/i18n/server';
 import type { T } from '@/lib/i18n/messages';
+import { canDeletePhoto } from '@/lib/photos/delete-permission';
 
 // M6M §4.9 — M-9 · Photo viewer.
 //
@@ -102,7 +103,8 @@ export default async function PhotoViewerPage({
   // A-25d — `files_delete_owner_admin` restricts DELETE to Owner/Admin. The UI
   // must not offer an action the DB will reject, so the tile is absent rather
   // than present-and-failing for every other role.
-  const canDelete = profile?.role === 'owner' || profile?.role === 'admin';
+  // C-11 [S115] — the shared rule; desktop reads the same one.
+  const canDelete = canDeletePhoto(profile?.role);
 
   return (
     <PhotoViewer
