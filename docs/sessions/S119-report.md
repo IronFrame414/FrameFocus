@@ -46,3 +46,29 @@ write WITHOUT `.select()`, counted with the service role; each probe resets the 
   lock bans everyone, but a **paid cancellation bans all EXCEPT clients** (`banCompanyUsers
   excludeClients`), so a client login whose profile goes and whose auth delete then fails is exactly the
   profile-less, un-banned login. See the A-1 build entry for what was built instead.
+
+### Prompt revision received mid-session (2026-09-29)
+- A-3 no longer lists `convert_estimate_to_project` (D-1: the PM is not touched; the earlier same-day
+  Owner/Admin-only convert ruling is WITHDRAWN). Item D is now per-estimate PE assignment. Applied.
+
+### ITEM A-2 — verified by object on PRODUCTION: ⚠️ NOT CLOSED (the S118 claim was false)
+- Production `selection_option_images(uuid)`: DEFINER, md5(prosrc) **`ea83f07bc5cab6c42fc200676f97bc95`**
+  = the `20261028000000` body (rebuild-test identical). `20262060000000` (item 16) mentions it in a
+  comment only (line 19). No trigger or policy checks `selection_options.image_file_id` /
+  `link_thumbnail_file_id` on write (2 triggers: updated_by/updated_at; FKs to `files` only).
+  General `files` INSERT/UPDATE arms do not bind `file_path` to the company (only the PE lien arm
+  does) and `enforce_files_column_scope` does not freeze it — so a row-company check alone would
+  still sign a path in another tenant's folder.
+- Production `selection_options` rows: **0**.
+- Every reader goes through the function: portal page, staff tab, spec sheet (`rls.rpc(...)` then the
+  admin client downloads/signs) — so fixing the function covers all three surfaces.
+- **Pre-fix probe (`s119-selection-images-scope.live.ts`, rebuild-test):** one selection, six options,
+  one legitimate photo + five foreign pointers (another tenant's photo; same company other project;
+  category `<first non-photos key>`; a same-project row whose path is in another tenant's folder;
+  another tenant's file as a link thumbnail). **Owner, PM and the linked CLIENT each got all 6.**
+  `signSelectionOptionImages` as the client → **2 signed URLs, one of them another tenant's object.**
+  (First run signed only 1 because the foreign object did not exist — a vacuous pass; a real foreign
+  object was added and the probe re-run.)
+- Fix (`20262076000000`): both joins require `f.company_id`/`f.project_id` = the selection's,
+  `f.category = 'photos'`, and the path's first two folders = company/project. Tags NOT checked
+  (author-editable; S172 fixtures carry none) — alternative recorded.
