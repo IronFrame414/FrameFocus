@@ -5,17 +5,19 @@ import type { MsgKey } from '@/lib/i18n/messages';
 
 /** Section A — the ten close-out checks, in the paper form's order. */
 export const CLOSEOUT_ITEMS = [
-  { key: 'closeout_floors_swept', label: 'field.closeout.floorsSwept' },
-  { key: 'closeout_debris_hauled', label: 'field.closeout.debrisHauled' },
-  { key: 'closeout_cut_station_clean', label: 'field.closeout.cutStationClean' },
-  { key: 'closeout_tools_secured', label: 'field.closeout.toolsSecured' },
-  { key: 'closeout_cords_clear', label: 'field.closeout.cordsClear' },
-  { key: 'closeout_materials_covered', label: 'field.closeout.materialsCovered' },
-  { key: 'closeout_work_protected', label: 'field.closeout.workProtected' },
-  { key: 'closeout_utilities_off', label: 'field.closeout.utilitiesOff' },
-  { key: 'closeout_site_secured', label: 'field.closeout.siteSecured' },
-  { key: 'closeout_first_task_staged', label: 'field.closeout.firstTaskStaged' },
-] as const satisfies readonly { key: string; label: MsgKey }[];
+  { key: 'closeout_floors_swept', labelKey: 'field.closeout.floorsSwept' },
+  { key: 'closeout_debris_hauled', labelKey: 'field.closeout.debrisHauled' },
+  { key: 'closeout_cut_station_clean', labelKey: 'field.closeout.cutStationClean' },
+  { key: 'closeout_tools_secured', labelKey: 'field.closeout.toolsSecured' },
+  { key: 'closeout_cords_clear', labelKey: 'field.closeout.cordsClear' },
+  { key: 'closeout_materials_covered', labelKey: 'field.closeout.materialsCovered' },
+  { key: 'closeout_work_protected', labelKey: 'field.closeout.workProtected' },
+  { key: 'closeout_utilities_off', labelKey: 'field.closeout.utilitiesOff' },
+  { key: 'closeout_site_secured', labelKey: 'field.closeout.siteSecured' },
+  { key: 'closeout_first_task_staged', labelKey: 'field.closeout.firstTaskStaged' },
+// `labelKey`, not `label`: it holds a MESSAGE KEY, and the /m anti-rot guard
+// reads a `label:` string as hard-coded text (test/s110-m-i18n-guard.test.ts).
+] as const satisfies readonly { key: string; labelKey: MsgKey }[];
 
 export type CloseoutKey = (typeof CLOSEOUT_ITEMS)[number]['key'];
 

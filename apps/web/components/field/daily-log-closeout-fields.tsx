@@ -17,7 +17,7 @@ import {
 const box = 'rounded-[12px] border border-gray-200 bg-white p-4';
 const head = 'mb-2 text-[12px] font-semibold uppercase tracking-wide text-gray-500';
 const field =
-  'w-full rounded-[8px] border border-gray-300 px-2 py-[7px] text-[14px] text-gray-900 outline-none focus:border-blue-600';
+  'w-full rounded-[8px] border border-gray-300 px-2 py-[7px] text-[16px] text-gray-900 outline-none focus:border-blue-600';
 
 /** Local "now" in the <input type="datetime-local"> format. */
 function nowLocal(): string {
@@ -66,7 +66,7 @@ export function DailyLogCloseoutFields({
                   checked={value[item.key as CloseoutKey] === true}
                   onChange={(e) => set(item.key as CloseoutKey, e.target.checked)}
                 />
-                {t(item.label)}
+                {t(item.labelKey)}
               </label>
             </li>
           ))}

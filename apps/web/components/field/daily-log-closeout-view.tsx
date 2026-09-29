@@ -90,7 +90,7 @@ export function DailyLogCloseoutView({
               const v = closeout[i.key as CloseoutKey];
               return (
                 <li key={i.key} data-testid={`view-${i.key}`} data-value={String(v)}>
-                  {v === true ? '✓' : v === false ? '✗' : '·'} {t(i.label)}
+                  {v === true ? '✓' : v === false ? '✗' : '·'} {t(i.labelKey)}
                 </li>
               );
             })}

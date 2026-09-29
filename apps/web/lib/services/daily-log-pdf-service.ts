@@ -94,7 +94,7 @@ export async function regenerateDailyLogPdf(
     hazardNotes: log.hazard_notes,
     // [S118 item 12] The paper close-out form (English labels from the shared list).
     closeout: CLOSEOUT_ITEMS.map((i) => ({
-      label: format('en', i.label),
+      label: format('en', i.labelKey),
       value: (log[i.key as CloseoutKey] as boolean | null) ?? null,
     })),
     photosSentAt: log.photos_sent_at,
