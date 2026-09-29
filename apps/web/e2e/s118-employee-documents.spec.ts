@@ -133,10 +133,14 @@ test.describe('S118 item 16 · employee documents', () => {
       page.getByTestId('employee-doc').filter({ hasText: `${RUN}-a.pdf` })
     ).toBeVisible();
     // Objects landed in the private bucket under THIS person.
+    // Storage `search` is a PREFIX match and object names start with a uuid, so list the
+    // person's folder and filter by the run tag.
     const { data: objs } = await admin.storage
       .from(BUCKET)
-      .list(`${COMPANY_A}/${who.crewMember}`, { search: `${RUN}-` });
-    expect((objs ?? []).filter((o) => /-a\.pdf$|-b\.pdf$/.test(o.name))).toHaveLength(2);
+      .list(`${COMPANY_A}/${who.crewMember}`, { limit: 1000 });
+    expect(
+      (objs ?? []).filter((o) => o.name.includes(RUN) && /-a\.pdf$|-b\.pdf$/.test(o.name))
+    ).toHaveLength(2);
   });
 
   test('a PM is refused the documents page (redirected away, nothing rendered)', async ({
