@@ -403,3 +403,42 @@ Q13. [ASK-C12-SENT] C-12's renderer change will also change how ALREADY-SENT but
 - Markup & margin: shown by the builder/health panel to whoever opens it; the PE's rows already carried them (no column scope). `canReadRates` (instrument rates) left Owner/Admin — narrower; the PE has a DB SELECT arm for rates, so widening is UI-only if Josh wants it.
 - Tests: `test/s115-estimate-access.test.ts` two TOTAL maps **18 passed**; `test/s130-ffnav.test.ts` Estimates gate **inverted in place**, superseded assertion quoted, **12 passed**. `e2e/desktop-pe-estimates-s115.spec.ts` written (assigns the PE to one converted estimate's project for its run; nav offers Estimates; list opens with no create control; builder read-only; proposal-data 200 and preview opens; an estimate on an unassigned project → proposal-data **404**) — **run pending**.
 - **Q5 (pre-conversion estimates) not built** — needs a ruling and a 21-policy migration.
+
+### ✅ Part 1 — H-1 MERGED to main as `a05e10db` (R8)
+- (1) CI **36502727258 green** on `341f6229`, whose base is the then-current main `33be035c`: Lint & Type Check success; E2E "Running 624 tests using 1 worker" (612 + the 12 new) → **603 passed, 21 skipped, 0 failed, 0 flaky** (41.2m). The overlap with main's own run (the slip above) produced no red in either. (2) checks stated above (middleware 168→120 / 159→128 ms, 12/12 negatives, sabotage 5 red → restored). (3) no migration.
+- That merge push starts main's own CI (a full suite, ~45 min) and holds the one-CI slot. **From here, merge commits carry `[skip ci]`**, with the tree-identity proof in the message instead: a `--no-ff` merge of a branch whose base is current main produces exactly the tested tree (`git diff <tested sha> main` empty) — main re-running the identical tree is 45 minutes that test nothing new. Reversible: drop the tag.
+- All eight other S115 branches rebased onto `a05e10db` and force-pushed with lease; heads carry `[skip ci]`; remote = local verified per branch.
+
+### Part 7 — R10: migration applied to **rebuild-test**, verified by object
+- `supabase/.temp/project-ref` = `nmyphyhmfttxkdoposvf` before and after (never linked). Plain dry run refused (`LegacyDbPushMissingLocalError`: rebuild-test holds PART E's 4 versions). **No repair.** S114 precedent: the 4 files copied in from `origin/feature/s112-bid-token-status` (1850/1860/1890) and `origin/feature/s112-default-acl-guard` (1900), uncommitted → dry run listed **exactly one**: `20262020000000_s115_r10_original_budget_edit.sql` → push `PUSH_EXIT=0` ("Applying migration 20262020000000…"). The 4 borrowed files deleted afterwards (`git status` shows none).
+- Verified with `node scripts/live-sql.mjs` (Management API, read-only, refuses non-rebuild-test): newest `20262020000000`; ledger 1; column nullable default false; **0** existing rows not false; `project_budget_items` policies **2** (S97 pin intact); 4 SECURITY DEFINER; anon EXECUTE false ×2; authenticated true. md5: issued `cd98c2cc21842a38c0ef735c7cf71259`, can_edit `cde4b4660b237e93d816e3d2f035c28f`, add `675545c2c6b0699377e4ee3884859095`, update `037907723a7e53e99b54e7bca180cd82`.
+- Types: `npm run db:types` → 10946 → 11008 lines, but the regenerated file also carried PART E objects that exist only on rebuild-test; kept **only R10's blocks** (S114 PART B precedent): +29 lines (3 column lines + 4 function blocks), each block count equal to the regenerated file's; `tsc` exit 0. Commit `c9d07697` (now `95582f0c` after rebase).
+- Runbook for Josh: **`docs/sessions/S115-PRODUCTION-RUNBOOK.md`** (Step 0 pre-check with expected values; dry run must list exactly one file; `--include-all`; verification by object with every expected value from rebuild-test; relink last).
+
+### Part 10 — H-4 / H-5 — branch `feature/s115-h5-prefetch` @ `3943d59e`
+**H-4 (measured):** no 45 MB-class outlier: 224–267 KB JS per cold load on the H screens; heaviest First Load `/dashboard/estimates/[id]` 286 kB. The dashboard and `/m` layouts carry supabase-js (41 + 12 KB gz — needed client-side for chat/clock). **One loaded-everywhere item one page needs:** `dashboard-shell.tsx` imported `ROLE_LABELS` from the `@framefocus/shared` **barrel**, which re-exports every Zod schema → zod (chunk 8204, 56.7 KB raw / **12.9 KB gz**) in the shell of every dashboard page (21 of 169 routes). Fixed: import by path. After: `/dashboard/layout` chunks containing `ZodError` → **none** (checked in `app-build-manifest.json`).
+
+**H-5 — measured: a dynamic-route prefetch carries nothing.** With 0 `loading.tsx`, a `<Link>` prefetch of `/dashboard/projects/:id/budget` returned **249 B, no page data, 346 ms** (vs the real navigation: 45,178 B with the page) — yet each one runs the middleware and its Supabase round trips. `prefetch={false}` on the sidebar items, project section/sub-tabs and Photos tiles. Same instrument as the Phase 1 baseline (`nav-measure.mjs`, qa-admin, project 4a4f8567…, median of 3):
+
+| screen | middleware runs / load (before → after) | requests | JS KB |
+| --- | --- | --- | --- |
+| overview | 19 → **6** | 54 → 39 | 266.5 → 252.0 |
+| Photos | 32 → **11** | 72 → 47 | 253.9 → 239.4 |
+| Budget | 23 → **7** | 57 → 39 | 258.4 → 243.9 |
+Navigation is not slower for it: click → `/dashboard/projects` median 12,043 ms after vs **12,474 ms on main's build** (5 runs each, same script `click-time.mjs`) — the destination page is the slow part, which led to:
+
+**H-5 — the projects list was 12 seconds.** Server-side fetch log on `/dashboard/projects` as the Company A owner (46 projects): **356 Supabase calls in a chain 263 deep**. The Owner/Admin money columns call `getProfitabilityReport` once per project **in a loop** — RULED ("the existing per-project getProfitabilityReport in a loop; no batch helper"). Kept exactly that: the same per-project calls, at most 6 at once, results summed **in project order**. Main: 12,283 / 13,605 / 12,998 ms, depth 263/265/263 → after: **3,409 / 3,423 / 5,401 ms**, depth 62–67; 356 calls both. **Rendered page text byte-identical** before/after (`cmp` of `main` innerText, 2,158 bytes, 28 `$` figures). ⚠️ Slip, no effect: my before/after swap overwrote the uncommitted edit; re-applied by the same script that produced the measured build (anchor matched once), `tsc` 0, then committed (`e07e1b5f`).
+- Test `e2e/desktop-prefetch-s115.spec.ts` 1/1 (sidebar fires 0 prefetches, still navigates); sabotage (sidebar `prefetch={false}` removed) → **red** ("sidebar prefetches"), restored `cmp`-identical.
+
+**H-5 ranked list — decision on each** (ranked by measured cost to a real screen):
+| # | item | measured | decision |
+| --- | --- | --- | --- |
+| 1 | `/dashboard/projects` per-project report chain | 12–13.6 s, depth 263 | **built** (bounded concurrency; ruling kept) → 3.4 s |
+| 2 | prefetch storm: 16–30 empty prefetches per screen, each a full middleware run | 19/32/23 middleware runs per load | **built** (prefetch off) → 6/11/7 |
+| 3 | Budget page waterfalls (page level) | depth 16, 1155 ms server | **built** in H-2 → depth 8, 899 ms |
+| 4 | middleware sequential reads | 5 RT owner | **built** in H-1 → 3 |
+| 5 | Budget service-internal chains (`getBudgetRollup` 8 serial, `getJobCostRollup` 6) | depth still 8 | **next** — reorder inside the services (money code; wants its own tests), not done unattended |
+| 6 | middleware `getUser()` → `getClaims()` (local ES256 verify) | ~50–70 ms → ~1 ms per middleware run | **awaits Q9** (auth gate) |
+| 7 | `/m` → `/m/timeclock` server redirect (PWA start_url pays two requests) | +1 request per cold launch | **deferred** — small; do via `next.config` redirect with a test |
+| 8 | zod in every dashboard page | 12.9 KB gz | **built** (import by path) |
+| 9 | `/api/chat/threads` polled 4× on first load | 4 middleware runs | **filed** — chat polling cadence is its own spec |
