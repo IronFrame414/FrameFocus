@@ -161,3 +161,46 @@ exit 3), push, then ALWAYS relinks rebuild-test and restores the held files.
   → **#173 / #174** (next free #175). `lint-job.sh`: 144 files / 1960 passed, all 0.
 - CI once on the stacked head `c7ba2eb5` (`feature/s118-acl-guard` ⊃ `feature/s118-bid-token-status`
   `f41f5df0`, all `[skip ci]`) → run **36578623899**.
+
+### ✅ Item 4 MERGED to main as `09da7bca` (R8)
+- CI **36578623899** on `c7ba2eb5` (base = main `3ef23838`): lint/type success; E2E 645 → **624 passed,
+  21 skipped** (41.4m); tally 626 `✓`, **0 `✘`**. Migrations already on production (above).
+  `git diff c7ba2eb5 HEAD --stat` → empty.
+
+### Item 7 — three ruled fixes: ON PRODUCTION (verified), CI in flight
+Branch `feature/s118-ruled-fixes` (from main, rebased onto `09da7bca`).
+- **#171** `20262030000000`: `enforce_files_column_scope` (CREATE OR REPLACE) refuses any change to
+  `is_deleted`/`deleted_at` unless Owner/Admin/PM/PE (COALESCE — a NULL role never passes); service
+  role (no auth) unchanged. Unattended decisions: **all categories** (a photos-only guard is walked
+  round by recategorising in the same statement) and **restore too** (alternative: photos only /
+  delete only). UI: `canTrashFile` (= the same list) gates the Files-tab Delete and Trash Restore —
+  foreman/crew/sub are no longer offered a control the database refuses (parity).
+- **#172** `20262040000000`: both UPDATE arms on `project_budget_amounts` **dropped**; both INSERT arms
+  gain `budgeted_amount = 0` (unattended, narrower: an INSERT of a figure is the same bypass;
+  alternative: INSERT untouched). `createAdHocBudgetLine` upsert → insert of 0. Every legitimate
+  writer is a SECURITY DEFINER function (6, enumerated live) and keeps working.
+- **#167** `20262050000000`: `setup_payment_schedule` guard + `revise_sub_contract_schedule` pass 1,
+  pass 2 (allocations + expenses) and live count gain `stage_label IS NOT NULL`. **Production count of
+  affected subcontracts: 0** (live subcontracts on production: 0) — query in `scratchpad/q167.sql`,
+  controlled on rebuild-test (inverted predicate → 9).
+- Rebuild-test: dry run listed exactly the 3; push exit 0. Live `s118-ruled-fixes` **34 passed**
+  (total role map for trash; recategorise walk-around, restore, markup regression, service role; direct
+  budget UPDATE total map; upsert/insert per O/A/PE; R10 positive control; #167 coexist, second setup
+  refused for O/A/PM, revise keeps the hand bill). One test fixed on its first run: `revise` refuses an
+  `id` on an unpaid stage ("replaced, not edited") — the test now resends without it.
+- **Sabotage** (old trigger body + both old UPDATE policies + old schedule bodies, byte-exact from the
+  pre-change definitions, via `scratchpad/testsql.sh`, rebuild-test only) → **10 failed / 24 passed**:
+  exactly the foreman/crew/sub trash rows, recategorise, restore, owner/admin/PE direct UPDATE,
+  coexist, revise. Restored → the three function md5s equal the post-migration snapshot and the
+  `project_budget_amounts` policy set `cmp`-identical.
+- Neighbours: `s118-ruled-fixes` + `s111-project-executive-writes` (W2 **inverted in place**, quoted;
+  P2 probe now 0 so it still measures scope) + `s97ct-budget-writers` + `s115-r10-original-budget` +
+  `s97ct-budget-immutability` + `s114-pe-carveouts` → **110 passed**. Unit `s118-trash-permission`
+  9 passed. `lint-job.sh`: 145 files / 1969 passed, all 0.
+- Baseline regenerated (rebuild-test = tree): policies 456 `67a3bcae…`, functions 333 `9e6d0d6a…`,
+  latest `20262050000000`.
+- **Production** (runbook §5–§7): each dry run listed exactly its file; PUSH_EXIT 0 ×3; relinked
+  rebuild-test after each. §5 md5 `e333c3be…` DEFINER ✅; §6 policies 4, UPDATE 0, both INSERT checks
+  carry `budgeted_amount = (0)::numeric` ✅; §7 md5s `a60cf25a…`/`4f7f172c…`, INVOKER ✅. **Final:
+  production fingerprint == baseline** (456/287/333/1017, latest `20262050000000`), ledger 265.
+- CI **36585189209** on `af0af714` (base = main `09da7bca`).
