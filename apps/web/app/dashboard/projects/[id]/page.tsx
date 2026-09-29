@@ -21,6 +21,7 @@ import { RateSummary } from './rate-summary';
 import { cardStyle, color, font, microLabelStyle } from '@/lib/theme';
 import { ActivatableRow } from '@/components/list-screen/row-activation';
 import { contactDisplayName } from '@framefocus/shared/utils/contact-name';
+import { ScopeTextHtml } from '@/lib/proposal/scope-text-html';
 
 /**
  * ui-04 — 1a Project Overview: KPI row + schedule-progress stepper (derived
@@ -699,9 +700,8 @@ export default async function ProjectOverviewPage({ params }: { params: { id: st
         {project.scope_summary && (
           <div style={{ ...cardStyle, padding: '18px 20px' }}>
             <div style={railTitleStyle}>Scope of Work</div>
-            <p style={{ fontSize: '14px', whiteSpace: 'pre-wrap', margin: 0 }}>
-              {project.scope_summary}
-            </p>
+            {/* C-12 [S115] — the same parse as the proposal and /m. */}
+            <ScopeTextHtml text={project.scope_summary} style={{ fontSize: '14px' }} />
           </div>
         )}
 

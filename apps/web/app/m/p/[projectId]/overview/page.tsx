@@ -6,6 +6,7 @@ import { SectionHeader } from '../section-header';
 import { getMobileT } from '@/lib/i18n/server';
 import type { MsgKey } from '@/lib/i18n/messages';
 import { EmptyState, SectionLabel } from '../../../mobile-ui';
+import { ScopeTextHtml } from '@/lib/proposal/scope-text-html';
 
 // M6M §4.11.1 — M-11 · Overview.
 //
@@ -162,9 +163,11 @@ export default async function ProjectOverviewPage({
             : (PROJECT_TYPE_LABELS[project.project_type] ?? project.project_type)}
         </p>
         {project.scope_summary ? (
-          <p className="mt-[8px] whitespace-pre-line text-[15px] leading-snug text-m6m-navy/80">
-            {project.scope_summary}
-          </p>
+          // C-12 [S115] — the same parse as the proposal and the desktop overview.
+          <ScopeTextHtml
+            text={project.scope_summary}
+            className="mt-[8px] text-[15px] leading-snug text-m6m-navy/80"
+          />
         ) : null}
       </div>
     </div>

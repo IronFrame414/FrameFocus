@@ -1,5 +1,6 @@
 import type { ProposalData } from './proposal-data';
 import type { ClientProposalCategory, ClientProposalData } from './client-proposal';
+import { ScopeTextHtml } from './scope-text-html';
 import {
   resolveProposalFormat,
   proposalRenderPlan,
@@ -143,9 +144,14 @@ export function ProposalHtml({ data }: { data: ProposalData | ClientProposalData
       {(estimate.scopeSummary || estimate.scopeSections.length > 0) && (
         <div>
           <div style={sectionTitle}>Scope of Work</div>
-          {estimate.scopeSummary && (
-            <p style={{ margin: '0 0 0.5rem', fontSize: '0.9375rem' }}>{estimate.scopeSummary}</p>
-          )}
+          {/* C-12 [S115] — was a bare <p> with no whitespace rule: every line
+              break collapsed and the whole scope read as one paragraph of raw
+              ## and *. Same parse as the PDF (scope-text-pdf.tsx). */}
+          <ScopeTextHtml
+            text={estimate.scopeSummary}
+            testId="proposal-scope-summary"
+            style={{ margin: '0 0 0.5rem', fontSize: '0.9375rem' }}
+          />
           {estimate.scopeSections.map((section, i) => (
             <div key={i} style={{ marginBottom: '0.5rem' }}>
               {section.title.trim().length > 0 && (
