@@ -148,8 +148,25 @@ export async function middleware(request: NextRequest) {
   //
   // ⚠️ THE EXEMPTIONS ARE THE LOAD-BEARING PART, not the guard. A locked
   // company must still be able to PAY — see LOCK_EXEMPT_API_PREFIXES.
-  if (user && !isLockExemptPagePath(pathname) && !isLockExemptApiPath(pathname)) {
-    const locked = await isMyCompanyLocked(supabase);
+  //
+  // ⚠️ H-1 [S115] — THE LOCK RPC AND THE PROFILE READ ARE FETCHED TOGETHER.
+  // Neither needs the other's answer (both need only the session), so they no
+  // longer wait in line: one round trip instead of two on every /dashboard
+  // request, and one screen load runs this middleware 19–32 times (prefetches).
+  // Only the FETCH moved. Every decision below reads the same values in the
+  // same order as before — lock first, then the role guard, then billing — so
+  // a locked tenant is still told it is locked before any roster check. The
+  // profile is read (and discarded) on a request the lock then redirects; that
+  // is one wasted read, never a changed outcome.
+  const lockApplies = !!user && !isLockExemptPagePath(pathname) && !isLockExemptApiPath(pathname);
+  const [locked, profileResult] = await Promise.all([
+    lockApplies ? isMyCompanyLocked(supabase) : Promise.resolve(false),
+    user && pathname.startsWith('/dashboard')
+      ? supabase.from('profiles').select('role, company_id').eq('user_id', user.id).single()
+      : Promise.resolve(null),
+  ]);
+
+  if (lockApplies) {
     if (locked) {
       // Register backlog §4, Q12 — THE PORTAL CARVE-OUT. A paid-cancellation
       // lock does NOT darken the client portal: those clients may owe money,
@@ -179,11 +196,7 @@ export async function middleware(request: NextRequest) {
   }
 
   if (user && pathname.startsWith('/dashboard')) {
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('role, company_id')
-      .eq('user_id', user.id)
-      .single();
+    const profile = profileResult?.data ?? null;
 
     // ⚠️ RULING A [Josh, S131] — `DASHBOARD_ROLES`, enforced at the route.
     //
@@ -218,12 +231,33 @@ export async function middleware(request: NextRequest) {
     //    so /onboarding, /api/stripe/setup-checkout, /onboarding/complete and
     //    /auth/callback are all naturally exempt. `enforceBilling` gates it, so
     //    DISABLE_BILLING_ENFORCEMENT turns it off with the rest of billing.
-    if (enforceBilling && profile?.role === 'owner') {
-      const { data: company } = await supabase
-        .from('companies')
-        .select('payment_method_on_file')
-        .eq('id', profile.company_id)
-        .single();
+    //
+    // H-1 [S115] — the card-gate read and the subscription read are fetched
+    // TOGETHER (each needs only the profile), then judged in the old order:
+    // the card gate first, the subscription second. Same queries, same
+    // conditions for running each; one round trip instead of two for an owner.
+    const cardGateApplies = enforceBilling && profile?.role === 'owner';
+    const subscriptionApplies =
+      enforceBilling && !!profile && !pathname.startsWith('/dashboard/billing');
+    const [companyResult, subscriptionResult] = await Promise.all([
+      cardGateApplies && profile
+        ? supabase
+            .from('companies')
+            .select('payment_method_on_file')
+            .eq('id', profile.company_id)
+            .single()
+        : Promise.resolve(null),
+      subscriptionApplies && profile
+        ? supabase
+            .from('subscriptions')
+            .select('status, trial_end, trial_start, stripe_subscription_id')
+            .eq('company_id', profile.company_id)
+            .single()
+        : Promise.resolve(null),
+    ]);
+
+    if (cardGateApplies) {
+      const company = companyResult?.data ?? null;
       if (company && company.payment_method_on_file === false) {
         const url = appUrl('/onboarding', request);
         return NextResponse.redirect(url);
@@ -231,12 +265,8 @@ export async function middleware(request: NextRequest) {
     }
 
     // Subscription enforcement — only for dashboard pages that are NOT billing
-    if (enforceBilling && profile && !pathname.startsWith('/dashboard/billing')) {
-      const { data: subscription } = await supabase
-        .from('subscriptions')
-        .select('status, trial_end, trial_start, stripe_subscription_id')
-        .eq('company_id', profile.company_id)
-        .single();
+    if (subscriptionApplies) {
+      const subscription = subscriptionResult?.data ?? null;
 
       if (subscription) {
         const isExpiredTrial =
