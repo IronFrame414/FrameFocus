@@ -43,3 +43,23 @@ before and **270** after (A1 + A2 first). Every other value unchanged; re-measur
 ## Final — fingerprint
 Production `schema_fingerprint()` must equal the baseline committed on the stacked head (regenerated
 from rebuild-test once its ledger equals the tree).
+
+## Items C + D — stack `feature/s119-pe-estimate-assignment` (D) on `feature/s119-project-rename` (C)
+
+### Pre-check (production, read-only) — measured 2026-09-29 ~22:20Z
+| value | expected | measured |
+| --- | --- | --- |
+| ledger / newest | 270 / `20262080000000` | 270 / `20262080000000` |
+| md5 `enforce_projects_column_scope` | `676653634b10a3568784e659dbf9c0db` (the base C rebuilds) | same |
+| `project_name_history` / `estimate_assignments` | absent / absent | absent / absent |
+| md5 `set_line_override_cost` / `set_winning_bid` / `switch_pricing_mode` | `faa7b771…` / `241d6e77…` / `e4ab430a…` (the bodies D edits) | same |
+| estimates / live PEs | — | 15 / 1 |
+Neither migration adds a constraint over existing rows (C's blank-name check binds CHANGES only; D is a new table).
+
+### §C — `20262090000000_s118_project_rename`
+After: ledger 271; `public.project_name_history` exists, RLS on, policies **1** (`project_name_history_select_owner_admin`, SELECT); trigger `projects_log_rename` on `projects`; md5 `enforce_projects_column_scope` = `a344ba290242bf8b1a58dee822b1f1cf`, `log_project_rename` = `be6e2de168996fcac61ec3f59228330b`, `project_name_at` = `3010d88561b4bc2e69eeadc746e8a776`; `project_name_at` EXECUTE anon false / authenticated true; rows 0.
+
+### §D — `20262100000000_s119_pe_estimate_assignment`
+After: ledger 272; `public.estimate_assignments` exists, RLS on, policies **4** (select owner_admin, select project_executive, insert owner_admin, update owner_admin; no DELETE); PE policies on estimate tables **20** (`estimates` 3 + 17 child); trigger `estimates_assign_creating_pe` on `estimates`; md5 `set_estimate_assignments_updated_by` = `f8eaaeeb…`, `enforce_estimate_assignment_shape` = `6e6c88bec50264b54927f75777f802fa`, `pe_assigned_estimate` = `365744ae5825628ff550aba72bbd33da`, `assign_creating_pe_to_estimate` = `e017531defafa8e7c64e5b8f71bf658b`, `set_line_override_cost` = `db985566cefd38b025555d9f41daa4d2`, `set_winning_bid` = `8996d7ef696b3358a37680e8f3ec4636`, `switch_pricing_mode` = `d2a324a251c77a00c0770b36f6810a36` (all file-derived = rebuild-test); `pe_assigned_estimate` EXECUTE anon false / authenticated true; rows 0; PM-naming policies on the estimate side unchanged (31, same md5 set as before §D).
+
+### Final — fingerprint = committed baseline on the stacked head: policies 490 `1c0ca77c…`, triggers 302 `2fcd222a…`, functions 349 `985d5448…`, constraints 1074 `c32e668a…`, latest `20262100000000`.
