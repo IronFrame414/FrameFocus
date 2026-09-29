@@ -981,7 +981,13 @@ test.describe('a capture screen is never a dead end', () => {
     // LEAVES is what makes this a dead-end test rather than a render test —
     // and it is the half that would have survived the rename unchanged.
     await exit.click();
-    await expect(page).toHaveURL(/\/m$/, { timeout: 20_000 });
+    // [S119 E-2] Asserts where the exit LANDS: `/m` is the landing rule's alias for the
+    // timeclock (D-12), now answered by next.config.js before middleware. The old
+    // assertion matched a TRANSIENT url — router.push('/m') committed `/m`, then the
+    // page's server redirect() moved it on — so the user landed on /m/timeclock
+    // before and after. _Superseded, quoted:_
+    // `await expect(page).toHaveURL(/\/m$/, { timeout: 20_000 });`
+    await expect(page).toHaveURL(/\/m\/timeclock$/, { timeout: 20_000 });
   });
 
   test('the exit RETURNS, rather than navigating somewhere fixed', async ({ page }) => {
