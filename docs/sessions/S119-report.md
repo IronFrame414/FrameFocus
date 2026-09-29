@@ -205,3 +205,95 @@ rebuild-test; same scripts, same identities (`josh+qa-admin`, `josh+crew`), proj
   mount → the duplicate removed (superseded effect quoted).
 - e2e `s119-slow-spots` **2/2**; **sabotage** (both files back to their old versions, rebuilt) → **2 red**
   (`/sign-in` ≠ `/m/timeclock`; 2 ≠ 1 calls); restored `cmp`-identical. No migration.
+
+### ✅ Items A + B MERGED to main as `27ba82ed` (R8)
+- CI **36633531126** GREEN on `0cad9176` (base = main `9616de1d`): vitest 147 / 2008; E2E **637 passed, 22
+  skipped, 0 `✘`**. `git diff 27ba82ed 0cad9176` → empty. Migrations were on production first (§A1/§A2/§B).
+- Owner sign-up through the real `/sign-up` form, retried after CI: GoTrue refused the fixture sink domain
+  too (`email_address_invalid` — it validates the domain), then with Josh's plus-address hit
+  `over_email_send_rate_limit` again (CI 2's sign-ups used the window). **Not yet shown in a browser.** What
+  is shown after the fix: the owner branch of `handle_new_user` (live, createUser = the same trigger with the
+  same metadata, then password sign-in → role owner) and a browser `signUp` through GoTrue (invite path,
+  local + both CI runs). The committed test now uses the plus-address (C branch) and stays gated.
+
+### ITEM C — item 14, project rename (branch `feature/s119-project-rename`, restacked on main)
+- The S118 audit's claim re-verified: `enforce_projects_column_scope` live body md5 `67665363…` on production,
+  rebuild-test AND the `20261013000000` file; the 2090 body differs from it by exactly the two S118 blocks
+  (diffed). ⚠️ **Tension for Josh:** D-1 says "nothing we are doing should touch PM", and this item's ruling
+  narrows an ability the database gave an assigned PM (rename by direct call; no UI ever offered it). Built as
+  Item C instructs (Owner/Admin only); say if D-1 should reverse it.
+- Rebuild-test: dry run exactly `[20262090000000_…]`, push 0. Types: only C's two blocks (+52; generator drift
+  `test_invite_lookup` left out). Live **52/52** (rename TOTAL map with every role ON the project, writes
+  without returning rows; log read/write; blank name; `project_name_at`; sent invoice/CO keep the name, draft
+  shows the new; + `s97ct-roles`) after two fixture fixes (invoice/CO `author_member_id` NOT NULL; the 6a
+  render mock needed `useRouter`). Unit 14/14. **Sabotage** (old column-scope body) → **3 red** (PE rename, PM
+  rename, blank name); restored → md5 `a344ba29…` = file; 16/16. lint-job caught one more (the
+  `redesign-sections` mock, 7 failures) — fixed before CI.
+- **The 10 denormalised copies — each left alone, and why** (sent documents keep the name they were sent under):
+  | copy | handling |
+  | --- | --- |
+  | issued invoice PDF / invoice data | resolves `project_name_at(sent_at)` — keeps the sent name (built) |
+  | signed CO copy / CO data | resolves `project_name_at(sent_at)` — keeps the sent name (built) |
+  | `notifications.title` (195 of 374 rows) | left: a record of what was said when it was said |
+  | `email_logs` | left: the audit of what was sent |
+  | spec-sheet file name | left: a sent/stored file keeps its name |
+  | lien `filled_values` | left: a signed/sent document's snapshot |
+  | stored PDFs (daily log, incident, delivery, archive copies) | left: stored as generated; internal ones regenerate with the live name on their next edit |
+  | archive (trial deletion) | left: written at deletion time with the name then |
+  | QuickBooks memos | left to the connector: rebuilt from the live row when that record next syncs (internal books, not sent to a client) |
+  | `estimates.name` | left: an estimate's own name, independent of the project it became |
+- **Production §C:** dry run exactly its file, push 0. Verified: ledger **271** ✅, RLS ✅, policies = 1 SELECT ✅,
+  trigger ✅, md5 column-scope `a344ba29…` / log `be6e2de1…` / name_at `3010d885…` ✅, anon false / auth true ✅,
+  rows 0 ✅.
+
+### ITEM D — item 13, PE per-estimate assignment (branch `feature/s119-pe-estimate-assignment`, stacked on C)
+- **Measured surface (rebuild-test = production by md5):** `pg_policies` on `estimate*`/`files`/`scope_library`/
+  `cost_catalog` whose text names `project_manager`: **21** non-SELECT on the 8 core estimate tables + **2** on
+  `files` (+1 files SELECT) + 4 on catalog/scope library (+1 catalog SELECT) (+ `estimates_select_authenticated`).
+  Functions: the text search finds **7** estimate DEFINER functions + **1** trigger (`enforce_estimate_void_authority`)
+  + 3 site-visit ones; S118's "9 + 1" = the 7 + `create_site_visit` + `promote_site_visit`. Widened by what is
+  CALLED: all **31** functions referencing an estimate table were listed with their role checks; the builder
+  RPCs reached by the UI are `set_line_override_cost`, `set_winning_bid`, `switch_pricing_mode` (+ INVOKER
+  `reorder_*`, governed by RLS). `files`/storage arms for estimate-scoped rows admit only Owner/Admin today
+  (PM gets nothing there), so PE parity needs none.
+- **Built (narrower choices, alternatives recorded):** `estimate_assignments`, **one PE per estimate** (partial
+  unique index; alt: several); RLS: Owner/Admin read all + write, a PE reads only its own live rows; a shape
+  trigger (live PE of the same company, estimate of that company, never moves). **Creating assigns the
+  creator:** a BEFORE INSERT trigger on `estimates` writes the assignment (FK DEFERRED to commit), and the
+  helper `pe_assigned_estimate()` is VOLATILE so the RETURNING check of the app's `insert().select()` sees it —
+  proven by the real `createEstimate()` in the live test. PE access = **24 new permissive policies**
+  (4 assignment + 3 `estimates` + 17 child) beside the **byte-identical PM set**; 3 builder RPCs gain one role +
+  one PE block. The PE does NOT: send (proposal routes O/A; its UPDATE pins `status='draft'` before AND after),
+  submit for review (alt: allow draft→review like a PM), convert (D-1), void, mark lost, clone, write the
+  catalog/scope library, send bid requests or share files with bidders (both reach outside parties; routes
+  refuse a PE explicitly; no PE arm on `estimate_sub_bid_requests`). UI: "+ New Estimate" for the PE, builder
+  editable only on an ASSIGNED draft, send/convert/clone/mark-lost not offered to a PE, an Owner/Admin
+  "Project Executive access" control on the estimate. Deletion walk gains the table (census caught it).
+- **Two read paths, stated:** (1) assigned — `estimates_select_pe_assigned` (reads + builds on drafts); (2) on
+  a project the PE is assigned to — `estimates_select_project_executive` (UNCHANGED, read-only; an estimate there
+  is reachable whether or not anyone assigned it). Live: path 2 read 1 with no assignment, rename refused; a PE
+  on neither path reads 0. Not narrowed — say if path 2 should require assignment too.
+- **PM unchanged, proven:** snapshot of the 31 PM-naming policies + 11 functions before/after on rebuild-test:
+  **39 of 42 byte-identical**, the 3 builder functions differ only by the PE lines (diffed). PM TOTAL map (8
+  roles × Owner's draft + PM's draft reads, PM writes on own/other, both RPCs): **21/21 before, 21/21 after,
+  identical result lists**. Production: PM snapshot before §D == rebuild-test before (42/42); after §D ==
+  rebuild-test after.
+- **Live 29/29** (both paths via the real services; PE-to-PE both directions, reads + writes + RPCs; unassigned
+  0; no self-assign, no re-point, PM cannot assign, non-PE cannot be assigned; no out-of-draft, no soft delete,
+  convert refused with the ROLE message, clone refused with the ROLE message; two read paths; foreman/crew/sub/
+  client read 0 estimates and 0 assignment rows). ⚠️ The first clone negative was **vacuous** (wrong argument
+  name → "function not found" is also an error) — found while planning its sabotage; fixed to the real signature.
+- **Sabotage, each restored and read back identical:** S1 helper widened to "any estimate of my company" → **9
+  red** (all 5 PE-to-PE, both unassigned, the path-2 over-grant check, "before: PE B reads 0"); S2 draft pin
+  removed from the PE UPDATE check → **2 red**; S3 a PE-admitting INSERT/UPDATE arm on assignments → **2 red**
+  (PE self-assign, PM assign; "re-point" held — the SELECT arm is a second barrier); S4 convert + clone admit
+  the PE → **2 red**. Restores: helper, convert, clone, `estimates`+assignment policy set md5s equal the
+  snapshots; PM snapshot unchanged by the cycle. Neighbours (+ `s111` PE floor with its path-2 precondition,
+  `s175` void/reissue, `s156` M4 audit, C's rename) **106/106**. Unit `s115-estimate-access` 18/18 (AUTHOR map
+  inverted in place, quoted). e2e on the C+D build: `s119-pe-estimates` **3/3**, `desktop-pe-estimates-s115`
+  3/3 (create-control test inverted in place, quoted), `s118-project-rename` 2/2. lint-job **0/0/0** (148 / 2022).
+  Live deletion 19/19. Baseline 490/302/349/1074 (every delta reconciled to the two migrations).
+- **Production §D:** dry run exactly its file, push 0. Verified: ledger **272** ✅, RLS ✅, assignment policies = the
+  4 ✅, PE policies **20** ✅, trigger ✅, all 7 md5s = file ✅, anon false / auth true ✅, rows 0 ✅. **Production
+  fingerprint == committed baseline** (490 `1c0ca77c` / 302 `2fcd222a` / 349 `985d5448` / 1074 `c32e668a`, latest
+  `20262100000000`) ✅. Relinked `nmyphyhmfttxkdoposvf` after each.
