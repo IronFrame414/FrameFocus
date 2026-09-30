@@ -27,12 +27,15 @@ export interface CopyRecipient {
   kind: Exclude<RecipientKind, 'signer'>;
 }
 
-export interface RecipientResult {
+// A `type`, not an interface: it keeps an implicit index signature so it stays
+// assignable to the generated Json type (estimate_events.payload) — the same
+// reason AlsoSendToRecipient is one.
+export type RecipientResult = {
   email: string;
   kind: RecipientKind;
   status: 'sent' | 'failed';
   error?: string;
-}
+};
 
 /**
  * Who gets a copy: every `also_send_to` contact (its SNAPSHOT email — the list

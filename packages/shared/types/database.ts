@@ -4085,6 +4085,7 @@ export type Database = {
         Row: {
           accepted_at: string | null
           also_send_to: Json
+          also_send_to_email: string | null
           client_unsubscribed_at: string | null
           cloned_from_estimate_id: string | null
           company_id: string
@@ -4154,6 +4155,7 @@ export type Database = {
         Insert: {
           accepted_at?: string | null
           also_send_to?: Json
+          also_send_to_email?: string | null
           client_unsubscribed_at?: string | null
           cloned_from_estimate_id?: string | null
           company_id?: string
@@ -4223,6 +4225,7 @@ export type Database = {
         Update: {
           accepted_at?: string | null
           also_send_to?: Json
+          also_send_to_email?: string | null
           client_unsubscribed_at?: string | null
           cloned_from_estimate_id?: string | null
           company_id?: string

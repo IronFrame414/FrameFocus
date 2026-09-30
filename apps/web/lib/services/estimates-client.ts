@@ -161,6 +161,9 @@ export type UpdateEstimateInput = Partial<
     // 19b — extra proposal recipients (migration #6). Per-job, frozen on send by
     // enforce_estimate_immutability (the also_send_to freeze).
     | 'also_send_to'
+    // S120 4-B — ONE typed extra address (not a contact). Owner/Admin only and
+    // validated in the DB (enforce_estimate_recipients); frozen on send.
+    | 'also_send_to_email'
     // Money representation §4.2/§7.1 S-3 — Owner/Admin-gated in the UI
     // (projected_value is user-entered, never derived; NULL is normal).
     | 'projected_value'

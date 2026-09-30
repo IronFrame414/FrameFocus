@@ -117,6 +117,22 @@ export function DetailsTab({
     () => (estimate.also_send_to as AlsoSendToRecipient[] | null) ?? []
   );
   const confirm = useConfirm();
+  // S120 4-A/4-B — who a proposal goes to is Owner/Admin only (adding a
+  // recipient is part of sending; enforce_estimate_recipients refuses anyone
+  // else), so the controls follow the same rule rather than erroring on save.
+  const canChooseRecipients = canEdit && (role === 'owner' || role === 'admin');
+  const [typedEmail, setTypedEmail] = useState(estimate.also_send_to_email ?? '');
+  const [typedError, setTypedError] = useState<string | null>(null);
+
+  async function saveTypedEmail() {
+    const next = typedEmail.trim();
+    if (next === (estimate.also_send_to_email ?? '')) return;
+    setTypedError(null);
+    const result = await saveField({ also_send_to_email: next === '' ? null : next });
+    // REFUSED, never silently dropped: the database says why and the value stays
+    // in the box so it can be corrected.
+    if (!result.success) setTypedError(result.error || 'Could not save that address');
+  }
 
   useEffect(() => {
     createClient()
@@ -299,7 +315,42 @@ export function DetailsTab({
               Per-job; frozen on send (the also_send_to freeze migration). §1.4:
               pick an existing contact or add one inline; stores contact_id +
               name/email snapshot. */}
-          <AlsoSendToField value={alsoSendTo} canEdit={canEdit} onChange={saveAlsoSendTo} />
+          <AlsoSendToField value={alsoSendTo} canEdit={canChooseRecipients} onChange={saveAlsoSendTo} />
+
+          {/* S120 4-B — "Also send to (email)": one typed address that is NOT a
+              contact. It receives a COPY of the proposal email (the PDF, no
+              signing link) and nothing else — no portal, no signing page. */}
+          <label
+            htmlFor="also-send-to-email"
+            style={{ display: 'block', fontSize: '0.78rem', fontWeight: 600, color: '#3f4a60', margin: '0.75rem 0 0.25rem' }}
+          >
+            Also send to (email)
+          </label>
+          {canChooseRecipients ? (
+            <input
+              id="also-send-to-email"
+              data-testid="also-send-to-email"
+              type="email"
+              value={typedEmail}
+              onChange={(e) => setTypedEmail(e.target.value)}
+              onBlur={() => void saveTypedEmail()}
+              placeholder="name@example.com"
+              style={{ width: '100%', padding: '0.45rem 0.6rem', fontSize: '0.875rem', border: '1px solid #d6dbe6', borderRadius: '0.375rem' }}
+            />
+          ) : (
+            <p data-testid="also-send-to-email-readonly" style={{ fontSize: '0.875rem', color: '#3f4a60', margin: 0 }}>
+              {estimate.also_send_to_email || '—'}
+            </p>
+          )}
+          {typedError ? (
+            <p data-testid="also-send-to-email-error" style={{ color: '#c0362c', fontSize: '0.75rem', margin: '0.25rem 0 0' }}>
+              {typedError}
+            </p>
+          ) : (
+            <p style={{ fontSize: '0.72rem', color: '#7b8699', margin: '0.25rem 0 0' }}>
+              Gets a copy of the proposal email and PDF. No signing link, no portal access.
+            </p>
+          )}
         </div>
 
         {/* Proposal format — the one control (same as 9d/19a); writes proposal_pricing_level. */}
