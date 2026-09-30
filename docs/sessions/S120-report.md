@@ -540,6 +540,52 @@ FK refused the delete. The object had already been removed.
   4 green and the positive control 3 green. **Restored** with `git checkout`, and `git diff --quiet
   HEAD` confirms the services are **identical** to `ac36ea54`. Leftover fixture files: **0**.
 
+#### 1-B `#176`: `email_has_account` rate limit (ASK-1 default A)
+
+**Choice:** a rate limit of **30 answered checks per caller per rolling hour**. The 31st call raises
+`54000`, is **not** counted, and the window clears on its own. The answer is unchanged and still
+platform-wide. **Alternative not built:** same-company scope (ASK-1 B). It would change what the
+invite route learns, and "an address with an account anywhere cannot accept" is the reason the check
+exists.
+
+Migration `20262111000000_s120_email_has_account_rate_limit.sql` adds the ledger
+`email_account_checks` (company_id, created_at, created_by). RLS is on, with an Owner/Admin SELECT
+policy for the own company and **no write policy**, so only the SECURITY DEFINER function writes it.
+The function becomes VOLATILE, and its signature, grants, Owner/Admin check and answer are unchanged.
+`app/api/invites/route.ts` maps `54000` to **429** `rate_limited`, logs the cause server-side, and
+now also logs the cause of any other failure. `lib/trial/deletion.ts` `COMPANY_TABLES` gains
+`email_account_checks`, which the deletion census requires.
+
+**Only caller** (`grep` over `apps/web`): `POST /api/invites`. **Signup does not call it.**
+`handle_new_user` and the sign-up route never reference it. Only the 20260917 migration's comment
+mentions it.
+
+**BEFORE, on rebuild-test** (`s120-email-check-rate-limit.live.ts`): 30/30 answered, **call 31
+answered (`data=true`)**, no ledger, and the route returned **200 and wrote an invitation** for the probe
+address. That row and its `email_logs` row were removed afterwards (0/0 confirmed), and the teardown
+now removes them. **4 red / 4 green.**
+
+**AFTER** (the dry run listed exactly `20262111000000_s120_email_has_account_rate_limit.sql`, the push
+exited 0, and the live function is `md5(prosrc)` = `e30ddcf7abe41c5934d6cae375457e0c`, `provolatile v`,
+SECURITY DEFINER, EXECUTE `authenticated` only): **8/8.**
+- Call 31 → `54000`, `data=null`, and the ledger holds exactly **30** by service-role count.
+- The Admin of the same company is still answered, because the limit is per caller.
+- A session's DELETE of its own rows removes **0**.
+- A session's INSERT against another caller is refused **42501**, and that caller's count stays
+  `1 → 1`.
+- The route while limited returns **429 `rate_limited`, with 0 invitations written**.
+- After the window is cleared, the answer is `true` for an existing address and `false` for a fresh
+  one.
+
+**Sabotage.** The limit was lifted to 100000 on rebuild-test, read back with `md5 b657b34e…` and
+`position('>= 100000') > 0`. Result: **4 red**. Call 31 was answered, the ledger held 31, and the route
+returned 200 and wrote an invitation, which the teardown removed. **Restored** from the live
+`pg_get_functiondef`, read back as `md5 e30ddcf7…`, **identical**. Invitations left: 0; ledger: 0.
+
+**The invite path still works:** `s135-invite-send-resend.live.ts` passed **10/10** after the change.
+Signup and invite-accept end to end are the CI e2e suite (onboarding and invite specs) on this branch
+(stop rule 7).
+
 ---
 
 ## Production verification rows
