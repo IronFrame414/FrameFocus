@@ -325,6 +325,20 @@ SQL editor (2-A). **Juan's segment carries no task, so the 2-A completion gate c
 Whoever closed it, the `21:15:38` stop time is recorded as fact and **Josh should confirm that it was
 Juan's real stop time** (payroll; stop rule 3).
 
+### 1.6 — S118 item 16 against the 2026-09-29 rulings (code on `origin/main` `fad4787e`; policies on PRODUCTION)
+
+| ruling | by object | verdict |
+| --- | --- | --- |
+| Employee reads their **own** documents only | **Production** `pg_policies`: 7 policies, read 2026-09-30. `employee_documents_select_own` = `company_id = get_my_company_id() AND is_deleted = false AND member_id = get_my_member_id()`. `employee_documents_select_owner_admin` = company + `get_my_role() IN (owner, admin)`. No other SELECT policy on the table. Storage `employee_documents_objects_select` = bucket + company folder (inline subquery) + (Owner/Admin OR a live `employee_documents` row with `file_path = objects.name AND member_id = get_my_member_id()`). The other 5 SELECT/ALL policies on `storage.objects` are each pinned to a different bucket (`company-logos`, `exports`, and three on `project-files`), and 0 are unpinned. Every one of these is textually identical to `20262060000000_s118_employee_documents.sql` on main. | **MATCH** |
+| Owner/Admin notice is **non-dismissible** | `employee-documents-panel.tsx:79-87` (main): a static `<div role="note" data-testid="employee-docs-notice">` at the top of the section, with the text "{personName} can see everything filed here. Do not file anything you would not show them." It has no state, no close control and no handler. The panel renders only on `app/dashboard/team/[id]/documents/page.tsx`. | **MATCH** |
+| The box exists on **`/m`** | `app/m/account/page.tsx:7,48` (main) renders `<MyDocuments documents={myDocuments} />`. So does `app/dashboard/account/page.tsx:41`. | **MATCH** |
+| An employee-to-employee negative that fails under sabotage | `apps/web/test/s118-employee-documents.live.ts:171-208` (main): "⚠️ EMPLOYEE-TO-EMPLOYEE — each reads their own and ZERO of the other's" (5 its). The S118 report claims sabotage S1 (own-read widened company-wide) → 9 red and S2 → 8 red. **That is a prior report, so it is a claim.** It is **re-run by this session in Part 6-B** on rebuild-test. | test exists; sabotage **carried to 6-B** |
+
+A residual noted rather than acted on: `get_my_member_id()` (production) ends in an **unordered
+`LIMIT 1`** over `company_members JOIN profiles WHERE p.user_id = auth.uid()`. Here it is safe only if
+each user has at most one live membership, and that is recorded for the `.limit(1)` rule in 6-B, not
+assumed.
+
 ---
 
 ## Phase 3 — parts
