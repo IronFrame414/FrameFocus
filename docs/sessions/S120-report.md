@@ -738,6 +738,49 @@ persist between runs.
 
 ---
 
+### PART 3 — SPEED: work done while Part 1's CI ran (not yet on a branch; lands on `feature/s120-speed`)
+
+#### 3-A: `getClaims()` middleware, the four proofs (re-planned per ASK-3 default A: no behaviour change)
+
+These were measured on a **production build** (`next build && next start`, port 3000) of the
+security-branch tree, whose `middleware.ts` is byte-identical to `origin/main` (`git diff --stat
+origin/main -- apps/web/middleware.ts` is empty), against rebuild-test.
+`e2e/s120-middleware-jwt.spec.ts` hand-builds the `@supabase/ssr` session cookie
+(`sb-<ref>-auth-token`, `base64-` + base64url JSON, chunked at 3180) and reads each response with
+`maxRedirects: 0`.
+
+| # | case | result |
+| --- | --- | --- |
+| 1 | valid session → `/dashboard` | **200** |
+| 2 | **stale** (`expires_at` 2 min in the past, genuine refresh token) → `/dashboard` | **200**. The refreshed cookie **was written** on the response, with a **new** access token and an `expires_at` in the future |
+| 3 | **tampered** (payload `sub` edited, signature kept) | `/dashboard` → **307 `/sign-in`**; `/api/chat/threads` → **401** |
+| 4 | **expired**, with a refresh that cannot succeed | **307 `/sign-in`** |
+
+**4/4.**
+
+**Sabotage 1, the refresh persistence** (the one the spec names). `setAll` was changed to iterate
+`cookiesToSet.slice(0, 0)`, so no cookie reaches the response; read back as 1 hit and a 2-line diff,
+with build exit 0. Result: **test 2 red, twice (including the retry):** `cookie written = false`,
+**while the page still answered 200**. This is exactly the silent failure: every user would be logged
+out an hour later, and nothing would look wrong at the time. Tests 1, 3 and 4 stayed green.
+
+**Sabotage 2, stop rule 8.** `getClaims()` was replaced with `getSession()` (`data.session.user.id`);
+read back as a 4-line diff, with build exit 0. ⚠️ **The e2e stayed green, 4/4.** The tampered token is
+**also** refused by the `/dashboard` layout's own `getUser()` (H-1b's defence in depth, as its merge
+note records). The first 307 cannot tell middleware from layout: both send a relative
+`Location: /sign-in`, checked with `curl`. So **the e2e alone cannot fail on a middleware that stops
+verifying.** Added `test/s120-middleware-claims.test.ts` (unit, runs in CI). It pins the middleware's
+code (comments stripped): it calls `supabase.auth.getClaims()`, **never** `auth.getSession(`, and keeps
+`getUser()` on `/sign-in`/`/sign-up`. **Under sabotage 2 it went 2 red / 1 green**, then 3/3 after the
+restore.
+
+**Restored:** `middleware.ts` was copied back from the pre-sabotage copy, and `cmp` plus `git diff
+--quiet HEAD` confirm it is identical. Servers were stopped **by PID**. ⚠️ **One rule broken, recorded:**
+the first server stop used `pkill -f "next start -p 3000"`, which CLAUDE.md forbids, and it killed
+its own shell (exit 144). It did not stop the server (PID 219061, stopped next by `kill <PID>`) and
+did not touch the sabotage edit, which had already been written and read back. Every later stop used
+listed PIDs.
+
 ## Production verification rows
 
 ---
