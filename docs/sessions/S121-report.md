@@ -198,3 +198,19 @@ Pattern to copy: `/m` check-in `check-in-form.tsx:331-376` — a wide camera lab
 ### 1.9 — The pre-CI check
 
 `scratchpad/lint-job.sh` **does not exist** (no `scratchpad/` directory in the repo). Phase 3 runs `.github/workflows/ci.yml`'s Lint & Type Check job directly: `npm run type-check`, `npx turbo run lint --filter=@framefocus/web`, `npx turbo run test --filter=@framefocus/web` — each with its exit code read on its own line, not through a pipe.
+
+### 1.7 — `origin/feature/s112-staletimes-hold` re-measured (SPEC 7-C) — assessment only, NOT merged
+
+- **Branch:** tip `9b90115a` is an empty `[skip ci]` "park" commit; the change is `3b603c07` — one file, `apps/web/next.config.js` gains `experimental.staleTimes: { dynamic: 0 }` (plus a comment block). `next.config.js` on main has moved since (last touched `467a0682`, S119), so the change was re-applied **by hand at an anchor matched exactly once**, not by merging.
+- **What it does on the current tree (Next 14.2):** the client Router Cache reuses a visited dynamic page for 30 s without asking the server; `0` makes every push/`<Link>` navigation to a dynamic page refetch its RSC payload. It does **not** affect Back/Forward (`restore-reducer` never reads it).
+- **Method (stated so it can be repeated):** local production builds (`next build` exit 0 each; `next start -p 3000`, confirmed sole listener) against **rebuild-test**, signed in as `josh+crew@worthprop.com`, Chromium at **402×874**. Each build was checked in its compiled router chunk: baseline `1528-99c455d25238272e.js` reads `1e3*Number("30")`; variant `1528-ccc810a9f33c8c1b.js` reads `1e3*Number("0")`. Measurement: land on `/m/projects`, tap the Field tab, wait for the header `<h1>` "Field", wait 1.5 s, **tap the Projects tab and time until the header `<h1>` reads "Projects"** (a revisit of a page seen < 30 s ago). 3 runs per profile, median. Navigation RSC fetches counted as requests with `rsc: 1` and **no** `next-router-prefetch` header. Network via CDP `Network.emulateNetworkConditions` with Chrome DevTools' presets (Fast 3G 562.5 ms RTT; Slow 3G 2000 ms RTT). CPU unthrottled. Harness committed as `docs/sessions/S121-evidence/nav-cost.mjs` (S112's `nav-cost.mjs` was never committed — this is a reconstruction, not the same script).
+
+| profile | main (30 s) — runs / median | `dynamic: 0` — runs / median | nav RSC fetches main → 0 |
+| --- | --- | --- | --- |
+| unthrottled | 37, 49, 49 / **49 ms** | 323, 301, 294 / **301 ms** | 0 → 3 |
+| Fast 3G | 38, 47, 48 / **47 ms** | 800, 798, 795 / **798 ms** | 0 → 3 |
+| Slow 3G | 53, 45, 49 / **49 ms** | 2301, 2311, 2308 / **2,308 ms** | 0 → 3 |
+
+- **The S112 claim holds, in shape and roughly in size:** 52 → 369 ms (S112) vs 49 → 301 ms (now) unthrottled; 51 → 639 ms vs 47 → 798 ms Fast 3G; 51 → 2,129 ms vs 49 → 2,308 ms Slow 3G. **Every tab revisit becomes one round trip.**
+- **Does the hold still make sense? Yes.** Josh already ruled it NOT SHIPPED at S116 Q8, reopenable only as a correctness decision with a named stale-after-mutation case `router.refresh()` cannot fix. Nothing measured here changes that. **Recommendation: keep it parked; no action.** Merging is Josh's call.
+- Restores: `next.config.js` restored with `git checkout --`, then `git diff --quiet origin/main -- apps/web/next.config.js` exit 0 and `cmp` against the pre-edit copy exit 0. Both servers killed by PID; port 3000 free.
