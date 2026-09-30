@@ -654,3 +654,18 @@ Each section ran through `section.sh`: every newer migration file held out of th
 
 **Part 5 MERGED → `main` `a72c7aa8`.** The Part 6/7/8 stack re-based onto it (pre-CI: type-check 0, lint 0, unit **160 / 2148**, 0 cache hits) → **CI `36746163548`**. 7-A re-based onto `a72c7aa8`; types regenerated — the diff is ONLY `create_safety_incident` collapsing to its 7-arg shape (−24/+12). Its CI follows the stack's merge.
 **Stack CI `36746163548` (base `a72c7aa8`): 1 failed, 3 flaky, 24 skipped, 670 passed.** The failure is `desktop-chat-switcher.spec.ts:46` ("the launcher badge sums unread": expected `2`, received `1`, on all 3 attempts). Parts 6/7/8 touch no chat code. **Reproduced locally on this branch's own production build: 5 passed.** It is an unread-count collision with `main`'s CI run, which was running against the same rebuild-test at the same time (this spec has a flake history, #157). **Not merged on that result:** the failed job is re-run on the same commit once `main`'s run has finished, and the merge waits for green.
+
+**Parts 6 / 7-B / 7-C / 8 MERGED → `main` `66a3a1a2`.** A fresh CI **`36753368752` green on base `a72c7aa8` (= main)**: e2e **673 passed, 24 skipped, 1 flaky** (my own `desktop-schedule-s121` 5-E drag test, passed on retry — see "What remains"), 0 failed. (`gh run rerun` of the collided run was refused, "Resource not accessible by integration", so the same commit got a fresh run on a quiet rebuild-test.)
+
+**7-A** re-based onto `66a3a1a2` (pre-CI: type-check 0, lint 0, unit 160 / 2148, 0 cache hits) → **CI `36758020810`**.
+
+**Branches deleted, each with proof** (ref `origin/main` `66a3a1a2`; tips recorded in `docs/branch-archive-2026-09-27.md`'s S121 section, on main):
+| branch | tip | proof |
+| --- | --- | --- |
+| `origin/feature/s112-bid-token-status` | `2313db6c` | its `+` commits map 1:1 to main (range-diff, §7-C); the `-` commits are patch-equivalent |
+| `origin/feature/s112-m-loading` | `72d603b3` | `git diff --quiet origin/main 72d603b3 -- nav-pending.tsx + its doc` → 0 |
+| `origin/feature/s112-cdn-investigation` | `15f73548` | **by ruling (Q26)**; SHA archived |
+| `origin/feature/s112-catalog-importer` | `3ac6f7da` | `git cherry origin/main` → all `-` (patch-equivalent) |
+| `feature/s118-catalog-import` (local `f9dbfb5c`, origin `cbd2c2c1`) | both | `git cherry origin/main` → all `-` for both |
+| S121's own `p1`–`p5`, `p6`, `p78` (local + origin) | — | ancestors of main, or `git cherry` all `-` (`p1` `2b084a1f`, `p4` `94bc9e33` and `p6` were pre-rebase copies) |
+**Kept:** `feature/s114-c5-multi-upload` (stop, reference for #181), `origin/feature/s112-staletimes-hold` (assessed, Josh's call), the four docs-tail branches `s116-report`, `s110-site-visit-access`, `s180-branch-archive`, `s180-unattended` (their content is now on main, but they were not in the ruled deletion list — **deletable on Josh's word**), `feature/s121-assess` (this report), `feature/s121-p7a-drop` (in CI). Refs: 37 before → 20 now (local + remote, incl. `main`/`origin/HEAD`).
