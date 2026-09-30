@@ -265,3 +265,68 @@ estimates on assigned projects.
    was the delivery-embed fix, on rebuild-test — the separation still holds.)
 3. Stack C-5 on R10 (keep Josh's `2f4ae640` specs), one CI for both, merge both on green; bisect R10
    first if red. The eight C-5 proofs in one Playwright invocation (they are Playwright, not vitest).
+
+### ✅ Docs merged to main as `c69f6c5d` (Josh: "merge both now")
+- `feature/s115-report` and `feature/s116-report`, `--no-ff`, `[skip ci]`, tree-identity exemption:
+  base `ef6192bc` = the tree CI 36562206482 tested green; delta by exclusion
+  (`git diff --name-only ef6192bc HEAD | grep -vE '^docs/|^[^/]+\.md$'` → 0 lines): `TECH_DEBT.md`,
+  `docs/sessions/{S112-router-staleness,S115-PRODUCTION-RUNBOOK,S115-report,S116-report}.md`,
+  `docs/specs/S114-SPEC-close-open-items.md`.
+
+### ✅ R10's `20262020000000` APPLIED TO PRODUCTION, verified by object (Josh's instruction)
+- Access: `SUPABASE_ACCESS_TOKEN` sees `jwkcknyuyvcwcdeskrmz` (`supabase projects list`). Production
+  SQL read-only via the Management API query endpoint (`scratchpad/prodq.sh`, refuses non-SELECT).
+- **Step 0** (production): newest `20262010000000`, r10_ledger_rows 0, column_exists 0, fn_count 0,
+  pbi_policies 2 — all as the runbook expects.
+- Branch `feature/s115-r10-budget-edit` fast-forwarded to `2f4ae640` (Josh's 3 spec files). Project-ref
+  `nmyphyhmfttxkdoposvf` → `supabase link --project-ref jwkcknyuyvcwcdeskrmz` (exit 0) → ref reads
+  `jwkcknyuyvcwcdeskrmz` → `db push --dry-run --include-all` (exit 0): **exactly one**,
+  `20262020000000_s115_r10_original_budget_edit.sql` → `db push --include-all` **PUSH_EXIT=0**,
+  "Applying migration 20262020000000…", "Finished supabase db push." → **relinked** to
+  `nmyphyhmfttxkdoposvf` (exit 0; ref file reads it). No repair run. `git status`: nothing under
+  `supabase/`.
+- **Verify on production** — every value equals the runbook's table: ledger_row 1, column_ok 1,
+  rows_not_false 0, pbi_policies 2, md5_issued `cd98c2cc21842a38c0ef735c7cf71259`, md5_can_edit
+  `cde4b4660b237e93d816e3d2f035c28f`, md5_add `675545c2c6b0699377e4ee3884859095`, md5_update
+  `037907723a7e53e99b54e7bca180cd82`, secdef_count 4, anon_add false, anon_update false,
+  auth_update true; newest migration now `20262020000000`.
+- **R8 condition 3 is satisfied for R10.** Its CI is still owed (never had a run) — the stacked run.
+- Production also confirmed to carry BOTH `deliveries` FKs to `company_members`
+  (`deliveries_checked_in_by_fkey`, `deliveries_received_by_fkey`) → the delivery-embed defect is live
+  there; `deliveries` live rows on production: **0**, so no user has hit it yet (the first real
+  check-in would).
+
+### ✅ Delivery-embed fix MERGED to main as `6aad413c` (R8, tree-identity exemption)
+- CI **36567384544** on `5e9034bf` (base `ef6192bc`): lint/type success; E2E 636 → **615 passed, 21
+  skipped** (29.5m); tally 617 `✓`, **0 `✘`**; `s116-delivery-pages` 2 `✓`; the job log's
+  "Delivery not found" count **0**. Main had moved `ef6192bc → c69f6c5d` by docs only (`git diff
+  --name-only ef6192bc origin/main | grep -vE '^docs/|^[^/]+\.md$'` → 0); full path list in the merge
+  message. No migration.
+
+### 6+7. The stack — R10 + C-5 step 1, ONE CI (Josh's schedule change)
+- R10 rebased onto `6aad413c` (`ccfedc50`, `207b9a85`, `18778e8f` = Josh's 3 spec files kept; all
+  `[skip ci]`); migration md5 `e4713911…` unchanged; `tsc` 0. C-5's 3 commits rebased `--onto` R10's
+  head (`28859392`, `4151e2d6`, `1b9a6fbd`); C-5 touches no `supabase/` or budget path.
+- Stacked tree: `tsc` 0, `next build` BUILD_EXIT=0.
+- **The eight proofs, ONE Playwright invocation** (`CI=1 playwright test <8 specs> --retries=0`):
+  **9 passed** (portal carries 2: the batch proof + the not-hers negative with its control),
+  `E2E_EXIT=0`, 9 `✓` / 0 `✘`. Each asserts N=3 selected → exactly 3 `files` rows (company, project or
+  estimate, category, link column) and 3 storage objects **counted with the service role**, one
+  forced failure named in the list while 2 landed, Retry → exactly 3 rows/3 objects, cleanup to zero
+  in `afterAll`.
+- **Sabotage A** (`makeAttachWorker` forgets the uploaded id): rebuilt → log, incident, expense →
+  **3 failed**; restored, `cmp` identical, `grep -c SABOTAGE` 0. This is the **end-to-end proof of
+  the duplicate-on-retry fix**: with the fix a link-failed file is re-linked (same id, 3 uploads);
+  without it, the retry uploads again.
+- **Sabotage B** (`requeueUnfinished` requeues nothing): rebuilt → check-in, delivery edit, selection
+  thread, site visit, portal → **5 failed**; restored, `cmp` identical, 0 markers.
+- Leftovers after all runs (rebuild-test, marker query): files 0, deliveries 0, expenses 0,
+  site-visit estimates 0, selections 0, chat messages 0, daily logs 0, incidents 0 (each spec's own
+  `afterAll` zero-count is the authority; none failed).
+- **R10 live** on the stacked tree (`vitest -c test/live.vitest.config.ts`
+  `s115-r10-original-budget.live.ts s97ct-budget-immutability.live.ts`): **32 passed** (19 + 13).
+  Not part of CI — run here because R10 never had a CI run.
+- `lint-job.sh`: TYPE 0, LINT 0, TEST 0 — **143 files / 1947 passed**, 0 cache hits.
+- CI request `d0348da7` on `feature/s116-c5-step1` → run **36572995329** (base = main `6aad413c`).
+  Merge plan on green: fast-forward-equivalent `--no-ff` merge of the stacked head (carries both
+  R10 and C-5); R10's branch then equals an ancestor. If red: bisect, R10 first.

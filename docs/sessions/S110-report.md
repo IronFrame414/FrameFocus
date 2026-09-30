@@ -276,3 +276,258 @@ there.** A local run on top would be the second heavy consumer the prompt forbid
 
 ## Section A — ⚠️ BLOCKED on Josh's production counts (FILLED-A.8 queries 1–3). B depends on A.
 Per Josh: not idling. Moving to Section H's parts that do not touch `SiteVisitRecord`.
+
+## Phase 3 — Section H (started early, A being blocked) — branch `feature/s110-h-language`
+
+Cut from the docs branch, then **C merged in** (`3c9988d1`) so H stacks on C's `mobile-shell.tsx`
+change instead of conflicting with it. Merge order F, C, D, E, A, B, H is unchanged.
+
+### Database — `20261750000000_language_and_translations.sql` → rebuild-test
+
+`profiles.language` (`'en'|'es'`, NOT NULL DEFAULT `'en'`, CHECK) and the self-edit guard admitting
+it; `text_translations` (the Q12 cache — RLS on, **no policies**, service role only);
+`ai_translation_logs` (3H cost log, owner/admin SELECT). Dry run listed exactly this file;
+`DBPUSH_EXIT_LINE=0`; column and RLS verified; all 10 rebuild-test profiles read `en`;
+`db:fingerprint` 0; `db:verify` 0 **LEDGER CLEAN**. The tenant-deletion walk gained
+`text_translations` (deleted with the tenant), and `ai_translation_logs` survives detached (S137 Q1).
+Census tests 46/46.
+⚠️ **Rebuild-test is shared by every section branch.** The push needed D's `20261720000000` present
+locally, so it was copied in **untracked** (never committed on H). **H's generated
+`database.ts` and fingerprints therefore include D's RPC.** Regenerate them (`npm run db:types`,
+`db:fingerprint`) when the branches land.
+**Production count owed:** `select count(*) from profiles;` — the CHECK governs every row, but every
+row takes the default `'en'`, which satisfies it.
+
+### Built, with proof
+
+| piece | proof |
+| --- | --- |
+| `LanguageForm`, ONE form on `/dashboard/account` and `/m/account` (ruling 1) | tsc/lint; drives `updateMyLanguage` (RLS + the column guard) |
+| `LanguageProvider` — `uiLang` (/m = user's, /dashboard pinned `en`, ruling 2) and `readerLang` (both surfaces, ruling 3) | layouts wired; shared components never inspect their route |
+| **anti-rot guard** `s110-m-i18n-guard.test.ts` (TS-AST scan of all 131 files /m can render; PENDING ratchet) | **`SABOTAGE_GUARD_EXIT_LINE=1`** — a hard-coded `<p>` on `/m/notifications` is named with its line |
+| **/m migrated**: 1011 strings / 80 files → `t()` in five area tables (5 parallel agents on disjoint files, then chips, gender agreement and 4 unowned labels by me) | guard 134/134; ratchet now holds **only** `site-visit-record.tsx` (60) and `voice-notes.tsx` (20), deferred until A |
+| `/api/translate` + `lib/translation/translate.ts` (Q12: on read, cached by company + sha256 + target + model; the original is never written; gpt-4o-mini; output validated; cost row on success and failure) | unit 5/5; **live 5/5 against the real model**: Spanish → English with a cost row, cache hit spends nothing, English → null, **a client refused 403 before any spend** |
+| `UserText` (Q13: translation + "Translated from Spanish · show original"; original while pending/failed) | built; wired into screens next |
+| **ruling 5** `s110-client-facing-english.test.ts` — from 19 roots + 14 root dirs, no import closure reaches translation, and nothing mounts a provider | 7/7; **two sabotages red** (UserText imported into the portal; a provider mounted in the portal layout) |
+| gate | unit **1540/1540**, `tsc` 0, lint 0, `next build` **130/130** `OY6oG28vQ1-syf43GX0Po` |
+
+### ⚠️ Twice this section, a sabotage that DID NOT APPLY read as a pass — caught, then redone
+
+1. **Translate route, client refusal.** `sed` matched nothing (Prettier had reflowed the `Set`), and
+   the run printed `SABOTAGE_TRANSLATE_CLIENT_EXIT_LINE=0`, a pass. The replacement count (`0`)
+   gave it away. Redone with a checked replacement → **`=1`**, X red.
+2. **Portal provider.** The anchor targeted E's portal layout, which is not on this branch.
+   `grep -c` printed `0` and the run passed. Redone against this branch's layout → **`=1`**.
+Both are the named class ("a probe that cannot fail"). **Every sabotage now prints its replacement
+count before its exit line.**
+
+Also measured and recorded in the test: under vitest 4, a `beforeEach` that resets or clears a
+mock makes a later throwing implementation fail the test **even though the code caught the
+error**. Reproduced with and without the hook; the test asserts call-count deltas instead.
+
+### H continued — Q14 (send-time English check), UserText wired, filings
+
+**Q14 — A + C, never B, with the amendment (warn + record the override).**
+`lib/language-check/english-check.ts` asks the model for a **language CODE per field and nothing
+else**; any other field of the reply is dropped. So machine output can stop a send but never becomes
+words on a document. It sits deliberately outside `lib/translation/`, which the ruling-5 test forbids
+client-facing code from reaching. It fails open, and logs a cost row on success and failure
+(`target_lang='detect'`). Wired into **proposal, change-order and invoice sends**. The invoice check
+runs **before** the issue step, so a warning never spends an invoice number. One
+`NotEnglishWarning` component serves all four send UIs; on `/m` it speaks the user's language. The
+override is recorded on the send's `email_logs.metadata.language_check`
+(`{checked, flagged, overridden_by}`).
+
+| proof | printed line |
+| --- | --- |
+| unit `s110-english-check.test.ts` (codes only; fails open; 409 body) | 5/5 |
+| live `s110-english-check.live.ts` — real route + model | **3/3**: Spanish estimate name → 409 naming it, no signing link, no log, name unchanged; override → proceeds, override recorded with the owner's profile id; English control clean |
+| live `s110-english-check-co-invoice.live.ts` | **4/4**: CO refused and untouched (no signature written); CO override recorded; CO English control; **invoice refused, still draft, `invoice_number` NULL** |
+| sabotage (proposal check disabled / CO check disabled) | `SABOTAGE_EC_EXIT_LINE=1`, `SABOTAGE_EC2_EXIT_LINE=1`; both restored `cmp` identical; fixtures 0 |
+| not driven live, stated | the invoice OVERRIDE path — it would issue the invoice and spend a real number in Company A's sequence |
+
+**Fixed on the way:** two send buttons passed the click EVENT as the new `languageOverride`
+argument (`onClick={handleSend}`), which would have overridden every warning silently. Now
+`onClick={() => void handleSend()}`. Prettier had also reflowed four unrelated files; they were
+restored and re-edited so the diffs hold only the change.
+
+**UserText (ruling 3), wired:** someone else's chat message (both surfaces), `/m` daily-log detail
+and list excerpts, the `/m` punch item, and the desktop daily-log detail.
+`s110-usertext-wiring.test.ts` 6/6. **UserText now adds nothing unless a translation exists**: pending
+or failed shows the original alone, with the state in `data-usertext-state` and a tooltip. This keeps
+the text identical for an English reader and for every existing e2e assertion (CI has no model
+key).
+
+**Filed (H branch):** `#3-s110` notifications/push, out of scope by Q15; `#4-s110` the user-text
+surfaces not yet wired (SiteVisitRecord first, after A).
+
+**E2E written, not yet run:** `e2e/m-language-s110.spec.ts` (Español on `/m`, English on `/dashboard`,
+back). Its `afterAll` resets the shared crew identity to `en` through the service role.
+
+### CI results so far (Actions API)
+
+| branch | run | result |
+| --- | --- | --- |
+| F `feature/s110-f-route-guard` | `35931243349` | **success** |
+| D `feature/s110-d-line-rows` | `35931975526` | **success**, so `desktop-line-rows-s110` R1/R2 passed in CI |
+| C `feature/s110-c-account-link` | `35931389397` | **failure: 1 failed, 4 flaky, 569 passed.** The failure is `desktop-chat-switcher.spec.ts:62` (per-thread unread), the #157 contention fingerprint. That run overlapped 4 other S110 CI runs on the one database. C's own specs are in neither the failed nor the flaky list; the log names only those, so this is not direct evidence. **To be confirmed by a local run on an idle database.** |
+| E | `35933826436` | in progress at the time of writing (earlier E runs failed at build/type-check on the two defects already fixed) |
+
+### Local e2e on an idle database (Actions API: 0 runs active), production builds (`next start`)
+
+| run | printed line |
+| --- | --- |
+| H branch (contains C): `m-account-link-s110` + `m-shell` + `m-language-s110` | `PW_EXIT_LINE=0`, 57 passed, **1 flaky**: my own new A-3b case read a 0.6px "gap". Separate `boundingBox()` calls had landed in different frames of the sheet's 140ms drop animation. Fixed (wait for the animation, read all rects in one frame), committed on **C** `f6ec75f0` and merged into H; `--repeat-each=5 --retries=0` → 6 passed |
+| **sabotage C + H** (row removed; `/m` uiLang pinned `en`) — one build, each spec red at its own assertion | `SABOTAGE_C_H_PW_EXIT_LINE=1`: both account-link cases time out waiting for `m-sheet-account`; L1 received `"Projects"` for `/Proyectos/`. Crew language read back `en` (afterAll reset works) |
+| restored (`cmp` identical), rebuilt | `REVERTED_PW_EXIT_LINE=0`, 4 passed |
+| **sabotage D** (`onMouseDown` focus removed), D branch build | `SABOTAGE_D_PW_EXIT_LINE=1`: R1 and R2 red at "did not focus itself on mousedown". **The synthetic-mousedown test measures the handle, not Chromium.** |
+| D restored (`cmp` identical), rebuilt, + S109 row-activation | `REVERTED_D_PW_EXIT_LINE=0`, 6 passed; fixtures 0; server stopped by PID |
+
+**C is now proven in a browser**, which CI could not show: CI's log names only failed and flaky tests.
+
+### CI — E
+
+`35933826436` (E head `8ebf5f74`): Lint & Type Check **success**; e2e **1 failed** —
+`desktop-chat-switcher.spec.ts:31` (thread ORDER), 2 flaky, 568 passed. Same file and fingerprint
+as C's CI failure and as the S108 #157 contention record. E touches no chat code. **Not yet
+confirmed**: a solo local run of that spec on E once the database is idle.
+
+### E's CI failure — decided on an idle database
+
+Solo run on E's production build, Actions API showing 0 active runs, `--workers=1 --retries=0`:
+`E_CHAT_SWITCHER_PW_EXIT_LINE=0`, **5/5**, `:31` and `:62` included. Contention between concurrent
+CI runs (the #157 fingerprint), not E. The server was stopped by PID.
+
+## STATUS AT PAUSE — what is built, what is blocked, what is owed
+
+| § | branch | state |
+| --- | --- | --- |
+| F | `feature/s110-f-route-guard` | **built and proven** (3 sabotages); CI green |
+| C | `feature/s110-c-account-link` | **built and proven** (browser + sabotage); CI red only on #157 contention |
+| D | `feature/s110-d-line-rows` | **built and proven** (live 11/11, e2e + sabotage); CI green. ⚠️ migration `20261720000000` owed to production |
+| E | `feature/s110-e-carried-debt` | **built and proven** (E1 live + 2 sabotages; E2/E3 by source assertion — **E3's sheets not driven in a browser**); CI red only on #157 contention (proven solo) |
+| A | — | ⚠️ **BLOCKED** on Josh's production counts (FILLED-A.8 queries 1–3) |
+| B | — | blocked on A |
+| H | `feature/s110-h-language` (stacked on C) | **built and proven except `SiteVisitRecord`** (deferred until A by the prompt's order). ⚠️ migration `20261750000000` owed to production |
+
+**Nothing merged. Nothing touched production.** Rebuild-test holds D's and H's migrations.
+
+---
+
+# Stretch 2 — A, B, and H's site-visit record [Josh: "Section A is unblocked"]
+
+**Production counts (Josh, 2026-09-23):** FILL-A.8 q1 visits 0 / notes 0 / measurements 0 / voice 0;
+q2 would-unfreeze 0; q3 backfill covers **6 files**. G.1 company `dc4da2a7-b636-4b56-9a30-39861109c827`
+/ worth-properties / josh@worthprop.com.
+**Josh on q2:** a zero on today's tiny dataset is not evidence a `sent_at` cutoff is safe. FILLED-A.1
+stands, so `frozen_at` is stamped as proposed.
+**New rule for this stretch: ONE branch's CI at a time.** Report pushes carry `[skip ci]`.
+
+## A — `feature/s110-a-site-visit-access` (cut from F) — **built; DB proven live; pushed alone**
+
+`20261730000000_site_visit_access_widen.sql` → rebuild-test (`--include-all`, because D's and H's
+later-numbered migrations were already applied; both copied in untracked, never committed on A).
+Dry run listed exactly this file; `DBPUSH_EXIT_LINE=0`; triggers 2/2, policies 4/4, columns 2/2
+verified. `database.ts` on A carries **only A's slice** (10 lines, picked from the generator's diff).
+Fingerprints were NOT regenerated on A: rebuild-test holds D and H too, and a baseline including
+H would report false drift on production between A's merge and H's apply. **Regenerate them after the
+last of A, D and H is applied.**
+
+- **frozen_at** is stamped by an `AFTER UPDATE OF status` trigger on the transition out of
+  draft/review (`coalesce`, first send), and **moved forward** at accepted/declined/expired/voided (Q3).
+  It never reads `sent_at`.
+- **The freeze** admits INSERT always, forcing `created_at := now()` so nothing can be backdated.
+  `created_at` is immutable. It refuses UPDATE of rows created at or before `frozen_at`, service role
+  included, except for: the stamp itself; FK→NULL; a pending transcription completing; the seed of its
+  editable copy.
+- **Reads:** one role list (five internal roles) on all four tables.
+- **`site_visit_access()`** returns `office` / `staff` / NULL at every status. Editing a note
+  no longer requires being its author. Rename, finish and abandon stay **office-or-recorder**. That is a
+  stated choice, not a ruling: ruling 1 names notes, measurements, blockers and photos, not visit-level acts.
+- **Files:** `site_visit_capture` (backfill as q3), plus a file freeze trigger. A user session can never
+  flip the flag. The routes gain a **VISIT arm** that lists and signs captures only (the Floor). An
+  ordinary upload still needs the office arm. `capture=1` uploads from the record at every status.
+- **The record:** add at every status; edit anything not frozen; "added after the estimate was sent"
+  markers; photos grouped before/after the send. S108 ruling 4's promotion cutoff is quoted, superseded,
+  in `photos.ts`.
+
+| proof | printed line |
+| --- | --- |
+| live `s108-site-visit` + `s108-voice` | **`LIVE_A_EXIT_LINE=0`, 40/40**, fixtures 0. Inverted in place: 2b, 2c, 4b, 4b-ii, 4.5c, 4.5d, 4.5f, voice V5 (old assertions quoted). New: 2c-ii (sub and client read 0, paired with the foreman reading all), stamp with no `sent_at`, backdated service-role insert forced to now(), post-send note editable until the outcome, pending transcript completes but cannot then be edited, pre-send capture photo cannot be deleted or renamed (a tags update on the same file passes as the control) |
+| unit (route order, both routes, Floor case + office mirror; photos; media) | `UNIT_EXIT_LINE=0` — A's full suite **105 files / 1410** |
+| lint / `next build` | `LINT_EXIT_LINE=0`; `BUILD_EXIT_LINE=0` 129/129 |
+| e2e `m-site-visit` (freeze case inverted) | in A's CI run, pushed after the docs run finished |
+| **UI sabotage** (AUDIT 3) | owed: local run after A's CI finishes (one consumer at a time) |
+
+## B — `feature/s110-b-desktop-site-visits` (cut from A) — **built; not yet pushed**
+
+A top-level **Site visits** item for the five internal roles, beside Estimates (Notifications stays
+last in the top layer). `/dashboard/site-visits` shows the phone's three groups through a shared helper
+(`lib/site-visits/groups.ts`, now also used by `/m`). The record moved to
+`/dashboard/site-visits/[id]` for everyone; office actions are office-only. The old path redirects.
+Links, the notification link and the S109 mount list were updated; there is no desktop recording (Q6).
+The S130 nav-order tests (unit + e2e) were inverted in place: 13→14 items, Notifications 8th→9th,
+still last.
+New `e2e/desktop-site-visits-s110.spec.ts`: B1 crew via sidebar; B2 owner office actions; B3 old URL;
+**B4 the Floor in a browser** (crew list lacks the non-captured vendor PDF, the owner's control list
+has it).
+⚠️ **F's guard caught a real miss:** B4 is a new consumer of the estimate-files list and was not
+registered. B's own full unit suite had not been run, only its nav tests; the guard fired when B was
+merged into H. Registered on B; B's suite **1410/1410**, build 130/130.
+
+## H — the site-visit record, after A — on `feature/s110-h-language` (B merged in) — **built; not yet pushed**
+
+The record and voice notes are translated (86 strings → `visit.*`, English byte-identical), and notes,
+measurement areas and transcripts go through `UserText`; the edit boxes keep the original.
+**The anti-rot ratchet is now EMPTY.** H unit **110 files / 1570**, `next build` 131/131.
+
+### A's CI, and the UI sabotage (idle database, clean production builds)
+
+| run | printed line |
+| --- | --- |
+| **A CI** `35949517577` (head `9e452c9c`) — the only run active | **success** (incl. the rewritten `m-site-visit`) |
+| A baseline, `rm -rf .next` + build | `A_BASELINE_PW_EXIT_LINE=0`, 3 passed |
+| **sabotage A1** — the record's freeze check always false | `SABOTAGE_A1_PW_EXIT_LINE=1`, red at `:217` "a note that existed at send is still editable"; restored `cmp` identical |
+| **sabotage A2** — add controls hidden after send | `SABOTAGE_A2_PW_EXIT_LINE=1`, red at `:216` "the office can no longer ADD after send"; restored `cmp` identical; fixtures 0 |
+| H clean build (A+B inside) — `m-site-visit` | `H_SV_PW_EXIT_LINE=0`, 3 passed |
+| H build — B + nav + language + account-link specs | `H_B_PW_EXIT_LINE=0`, **18 passed** |
+| **sabotage B** — nav item removed + list route's capture filter removed (one build, two tests) | `SABOTAGE_B_PW_EXIT_LINE=1`: **B1** red waiting for the sidebar link; **B4 (the Floor)** red; B2/B3 green; restored `cmp` identical; fixtures 0 |
+
+⚠️ **A first sabotage attempt proved nothing, and is recorded because it is the named class.**
+`false && …` did not type-check. **`BUILD_EXIT_LINE=1` was printed and the run went ahead anyway**,
+against whatever `.next` held. It went red, which looked like success. `next build` writes the
+compiled client bundle BEFORE it type-checks, so a failed build can leave a half-new `.next` behind.
+Redone with `rm -rf .next` before every build and a sabotage that compiles. **Rule applied from
+here: read `BUILD_EXIT_LINE` before trusting the e2e line that follows it.**
+
+**B pushed** once the Actions API showed 0 active runs. H is pushed after B's run finishes.
+
+**Found, not touched:** `feature/s110-d-line-rows` carries a commit that is not this session's —
+`423b9ab7` "[Data] Home Depot South Florida cost catalog - 282 verified items" (01:43 UTC, one CSV,
+same git identity). It will ride along when D merges.
+
+### B and H CI — one at a time, both green
+
+| branch | run | result |
+| --- | --- | --- |
+| B `feature/s110-b-desktop-site-visits` (`de9094fc`) | `35953040329` | **success** — the only run active |
+| H `feature/s110-h-language` (`16dbcef2`, contains C, A, B) | `35955073904` | **success** — the only run active |
+
+Under the one-branch-at-a-time rule, all three runs in this stretch (A, B, H) came back green. The
+two reds in the first stretch were contention, confirmed by solo runs.
+
+## STATUS — end of stretch 2
+
+| § | branch | state |
+| --- | --- | --- |
+| F | `feature/s110-f-route-guard` | built and proven; CI green |
+| C | `feature/s110-c-account-link` | built and proven; CI red only on #157 contention (proven solo) |
+| D | `feature/s110-d-line-rows` | built and proven; CI green. Migration `20261720000000` owed. Carries Josh's catalog CSV commit `423b9ab7` |
+| E | `feature/s110-e-carried-debt` | built and proven (E3 sheets by source assertion only); CI red only on #157 contention (proven solo) |
+| **A** | `feature/s110-a-site-visit-access` | **built and proven** — live 40/40, unit, UI sabotage ×2, **CI green**. Migration `20261730000000` owed |
+| **B** | `feature/s110-b-desktop-site-visits` | **built and proven** — e2e + sabotage (sidebar, Floor), **CI green**. No migration |
+| **H** | `feature/s110-h-language` | **built and proven, complete** — the site-visit record included, ratchet empty, **CI green**. Migration `20261750000000` owed |
+
+**Merge order:** F, C, D, E, A, B, H. Not authorized; nothing merged. **Nothing touched production.**
+**After the last migration lands:** regenerate `database.ts` and both fingerprint files
+(`npm run db:types`, `npm run db:fingerprint`) against production.

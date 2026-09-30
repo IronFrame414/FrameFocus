@@ -342,13 +342,33 @@ export function ExpenseCaptureForm({
         <label style={fieldLabelStyle}>
           Receipt photo(s){!photoExempt && ' (required)'}
         </label>
-        <input
-          type="file"
-          accept="image/*"
-          multiple
-          onChange={(e) => setPhotos(Array.from(e.target.files ?? []))}
-          style={{ fontSize: '13px', color: color.body }}
-        />
+        {/* [S121 7-B] Camera first (a receipt is photographed on the spot);
+            the library stays as the secondary control. SUPERSEDED: one
+            library-only `accept="image/*" multiple` input (kept, second). */}
+        <label style={{ display: 'inline-block', marginRight: '10px', fontSize: '13px', color: color.body }}>
+          Take photo:{' '}
+          <input
+            type="file"
+            accept="image/*"
+            capture="environment"
+            data-testid="expense-receipt-camera"
+            onChange={(e) => {
+              const shot = Array.from(e.target.files ?? []);
+              setPhotos((p) => [...p, ...shot]);
+            }}
+            style={{ fontSize: '13px', color: color.body }}
+          />
+        </label>
+        <label style={{ display: 'inline-block', fontSize: '13px', color: color.body }}>
+          or choose from library:{' '}
+          <input
+            type="file"
+            accept="image/*"
+            multiple
+            onChange={(e) => setPhotos(Array.from(e.target.files ?? []))}
+            style={{ fontSize: '13px', color: color.body }}
+          />
+        </label>
         {photoMissing && (
           <p style={{ fontSize: '12px', color: color.warning, margin: '6px 0 0' }}>
             Receipt photo required.
