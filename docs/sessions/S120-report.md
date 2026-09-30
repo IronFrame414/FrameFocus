@@ -165,6 +165,118 @@ went from **8 to 1**. The working tree is **clean** (`git status --short` prints
 | origin/feature/s112-default-acl-guard | ff449cae6be8856a0409c4f748d764abfcf14baa | 2 commits not patch-equivalent, but every file it touches is byte-identical on origin/main (`git diff --name-only origin/main <b> -- <files it touches>` = 0 files) |
 </details>
 
+### 1.2 — The debt entries, read from `origin/main:TECH_DEBT.md` (`fad4787e`), lines 2440–2494
+
+⚠️ **The spec said only `#175`, `#178` and `#179` had never been read. None of `#175`–`#180` is
+paraphrased below; each is quoted verbatim.**
+
+> ## `#175` (was `#1-s119a`) — ⚠️ PDF regeneration hard-deletes whatever `pdf_file_id` points at — and that pointer can name ANOTHER company's file
+>
+> Filed S119 ITEM A-3 (S118 item 16 audit). `apps/web/lib/services/daily-log-pdf-service.ts:176-185`,
+> `delivery-pdf-service.ts:176-185`, `incident-pdf-service.ts:117-126`: the stale-artifact cleanup reads
+> `files.file_path` by `id` ONLY and removes the object and the row **with the service role**. The record's
+> author may set `pdf_file_id` (neither `enforce_daily_logs_column_scope` nor any trigger on `deliveries` /
+> `safety_incidents` mentions it — measured live), and the FKs (`*_pdf_file_id_fkey`) are checked without
+> RLS, so a foreign file id is accepted. ⚠️ **S119 measured this as CROSS-TENANT DELETION, not the
+> "within-company integrity" the S119 prompt filed it under** — reachable only by someone who knows a
+> foreign file's UUID (not enumerable through RLS). Fix shape (3 services, no migration): add
+> `.eq('company_id', <record company>)` and the expected PDF category to the stale-file select; better,
+> freeze `pdf_file_id` to the service role in the column-scope triggers. **Not fixed today:** the S119
+> ruling is "file, do not fix" for this list; the premise difference is raised with Josh in the S119 report.
+
+**How the real `#175` entry differs from the spec (the entry wins):**
+- **Three services and three tables, not one "PDF regeneration" path.** They are
+  `daily-log-pdf-service.ts:176-185` (`daily_logs`), `delivery-pdf-service.ts:176-185` (`deliveries`)
+  and `incident-pdf-service.ts:117-126` (`safety_incidents`). The fix covers all three.
+- **Narrower reach than the spec implies:** an attacker needs a foreign file's UUID, which RLS does
+  not let them enumerate. It is still a real cross-tenant destruction.
+- **The entry adds a second condition to the check:** the stale-file select must also match the
+  expected PDF **category**, not only `company_id`. Without it, a same-company non-PDF file can be
+  deleted. The fix adopts both.
+- The entry calls the trigger freeze "better" and optional ("no migration"). **The spec requires
+  both.** They do not conflict, so both are built: the service check and the column freeze.
+
+> ## `#176` (was `#2-s119a`) — `email_has_account` answers "does this email have an account" to any Owner/Admin
+>
+> Filed S119 ITEM A-3 (S118 item 9). `supabase/migrations/20260916000000_email_has_account.sql:35`
+> (SECURITY DEFINER; EXECUTE `authenticated`). Anyone can become an Owner by signing up, so this is an
+> account-existence oracle for any address. **Not fixed today:** it discloses existence only (no row
+> content, no tenant data), and the invite flow depends on it; a rate limit or a same-company scope is a
+> design decision for Josh.
+
+Matches the spec.
+
+> ## `#177` (was `#3-s119a`) — `record_client_payment` does not check `p_contact_id`'s company when there are no applications
+>
+> Filed S119 ITEM A-3 (S118 item 9). `supabase/migrations/20261830000000_s111_project_executive_floor_reads.sql:159`
+> (live body; inserts `p_contact_id` at :204, and compares it only per application at :238). With
+> `p_applications = []` an Owner/Admin can record an unapplied payment against another company's contact
+> id — an FK-valid, RLS-invisible row in their own company. **Not fixed today:** within-company integrity,
+> no disclosure; money code (stop rule 3 territory) wants its own session and tests.
+
+Matches the spec. ⚠️ The entry names stop-rule-3 territory ("money code"). The fix does **not** change who
+may record a payment or for how much. It adds only a company check on the contact, which is an
+integrity guard and not a change of refund, contract or payroll authority. It proceeds on that basis,
+and the reasoning is recorded here.
+
+> ## `#178` (was `#4-s119a`) — `create_safety_incident` trusts the member ids in its JSON
+>
+> Filed S119 ITEM A-3 (S118 item 9). Live 7-arg SECURITY INVOKER body
+> `supabase/migrations/20260722020000_6c_create_incident_fn.sql:12`; the dead 6-arg DEFINER overload
+> `20260711140000_module6_6c_safety_incidents.sql:307` (already `#1-s180u`). Injured-party / witness
+> member ids in `p_injuries` / `p_witnesses` are not checked against the incident's company. **Not fixed
+> today:** the live path is INVOKER, so child-row RLS still applies; integrity only, no disclosure.
+
+**How it differs from the spec's inference:** the spec had no detail. The entry names a **live INVOKER**
+7-arg function plus a **dead DEFINER** 6-arg overload. It is integrity only: the child-row RLS applies,
+and there is no disclosure. The fix must check the member ids of **both** `p_injuries` and
+`p_witnesses`. Whether the child-row RLS already rejects a foreign member id is measured before
+anything is fixed (see 1-D).
+
+> ## `#179` (was `#5-s119a`) — Two payment functions say "belongs to another company" instead of "not found"
+>
+> Filed S119 ITEM A-3 (S118 item 9). Live on production (by `prosrc`): `apply_client_credit`
+> (`20260804000000_7e_payments.sql:642`) and `record_client_payment`
+> (`20261830000000_s111_project_executive_floor_reads.sql:226`). The message confirms that a foreign
+> invoice id exists. **Not fixed today:** ids are random UUIDs (no enumeration); wording-only change,
+> batched with the next payments migration.
+
+Matches the spec's inference. The entry adds the two function names and their files.
+
+> ## `#180` — Trial deletion: an auth user whose delete fails AFTER `profiles` is gone is never retried
+>
+> _(verbatim at `TECH_DEBT.md:2486`; it matches spec 1-F, including "the security half is closed")._
+
+### 1.3 — `apps/web/next.config.js` on `origin/main` (`fad4787e`)
+
+The `experimental` block, verbatim:
+
+```js
+  experimental: {
+    // Next 14.2: outputFileTracingIncludes lives under `experimental` (it moved
+    // to the top level in Next 15). co-template.tsx reads the Dancing Script TTF
+    // off the filesystem via process.cwd() at render time, so Next's static
+    // dependency trace can't see it and would omit it from the Vercel serverless
+    // bundle. Force it in for the only two routes that render the CO PDF:
+    //   /api/change-orders/[id]/send   → v1 (contractor-signed) at send
+    //   /api/sign-co/[token]/complete  → v2 (fully signed) at client completion
+    // Paths are relative to the app root (apps/web).
+    outputFileTracingIncludes: {
+      '/api/change-orders/[id]/send': ['./public/fonts/DancingScript-Variable.ttf'],
+      '/api/sign-co/[token]/complete': ['./public/fonts/DancingScript-Variable.ttf'],
+    },
+    ...(isDev && {
+      serverActions: {
+        allowedOrigins: ['localhost:3000', '*.app.github.dev'],
+      },
+    }),
+  },
+```
+
+**`staleTimes.dynamic: 0` is NOT present.** `staleTimes` does not appear in the file at all. The
+setting exists only on the held branch `origin/feature/s112-staletimes-hold` (`3b603c07`), which never
+merged. **SPEC 3-E therefore has nothing to revert.** No `staleTimes` block will be added.
+
 ---
 
 ## Phase 3 — parts
