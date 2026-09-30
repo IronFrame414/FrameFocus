@@ -669,3 +669,32 @@ Each section ran through `section.sh`: every newer migration file held out of th
 | `feature/s118-catalog-import` (local `f9dbfb5c`, origin `cbd2c2c1`) | both | `git cherry origin/main` → all `-` for both |
 | S121's own `p1`–`p5`, `p6`, `p78` (local + origin) | — | ancestors of main, or `git cherry` all `-` (`p1` `2b084a1f`, `p4` `94bc9e33` and `p6` were pre-rebase copies) |
 **Kept:** `feature/s114-c5-multi-upload` (stop, reference for #181), `origin/feature/s112-staletimes-hold` (assessed, Josh's call), the four docs-tail branches `s116-report`, `s110-site-visit-access`, `s180-branch-archive`, `s180-unattended` (their content is now on main, but they were not in the ruled deletion list — **deletable on Josh's word**), `feature/s121-assess` (this report), `feature/s121-p7a-drop` (in CI). Refs: 37 before → 20 now (local + remote, incl. `main`/`origin/HEAD`).
+
+---
+
+## Resumed session (2026-09-30, fresh context): finishing 7-A
+
+**Start state, verified rather than believed:** `git fetch --prune` exit 0; `origin/main` = `66a3a1a2` "[S121] Merge feature/s121-p78-leftovers …"; built from main `66a3a1a2`, clean. `origin/feature/s121-p7a-drop` = `a73eb4e3`, merge-base `66a3a1a2`, 3 ahead / 0 behind. CI `36758020810` on `a73eb4e3`: Lint & Type Check **success**, E2E **in progress** when this session resumed. The interrupted session had left a second worktree (`feature/s121-assess`, clean, = origin `d59b10e9`); it was removed with `git worktree remove`, which refuses a dirty tree.
+
+**The stop-rule grep** (ref `a73eb4e3`; `git grep -n create_safety_incident -- apps packages scripts supabase/functions`) found **8 lines**. Each one, classified:
+
+| line | what | a 6-arg reference? |
+| --- | --- | --- |
+| `app/api/safety-incidents/route.ts:14` | comment naming the RPC | no |
+| `app/api/safety-incidents/route.ts:65` | the production caller; passes `p_prevention_notes` → 7-arg | no |
+| `test/s120-incident-member-company.live.ts:5` | docstring ("BOTH overloads") | prose; updated in place |
+| `test/s120-…:58` | `report7` helper; passes `p_prevention_notes` → 7-arg | no |
+| `test/s120-…:162` | **6-arg probe #1** | yes, ruled (ASK-34) |
+| `test/s120-…:204` (was `:198`) | **6-arg probe #2** | yes, ruled (ASK-34) |
+| `packages/shared/types/database.ts:11143` | generated; the 7-arg shape only | no |
+| `scripts/db-function-sync.py:201` | docstring citing it as an example of a name "defined with two signatures … and never dropped" | prose only. The function is generic and nothing depends on the 6-arg. It is not a caller, **so not a stop**; its sentence became false, so it was corrected |
+
+**6-arg references other than the two ruled tests: 0.** Database (rebuild-test), after the drop: `create_safety_incident` has exactly **1** overload, `(uuid,date,text,text,text,jsonb,jsonb)`, INVOKER, `authenticated` EXECUTE `true`, `prosrc` md5 `86980f13eefabd8edf5aee6571df144c`.
+
+⚠️ **Gap found and closed.** Josh's ruling (ASK-34) said to invert **both** tests; the earlier 7-A commit inverted only probe #2. Probe #1 still passed, because `expect(error).not.toBeNull()` holds for `PGRST202` too, but it never asserted that the function is gone. It is now **inverted in place** (commit `56c22553`). _Superseded:_ "calling it with a foreign injured party writes nothing (service-role count 0) and is refused", which asserted only `expect(error).not.toBeNull()`. It now asserts `error.code === 'PGRST202'`, 0 incidents and 0 foreign injuries.
+
+**Proof** (rebuild-test, verbose reporter): live **6/6**. `[S120I] 6-arg: error=PGRST202 incidents=0 foreign injuries=0`; `[S120I] 6-arg harmless: error=PGRST202 incidents=0`. The controls fired: 7-arg foreign injured and foreign witness each `42501` with 0 rows, and the positive control wrote injuries **1**, witnesses **1**.
+
+**Sabotage:** a 6-arg stub re-created with EXECUTE revoked (the pre-drop state), then a schema reload → **2 ✘** (both probes: `Expected "PGRST202" / Received "42501"`), with the 4 controls green. Dropped again; read back **1** overload (the 7-arg, md5 above) → **6/6**.
+
+`56c22553` changes `apps/` and `scripts/`, so run `36758020810` (on `a73eb4e3`) **no longer covers the tree that would merge.** A fresh run goes on `56c22553` once `36758020810` finishes, so that two runs don't share rebuild-test at once (the cause of the earlier S121 chat-unread collision).
