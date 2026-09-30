@@ -726,6 +726,8 @@ persist between runs.
 
 #### Part 1: state
 
+✅ **PART 1 MERGED to `main` as `7242e399`** (a `--no-ff` merge of `feature/s120-security` onto `fad4787e`). `git diff 1f5393ad main` is **empty**, so the merged tree is the CI-tested tree. **All three merge conditions hold:** (1) CI green on a base equal to current `main`; (2) every check passed, with its numbers in this section and in the production table; (3) all six migrations were **on production first**, verified by object, with production fingerprint == committed baseline.
+
 - **Fingerprint baseline** regenerated from rebuild-test (ledger at `20262115000000`, with agreement
   confirmed on all six replayable dimensions): policies 490 → **491**, triggers 302 → **308**,
   functions 349 → **351**, constraints 1074 → **1077**. Each delta is a Part 1 object.
