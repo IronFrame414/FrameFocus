@@ -2334,6 +2334,8 @@ gap exists today (both are safe), so this is cleanup, not a defect.
 after a final confirm that no test/`/m` path calls the 6-arg form. Migration + production apply are
 Josh's action; **not applied this session** (unattended, no production).
 
+> **S120 status (2026-09-30):** the overload was measured REACHABLE (EXECUTE `authenticated` on production) and, as DEFINER, it bypassed child-table RLS — the #178 finding. S120 REVOKED EXECUTE from PUBLIC/anon/authenticated (`20262113000000`, on production, verified). The DROP itself is still open here; it is now cleanup only.
+
 ## `#2-s180u` — N3: move the 8 existing-`multiple` upload inputs onto the shared queue
 
 **Provisional branch-scoped id** (`feature/s112-files-and-upload`), per CLAUDE.md → "Tech-debt
@@ -2436,63 +2438,6 @@ INSERT/UPDATE on its projects (`20261910000000:105,107`) — still let those rol
 direct path today. Closing it = dropping/narrowing those UPDATE arms so the functions are the only writer
 (check every writer first: conversion, CO apply, the recompute triggers — S115 mapped 6). Policy change →
 needs Josh's word; not done unattended. Land after R10 is on production.
-
-## `#175` (was `#1-s119a`) — ⚠️ PDF regeneration hard-deletes whatever `pdf_file_id` points at — and that pointer can name ANOTHER company's file
-
-Filed S119 ITEM A-3 (S118 item 16 audit). `apps/web/lib/services/daily-log-pdf-service.ts:176-185`,
-`delivery-pdf-service.ts:176-185`, `incident-pdf-service.ts:117-126`: the stale-artifact cleanup reads
-`files.file_path` by `id` ONLY and removes the object and the row **with the service role**. The record's
-author may set `pdf_file_id` (neither `enforce_daily_logs_column_scope` nor any trigger on `deliveries` /
-`safety_incidents` mentions it — measured live), and the FKs (`*_pdf_file_id_fkey`) are checked without
-RLS, so a foreign file id is accepted. ⚠️ **S119 measured this as CROSS-TENANT DELETION, not the
-"within-company integrity" the S119 prompt filed it under** — reachable only by someone who knows a
-foreign file's UUID (not enumerable through RLS). Fix shape (3 services, no migration): add
-`.eq('company_id', <record company>)` and the expected PDF category to the stale-file select; better,
-freeze `pdf_file_id` to the service role in the column-scope triggers. **Not fixed today:** the S119
-ruling is "file, do not fix" for this list; the premise difference is raised with Josh in the S119 report.
-
-## `#176` (was `#2-s119a`) — `email_has_account` answers "does this email have an account" to any Owner/Admin
-
-Filed S119 ITEM A-3 (S118 item 9). `supabase/migrations/20260916000000_email_has_account.sql:35`
-(SECURITY DEFINER; EXECUTE `authenticated`). Anyone can become an Owner by signing up, so this is an
-account-existence oracle for any address. **Not fixed today:** it discloses existence only (no row
-content, no tenant data), and the invite flow depends on it; a rate limit or a same-company scope is a
-design decision for Josh.
-
-## `#177` (was `#3-s119a`) — `record_client_payment` does not check `p_contact_id`'s company when there are no applications
-
-Filed S119 ITEM A-3 (S118 item 9). `supabase/migrations/20261830000000_s111_project_executive_floor_reads.sql:159`
-(live body; inserts `p_contact_id` at :204, and compares it only per application at :238). With
-`p_applications = []` an Owner/Admin can record an unapplied payment against another company's contact
-id — an FK-valid, RLS-invisible row in their own company. **Not fixed today:** within-company integrity,
-no disclosure; money code (stop rule 3 territory) wants its own session and tests.
-
-## `#178` (was `#4-s119a`) — `create_safety_incident` trusts the member ids in its JSON
-
-Filed S119 ITEM A-3 (S118 item 9). Live 7-arg SECURITY INVOKER body
-`supabase/migrations/20260722020000_6c_create_incident_fn.sql:12`; the dead 6-arg DEFINER overload
-`20260711140000_module6_6c_safety_incidents.sql:307` (already `#1-s180u`). Injured-party / witness
-member ids in `p_injuries` / `p_witnesses` are not checked against the incident's company. **Not fixed
-today:** the live path is INVOKER, so child-row RLS still applies; integrity only, no disclosure.
-
-## `#179` (was `#5-s119a`) — Two payment functions say "belongs to another company" instead of "not found"
-
-Filed S119 ITEM A-3 (S118 item 9). Live on production (by `prosrc`): `apply_client_credit`
-(`20260804000000_7e_payments.sql:642`) and `record_client_payment`
-(`20261830000000_s111_project_executive_floor_reads.sql:226`). The message confirms that a foreign
-invoice id exists. **Not fixed today:** ids are random UUIDs (no enumeration); wording-only change,
-batched with the next payments migration.
-
-## `#180` — Trial deletion: an auth user whose delete fails AFTER `profiles` is gone is never retried
-
-Filed S119 ITEM A-1 (found while building the ban-first step). `apps/web/lib/trial/deletion.ts`
-`runTrialDeletion`: user ids are re-read from `profiles` on every run. Once `deleteRows` has removed
-`profiles`, a retry reads `[]`, so an auth user whose `deleteUser` failed is never retried and the job
-completes with `auth_done = true`. Since S119 that login is BANNED before any row goes (`banAuthUsers`),
-so it cannot sign in — the exposure S118 item 9 named is closed; what remains is an orphaned auth row
-and a dishonest `auth_done`. Fix shape: persist the user ids on `deletion_jobs` (a nullable column) at
-the first run. **Not fixed today:** needs a migration on a live table and its own test; the security half
-is closed.
 
 ## Process notes
 
