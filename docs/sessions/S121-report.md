@@ -168,3 +168,33 @@ Greps over `apps packages scripts supabase` (excl. node_modules/.next/.turbo): `
 - `origin/feature/s112-catalog-importer` (`3ac6f7da`) is a strict earlier prefix of it (range-diff `=`, same blobs).
 - **What it does:** reads a CSV (`scripts/data/cost-catalog-home-depot-south-florida-2026-09-23.csv`, **already on main**, 282 rows, all unit_cost ≤ 2 decimals) into `public.cost_catalog` only. **Dry run is the default** (`--apply` to write). Insert-only, batches of 100, skips names already live in the company (trimmed, whitespace-collapsed, lower-cased) — idempotent. `--markup-percent p` (0–100, integer): `cents = Math.round(cost*100)`, then `Math.floor((cents*(100+p)+50)/100)/100` — **integer cents, round half up**; prints five worked examples. `--sql-out` writes one idempotent `INSERT … WHERE NOT EXISTS`. Minor display bug: the multiplier label prints `1.100` at p=100 (irrelevant at 5).
 - **Auth for the default mode:** signs in as a company user (`--email` + `CATALOG_IMPORT_PASSWORD`) with the anon key from `apps/web/.env.local` — **which is rebuild-test's**. A production run therefore goes through `--sql-out` (company id + creator id) applied by the linked CLI, or Josh signs in himself. Phase 2 question.
+
+### 7-A / 7-B / 7-C pre-audit (Phase 1 facts, nothing changed) — ref `origin/main` `7cf348a0`
+
+**7-A — `create_safety_incident` 6-arg overload.** Defined only at `20260711140000_module6_6c_safety_incidents.sql:307` (SECURITY DEFINER); EXECUTE revoked by `20262113000000:60-62`. Live 7-arg (INVOKER) at `20260722020000:12`. `git grep -n create_safety_incident origin/main -- apps packages scripts supabase/migrations` → 20 lines / 8 files. **Production callers of the 6-arg form: 0** (`api/safety-incidents/route.ts:65` passes `p_prevention_notes` → 7-arg). **Test callers of the 6-arg form: 2**, both in `test/s120-incident-member-company.live.ts` (`:162`, `:198`), both negative probes asserting refusal (`:198` asserts `42501`). ⚠️ **They are references.** After a DROP, `:198` would get `PGRST202` (function not found) instead of `42501` — they must be **inverted in place** in the same change (S157 rule). They are not callers that need the function; stop rule 10 is read as "a caller that depends on it", and the plan says so explicitly for Josh to confirm.
+
+**7-B — the four library-only inputs** (all `accept="image/*" multiple`, no `capture`):
+| # | file:line | captures | on `/m`? |
+| --- | --- | --- | --- |
+| 1 | `components/site-visits/site-visit-record.tsx:537` | site-visit photos | yes (`/m/site-visits/[id]`) |
+| 2 | `components/material-signouts/signout-detail.tsx:199` | sign-out release/return photos | yes |
+| 3 | `components/expenses/expense-capture-form.tsx:347` | receipt photos | desktop only |
+| 4 | `components/field/incident-form.tsx:494` | incident photos | desktop only (`/m` has its own paired form) |
+Pattern to copy: `/m` check-in `check-in-form.tsx:331-376` — a wide camera label (`capture="environment"`) plus a 44px secondary library button, both appending to the same list. #2 is rebuilt by Part 3-D anyway.
+
+**7-C — parked branches.**
+| branch | verdict | proof |
+| --- | --- | --- |
+| `feature/s116-report` | land (docs only) | +65 to `docs/sessions/S116-report.md`; main's copy unchanged since merge-base `6aad413c`; merge-tree clean |
+| `origin/feature/s110-site-visit-access` | land (docs only) | +255 to `S110-report.md`; unchanged on main since `3ab942c3`; clean; nothing outside `docs/` |
+| `feature/s180-branch-archive` | land (docs only) | new `docs/branch-archive-2026-09-27.md` (+229); clean |
+| `feature/s180-unattended` | land **report files only** | `docs/sessions/S180-report.md` (+516), `S180-unattended-plan.md` (+52), both new. ⚠️ Its `TECH_DEBT.md` delta **conflicts and is stale** (main already has `#1-s180u` at `TECH_DEBT.md:2312` plus S120's status note) — **not taken** |
+| `origin/feature/s112-bid-token-status` | **FULLY SUPERSEDED** → delete | 4 `+` commits map 1:1 to main (`682a5c3b→67050a76`, `e2ee355f→83bce973`, `b99c41be→4e25f5ab`, `4078a08f→fcc40c37`), differences are only the S114 hotfix already on main; debt became #173/#174 |
+| `origin/feature/s112-m-loading` | **FULLY SUPERSEDED** → delete | shipped via `92c975ed` / merge `0de7b883`; `git diff --quiet origin/main 72d603b3 -- apps/web/app/m/nav-pending.tsx docs/sessions/S112-R2-loading-feedback.md` exit 0; `loading.tsx` deliberately dropped on both |
+| `origin/feature/s112-catalog-importer` | superseded by `feature/s118-catalog-import`, **not by main** → delete only **after** Part 6 lands the importer | range-diff `=`, same blobs |
+| `origin/feature/s112-cdn-investigation` | **NOT superseded** → keep | 3 live harness files (627 lines) absent on main, cited by `S112-rulings-report.md:5,24`; the "ACCEPTED RISK, CLOSED" ruling lives only in `S180-report.md:243` (which 7-C lands) |
+| `s112-default-acl-guard` | **no such ref** exists locally or on origin | its work (`255add7a`) is on main |
+
+### 1.9 — The pre-CI check
+
+`scratchpad/lint-job.sh` **does not exist** (no `scratchpad/` directory in the repo). Phase 3 runs `.github/workflows/ci.yml`'s Lint & Type Check job directly: `npm run type-check`, `npx turbo run lint --filter=@framefocus/web`, `npx turbo run test --filter=@framefocus/web` — each with its exit code read on its own line, not through a pipe.
