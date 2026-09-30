@@ -339,6 +339,89 @@ A residual noted rather than acted on: `get_my_member_id()` (production) ends in
 each user has at most one live membership, and that is recorded for the `.limit(1)` rule in 6-B, not
 assumed.
 
+### 1.7 — `getClaims()`: the library, read from source
+
+⚠️ **THE SPEC'S PREMISE FOR 3-A IS FALSE ON `main`.** The spec says `apps/web/middleware.ts` "calls
+`supabase.auth.getUser()` **unconditionally**". On `origin/main` (`fad4787e`), `middleware.ts:45-65`
+already calls **`getClaims()`** on every matched path **except `/sign-in` and `/sign-up`**. Those two
+keep `getUser()` on purpose: a revoked-but-unexpired token must not bounce a user between `/sign-in`
+and `/dashboard`. The change is **H-1b**, merged to main as `160a57d5` in S116 (RULED Josh, S116 Q9),
+with CI `36558892243` green. The spec's description matches the tree **before** `160a57d5`, which is
+the same "inspected the wrong ref" failure that the prompt names. **The library wins; 3-A is re-planned
+in Part 3.**
+
+1. **Installed versions** (the root `node_modules`, matching `origin/main:package-lock.json`):
+   `@supabase/ssr` **0.5.2**, `@supabase/supabase-js` **2.100.1**, `@supabase/auth-js` **2.100.1**.
+   `getClaims` exists: `node_modules/@supabase/auth-js/dist/main/GoTrueClient.js:4781`.
+2. **Behaviour, read from that source (`GoTrueClient.js:4684-4834`):**
+   - With no token argument, it first calls **`getSession()`**. That is the call which **refreshes an
+     expired session**, and in `@supabase/ssr` the refreshed session is written back through the
+     cookie adapter's `setAll`, which is the persistence path the middleware owns. `getSession()`
+     here only **obtains** the token; the token is then **verified** below, so this is **not** the
+     stop-rule-8 substitution.
+   - `validateExp(payload.exp)` runs unless `allowExpired` is passed, so **an expired token is
+     rejected**.
+   - **Asymmetric** (`alg` not `HS*`, `kid` present, WebCrypto available): it fetches the key by
+     `kid` from `/.well-known/jwks.json`, caches it module-wide for `JWKS_TTL`, and verifies the
+     signature **in-process** with `crypto.subtle.verify`. A bad signature throws
+     `AuthInvalidJwtError('Invalid JWT signature')`, which returns an error with no claims, so **a
+     tampered token is rejected**.
+   - **Symmetric (`HS*`), no `kid`, a `kid` absent from the JWKS, or no WebCrypto:** it **falls back to
+     `getUser(token)`**, the same network call as before, and returns claims only if that succeeds.
+     **So it falls back safely.** A symmetric project gets exactly the old cost and the old
+     guarantee. The spec author's understanding is **confirmed** on this point.
+   - A JWKS **fetch error** throws. It is an AuthError, so the result is `{data: null, error}`: the
+     middleware sees no user, and on a gated path that means a redirect to `/sign-in` (it **fails
+     closed**, not open).
+3. **Under this project's CURRENT keys:** the project already **is** asymmetric (1.8), so on
+   production `getClaims()` takes the local-verification branch today, and has since H-1b shipped.
+   **3-A does not stop**, but the build it described has **already shipped**. What H-1b's record does
+   **not** show is the four behaviours the spec requires, each proven separately. H-1b's pre-merge
+   proof was "negatives 24/24; inverse sabotage (claims → null) 10 red; admit-all sabotage stays
+   green because every layout still calls getUser". **No test names a stale-token refresh with the
+   cookie written, a tampered token, or an expired token**: `git grep -il getClaims origin/main --
+   apps/web/test apps/web/e2e` finds **0 files**. **Re-planned 3-A: prove those four, and sabotage the
+   refresh test by breaking `setAll`. No middleware behaviour change.**
+
+### 1.8 — The asymmetric JWT signing-key switch: whose click is it?
+
+⚠️ **It has ALREADY HAPPENED, on both projects.** Management API `GET
+/v1/projects/{ref}/config/auth/signing-keys`, read 2026-09-30:
+
+| project | ES256 key | HS256 (legacy) key |
+| --- | --- | --- |
+| **production** `jwkcknyuyvcwcdeskrmz` | `3332049c-…` **`in_use`** | `37f595c4-…` `previously_used` |
+| rebuild-test `nmyphyhmfttxkdoposvf` | `f25bede5-…` **`in_use`** | `7fcdb06f-…` `previously_used` |
+
+The public `/auth/v1/.well-known/jwks.json` of each project serves exactly that one ES256 P-256 key.
+The legacy HS256 secret is `previously_used`, which means it still **verifies** old tokens and **signs
+nothing new**.
+
+**Whose click:** it is reachable from this session's tooling. The Management API
+signing-keys endpoints answered this session's token (the GETs above returned 200), and the same
+resource is where keys are created and moved between standby, in-use and revoked. So it would **not**
+be dashboard-only. **It is moot, though: there is nothing to switch.** Tomorrow's agenda item "switch to
+asymmetric keys" is **already done** (production's ES256 key is `in_use`). The only related action left
+is optional: **revoking** the `previously_used` HS256 key. That would invalidate any token still signed
+with it (none can be less than 1 h old), and it also touches anything still using the legacy JWT secret
+directly. ⚠️ **Not done, and not recommended unattended.** It is Josh's decision. Nothing was flipped.
+
+### 1.9 — The measurement helpers
+
+The repo has **no `scratchpad/` directory**, and `ls scratchpad` fails on `feature/s120-report`. The
+helpers the spec means live in the **S119 session's scratchpad**
+(`/tmp/claude-1000/…/404c676b-…/scratchpad/`), outside the repo, and they **survived**:
+`lint-job.sh` (526 B), `nav-measure.mjs` (2,645 B), `server-measure.mjs`, `fetch-log.cjs`,
+`prod-sql.mjs`, `test-sql.mjs`, `section.sh`, `wt-deps.sh`. All of them were copied into this session's
+scratchpad. `lint-job.sh` was checked against `origin/main:.github/workflows/ci.yml`: the "Lint & Type
+Check" job runs `npm run type-check`, `npx turbo run lint --filter=@framefocus/web` and `npx turbo run
+test --filter=@framefocus/web`, and the helper runs the same three with `--force` (no Turbo cache),
+printing each real exit code. **It matches.** `nav-measure.mjs` method: log in once, then N+1 cold loads
+of a path on `localhost:3000` in fresh browser contexts carrying only the session cookies, at a
+402×874 viewport. Run 0 is a warm-up and is discarded. It records TTFB and load ms and reports the
+medians. The server must be a **production build** (`next build && next start`), never dev (the
+S179 GATED rule).
+
 ---
 
 ## Phase 3 — parts
