@@ -90,6 +90,41 @@ export async function prepareImageForUpload(file: File): Promise<{ file: File; m
   return { file: typed, mimeType: inferred };
 }
 
+/**
+ * [S121 Part 2] Which of these client-generated ids are already `files` rows,
+ * and on which project. A held photo's id IS its `files.id` (uploadFile's
+ * idempotency id), so this is how the phone learns a queued photo has landed.
+ *
+ * Returns null when the lookup itself failed (offline, a server error) so the
+ * caller can tell "not on the server" from "could not ask" — a failed lookup
+ * must never read as "not uploaded" and never clear anything. Only live rows
+ * count: a photo someone has since deleted is not "on the project".
+ */
+export async function findUploadedFiles(
+  ids: readonly string[]
+): Promise<Map<string, { projectId: string | null; projectName: string | null }> | null> {
+  const found = new Map<string, { projectId: string | null; projectName: string | null }>();
+  if (ids.length === 0) return found;
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from('files')
+    .select('id, project_id, project:projects(name)')
+    .in('id', [...ids])
+    .eq('is_deleted', false);
+  if (error) {
+    console.error('[findUploadedFiles] lookup failed', error);
+    return null;
+  }
+  for (const row of (data ?? []) as unknown as {
+    id: string;
+    project_id: string | null;
+    project: { name: string } | null;
+  }[]) {
+    found.set(row.id, { projectId: row.project_id, projectName: row.project?.name ?? null });
+  }
+  return found;
+}
+
 export async function uploadFile(
   file: File,
   options: {

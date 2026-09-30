@@ -33,7 +33,7 @@ import {
   resolveCaptureProjectId,
   useCaptureStore,
 } from './capture-store';
-import { soonestDeletion } from '@/lib/offline/held-shots';
+import { unfiledShots } from '@/lib/offline/capture-batch';
 import { getOpenClockProjectId } from '@/lib/services/time-tracking-client';
 import { MobileChatOverlay } from '@/components/chat/mobile-chat-overlay';
 import { useT } from '@/components/i18n/language-provider';
@@ -1003,6 +1003,9 @@ function NavSheet({
 // down to the SOONEST deletion, and links to the tray to file them. Hidden on
 // /m/capture itself (the tray shows each shot's countdown) and on the dark
 // photo screens (no header there).
+// ⚠️ [S121, RULED Josh ASK-26] THE DELETION IS GONE — reverses S114 C-4. The
+// sweep is no longer automatic, so the strip no longer counts down to one. It
+// still shows while any shot has no project, and still links to the tray.
 // ---------------------------------------------------------------------------
 // S120 2-B — THE DEAD TAP. Josh: "Tap to choose a project" did nothing. Measured
 // (S120, production build, 402x874 touch context): ONLINE the tap works — it
@@ -1019,9 +1022,12 @@ function HeldPhotosStrip({ pathname }: { pathname: string }) {
   const [offlineNote, setOfflineNote] = useState(false);
   if (!capture?.ready || !capture.needsProject) return null;
   if (pathname.startsWith('/m/capture')) return null;
-  const warning = soonestDeletion(capture.batch.shots);
-  if (!warning) return null;
-  const { count: n, days: soonest } = warning;
+  // [S121 ASK-26] Counts UNFILED shots only (a queued shot has its project),
+  // and no longer counts down to a deletion — nothing is deleted without a yes.
+  // SUPERSEDED [S114 C-4]: `soonestDeletion(capture.batch.shots)` over EVERY
+  // tray row, worded "N photos with no project will be DELETED … in d day(s)".
+  const n = unfiledShots(capture.batch).length;
+  if (n === 0) return null;
   return (
     <>
       <Link
@@ -1036,9 +1042,7 @@ function HeldPhotosStrip({ pathname }: { pathname: string }) {
         }}
         className="flex min-h-[44px] w-full items-center border-y border-m6m-danger-border bg-[#fdf1f0] px-[18px] py-[10px] text-[13px] font-semibold text-m6m-danger"
       >
-        {soonest === 0
-          ? t(n === 1 ? 'field.capture.deleteTodayOne' : 'field.capture.deleteTodayMany', { n })
-          : t(n === 1 ? 'field.capture.deleteSoonOne' : 'field.capture.deleteSoonMany', { n, d: soonest })}
+        {t(n === 1 ? 'field.capture.waitingStripOne' : 'field.capture.waitingStripMany', { n })}
       </Link>
       {offlineNote ? (
         <p

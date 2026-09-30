@@ -27,7 +27,7 @@
 // THE CLEANUP RULE [Josh's condition on the ruling]
 // ===========================================================================
 //   TTL          7 days from takenAt
-//   swept        at store open (app start) and after every successful adoption
+//   swept        ⚠️ NEVER AUTOMATICALLY — see S121 below
 //   removed by   (1) adoption  (2) explicit discard  (3) the TTL sweep
 //   at capacity  ⚠️ REFUSE THE NEW SHOT. NEVER EVICT AN OLD ONE.
 //   capacity     25 — the same number as the batch cap; a full tray and a full
@@ -38,6 +38,18 @@
 // ⚠️ Eviction-to-make-room is a SILENT PHOTO LOSS, which is the single failure
 // this whole part exists to prevent. Refusing the new shot is loud, recoverable,
 // and puts the choice with the user.
+
+// ===========================================================================
+// ⚠️ S121 [RULED Josh, ASK-26, 2026-09-30] — NO SILENT SWEEP. REVERSES S114.
+// ===========================================================================
+// SUPERSEDED: "swept at store open (app start) and after every successful
+// adoption" and `all()`'s "Sweeps expired shots as a side effect". The sweep
+// deleted EVERY shot past 7 days on app open — failed, uploading and queued
+// ones too, with or without a project — before anything was on screen.
+// Josh: "Deleting a user's jobsite photos with no prompt is silent data loss."
+// Now a shot past the TTL is only ever OFFERED for deletion (the tray asks
+// "Delete N photos older than 7 days?"), and removed only on that yes.
+// HELD_TTL_MS is kept as the age at which the tray starts asking.
 
 export const HELD_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 export const HELD_CAPACITY = 25;
@@ -55,6 +67,11 @@ export interface HeldShot {
   status: HeldStatus;
   /** Why it failed, shown on the shot's own row. Never only logged. */
   error?: string | null;
+  /** [S121 Part 2] The project this shot was last SENT to. Persisted on the
+   *  shot so a failed shot can be retried after a reload (the batch's pinned
+   *  project is memory-only and resets on every app load). Absent on shots
+   *  held before S121 and on shots never sent. */
+  projectId?: string | null;
 }
 
 /** Shots whose TTL has elapsed at `now`. */
@@ -152,13 +169,11 @@ export class HeldShotStore {
     );
   }
 
-  /** Everything held, oldest first. Sweeps expired shots as a side effect —
-   *  this is the "at store open" half of the cleanup rule. */
+  /** Everything held, oldest first. ⚠️ [S121 ASK-26] NO LONGER SWEEPS — an
+   *  old shot is returned like any other and the tray asks before deleting. */
   async all(): Promise<HeldShot[]> {
     const rows = (await this.tx<HeldShot[]>('readonly', (s) => s.getAll())) ?? [];
-    const dead = expiredShots(rows);
-    if (dead.length) await Promise.all(dead.map((d) => this.remove(d.id)));
-    return liveShots(rows).sort((a, b) => a.takenAt.localeCompare(b.takenAt));
+    return rows.sort((a, b) => a.takenAt.localeCompare(b.takenAt));
   }
 
   async put(shot: HeldShot): Promise<void> {
