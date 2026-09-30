@@ -808,6 +808,9 @@ function NavSheet({
   const router = useRouter();
   const t = useT();
   const [signingOut, setSigningOut] = useState(false);
+  // S120 2-C — everything still on this phone (queued, needing attention, or
+  // held for review): the count the "Waiting to sync" row carries.
+  const waiting = useOfflineSync()?.entries.length ?? 0;
 
   const handleSignOut = useCallback(async () => {
     setSigningOut(true);
@@ -913,6 +916,24 @@ function NavSheet({
             {t('shell.desktopSite')}
           </button>
         ) : null}
+
+        {/* S120 2-C — THE ROAD TO THE HELD-PHOTO LIST, online or not. /m/offline
+            listed what is still on this phone, but was reachable only from the
+            OFFLINE strip or by typing the URL — so with a connection, 30 queued
+            photos had no screen at all. A row, not an eighth tile: the grid's
+            tiles and order are ruled (§3.3, pinned by m-shell.spec). */}
+        <Link
+          href="/m/offline"
+          data-testid="m-sheet-waiting"
+          aria-current={pathname === '/m/offline' ? 'page' : undefined}
+          className={`mt-[10px] flex h-[58px] w-full items-center justify-center gap-[8px] rounded-[14px] bg-m6m-card text-[15px] font-bold ${
+            pathname === '/m/offline'
+              ? 'border-[1.5px] border-m6m-blue text-m6m-blue'
+              : 'border border-m6m-border text-m6m-navy'
+          }`}
+        >
+          {t('shell.waitingCount', { n: waiting })}
+        </Link>
 
         {/* [S110 C, RULED Josh Q7] — "Your account", every role, above Sign out.
             /m/account (name + password, #162) was linked ONLY from a card on

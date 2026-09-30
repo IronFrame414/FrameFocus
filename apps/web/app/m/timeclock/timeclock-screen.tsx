@@ -15,6 +15,8 @@ import { buildClockInEntries, buildClockOutEntries } from '@/lib/offline/capture
 import type { QueueEntry } from '@/lib/offline/queue';
 import { SetMobileHeader } from '../mobile-header';
 import { captureGps } from './capture-gps';
+import { CompletionChoice } from '@/components/time/completion-choice';
+import type { Completion } from '@/lib/services/time-tracking-client';
 import { useT, useUiLang } from '@/components/i18n/language-provider';
 import { dateLocale } from '@/lib/i18n/dates';
 import type { MsgKey, T } from '@/lib/i18n/messages';
@@ -434,6 +436,7 @@ function OnTheClock({
   const [now, setNow] = useState(() => Date.now());
   const [confirming, setConfirming] = useState(false);
   const [note, setNote] = useState('');
+  const [completion, setCompletion] = useState<Completion | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -465,9 +468,17 @@ function OnTheClock({
   // hard requirement of clock-out, not a nicety.
   const noteRequired = openSegment !== null && openSegment.segment_type !== 'break';
 
+  // S120 2-A — ending a TASK-BOUND segment requires the task's outcome:
+  // time_segments_completion_gate_check refuses segment_end without it. This
+  // clock-out never asked, so every crew member clocked in against a task was
+  // refused at clock-out (Josh, 2026-09-29: "nothing happens when i tap it").
+  // Asked, never defaulted — see CompletionChoice.
+  const completionRequired = openSegment !== null && openSegment.task_id !== null;
+
   async function submitClockOut() {
     if (!openSegment) return;
     if (noteRequired && !note.trim()) return;
+    if (completionRequired && !completion) return;
     setBusy(true);
     setError(null);
 
@@ -492,6 +503,7 @@ function OnTheClock({
           segment_type: openSegment.segment_type,
           task_id: openSegment.task_id,
           note: noteRequired ? note.trim() : null,
+          completion: completionRequired ? completion : null,
         },
         gps_out: gps,
         captured_at,
@@ -503,6 +515,7 @@ function OnTheClock({
       setBusy(false);
       setConfirming(false);
       setNote('');
+      setCompletion(null);
       return;
     }
 
@@ -513,6 +526,7 @@ function OnTheClock({
         segment_type: openSegment.segment_type,
         task_id: openSegment.task_id,
         note: noteRequired ? note.trim() : null,
+        completion: completionRequired ? completion : null,
       },
       gps_out: gps,
     });
@@ -524,6 +538,7 @@ function OnTheClock({
     }
     setConfirming(false);
     setNote('');
+    setCompletion(null);
     router.refresh();
   }
 
@@ -607,10 +622,19 @@ function OnTheClock({
               />
             </>
           ) : null}
+          {completionRequired ? (
+            <div className="mt-[10px]">
+              <CompletionChoice
+                value={completion}
+                onChange={setCompletion}
+                testIdPrefix="m-clock-out-completion"
+              />
+            </div>
+          ) : null}
           <button
             type="button"
             data-testid="m-clock-out-go"
-            disabled={busy || (noteRequired && !note.trim())}
+            disabled={busy || (noteRequired && !note.trim()) || (completionRequired && !completion)}
             onClick={submitClockOut}
             className="mt-[10px] flex h-[52px] w-full items-center justify-center rounded-[12px] bg-m6m-danger text-[15px] font-bold text-white disabled:opacity-40"
           >

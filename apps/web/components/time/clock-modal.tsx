@@ -303,7 +303,9 @@ export function ClockModal({
   return (
     <div style={overlayStyle} onClick={() => !busy && onClose()}>
       <div
-        style={{ ...cardStyle, width: '460px', maxHeight: '86vh', overflowY: 'auto', padding: '24px' }}
+        // S120 2-A: maxWidth — a fixed 460px was wider than every phone viewport
+        // (measured S97), so on a phone the modal ran off-screen.
+        style={{ ...cardStyle, width: '460px', maxWidth: 'calc(100vw - 32px)', maxHeight: '86vh', overflowY: 'auto', padding: '24px' }}
         onClick={(e) => e.stopPropagation()}
       >
         <h3 style={{ ...h2Style, fontSize: '19px', marginBottom: '16px' }}>

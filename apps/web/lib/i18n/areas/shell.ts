@@ -62,6 +62,9 @@ export const en = {
   'shell.lastTry': 'last try {time}',
   'shell.waitingToSync': 'Waiting to sync',
   'shell.nothingWaiting': 'Nothing waiting. Anything you capture offline will be listed here.',
+  // S120 2-C — why a queued photo is still on this phone, and its entry point.
+  'shell.notUploadedYet': 'Not uploaded yet — it will try again automatically.',
+  'shell.waitingCount': '{n} waiting to sync',
   'shell.conflictMessage':
     'Someone edited this {thing} after you loaded it. Your copy was kept and sent for review.',
   'shell.heldForReview': 'Held for review',
@@ -261,6 +264,8 @@ export const es: Record<keyof typeof en, string> = {
   'shell.lastTry': 'último intento {time}',
   'shell.waitingToSync': 'Esperando sincronizar',
   'shell.nothingWaiting': 'Nada pendiente. Lo que captures sin conexión aparecerá aquí.',
+  'shell.notUploadedYet': 'Aún no se ha subido — lo volverá a intentar solo.',
+  'shell.waitingCount': '{n} esperando sincronizar',
   'shell.conflictMessage':
     'Alguien editó este registro ({thing}) después de que lo abriste. Tu copia se guardó y se envió a revisión.',
   'shell.heldForReview': 'En revisión',
