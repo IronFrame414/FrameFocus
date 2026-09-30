@@ -274,6 +274,7 @@ test.describe('/locked — the tenant whose trial expired', () => {
     // SPEC 3-B: "prove a locked tenant still gets locked within the TTL"), and
     // the sign-in above minted one. So the claim is now "caught WITHIN the TTL":
     // wait it out, then navigate.
+    test.setTimeout((LOCK_OK_TTL_S + 60) * 1000); // the wait itself outlasts the 30s default
     await page.waitForTimeout((LOCK_OK_TTL_S + 2) * 1000);
     await page.goto('/dashboard');
     await expect(page).toHaveURL(/\/locked$/);
@@ -339,10 +340,11 @@ test.describe('/locked — the tenant whose trial expired', () => {
     await lockThrowaway(admin, locked.companyId);
     await signInAs(page, LOCKED_EMAIL, /\/locked/);
     await page.context().addCookies([{ ...minted!, domain: 'localhost', path: '/' }]);
-    const res = await page.request.post('/api/trial/export', {
-      data: { categories: ['contacts'], format: 'zip' },
-      failOnStatusCode: false,
-    });
+    // A path with NO route: only the middleware can answer it — 403 TRIAL_LOCKED
+    // when it sees the lock, a 404 when it does not. (/api/trial/export re-checks
+    // the lock itself, so it cannot tell a working guard from a bypassed one —
+    // measured S120: it stayed green with the cookie's user binding removed.)
+    const res = await page.request.get('/api/s120-lock-probe', { failOnStatusCode: false });
     expect(res.status()).toBe(403);
     expect((await res.json()).code).toBe('TRIAL_LOCKED');
   });
