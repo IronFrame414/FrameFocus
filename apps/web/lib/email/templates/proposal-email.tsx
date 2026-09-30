@@ -21,7 +21,11 @@ export interface ProposalEmailProps {
   logoUrl: string | null;
   brandColor: string;
   bodyText: string;
-  signingUrl: string;
+  /**
+   * S120 4-A/4-B — ABSENT on a COPY to an "Also send to" recipient: a copy
+   * carries the PDF and no signing link (no new way into the signing page).
+   */
+  signingUrl?: string | null;
 }
 
 export function ProposalEmail({
@@ -56,6 +60,7 @@ export function ProposalEmail({
               {line}
             </Text>
           ))}
+          {signingUrl ? (
           <Section style={{ textAlign: 'center', margin: '28px 0' }}>
             <Button
               href={signingUrl}
@@ -72,9 +77,11 @@ export function ProposalEmail({
               Review &amp; Sign Proposal
             </Button>
           </Section>
+          ) : null}
           <Text style={{ fontSize: '12px', color: '#7b8699' }}>
-            The full proposal is attached as a PDF. You can review and sign online using the
-            button above.
+            {signingUrl
+              ? 'The full proposal is attached as a PDF. You can review and sign online using the button above.'
+              : 'The full proposal is attached as a PDF. This copy is for your records.'}
           </Text>
           <Hr style={{ borderColor: '#e5e7eb', margin: '16px 0' }} />
           <Text style={{ fontSize: '11px', color: '#9ca3af' }}>

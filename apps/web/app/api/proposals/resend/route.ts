@@ -18,6 +18,11 @@ import {
 } from '@/lib/services/signing-service';
 import { ProposalEmail } from '@/lib/email/templates/proposal-email';
 import { contactDisplayName } from '@framefocus/shared/utils/contact-name';
+import {
+  collectCopyRecipients,
+  copySigningPhrase,
+  sendProposalCopies,
+} from '@/lib/services/proposal-copies';
 
 // Spec 2 (4F F10) — "Resend Proposal": invalidates every pending
 // session (old links stop working), creates a fresh token, sends a
@@ -58,7 +63,9 @@ export async function POST(request: NextRequest) {
 
   const { data: estimate } = await supabase
     .from('estimates')
-    .select('id, status, name, estimate_number, company_id, contact_id, expires_at, sent_at')
+    .select(
+      'id, status, name, estimate_number, company_id, contact_id, expires_at, sent_at, also_send_to, also_send_to_email'
+    )
     .eq('id', input.estimate_id)
     .eq('is_deleted', false)
     .maybeSingle();
@@ -220,5 +227,23 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: `Email send failed: ${sendError}` }, { status: 502 });
   }
 
-  return NextResponse.json({ success: true });
+  // S120 4-A/4-B — the same copies as the first send (one helper, both routes).
+  // Each attempt is its own email_logs row; estimate_events has no 'resend'
+  // kind, and the send event already names who the proposal goes to.
+  const copies = await sendProposalCopies(admin, {
+    companyId: estimate.company_id,
+    estimateId: estimate.id,
+    recipients: collectCopyRecipients(estimate, contact.email),
+    sender,
+    subject,
+    bodyText: replaceTemplateVariables(input.body, {
+      ...variables,
+      signing_link: copySigningPhrase(contactName),
+    }),
+    company,
+    pdf: { filename: `${estimate.estimate_number}-proposal.pdf`, content: generated.buffer },
+    resend: true,
+  });
+  const failedCopies = copies.filter((c) => c.status === 'failed').map((c) => c.email);
+  return NextResponse.json({ success: true, copies, failedCopies });
 }
