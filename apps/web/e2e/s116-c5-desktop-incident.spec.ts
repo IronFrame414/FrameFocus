@@ -293,8 +293,15 @@ test.describe('S116 C-5 · desktop incident — N photos, a forced LINK failure,
     await page.getByPlaceholder('Factual description — what, where, how').fill(MARKER);
 
     // The photo input renders only once a project is chosen.
-    const input = page.locator('input[type="file"]');
-    await expect(input, 'exactly one file input on the incident form').toHaveCount(1);
+    // ⚠️ INVERTED IN PLACE [S121 7-B — camera first, library kept]. _Superseded:_
+    // "exactly one file input on the incident form" (toHaveCount(1)). The form
+    // now has TWO: the camera (capture="environment", one shot) and the library
+    // (multiple). This proof drives the LIBRARY input — the N-photo path.
+    const all = page.locator('input[type="file"]');
+    await expect(all, 'a camera input and a library input').toHaveCount(2);
+    await expect(page.getByTestId('incident-photo-camera')).toHaveAttribute('capture', 'environment');
+    const input = page.locator('input[type="file"][multiple]');
+    await expect(input, 'exactly one LIBRARY (multiple) input').toHaveCount(1);
     await input.setInputFiles(NAMES.map((name) => ({ name, mimeType: 'image/png', buffer: PNG })));
     for (const name of NAMES) await expect(page.getByText(name)).toBeVisible();
 
