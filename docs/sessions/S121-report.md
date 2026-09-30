@@ -151,6 +151,38 @@ Order: **1 → 2 → 3 → 4 → 5 → 6 → 7 → 8**. Each part ships whole or
 
 ### 2.3 — Stopped. Waiting for Josh's approval before Phase 3.
 
+### 2.4 — Josh's rulings (2026-09-30) and the plan as revised by them — **Plan approved; Phase 3 started**
+
+| Q | ruling | plan change |
+| --- | --- | --- |
+| Q9 ASK-19 | **A** — a day column view | none |
+| Q10 ASK-20 | **A — ONE DAY ONLY**, no 2-day toggle (Part 5 is XL; the toggle can come next session) | 5-A builds one-day only |
+| Q11 ASK-21 | no week view on mobile | none |
+| Q12 ASK-22 | no Gantt on mobile | none |
+| Q13 ASK-23 | **refuse OVERLAP only; ALLOW gaps** — *"An overlap is a data error … A gap is normal: lunch, a supply run"* — **corrects the spec** | 4-C: add/split refuse overlap only |
+| Q14 ASK-24 | filter only | none |
+| Q15 ASK-25 | "On Site" entry | none |
+| Q16 ASK-26 | **A** — never auto-delete; show age and ask. **Reverses S114 deliberately.** | Part 2 |
+| Q17 ASK-27 | **A** — `active` + `on_hold` | 3-A |
+| Q18 ASK-28 | **A, plus: when NOT returned, a required REASON** — consumed / installed / lost / still out | 3-F migration adds `not_returned_reason` (nullable, CHECK on the 4 values, `IS NULL OR …` so existing rows pass); `close_material_signout` requires it for the not-returned outcome |
+| Q19 ASK-29 | **A** — extend `time_edit_logs`; **the spec was wrong** to call for a new table | 4-C |
+| Q20 ASK-30 | **split by view: Gantt = one bar per task; Calendar = ONE BAR PER PERSON** (*"the calendar answers who is where"*) | 5-C/5-H: calendar events emitted per assignee |
+| Q21 ASK-31 | **A** — PE rights untouched | none |
+| Q22 ASK-32 | **A** — hidden for foreman, refused by DB | none |
+| Q23 ASK-33 | yes; final proof is Josh's phone | none |
+| Q24 ASK-34 | **A** — drop, invert the two tests | none |
+| Q25 ASK-35 | **B** — C-5 step 2 filed as tech debt | 7-C: file `#1-s121` |
+| Q26 ASK-36 | **B — delete `s112-cdn-investigation`, archive the SHA** (not CC's recommendation) | 7-C |
+| Q27 ASK-37 | **A** — `--sql-out`, dry-run numbers posted first | none |
+| Q28 ASK-38 | **A** — prove 0 → hidden, 1 → shown; hide nothing else | none |
+| Q29 ASK-39 | yes, **lowest priority in Part 5** | done last in Part 5 |
+
+The rulings narrow or correct the plan; none widens authority. Josh's message closed "Plan approved. Proceed to Phase 3." — the revised rows above are his own, so they are recorded here rather than re-presented and waited on.
+
+---
+
+## Phase 3 — build log
+
 ---
 
 ## Phase 1 — findings
