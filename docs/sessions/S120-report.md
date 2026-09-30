@@ -973,6 +973,15 @@ its own shell (exit 144). It did not stop the server (PID 219061, stopped next b
 did not touch the sabotage edit, which had already been written and read back. Every later stop used
 listed PIDs.
 
+**3-A speed, before and after.** The change shipped in S116 (H-1b), not this session, so the
+before/after is **S115's measurement**, quoted with its method from `docs/sessions/S115-report.md:130-131`
+on `main`. It is a claim that this session did not re-measure. Per-call latency, Codespace →
+rebuild-test, qa-b-owner, medians of n=20: **`getUser` 53–74 ms → `getClaims` 1 ms** (a local ES256
+verify). The owner's middleware chain went **337 ms → 204 ms (parallelised, H-1) → 152 ms (with
+getClaims)**. This session's own 3-B number below (the middleware-only toll of 56 ms, with
+`getClaims` already in place) is consistent with that: what remained in the middleware was mostly the
+lock RPC.
+
 #### 3-B: `is_my_company_locked()` out of the request path (branch `feature/s120-speed`)
 
 **Built** (`lib/trial/lock-cookie.ts`, `lib/trial/lock-guard.ts`, `middleware.ts`):
