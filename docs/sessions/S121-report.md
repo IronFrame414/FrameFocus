@@ -534,3 +534,65 @@ Each section ran through `section.sh`: every newer migration file held out of th
 **Part 4 MERGED → `main` `fe616f1f`** (the three conditions: CI green on a byte-identical tree to current main's base plus Part 4; checks passed with numbers; migration on production, MATCH).
 
 **Parts 1+2 rebased again onto `fe616f1f`** (Part 4 changed code, so the in-flight run `36727805772` on `483143d9` is a stale base and **does not count**; it cannot be cancelled). Pre-CI: type-check 0, lint 0, unit **153 / 2054**, 0 cache hits. **CI `36732594530`** requested on `8d804d23`.
+
+### Part 5 — The schedule — branch `feature/s121-p5-schedule` (rebased onto main `fe616f1f`), CI `36733899929` requested
+
+**5-C — multi-assignee tasks. Migration `20262120000000_s121_task_assignees`** (rebuild-test: dry run exactly that file; applied):
+- **Table `task_assignees`** (standard columns, defaults, updated_at/updated_by triggers; partial UNIQUE (task_id, member_id) over live rows). RLS: SELECT follows the task; INSERT/UPDATE = owner/admin/PM/foreman on a viewable project, or the task project's PE (the arms `tasks` INSERT already carries); no DELETE (soft delete).
+- **Backfill** asserted inside the migration (count of tasks with `assignee_id` = count of live join rows); rebuild-test **5 = 5**, each matching.
+- **`is_task_assignee(task_id)`** (SQL SECURITY DEFINER) replaces `assignee_id = get_my_member_id()` in **`tasks_select_visible`** (both arms, the sub arm included) and **`tasks_update_authorized`**. Every other arm is verbatim.
+- ⚠️ **The guard that moved:** `tasks_update_authorized` has no WITH CHECK, so its USING clause was, by accident, what stopped a crew assignee reassigning a task. That is now explicit: trigger `tasks_guard_assignee_change` refuses an `assignee_id` change by anyone but owner/admin/PM/foreman or the project's PE.
+- **`tasks.assignee_id` KEPT** (not dropped): trigger `task_assignees_sync_primary` keeps it = the **earliest live assignee**. A direct write of `assignee_id` by an allowed writer (the old single-assignee path, e.g. mid-deploy) **replaces** the live set (`tasks_mirror_assignee_write`), so the two can never disagree.
+- **`set_task_assignees(task, member_ids[])`** (INVOKER, one transaction; refuses with 42501 if RLS dropped any part of the change).
+- **Deletion census:** `task_assignees` added to the trial deletion walk before `tasks` and `company_members`, and to the export with tasks. `lib/trial/deletion-census.test.ts` went red on the new table until then; that is the guard doing its job.
+
+**Every reader from §1.5, and where it went:**
+| # | reader | now |
+| --- | --- | --- |
+| D1/D2 | `tasks_select_visible`, `tasks_update_authorized` | `is_task_assignee(id)`. **Verified by object:** 0 `tasks` policies and 0 functions (outside the 3 sync functions) read `assignee_id`. ⚠️ My first probe used `ILIKE '%assignee_id%'`, which **false-positived** (`_` is a LIKE wildcard, so it matched `assignee(id`); re-run with `\_`, with a control that must fire (punch policies = **2**). |
+| A1/A2 | `getTasks`, `Task` type | `assignees: TaskAssignee[]` (live, earliest first) via `TASK_ASSIGNEES_EMBED`; the `assignee` field **removed** so the compiler found every reader |
+| A3 | project task list | one colour dot per assignee; names joined |
+| A4 | Gantt | one bar per task (ASK-2); the first assignee's colour; **every name on the bar** |
+| A5/A6 | task form, `createTask`/`updateTask` | multi-select; writes through `set_task_assignees`; overlap warning per person (still a warning) |
+| **A7** | **`getCalendarEvents` + the crew self-filter** | **`lib/schedule/task-events.ts` (pure):** one event **per person** (Q20); `ownMemberId` keeps a task only if the member is **among** the assignees, and only **their** bar |
+| A8 | `findOverlaps` | `task_assignees` `!inner` join on `member_id`; **still non-blocking** |
+| A9/A10/A11 | `listPickerTasks`, desktop clock-in, clock modal, **/m switch screen** | `assignee_ids[]` + one shared `taskOpenToMember()`; the /m switch screen now filters like desktop (**Q29**, the parity gap) |
+| A12/A13 | `completeTaskFromSegment`, crew edits | follow `is_task_assignee` |
+| A14 | `database.ts` | regenerated |
+| test | `s133-subcontractor-read-floor.live.ts` | **inverted in place** (every task the sub reads must have the sub among its assignees, read from the join table), superseded assertion quoted |
+
+**Crew self-filter proof** (`test/s121-task-events.test.ts`, 10 arms): Casey **second** on a 3-person task → kept, only Casey's bar, `member_ids` carries all 3; a task Casey is not on → dropped; alone → kept; unassigned → dropped for crew, one null bar for everyone; unique keys. **Sabotage (a)** the old "first assignee only" comparison → **3 ✘**; **(b)** every person's bar shown to crew → **3 ✘**. Restored, `cmp` identical.
+**DB proof** (`test/s121-task-assignees.live.ts`, 17/17, and `s133` 25/25):
+- A sub who is **second** on a task (`assignee_id` = the PM) reads it; the task beside it, not.
+- A crew member not on the project but on the task reads it; removal removes it.
+- **Total map** over 8 roles for `set_task_assignees` (5 allowed, crew/sub/client refused, judged by the service role).
+- A crew direct join INSERT is refused; a PM off the project is refused.
+- **Guard:** a crew assignee's `assignee_id` change → "Only a supervisor can change who is assigned to a task." (unchanged); their status update still lands (control).
+- **Sync:** [A,B]→A, [B]→B, []→null; a PM's direct write replaces the set.
+- **Sabotages:** the old `assignee_id` visibility → **2 ✘**; guard trigger disabled → **1 ✘**; crew in the INSERT policy → **2 ✘**. Each restored; policy md5s `8596c75e…` / `58ed694e…` and trigger `O` read back identical.
+
+**5-A — mobile. ⚠️ OVERTURNS (quoted, not deleted — in the pages' own comments and here):**
+- **M-12** (`M6M §4.11.2`): *"The project's calendar, as a list — not a grid. A month grid at 402px cannot carry a legible event label."* …and *"CUT: create/edit/assign — schedule-client.ts's writes are desktop flows."*
+- **M-25** (`§4.13.2`): *"The company calendar as a list, not a grid — same reasoning as M-12 … CUT: create/edit/assign. No handoff specced scheduling from a phone, and schedule-client.ts's writes are desktop flows. … CUT: a month or week grid."*
+- **D-24**: *"Up next binding — Bound to the schedule."* — **kept** (Up next stays on the /m overview; the day view sits under it).
+- **Built: a ONE-DAY column** (Q9 A, **Q10 A — one day only**; no week Q11, no Gantt Q12). **402px arithmetic:** 402 − 2×16 = **370px** for one day: the whole width is one bar, with the full label. A week would be ~53px a column, and a month grid the same failure M-12 named. **There is no grid on mobile.** ‹ › and Today walk the days; the column scrolls; a multi-day bar says "← from …" / "until … →".
+- **Scheduling from the phone:** "+ Schedule" opens the SAME sheet as desktop. **Staff see the details:** tap a bar → dates, **every person on the task**, notes.
+- **Drag vs scroll:** a swipe always scrolls. Bars have no drag until a **press-and-hold (450ms)** puts one bar in move mode; only its three handles (◀ Start / ↔ Move / End ▶) are `touch-action: none`; 56px = one day; Done leaves.
+- Screenshot `S121-evidence/p5-m-day-view-402.png` (402×874, production build).
+- RLS unchanged (`schedule_entries_select_scoped`); no `ownMemberId` on /m (the M-25 reasoning stands).
+
+**5-B:** Week / Month / **Gantt** toggle on the desktop calendar. The Gantt is the SAME component the project panel uses, now fed by groups (`ganttGroupsFromRollups` / `ganttGroupsFromEvents`). Dependency arrows: the existing component already draws them for the project panel; the calendar's Gantt shows none (the calendar carries no dependencies) — arrows were "wanted but not required" (ASK-3).
+**5-D:** click a day → the sheet in Josh's order. Typing **filters** only (Q14); "+ Not on project" writes a real `project_assignments` row through `/api/project-assignments` — the project page's authority, **hidden for a foreman** (Q22), refused by RLS regardless. No task → `schedule_entries` "On Site" (Q15). An existing task gets the person added and **keeps its own dates** (an undated one is given these). A new task is written with dates (`is_scheduled` is generated). **Overlap = warning, never a block** (stop rule 9, proved by e2e: warned and saved).
+**5-E:** drag = whole range, length kept; either end resizes; a resize past the other end **clamps to one day and says so** ("A bar cannot end before it starts — it was kept to one day."). ⚠️ **A defect found by the e2e and fixed:** after a move the bar snapped back until the refresh landed, and a second drag in that window started from the stale range (a resize wrote the OLD start back). Fixed with an optimistic override held until fresh data arrives, on both surfaces. **The sabotage that removes it reproduces the bug** (5-E ✘: start `2026-09-28`).
+**5-F:** `lib/schedule/authority.ts`. **Total maps** (26 tests incl. junk roles): schedule = owner/admin/PM/foreman + PE (Q21, existing arms untouched); add-to-project = owner/admin/PM/PE, **not foreman**. The database refusals are the live tests. ⚠️ Differs from timesheets (Owner/Admin); not merged.
+**5-G:** one colour rule, `packages/shared/utils/schedule-colors.ts`. Crew: picked, else a stable hash. Subs/vendors: by **trade** (free text, normalised; keyword map; an unmapped trade gets one stable colour shared by everyone in it); **no trade → slate `#475569` + "no trade"**, never invisible. A sub's own `schedule_color` is ignored. **Contrast:** every colour ≥ 4.5:1 against white, computed per colour by `test/s121-schedule-colors.test.ts` (with a failing control: `#fbbf24` < 4.5). The **picker** (palette + Auto; subs show "from their trade") is on the **desktop** team profile (new) and the **/m** team edit (replacing a free-text hex field). /m avatars use the same rule; the flat-amber fallback is superseded, and A-47e's title updated in place.
+**5-H:** `lib/schedule/lanes.ts` — one segment per event per week row, lanes; the row break is squared with ‹ / › (unit 6/6; e2e: a Fri→Tue bar shows › this week and ‹ next week).
+**5-I:** desktop project overview gets the interactive calendar (the desktop overview had no "Up next"); /m overview **keeps Up next** and adds the day view.
+
+**Proofs:**
+- e2e `desktop-schedule-s121.spec.ts` + `m-schedule-s121.spec.ts` **11 passed, 0 ✘**. Connected bar width 2.8–3.05 cells; Gantt count 1 with both names; the sheet saves 1 `project` row on Wednesday **despite** the warning; drag Mon→Wed, end→Fri, start past end → clamped to one day with the note; task Tue–Thu → Wed–Fri; PM has +Not-on-project, foreman 0; crew: no sheet, 0 handles. /m: one day, no grid, ‹ › walk; schedule from the phone → task written with dates and the person, row on screen; tap = details not move; hold → move mode, handle `touch-action: none`, +2 days length kept; crew sees both names.
+- Existing specs **inverted in place** (superseded titles quoted): **A-44d** (day groups → one day at a time), **A-32** (groups → the one-day column), **A-30c** (schedule: navigation and details allowed; no write control for crew).
+- Neighbouring specs: `m-destinations`, `m-sections`, `m-hubs` 172 passed / 10 skipped. `desktop-selections`, `m-capture`, `m-clock-out-task-s120`, `m-photos` **85 passed with `--workers=1`**: the 11 failures in a 7-spec parallel run were fixture collisions (null fixture rows, `beforeAll`, "9 punch lists — a previous run did not clean up", #144). `m-writes` 52 passed / 2 skipped serially.
+- Unit: new `s121-task-events` (10), `s121-schedule-colors`, `s121-schedule-drag` (11), `s121-schedule-lanes` (6), `s121-schedule-authority` (26). The /m i18n anti-rot guard is green: every new /m string is a `sched.*` key with Spanish.
+- **Pre-CI:** type-check 0; lint 0; unit **157 files / 2123 tests**, 0 cache hits.
+- ⚠️ Left in place, noted: `app/m/schedule/scroll-to-today.tsx` is now unused (the list it scrolled is gone); `scripts/.db-expected.json` (a local replay fingerprint, not in CI) predates this schema.
