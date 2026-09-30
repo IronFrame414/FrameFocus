@@ -506,3 +506,13 @@ Pattern to copy: `/m` check-in `check-in-form.tsx:331-376` — a wide camera lab
 - **UI sabotages:** checkbox stopPropagation removed → **4-A ✘** (days collapsed); `isAdmin = true` forced → **4-D ✘** (Edit expected 0, received 8). Each restored by copy, `cmp` exit 0, 0 SABOTAGE markers, rebuilt, 4 passed.
 - **Pre-CI (stacked head):** type-check exit 0; lint exit 0; unit **152 files / 2044 tests**, exit 0, 0 cache hits.
 - **CI requested on this stacked head** (Part 3 + 4).
+
+### Production — Part 3 migrations (after Part 3 CI `36720889843` **green** on base `7cf348a0` = current main)
+
+**Pre-check, PRODUCTION (read-only):** ledger latest `20262116000000` (S120 complete, `20262110`–`20262116` all present); none of S121's present; `material_signouts` = **1** row; `material_signout_photos` = **1** row, stages present = `release` only (so the widened stage CHECK admits every existing row); trigger absent.
+
+Each section ran through `section.sh`: every newer migration file held out of the tree, the **dry run must list exactly the named file** (else stop), push, verification query on production, then **always** restore the held files and relink rebuild-test.
+
+| # | migration | dry run | verification on PRODUCTION | expected (rebuild-test) | verdict |
+| --- | --- | --- | --- | --- | --- |
+| 1 | `20262117000000_s121_signout_signer_is_caller` | exactly that file | ledger `20262116000000,20262117000000`; `enforce_material_signout_released_signer` md5 `91225a5e38fa824ae77ffba9b0b60432`; `material_signout_caller_name` md5 `b3be1153bd481f9af3de443efdda0e17`; trigger `material_signouts_released_signer_is_caller` = `O`; helper EXECUTE for authenticated = `false`; rows 1 | ledger +2117; md5s = rebuild-test's; trigger `O`; `false`; rows 1 (no row touched) | **MATCH** — relinked, `LINKED_REF=nmyphyhmfttxkdoposvf` |
