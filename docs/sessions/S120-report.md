@@ -740,6 +740,117 @@ persist between runs.
 
 ---
 
+### PART 2 — DEFECTS (branch `feature/s120-defects`, rebased onto `7242e399`)
+
+All measurements: a **production build** (`next build && next start`) against rebuild-test, the m-*
+Playwright project (**402×874, the crew session**), and for 2-B/2-C a **touch** context
+(`hasTouch`, `isMobile`).
+
+#### 2-A: mobile clock-out of a task-bound segment
+
+**Reproduced first, on unfixed code** (the speed-branch build, whose timeclock code equals `main`).
+The crew member is clocked in on a `work` segment with a `task_id`. They tap Clock out, type the note,
+and tap Confirm. **What the user gets:** a red box reading *"new row for relation "time_segments"
+violates check constraint "time_segments_completion_gate_check""*. The confirm panel stays up.
+`segment_end` and `clock_out` both stay **NULL** (service role). In this build the failure is **not
+silent**, but it is raw database text that tells a crew member nothing they can act on. Josh's
+"nothing happens" may be that message sitting under the fold on his phone, or the confirm panel
+opening below it. It could not be pinned down remotely.
+
+**A second instance found:** the **/m switch** had the same hole. Its "Mark complete" was a checkbox,
+and an unticked box wrote `completion = NULL`, which the same check refuses. So switching away from a
+task without finishing it failed too. Mobile can start task segments itself (switch → Work → task), so
+both paths were reachable from the phone alone.
+
+**Fix** (no default value is ever sent):
+- `components/time/completion-choice.tsx` asks **"Is the task finished?"**, with **Finished / Not
+  finished** as two **52 px** buttons. Neither is pre-selected.
+- The `/m` clock-out asks it whenever the open segment has a task, and Confirm stays disabled until it
+  is answered. The answer goes on both the online write and the offline queued entry.
+- The `/m` switch replaces the checkbox with the same component, and it is required. The superseded
+  comment ("the ONLY surface that may write `completion`") is quoted in place.
+- `endSegmentAt()` (`lib/`) now states the rule in words before any write: a task-bound end with no
+  outcome returns *"Say whether the task is finished before ending it."* That covers every surface,
+  so no caller can reach the raw constraint text again.
+- The desktop `clock-modal.tsx:306` gains `maxWidth: 'calc(100vw - 32px)'`, because its fixed 460 px
+  was wider than every phone (measured S97). This is a one-line fix to the modal a phone can open on
+  `/dashboard`.
+
+**e2e** `m-clock-out-task-s120.spec.ts`: **2/2.** For clock-out and for switch, the question is
+visible, both choices are `aria-checked=false`, submit is disabled until answered, and each target is
+≥44 px. After submitting, the clock-in control is rendered (clock-out) or the URL is `/m/timeclock` with
+Clock out rendered (switch). The service role reads back `completion='incomplete'`, `segment_end`
+set, and `clock_out` set, or else the next open segment is `break`.
+**Sabotage:** the chosen value was dropped from both writes (`completion: null`, read back as `2 files
+changed, 2+/2-`) → **2 red**. **Restored**, identical to HEAD `a310c66e`. Leftover tasks 0; open crew
+sessions 0.
+
+#### 2-B: "Tap to choose a project" (the held-photos strip)
+
+**Where:** `app/m/mobile-shell.tsx`, `HeldPhotosStrip`, a `<Link href="/m/capture">`. **Why it is dead,
+measured.** It is neither a missing handler nor a throwing one. **Online the tap works:** it lands on
+`/m/capture` with the tray and the project prompt, the strip's centre hit-tests to the link itself, and
+nothing overlays it. **Offline it is dead:** a client navigation into `/m/capture`, a **server-rendered**
+route (its project list is loaded on the server), cannot be served. The URL changed and the screen went
+**blank white** (reproduced with the context offline). On an installed PWA the service worker may
+instead serve a cached copy or `/m/offline`, and `/m/offline` said "Nothing waiting", because held
+shots are not queue entries. **Fix:** offline, the tap no longer navigates. It opens an in-place note:
+*"No signal right now. Your {n} photo(s) are safe on this phone — tap this bar again when you have
+signal to choose a project."* That needs no network. Online, the behaviour is unchanged.
+
+#### 2-C: held photos get a list
+
+- **Are Josh's 30 in the queue, or lost? That cannot be determined from here, stated plainly.** Both
+  stores live in IndexedDB **on his phone**, and nothing server-side records a photo that never
+  uploaded. The code bounds it:
+  - **held** shots (no project) are capped at **25** and swept **7 days** after they were taken;
+  - **queued** photos (a project was chosen but the upload failed) are **never** swept.
+  So 30 cannot all be held shots. Anything that was held more than 7 days ago is gone, and a list
+  cannot bring it back. After this ships, **Menu → "N waiting to sync"** shows exactly what the queue
+  holds, and the strip or `/m/capture` shows what is held.
+- **Built:**
+  - `components/offline/blob-thumb.tsx` (`BlobThumb`, `capturedWhen`) is **one** component used by
+    both lists.
+  - The **capture tray** gains a thumbnail and the date and time taken (it showed only file names).
+  - **`/m/offline`** shows each photo entry's thumbnail, date and time, **project name** (fetched
+    best-effort when online), and **why it is still here** ("Not uploaded yet — it will try again
+    automatically", or the last error). The CONFLICTED treatment is untouched, so no retry is offered
+    that will always fail. "No connection" is claimed only while actually offline.
+  - **Reachable without typing a URL:** a **"N waiting to sync"** row in the nav sheet, 58 px, placed
+    **outside** the ruled tile grid, which is pinned by `m-shell.spec`.
+  - **Retry:** the existing "Try again" (`m-try-again`) calls `sync()` immediately (A-17b). It was
+    left as is.
+- **The `capture` attribute, stated before any change** (grep over `app/m` and `components`):
+  - Paired camera + library inputs **with** `capture="environment"` on the camera one: the shell
+    camera (`mobile-shell.tsx`, the orange button, which is why it "goes straight to camera"),
+    `/m/capture`, `/m/logs/new`, punch, incident, and delivery check-in.
+  - Library-only inputs **without** `capture` (they open the chooser, which on iOS and Android also
+    offers the camera): `site-visit-record`, `signout-detail`, `expense-capture-form`, and
+    `components/field/incident-form`.
+  - **No change made.** Those four take **multiple** files, and `capture` would remove the library,
+    so it is a trade for Josh, not a defect.
+
+**e2e** `m-held-photos-s120.spec.ts`: **3/3.**
+- **Online:** the strip opens the tray, which shows 1 thumbnail and a date like "Sep 30, 2:41".
+- **Offline:** the note is shown, it contains "1 photo(s) are safe on this phone", and the URL stays
+  `/m/projects`.
+- **2-C:** storage uploads are aborted with `page.route`, so the photo honestly falls back to the
+  queue. Then Menu shows **"1 waiting to sync"** (≥44 px), and `/m/offline` shows the thumbnail, the
+  date, the **project name, equal to the service-role name of the project actually chosen**, and a
+  why line. No "No connection" heading appears online.
+- **Test bugs fixed on the way:** holding via the shell camera consulted the crew's open clock (a
+  parallel spec had clocked them in), so shots are now held through the tray's library input; and a
+  prefix selector matched the prompt container itself.
+
+**Sabotage (one build, three breaks, each hitting a different test):** S1, the strip's offline handler
+removed; S2, the nav-sheet row's testid changed; S3, the tray thumbnail removed. Read back: 2 + 1
+markers. Result: **3 red**, one per test. **Restored**, `cmp`-identical. The final run (a clean build,
+with Part 2's specs plus the whole `m-shell.spec`) gave **60 passed, 0 `✘`**. Leftover `s120hp-%`
+files rows: 0.
+
+**Pre-CI:** `lint-job.sh` on the branch gave `TYPE_EXIT=0 LINT_EXIT=0 TEST_EXIT=0`, **149 files / 2028
+tests**.
+
 ### PART 3 — SPEED: work done while Part 1's CI ran (not yet on a branch; lands on `feature/s120-speed`)
 
 #### 3-A: `getClaims()` middleware, the four proofs (re-planned per ASK-3 default A: no behaviour change)
