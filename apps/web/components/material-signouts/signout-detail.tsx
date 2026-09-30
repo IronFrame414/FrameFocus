@@ -8,6 +8,8 @@ import { UploadBatchList } from '@/components/uploads/upload-batch-list';
 import { makeAttachWorker } from '@/lib/uploads/upload-batch';
 import { useUploadBatches } from '@/lib/uploads/use-upload-batches';
 import {
+  NOT_RETURNED_REASONS,
+  NOT_RETURNED_REASON_KEY,
   RECEIPT_ACKNOWLEDGEMENT,
   RELEASE_CONDITION_KEY,
   RETURN_CONDITIONS,
@@ -15,6 +17,8 @@ import {
   STATUS_KEY,
   blankToNull,
   isOverdue,
+  returnCameBack,
+  type NotReturnedReason,
   type PhotoStage,
   type ReturnCondition,
 } from '@/lib/material-signouts/signout';
@@ -43,6 +47,14 @@ import { inputCls, labelCls, sectionCls, sectionTitleCls, signatureLabels } from
 //
 // ⚠️ TWO PHOTO SETS, NEVER MERGED: "at release" and "at return" render side by
 // side, each photo with who took it and when.
+//
+// [S121 3-D / 3-F, RULED Josh ASK-13 + ASK-28] The RETURN is one step carrying
+// its evidence: when the material came back, a photo of the material, a photo
+// of WHERE it was put (a third set, `return_location`) and a written note of
+// where; when it did not, a reason. close_material_signout refuses the close
+// without them — the checks below only say so first, in the same words.
+// pending_receipt on this page is now only where a page-1 save that failed
+// part-way is FINISHED (the new form does the release in one go).
 
 function fmtWhen(iso: string, timeZone: string): string {
   return new Date(iso).toLocaleString('en-US', {
@@ -170,10 +182,13 @@ export function SignoutDetailView({
   const [retDate, setRetDate] = useState(today);
   const [retTime, setRetTime] = useState('');
   const [retNotes, setRetNotes] = useState('');
+  const [retWhere, setRetWhere] = useState('');
+  const [retReason, setRetReason] = useState<NotReturnedReason | ''>('');
   const [error, setError] = useState<string | null>(null);
 
   const release = photos.filter((p) => p.stage === 'release');
   const ret = photos.filter((p) => p.stage === 'return');
+  const retWherePhotos = photos.filter((p) => p.stage === 'return_location');
   const overdue = isOverdue(record, today);
   const closed = record.status !== 'pending_receipt' && record.status !== 'open';
 
@@ -190,26 +205,44 @@ export function SignoutDetailView({
     router.refresh();
   }
 
+  // [S121 7-B] The primary control opens the CAMERA (a fresh photo is the
+  // point); a SECONDARY control keeps the library — the /m check-in pattern.
+  // SUPERSEDED [S118]: one library-only `accept="image/*" multiple` input.
   function PhotoInput({ stage, label }: { stage: PhotoStage; label: string }) {
+    const onPick = (e: React.ChangeEvent<HTMLInputElement>) => {
+      // Read the list NOW, before the reset: a lazy read of e.target.files
+      // after it sees nothing (the S116 selection-sheet bug).
+      const list = Array.from(e.target.files ?? []);
+      e.target.value = '';
+      void addPhotos(stage, list);
+    };
     return (
-      <label className="inline-flex min-h-[44px] cursor-pointer items-center rounded-[9px] border border-[#e0e4ea] bg-white px-[14px] text-[14px] font-semibold text-[#14213d]">
-        {label}
-        <input
-          type="file"
-          accept="image/*"
-          multiple
-          className="sr-only"
-          data-testid={`so-${stage}-input`}
-          disabled={batches.busy(stage)}
-          onChange={(e) => {
-            // Read the list NOW, before the reset: a lazy read of e.target.files
-            // after it sees nothing (the S116 selection-sheet bug).
-            const list = Array.from(e.target.files ?? []);
-            e.target.value = '';
-            void addPhotos(stage, list);
-          }}
-        />
-      </label>
+      <span className="inline-flex items-center gap-2">
+        <label className="inline-flex min-h-[44px] cursor-pointer items-center rounded-[9px] border border-[#e0e4ea] bg-white px-[14px] text-[14px] font-semibold text-[#14213d]">
+          {label}
+          <input
+            type="file"
+            accept="image/*"
+            capture="environment"
+            className="sr-only"
+            data-testid={`so-${stage}-camera`}
+            disabled={batches.busy(stage)}
+            onChange={onPick}
+          />
+        </label>
+        <label className="inline-flex min-h-[44px] cursor-pointer items-center rounded-[9px] border border-[#e0e4ea] bg-white px-[12px] text-[13px] text-[#374151]">
+          {t('signout.fromLibrary')}
+          <input
+            type="file"
+            accept="image/*"
+            multiple
+            className="sr-only"
+            data-testid={`so-${stage}-input`}
+            disabled={batches.busy(stage)}
+            onChange={onPick}
+          />
+        </label>
+      </span>
     );
   }
 
@@ -282,7 +315,11 @@ export function SignoutDetailView({
         <Row label={t('signout.receiverContact')} value={record.receiver_contact_name} />
         <Row label={t('signout.receiverPhone')} value={record.receiver_phone} />
         <Row label={t('signout.receiverDriver')} value={record.receiver_driver_name} />
-        <Row label={t('signout.receiverVehicle')} value={record.receiver_vehicle} />
+        {/* [S121 3-B] The input is removed; a record that HOLDS a vehicle
+            (pre-S121) still shows it — hidden only when there is nothing. */}
+        {record.receiver_vehicle ? (
+          <Row label={t('signout.receiverVehicle')} value={record.receiver_vehicle} />
+        ) : null}
       </div>
 
       <div className={sectionCls}>
@@ -318,6 +355,12 @@ export function SignoutDetailView({
         <div className="flex flex-col gap-4 sm:flex-row">
           <PhotoSet title={t('signout.photosRelease')} photos={release} timeZone={timeZone} testId="so-photos-release" />
           <PhotoSet title={t('signout.photosReturn')} photos={ret} timeZone={timeZone} testId="so-photos-return" />
+          <PhotoSet
+            title={t('signout.photosReturnLocation')}
+            photos={retWherePhotos}
+            timeZone={timeZone}
+            testId="so-photos-return_location"
+          />
         </div>
         {record.status === 'pending_receipt' ? (
           <div className="mt-3">
@@ -329,7 +372,7 @@ export function SignoutDetailView({
             <PhotoInput stage="return" label={t('signout.addReturnPhotos')} />
           </div>
         ) : null}
-        {(['release', 'return'] as const).map((k) =>
+        {(['release', 'return', 'return_location'] as const).map((k) =>
           batches.items(k).length > 0 ? (
             <div key={k} className="mt-3">
               <UploadBatchList
@@ -443,6 +486,59 @@ export function SignoutDetailView({
                   ))}
                 </div>
               </fieldset>
+              {retCondition && returnCameBack(retCondition) ? (
+                // [S121 3-D + 3-F] ONE step: the two photos, distinguishable,
+                // and the written location they pair with.
+                <div data-testid="so-ret-evidence" className="mt-3 flex flex-col gap-3">
+                  <div>
+                    <p className={labelCls}>
+                      {t('signout.retMaterialPhoto')} * · {ret.length}
+                    </p>
+                    <PhotoInput stage="return" label={t('signout.retMaterialPhoto')} />
+                  </div>
+                  <div>
+                    <p className={labelCls}>
+                      {t('signout.retLocationPhoto')} * · {retWherePhotos.length}
+                    </p>
+                    <PhotoInput stage="return_location" label={t('signout.retLocationPhoto')} />
+                  </div>
+                  <label className="block">
+                    <span className={labelCls}>{t('signout.retLocationNote')} *</span>
+                    <textarea
+                      value={retWhere}
+                      onChange={(e) => setRetWhere(e.target.value)}
+                      rows={2}
+                      data-testid="so-ret-where"
+                      className={inputCls}
+                    />
+                  </label>
+                </div>
+              ) : null}
+              {retCondition === 'not_returned' ? (
+                // [S121 ASK-28] Not returned → a required reason instead.
+                <fieldset className="mt-3" data-testid="so-ret-reason">
+                  <legend className={labelCls}>{t('signout.notReturnedReason')} *</legend>
+                  <div className="flex flex-wrap gap-2">
+                    {NOT_RETURNED_REASONS.map((r) => (
+                      <label
+                        key={r}
+                        className={`flex min-h-[40px] items-center gap-2 rounded-[9px] border px-3 text-[14px] ${
+                          retReason === r ? 'border-[#2f49d1] bg-[#e8edfb] text-[#2f49d1]' : 'border-[#e0e4ea] text-[#374151]'
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          name="not_returned_reason"
+                          checked={retReason === r}
+                          onChange={() => setRetReason(r)}
+                          data-testid={`so-reason-${r}`}
+                        />
+                        {t(NOT_RETURNED_REASON_KEY[r])}
+                      </label>
+                    ))}
+                  </div>
+                </fieldset>
+              ) : null}
               <label className="mt-3 block">
                 <span className={labelCls}>{t('signout.returnNotes')}</span>
                 <textarea value={retNotes} onChange={(e) => setRetNotes(e.target.value)} rows={2} data-testid="so-ret-notes" className={inputCls} />
@@ -458,6 +554,12 @@ export function SignoutDetailView({
                 onCancel={() => setClosing(false)}
                 onSubmit={async (sig) => {
                   if (!retCondition) return t('signout.pickCondition');
+                  // The database's rule, said first in the same words.
+                  const came = returnCameBack(retCondition);
+                  if (came && ret.length === 0) return t('signout.errRetMaterialPhoto');
+                  if (came && retWherePhotos.length === 0) return t('signout.errRetLocationPhoto');
+                  if (came && retWhere.trim() === '') return t('signout.errRetLocationNote');
+                  if (!came && !retReason) return t('signout.errReason');
                   const res = await closeMaterialSignout(record.id, {
                     condition_at_return: retCondition,
                     returned_date: retDate,
@@ -466,6 +568,8 @@ export function SignoutDetailView({
                     signer_name: sig.signer_name,
                     signature_type: sig.signature_type,
                     signature_data: sig.signature_data,
+                    return_location_note: came ? retWhere.trim() : null,
+                    not_returned_reason: came ? null : (retReason as NotReturnedReason),
                   });
                   if (!res.success) return res.error;
                   const pdf = await generateSignoutPdf(record.id);
@@ -498,6 +602,11 @@ export function SignoutDetailView({
           <Row
             label={t('signout.conditionAtReturn')}
             value={record.condition_at_return ? t(RETURN_CONDITION_KEY[record.condition_at_return]) : null}
+          />
+          <Row label={t('signout.returnLocationNote')} value={record.return_location_note} />
+          <Row
+            label={t('signout.notReturnedReasonRow')}
+            value={record.not_returned_reason ? t(NOT_RETURNED_REASON_KEY[record.not_returned_reason]) : null}
           />
           <Row label={t('signout.returnNotes')} value={record.return_notes} />
           <div className="mt-3">

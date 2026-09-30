@@ -1,6 +1,11 @@
 import { createClient } from '@/lib/supabase-browser';
 import { uploadFile } from '@/lib/services/files-client';
-import type { PhotoStage, ReturnCondition, SignoutCreateInput } from '@/lib/material-signouts/signout';
+import type {
+  NotReturnedReason,
+  PhotoStage,
+  ReturnCondition,
+  SignoutCreateInput,
+} from '@/lib/material-signouts/signout';
 export type { SignoutDetail, SignoutListItem, SignoutPhoto } from '@/lib/services/material-signouts';
 
 // S118 item 11 — browser writes for the material sign-out. Every state change
@@ -76,6 +81,10 @@ export async function closeMaterialSignout(
     signer_name: string;
     signature_type: 'draw' | 'type';
     signature_data: string;
+    /** [S121 3-F] Required by the DB when the material came back. */
+    return_location_note: string | null;
+    /** [S121 ASK-28] Required by the DB when it did not. */
+    not_returned_reason: NotReturnedReason | null;
   }
 ): Promise<Result> {
   const supabase = createClient();
@@ -88,6 +97,8 @@ export async function closeMaterialSignout(
     p_signer_name: payload.signer_name,
     p_signature_type: payload.signature_type,
     p_signature_data: payload.signature_data,
+    p_return_location_note: payload.return_location_note ?? undefined,
+    p_not_returned_reason: payload.not_returned_reason ?? undefined,
   });
   if (error) return { success: false, error: error.message };
   return { success: true, data: undefined };

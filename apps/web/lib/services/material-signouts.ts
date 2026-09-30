@@ -5,8 +5,18 @@ import { getSignedUrls } from '@/lib/services/files';
 import { DASHBOARD_ROLES } from '@framefocus/shared/constants/roles';
 import { getMyProfile } from '@/lib/services/profiles';
 import { getProject } from '@/lib/services/projects';
-import { formatSiteAddress, getProjectSiteAddress } from '@/lib/services/contact-addresses';
-import { canCloseSignout, type MaterialSignout, type PhotoStage } from '@/lib/material-signouts/signout';
+import {
+  formatSiteAddress,
+  getProjectSiteAddress,
+  type SiteAddress,
+} from '@/lib/services/contact-addresses';
+import { getMyAssignedProjectIds } from '@/lib/services/project-assignments';
+import {
+  canCloseSignout,
+  SIGNOUT_OPEN_PROJECT_STATUSES,
+  type MaterialSignout,
+  type PhotoStage,
+} from '@/lib/material-signouts/signout';
 
 // S118 item 11 — server reads for the material sign-out. RLS decides who sees
 // a record (the six staff roles, on a project they can view); these reads add
@@ -149,6 +159,47 @@ export async function getSignoutViewer(): Promise<SignoutViewer> {
   };
 }
 
+/** [S121 3-A] One job in the sign-out's job picker. */
+export interface SignoutJobChoice {
+  id: string;
+  name: string;
+  address: string;
+}
+
+/**
+ * [S121 3-A, RULED Josh ASK-14 / ASK-27] The sign-out's job picker: OPEN jobs
+ * (`active`, `on_hold`). Owner and Admin see every open job; every other role
+ * sees only the jobs it is ASSIGNED to — stated here, explicitly, rather than
+ * left to whatever the `projects` SELECT policy happens to admit, because the
+ * insert policy (`can_view_project`) is owner/admin OR assigned and the picker
+ * must not offer a job the write will refuse.
+ */
+export async function getSignoutJobChoices(role: string | null): Promise<SignoutJobChoice[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from('projects')
+    .select('id, name, contact_addresses:contact_address_id (address_line1, address_line2, city, state, zip)')
+    .eq('is_deleted', false)
+    .in('status', [...SIGNOUT_OPEN_PROJECT_STATUSES])
+    .order('name', { ascending: true })
+    .order('id', { ascending: true });
+  if (error) {
+    console.error('[getSignoutJobChoices]', { role, error: error.message });
+    return [];
+  }
+  type Raw = { id: string; name: string; contact_addresses: SiteAddress | null };
+  let rows = (data ?? []) as unknown as Raw[];
+  if (role !== 'owner' && role !== 'admin') {
+    const assigned = await getMyAssignedProjectIds();
+    rows = rows.filter((r) => assigned.has(r.id));
+  }
+  return rows.map((r) => ({
+    id: r.id,
+    name: r.name,
+    address: r.contact_addresses ? formatSiteAddress(r.contact_addresses) : '',
+  }));
+}
+
 export async function loadNewSignout(projectId: string) {
   const [project, site, viewer, today] = await Promise.all([
     getProject(projectId),
@@ -157,10 +208,12 @@ export async function loadNewSignout(projectId: string) {
     signoutToday(),
   ]);
   if (!project || project.is_deleted) return null;
+  const jobs = await getSignoutJobChoices(viewer.role);
   return {
     project,
     viewer,
     today,
+    jobs,
     defaultJobName: project.name,
     defaultJobAddress: site ? formatSiteAddress(site) : '',
   };

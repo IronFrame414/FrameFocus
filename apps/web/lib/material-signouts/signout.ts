@@ -12,13 +12,36 @@ type Row = Database['public']['Tables']['material_signouts']['Row'];
 export type SignoutStatus = 'pending_receipt' | 'open' | 'returned' | 'damaged_on_return' | 'not_returned';
 export type ReleaseCondition = 'undamaged' | 'minor_damage' | 'pre_existing_damage';
 export type ReturnCondition = 'same_as_released' | 'damage_occurred' | 'not_returned';
-export type PhotoStage = 'release' | 'return';
+/** [S121 3-F] + 'return_location': the photo of WHERE the material was put. */
+export type PhotoStage = 'release' | 'return' | 'return_location';
+/** [S121 ASK-28] Why material did not come back — the DB CHECK, verbatim. */
+export type NotReturnedReason = 'consumed' | 'installed' | 'lost' | 'still_out';
+export const NOT_RETURNED_REASONS: readonly NotReturnedReason[] = ['consumed', 'installed', 'lost', 'still_out'];
+export const NOT_RETURNED_REASON_KEY: Record<NotReturnedReason, MsgKey> = {
+  consumed: 'signout.reason.consumed',
+  installed: 'signout.reason.installed',
+  lost: 'signout.reason.lost',
+  still_out: 'signout.reason.still_out',
+};
+/** [S121] The return evidence is required exactly when the material came back. */
+export function returnCameBack(c: ReturnCondition): boolean {
+  return c === 'same_as_released' || c === 'damage_occurred';
+}
+/** [S121 3-A, RULED ASK-27] "Open" jobs for the sign-out picker. */
+export const SIGNOUT_OPEN_PROJECT_STATUSES = ['active', 'on_hold'] as const;
 
 /** The generator emits `string` for CHECK columns; restore the literal unions. */
 export type MaterialSignout = Omit<
   Row,
-  'status' | 'condition_at_release' | 'condition_at_return' | 'released_signature_type' | 'receiver_signature_type' | 'return_signature_type'
+  | 'status'
+  | 'condition_at_release'
+  | 'condition_at_return'
+  | 'released_signature_type'
+  | 'receiver_signature_type'
+  | 'return_signature_type'
+  | 'not_returned_reason'
 > & {
+  not_returned_reason: NotReturnedReason | null;
   status: SignoutStatus;
   condition_at_release: ReleaseCondition;
   condition_at_return: ReturnCondition | null;
@@ -101,9 +124,13 @@ export interface SignoutCreateInput {
   receiver_contact_name: string | null;
   receiver_phone: string | null;
   receiver_driver_name: string | null;
-  receiver_vehicle: string | null;
+  // [S121 3-B] `receiver_vehicle` is no longer sent: the input is removed. The
+  // COLUMN stays (production: 1 row, 0 values — S121 §1.4); nothing is dropped.
+  /** [S121 3-C] Sent for the column's NOT NULL, but IGNORED: the database
+   *  stores the caller's own profile name (trigger
+   *  material_signouts_released_signer_is_caller). */
   released_signer_name: string;
-  released_title: string | null;
+  // [S121 3-C] `released_title` ("Your title") is removed from the form.
   released_signature_type: 'draw' | 'type';
   released_signature_data: string;
 }

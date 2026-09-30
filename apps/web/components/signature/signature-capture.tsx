@@ -101,6 +101,7 @@ export function SignatureCapture({
   onCancel,
   testId,
   labels,
+  lockName = false,
 }: {
   title: string;
   defaultName: string;
@@ -115,6 +116,14 @@ export function SignatureCapture({
   onCancel: () => void;
   testId?: string;
   labels: SignatureCaptureLabels;
+  /**
+   * [S121 3-C, RULED Josh ASK-15] The signer is the signed-in user and the name
+   * CANNOT be typed over: the name and the typed signature are both fixed to
+   * `defaultName`. ⚠️ Presentation only — the rule itself is the database
+   * trigger `material_signouts_released_signer_is_caller`, which stores the
+   * caller's own name whatever this sends.
+   */
+  lockName?: boolean;
 }) {
   const [method, setMethod] = useState<'draw' | 'type'>('type');
   const [signerName, setSignerName] = useState(defaultName);
@@ -167,9 +176,15 @@ export function SignatureCapture({
       </label>
       <input
         value={signerName}
-        onChange={(e) => setSignerName(e.target.value)}
+        onChange={(e) => {
+          if (!lockName) setSignerName(e.target.value);
+        }}
+        readOnly={lockName}
+        aria-readonly={lockName || undefined}
+        data-locked={lockName ? 'true' : undefined}
         data-testid={testId ? `${testId}-name` : undefined}
         style={{
+          ...(lockName ? { backgroundColor: '#f4f6f9', color: '#374151' } : {}),
           width: '100%',
           padding: '8px 10px',
           fontSize: '16px', // [S118 item 11] ≥16px: /m renders this now (iOS focus zoom)
@@ -216,10 +231,15 @@ export function SignatureCapture({
         <>
           <input
             value={typed}
-            onChange={(e) => setTyped(e.target.value)}
+            onChange={(e) => {
+              if (!lockName) setTyped(e.target.value);
+            }}
+            readOnly={lockName}
+            aria-readonly={lockName || undefined}
             placeholder={labels.typePlaceholder}
             data-testid={testId ? `${testId}-typed` : undefined}
             style={{
+              ...(lockName ? { backgroundColor: '#f4f6f9', color: '#374151' } : {}),
               width: '100%',
               padding: '8px 10px',
               fontSize: '16px', // [S118 item 11] ≥16px (iOS focus zoom)

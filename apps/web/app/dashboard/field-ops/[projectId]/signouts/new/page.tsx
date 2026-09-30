@@ -35,11 +35,11 @@ export default async function NewSignoutPage({ params }: { params: { projectId: 
       <FieldTabs projectId={project.id} active="signouts" />
       <SignoutNewForm
         projectId={project.id}
-        defaultJobName={data.defaultJobName}
+        jobs={data.jobs}
         defaultJobAddress={data.defaultJobAddress}
         defaultSignerName={data.viewer.signerName}
         today={data.today}
-        hrefBase={`/dashboard/field-ops/${project.id}/signouts`}
+        surface="desktop"
       />
     </div>
   );
