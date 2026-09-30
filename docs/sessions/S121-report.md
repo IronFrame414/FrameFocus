@@ -530,3 +530,7 @@ Each section ran through `section.sh`: every newer migration file held out of th
 | # | migration | dry run | verification on PRODUCTION | expected (rebuild-test) | verdict |
 | --- | --- | --- | --- | --- | --- |
 | 3 | `20262119000000_s121_time_segment_edits` | exactly that file | ledger `…2116,2117,2118,2119`; md5 `add_time_segment` `df3cfcab…`, `edit_time_segment` `c78e1908…`, `split_time_segment` `5a08970a…`, `s121_time_edit_session` `dc41fce6…`, `s121_time_overlap_check` `83e8d55c…`, `s121_time_task_check` `f8e8de32…`, `s121_time_reopen` `ef22201b…`, `audit_time_segment_edit` `11fbfe95…`, `audit_time_clock_session_edit` `0e4c2233…`; triggers `time_segments_insert_audit`/`time_segments_edit_audit`/`time_clock_sessions_edit_audit` = `O`; EXECUTE authenticated: the 3 RPCs `true`, helpers `false`; anon `false` ×3; overloads 1 each | all nine md5 = rebuild-test's; triggers `O`; grants as listed | **MATCH** — relinked, `LINKED_REF=nmyphyhmfttxkdoposvf` |
+
+**Part 4 MERGED → `main` `fe616f1f`** (the three conditions: CI green on a byte-identical tree to current main's base plus Part 4; checks passed with numbers; migration on production, MATCH).
+
+**Parts 1+2 rebased again onto `fe616f1f`** (Part 4 changed code, so the in-flight run `36727805772` on `483143d9` is a stale base and **does not count**; it cannot be cancelled). Pre-CI: type-check 0, lint 0, unit **153 / 2054**, 0 cache hits. **CI `36732594530`** requested on `8d804d23`.
