@@ -3,9 +3,153 @@
 Spec: [`docs/specs/S121-SPEC.md`](../specs/S121-SPEC.md). Running order: [`S121-prompt-v3.md`](S121-prompt-v3.md).
 Branch: `feature/s121-assess`, cut from `origin/main` = `7cf348a0` (verified after `git fetch --prune`).
 
-## Phase 2 — questions and plan
+## Phase 2 — questions and plan (posted 2026-09-30; **awaiting Josh's approval — nothing in Phase 3 has started**)
 
-_(pending; written at the end of Phase 1)_
+### 2.1 — The questions
+
+**Already RULED — restated as settled, not re-asked:** (1) Owner/Admin see every open job in the sign-out picker; every other role sees only its assignments. (2) The auto-filled signer name is NOT editable, and the server enforces that. (3) Three required photos: 1 on release, 2 on return (the material, and where it was put). (4) Josh's 30 held photos must end up on a job. (5) The catalog import is IN, at `--markup-percent 5`. (6) All of S120's leftovers are IN; `s112-staletimes-hold` is assessed only; the legacy HS256 key is NOT revoked. (7) Mobile has NO month grid. (8) Timesheets: Owner and Admin edit. Schedule: Owner, Admin, PM and Foreman.
+
+**Open — each has options and a recommendation:**
+
+**Q9. [ASK-19]** "only do 1-2 view if it makes sense" can be read two ways. Options: A) a **1–2 day** column view on mobile; B) offer only **one or two of the three views** (week / month / Gantt) on mobile. **Recommendation: A.** "The calendar can be scrollable" only makes sense for a day view, and B would bring back the same 402px legibility problem.
+
+**Q10. [ASK-20]** Which mobile day view? The arithmetic: 402px minus two 16px gutters leaves 370px. One day gets 370px; two days get (370 − 8px gap) / 2 = **181px** each. Schedule items have **no clock times** (`schedule_entries` and `tasks` carry dates only), so a "day column" is a stack of full-width bars, and days follow each other down the page as you scroll. Options: A) one-day only; B) **one-day by default, with a "2 days" toggle**; C) two-day only. **Recommendation: B.** One day at 370px holds a full label; 181px fits a name plus a trade, and the toggle costs nothing.
+
+**Q11. [ASK-21]** No week view on mobile? Seven columns come to about 53px each, the same failure as the month grid. **Recommendation: no week view on mobile.**
+
+**Q12. [ASK-22]** No Gantt on mobile? **Recommendation: no.** The day view already covers "staff can see the details".
+
+**Q13. [ASK-23]** Timesheets: a new or split segment may **not overlap** an existing one, and may **not leave a gap** (an added segment must touch its neighbour). The sheet refuses it and says why, e.g. "Overlaps 10:15–11:00 Framing". **Recommendation: refuse both, as the spec defaulted.**
+
+**Q14. [ASK-24]** Typing in the schedule's assignee box **filters the list; it does NOT create a member.** **Recommendation: filter only.** Someone real who isn't on the project goes through the "assign someone not assigned" button.
+
+**Q15. [ASK-25]** If no task is picked, the sheet writes a `schedule_entries` row with `general_kind = 'project'` ("On Site"). **Recommendation: yes.**
+
+**Q16. [ASK-26] — held photos, the 7-day sweep.** Today it silently deletes **every** held photo older than 7 days on app open: failed, uploading and queued included, with or without a project. S120's report said "only project-less ones", and that was wrong. Options: A) **never auto-delete**; instead show the age and ask "Delete N photos older than 7 days?", which reverses your S114 ruling; B) keep the 7-day auto-delete, but never for failed or uploading photos; C) leave it as is. **Recommendation: A.** A silent delete is the one failure this feature exists to prevent.
+
+**Q17. [ASK-27] — the sign-out job dropdown.** Which statuses count as "open"? The status set is `active, on_hold, complete, archived, cancelled`. Options: A) `active` + `on_hold`; B) `active` only; C) everything except `complete`/`archived`, which also includes `cancelled`. **Recommendation: A.** A cancelled job shouldn't be taking material out. (Today all 6 live production projects are `active`.)
+
+**Q18. [ASK-28] — return photos when the material did NOT come back.** `close_material_signout` has three outcomes: returned, damaged, not returned. Options: A) the 2 return photos + the "where did you put it" box are required only when the material **came back** (returned or damaged); "not returned" requires none of them; B) always required. **Recommendation: A.** You can't photograph where you put material you don't have.
+
+**Q19. [ASK-29] — the timesheet audit.** An audit table **already exists**: `time_edit_logs` (editor, target member, session, segment, `changes` jsonb). Triggers write it, only Owner/Admin can read it, and no client can write it. **It skips self-edits** and does not record inserts. Options: A) **extend `time_edit_logs`**: log adds, splits and the approved→pending reset as well, and stop skipping an Owner/Admin editing their own time; B) a new table, as the spec says. **Recommendation: A.** One audit mechanism; a second table is a second place to look, and the two could disagree.
+
+**Q20. [ASK-30] — a task with several people on the calendar.** Options: A) **one bar per task**, with a colour stripe per assignee and the names on the label; B) one bar per person (a 3-person task shows as 3 bars). **Recommendation: A**, matching your Gantt ruling (ASK-2: one bar per task).
+
+**Q21. [ASK-31] — Project Executive and the schedule.** Your ruling names owner/admin/PM/foreman. A PE already has **project-scoped** write access on tasks and schedule entries (`pe_on_project`). Options: A) leave the PE's existing access untouched; B) remove it. **Recommendation: A.** Removing it is a narrowing that nobody asked for.
+
+**Q22. [ASK-32] — foreman and the "assign someone not on the project" button.** Assigning to a project from the project page is allowed for Owner, Admin, and a PM (or PE) on that project. **Foremen are not allowed.** Options: A) **the button follows that same rule**: a foreman doesn't see it and the database refuses the write; B) widen `project_assignments` to foremen. **Recommendation: A**, the same authority as the project page, as the spec says.
+
+**Q23. [ASK-33] — the navy status bar.** Painting the strip navy means switching to `black-translucent` with the header padded down by the safe-area inset. That overturns the S97 comment at `app/layout.tsx:75-84` and inverts two tests in place (`test/pwa-manifest.test.ts:102`, `e2e/m-pwa.spec.ts:53`). **A headless browser cannot draw the iOS status bar.** The 402px screenshot can prove the header and meta tags; the **final proof is your phone.** Accept that? **Recommendation: yes.**
+
+**Q24. [ASK-34] — 7-A, the DROP.** The only references to the dead 6-arg `create_safety_incident` are **two negative tests** (`s120-incident-member-company.live.ts:162,198`) that assert it is unreachable. Production callers: 0. Options: A) treat them as non-callers, and **invert them in place** so they assert the function is gone; B) treat them as a stop. **Recommendation: A.** They test the thing the DROP completes.
+
+**Q25. [ASK-35] — `s114-c5-multi-upload` is a STOP (stop rule 11).** `main` rebuilt step 1 differently (S116, merged S118), and this branch is the version that was replaced. What's still genuinely owed is **C-5 step 2**: adding `multiple` to the 4 new photo inputs, on `main`'s mechanism, with a proof per surface. Options: A) build step 2 fresh this session, after Part 8; B) file it as debt. **Recommendation: B.** This build is already the largest yet.
+
+**Q26. [ASK-36] — `origin/feature/s112-cdn-investigation`.** It is not superseded: a 627-line live harness that isn't on `main`, for a finding ruled closed. Options: A) keep it parked; B) delete it and record its tip SHA in the branch archive. **Recommendation: A.**
+
+**Q27. [ASK-37] — the production write path for the catalog import.** The script's sign-in mode uses `.env.local`, which is rebuild-test's. Options: A) `--sql-out` with your production company id and your user id as `created_by`, run after the dry-run numbers are posted, applied by the linked CLI, and idempotent by name; B) you run the script signed in yourself. **Recommendation: A.**
+
+**Q28. [ASK-38] — Part 8: hiding PE features.** Only **one** PE-specific surface exists: the per-estimate PE picker (`pe-access-control.tsx`). It **already** hides when the company has no PE (`:26`), unless a PE is still assigned to that estimate. PE also appears as a **role option** in the invite and team-edit pickers, and those must stay, because that is how a PE gets created. Options: A) Part 8 = prove the picker in both directions (live members only), fix anything that fails, and hide nothing else; B) also hide PE from the role pickers, which would make it impossible to create one. **Recommendation: A.** **If you saw a PE feature somewhere specific, tell me where** and it goes on the list.
+
+**Q29. [ASK-39] — an existing parity gap found in 1.5.** The `/m` task-switch picker shows **every** task; desktop shows "unassigned or mine". Part 5-C rewrites that filter anyway. Fix it with one shared filter? **Recommendation: yes.**
+
+**Corrections Phase 1 made to the spec** (a correction wins over the spec):
+- **`tasks.is_scheduled` is a GENERATED column** (`start_date IS NOT NULL OR due_date IS NOT NULL`). It can't be set. A task created from the schedule gets its dates, which makes it scheduled.
+- **A Gantt already exists** at project level (`components/schedule/gantt.tsx`, in the project's schedule panel). 5-B extends it and reuses it for the company view, rather than building a second one (PARITY).
+- **The held photos are most likely not lost; they are ghosts.** Details under Part 2.
+- **The sign-out photo control is the S118 control**, and it is already enforced in the database. It sits after the employee's signature by design.
+
+### 2.2 — The build plan, for approval
+
+Order: **1 → 2 → 3 → 4 → 5 → 6 → 7 → 8**. Each part ships whole or stops unmerged. New migrations start at **`20262117000000`**; `20262116000000` is S120's and is already taken. CI stacks: **[1+2]** (no migrations) · **[3]** · **[4]** · **[5]** (each carries a migration, alone) · **[6+8]** (no migrations) · **[7-A]** (migration, alone) · **7-B** stacked on [6+8] · **7-C** docs-only (tree-identity exemption, file list stated).
+
+**Part 1 — Mobile chrome. Size: XS. No migration.**
+- 1-A: `export const viewport = { themeColor: '#0f1729', viewportFit: 'cover' }` in `app/layout.tsx`. Next 14 emits theme-color **only** from the viewport export, and **no page emits one today**. `appleWebApp.statusBarStyle` goes from `'black'` to `'black-translucent'` (Q23), and the `/m` header gets `padding-top: env(safe-area-inset-top)`. Text stays white on navy. The two tests are inverted in place.
+- 1-B: the cause will be proven before the fix. The hypothesis: the tab bar `<nav>` (`mobile-shell.tsx:624`) is **not positioned**, while the content region (`:563`) is `relative`. CSS paints positioned elements after non-positioned ones, so the form cards cover the camera's 26px overhang. **This is paint order, not a losing z-index.** The fix is `relative z-10` on the nav. The proof is before/after screenshots at 402px, scrolled, on the sign-out form.
+- Risk: none of the stop rules. The status bar can only be finally proved on your phone.
+
+**Part 2 — Held photos. Size: M. No migration.**
+- Clear a tray row once its photo is on the server. On load, every `queued` tray row is checked against `files.id` (the shot id **is** the file id). If it is found, the row is removed and reported as "already on <project>". This is also what clears your current ghosts.
+- A **select → assign project → upload** control, with a success or failure line **per photo**; a photo that didn't upload never reads as done. The project is stored on each shot, so it survives a reload.
+- `queued` rows stop counting as "no project". Sweep per Q16.
+- Tests: unit tests for the reconcile and the selection; an e2e with seeded tray rows (one already on the server, one not, one failing), asserting per-photo results; sabotage on the reconcile.
+- The report will carry the exact phone steps for you.
+
+**Part 3 — Material sign-out. Size: M. Two migrations.**
+- 3-A: the Job section becomes a dropdown of open projects (Q17), fed by `getProjects`. RLS already gives Owner/Admin every project and everyone else their assigned ones (`can_view_project`). Choosing a project files the sign-out under it.
+- 3-B: the "Vehicle / unit #" input is removed. **The column is kept** (production: 1 row, 0 values).
+- 3-C: "Your title" is removed, and the signer name is shown read-only.
+- 3-D/3-E: page 1 becomes: sections → employee signature → **1 release photo** → **external party signs directly below** → Submit. Submit creates the record, uploads the photo, and records the receipt. The existing receipt function **already refuses without a release photo**. If the upload fails after the record is created, the record opens on its own page to finish; nothing is lost.
+- 3-F: the return section becomes one step with a **"Photo of the material"**, a **"Photo of where you put it"**, and a **required "Where did you put it?"** text box.
+- **Migration `20262117000000_s121_signout_signer_is_caller`:** a BEFORE INSERT trigger on `material_signouts` sets `released_signer_name` from the caller's own profile, whatever the client sent, and refuses a profile with no name. This is the server-side "not editable". There is no UPDATE policy on that table, so insert is the only write path.
+- **Migration `20262118000000_s121_signout_return_evidence`:** adds `material_signouts.return_location_note text NULL`; **widens** the photo `stage` CHECK to add `'return_location'` (existing rows all satisfy it; counted on production first); adds the matching RLS arm (only while `open`); and `close_material_signout` requires ≥1 live `return` photo, ≥1 `return_location` photo and a non-blank note when the material came back (Q18).
+- **No constraint over existing rows** (stop rule 2). The requirement lives in the write path.
+- The error text names the missing photo: "Add a photo of the material", "Add a photo of where you put it".
+- Tests: a per-role test for each refusal, written without returning rows, each with its own sabotage; both name inputs checked at 16px.
+
+**Part 4 — Timesheets (payroll). Size: L. One migration.**
+- 4-A: the whole row opens the day breakdown. The checkbox and "Approve week" stop propagation, and a test clicks each one to assert.
+- 4-B: "Details" opens a `ModalSheet` (the repo's existing sheet primitive; there is no shadcn Sheet) carrying the member's whole week: days, segments and tasks. Approve works from inside the sheet.
+- 4-C: Owner and Admin can edit times, add a segment, and split a segment (the two halves are proved to sum to the original, to the second).
+- **Migration `20262119000000_s121_time_segment_edits`:**
+  - `split_time_segment()` and `add_time_segment()`: each one transaction; Owner/Admin checked inside; overlaps and gaps refused (Q13).
+  - **The completion gate is kept:** a closed, task-bound half or new segment must carry `completion`, and a split copies it to both halves. Your 2026-09-29 trap gets a regression test.
+  - Any Owner/Admin edit to a segment in an **approved** session sets that session back to `pending`, and the sheet shows the "hours changed" pop-up with an Approve button.
+  - The audit goes through `time_edit_logs` (Q19).
+- Negative tests: PM, foreman, crew, sub, client and PE each refused on each RPC, written without returning rows, each with its own sabotage.
+- Risk: **stop rule 3.** Nothing beyond these rulings: approval authority and the existing supervisor attribution-edit rights are unchanged.
+
+**Part 5 — The schedule. Size: XL (the largest). One migration.**
+- **5-C, the join table first.** **Migration `20262120000000_s121_task_assignees`:**
+  - A new table `task_assignees(id, company_id, task_id, member_id, standard columns)`, with a partial UNIQUE on (task_id, member_id) over live rows.
+  - RLS: SELECT follows the task. INSERT/UPDATE: owner/admin/pm/foreman with `can_view_project`, plus the PE arm that tasks already carry (Q21). That carries over the guard D2 gives today, so **crew cannot add or remove assignees.**
+  - A backfill from `assignee_id`, counted before and after.
+  - A SQL SECURITY DEFINER `is_task_assignee(task_id)` helper, used by **`tasks_select_visible`** (both arms, including the subcontractor arm) and **`tasks_update_authorized`**.
+  - `save_task_with_assignees()` writes a task and its assignees in one transaction.
+  - `assignee_id` is **kept**, maintained by a trigger as the earliest live assignee, so nothing that still reads it can disagree. **Every app reader moves to the join table in the same merge** (stop rule 8).
+- **Reader migration, all 18 from 1.5:**
+  - D1 and D2 → the helper.
+  - A1/A2 → `assignees[]`.
+  - A3/A4 → names and stripe (Q20).
+  - A5/A6 → multi-select writing through the RPC.
+  - **A7 → the crew self-filter becomes `assignees.some(a => a.id === ownMemberId)`**, with negative tests on each arm: crew sees their own multi-assignee task; crew does not see a task that excludes them; the sub arm is the same.
+  - A8 `findOverlaps` → a `task_assignees` inner join, **still a warning** (stop rule 9).
+  - A9/A10/A11 → one shared "unassigned or me among the assignees" filter (Q29).
+  - A12/A13 follow D2.
+  - A14 → regenerated types.
+  - `s133` is inverted in place to the join table.
+- **5-B:** the calendar gains the Gantt toggle, reusing `gantt.tsx` (one bar per task). Dependency arrows only if everything else is done.
+- **5-H:** connected multi-day bars. In month view, a bar broken at the week row gets a squared edge plus a "continues" chevron at the break.
+- **5-D:** click a day → the scheduling sheet, in your order. The start date is prefilled and editable. The overlap warning is non-blocking. Assigning to a project writes `project_assignments` under the page's own authority (Q22).
+- **5-E:** drag the whole bar (proved to keep its length) and both ends; a resize that would invert the range clamps at one day and says so. **On mobile, drag starts only on a long-press** (about 400ms) or from the end handles, so a normal swipe scrolls. There is no drag library in the repo; this is built on pointer events.
+- **5-F:** writes are gated owner/admin/pm/foreman (plus PE's existing arm). Crew and sub negative tests, written without returning rows.
+- **5-G:** crew colour = `schedule_color`, else a stable hash of the member id, from **one** function in `lib/`; this also removes today's desktop-vs-`/m` fallback mismatch. A picker on both the desktop and `/m` team profiles. Subs and vendors take their colour from `packages/shared` `tradeColor(trade_type)`: trade text is normalised; **null or unknown → a fixed neutral slate with a "no trade" label**, never invisible. Every colour is checked for ≥ 4.5:1 contrast against its label text by a unit test.
+- **5-A:** the mobile day view (Q9/Q10), with scheduling from the phone through the same sheet, proved at 402px. It quotes M-12, M-25 and D-24 as overturned, deleting none.
+- **5-I:** the schedule on the project overview: desktop gets the calendar with its toggle; `/m` keeps **"Up next" and adds** the day view below it (D-24 stands).
+- RLS `schedule_entries_select_scoped` is unchanged.
+- Risks: stop rules 8 and 9. **This is the part most likely to run out of road. If it does, it stops unmerged, with the state written down.**
+
+**Part 6 — Catalog import. Size: S. No migration (business data).**
+- Land `scripts/import-cost-catalog.mjs` from local `f9dbfb5c`, dropping the empty park commit.
+- On production: a read-only count of `cost_catalog` for your company, and how many of the 282 rows would insert. Then the five worked examples and sample before/after prices, **posted before any write**.
+- Then write (Q27) and spot-check 5 rows by object.
+- `origin/feature/s112-catalog-importer` is deleted after this lands.
+
+**Part 7 — S120 leftovers. Size: S.**
+- 7-A: **migration `20262121000000_s121_drop_create_safety_incident_6arg`**, after a fresh grep that must still count 0 production callers, with the two tests inverted (Q24).
+- 7-B: `site-visit-record.tsx:537`, `expense-capture-form.tsx:347` and `incident-form.tsx:494` get a camera input plus a secondary library button (the check-in pattern). The sign-out input is rebuilt in Part 3.
+- 7-C: land the four docs tails (S180-unattended's report files only, **not** its `TECH_DEBT.md`); delete `s112-bid-token-status` and `s112-m-loading`, with the proof above.
+- `s114-c5-multi-upload`: **STOP**, left as reference (Q25).
+- `s112-staletimes-hold`: **not merged**; the numbers are in 1.7.
+- The HS256 key is **not touched.**
+
+**Part 8 — Hide PE features. Size: XS. No migration, no policy, no function.**
+- Per Q28. The code comment says **PRESENTATION ONLY — not a security control (#136 class)**.
+- Proved in both directions on rebuild-test: 0 live PEs → hidden; 1 → shown; a soft-deleted PE counts as 0.
+
+**Production, for every migration:** one per section; a dry run listing **exactly** that file; push; verification by object with every expected value stated; the CLI relinked to rebuild-test and read back. **Never `migration repair --status reverted`.**
+
+### 2.3 — Stopped. Waiting for Josh's approval before Phase 3.
 
 ---
 
