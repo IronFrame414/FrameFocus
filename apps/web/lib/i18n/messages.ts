@@ -6,6 +6,7 @@ import * as photos from '@/lib/i18n/areas/photos';
 import * as directory from '@/lib/i18n/areas/directory';
 import * as visit from '@/lib/i18n/areas/visit';
 import * as signout from '@/lib/i18n/areas/signout';
+import * as schedule from '@/lib/i18n/areas/schedule';
 
 // S110 H — SYSTEM TEXT, English and Spanish.
 //
@@ -72,6 +73,7 @@ export const en = {
   ...directory.en,
   ...visit.en,
   ...signout.en,
+  ...schedule.en,
 };
 
 export type MsgKey = keyof typeof en;
@@ -123,6 +125,7 @@ export const es: Record<MsgKey, string> = {
   ...directory.es,
   ...visit.es,
   ...signout.es,
+  ...schedule.es,
 };
 
 const TABLES: Record<Lang, Record<MsgKey, string>> = { en, es };

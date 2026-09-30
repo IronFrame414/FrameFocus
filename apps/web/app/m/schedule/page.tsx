@@ -3,14 +3,28 @@ import { getCompanyTimeSettings } from '@/lib/services/company';
 // [S106] was a local copy of the company-tz calendar-date rule.
 import { companyToday } from '@framefocus/shared/utils/dates';
 import { SetMobileHeader } from '../mobile-header';
-import { EmptyState, ListRow, SectionLabel } from '../mobile-ui';
-import { ScrollToToday } from './scroll-to-today';
+import { DayView } from './day-view';
+import { getMyProfile } from '@/lib/services/profiles';
+import { getMembers } from '@/lib/services/members';
+import { getScheduleJobChoices } from '@/lib/services/schedule';
+import { canSchedule } from '@/lib/schedule/authority';
 import { getMobileT, getMyLanguage } from '@/lib/i18n/server';
 import { dateLocale } from '@/lib/i18n/dates';
-import type { MsgKey, T } from '@/lib/i18n/messages';
+import type { MsgKey } from '@/lib/i18n/messages';
 
-// M6M §4.13.2 — M-25 · Schedule. The company calendar as a LIST, not a grid:
-// a month grid at 402px cannot carry a legible event label (the M-12 argument).
+// M6M §4.13.2 — M-25 · Schedule.
+//
+// ⚠️ OVERTURNED [S121 5-A, RULED Josh 2026-09-30] — quoted, not deleted:
+//   M-25: "The company calendar as a LIST, not a grid — same reasoning as M-12
+//          (§4.11.2): a month grid at 402px cannot carry a legible event label."
+//   M-25: "CUT: create/edit/assign. No handoff specced scheduling from a phone,
+//          and schedule-client.ts's writes are desktop flows."
+//   M-25: "CUT: a month or week grid."
+// Josh: "it is important that i can schedule staff while i am on mobile. it is
+// also important that they can see the details." Now a ONE-DAY column
+// (app/m/schedule/day-view.tsx): the full 370px for one day, scrollable, the
+// scheduling sheet, drag after press-and-hold. The month-grid objection STANDS
+// and is honoured — there is still no month (or week) grid on mobile.
 
 /**
  * §4.13.2 — the source is `getCalendarEvents({})` with NO `projectId`: the
@@ -36,152 +50,37 @@ const SOURCE_KEY: Record<CalendarEvent['source'], MsgKey> = {
   compliance: 'field.schedule.source.compliance',
 };
 
-// [S112 audit F4] `locale` from dateLocale(): Spanish readers were shown English
-// weekdays and months. The zone stays UTC — these are date-only values.
-function formatDay(iso: string, locale: string): string {
-  const [y, m, d] = iso.split('-').map(Number);
-  return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString(locale, {
-    weekday: 'short',
-    month: 'short',
-    day: 'numeric',
-    timeZone: 'UTC',
-  });
-}
-
-/** Mono date range. A single-day event renders one date, not `x–x`. */
-function formatRange(start: string, end: string): string {
-  return start === end ? start : `${start} – ${end}`;
-}
-
 export default async function MobileSchedulePage() {
-  const [events, timeSettings, t, lang] = await Promise.all([
+  const [events, timeSettings, t, lang, profile] = await Promise.all([
     getCalendarEvents({}),
     getCompanyTimeSettings(),
     getMobileT(),
     getMyLanguage(),
+    getMyProfile(),
   ]);
-  const locale = dateLocale(lang);
-
-  const today = companyToday(timeSettings.timezone);
-
-  // Group by day. `getCalendarEvents` already sorts ascending by `start_date`
-  // (`schedule.ts:200`), so insertion order into the map is the ascending order
-  // A-44d requires — but rendering that untouched would put last month at the
-  // top and still satisfy every other Schedule criterion, which is exactly the
-  // failure A-44d was written for. Hence the explicit past/upcoming split below.
-  const byDay = new Map<string, CalendarEvent[]>();
-  for (const e of events) {
-    const bucket = byDay.get(e.start_date);
-    if (bucket) bucket.push(e);
-    else byDay.set(e.start_date, [e]);
-  }
-
-  const days = [...byDay.keys()].sort();
-  const past = days.filter((d) => d < today);
-  const upcoming = days.filter((d) => d >= today);
+  const role = profile?.role ?? null;
+  const may = canSchedule(role);
+  const [projects, members] = may
+    ? await Promise.all([getScheduleJobChoices(), getMembers()])
+    : [[], []];
 
   return (
     <div className="px-[18px] pb-[18px]">
       <SetMobileHeader title={t('field.schedule.title')} sub={t('field.schedule.sub')} />
-
-      {events.length === 0 ? (
-        <div className="pt-[18px]">
-          {/* §4.13.2's own empty state. Not a spinner, not omitted. */}
-          <EmptyState>{t('field.schedule.empty')}</EmptyState>
-        </div>
-      ) : (
-        <>
-          <ScrollToToday />
-
-          {/* Past days sit ABOVE today — "reachable by scrolling up" (§4.13.2),
-              asserted by A-44d. They are not dropped. */}
-          {past.map((day) => (
-            <DayGroup key={day} day={day} events={byDay.get(day)!} t={t} locale={locale} />
-          ))}
-
-          {/* The anchor ScrollToToday targets. It exists whether or not today
-              itself has events, so the viewport lands in the right place on a
-              day with nothing scheduled. */}
-          <div id="m-today" data-testid="m-today-anchor" />
-
-          {upcoming.length === 0 ? (
-            <div className="pt-[18px]">
-              <EmptyState>{t('field.schedule.empty')}</EmptyState>
-            </div>
-          ) : (
-            upcoming.map((day) => (
-              <DayGroup
-                key={day}
-                day={day}
-                events={byDay.get(day)!}
-                isToday={day === today}
-                t={t}
-                locale={locale}
-              />
-            ))
-          )}
-        </>
-      )}
+      <DayView
+        events={events}
+        today={companyToday(timeSettings.timezone)}
+        locale={dateLocale(lang)}
+        role={role}
+        projects={projects}
+        members={members.map((m) => ({
+          id: m.id,
+          display_name: m.display_name,
+          member_type: m.member_type,
+          sub_type: m.sub_type ?? null,
+        }))}
+        sourceKey={SOURCE_KEY}
+      />
     </div>
-  );
-}
-
-function DayGroup({
-  day,
-  events,
-  isToday = false,
-  t,
-  locale,
-}: {
-  day: string;
-  events: CalendarEvent[];
-  isToday?: boolean;
-  t: T;
-  locale: string;
-}) {
-  return (
-    <section data-testid="m-day-group" data-day={day}>
-      <SectionLabel>
-        {formatDay(day, locale)}
-        {isToday ? ` · ${t('field.schedule.today')}` : ''}
-      </SectionLabel>
-      <ul className="rounded-[15px] border border-m6m-border bg-m6m-card px-[12px]">
-        {events.map((e) => (
-          <ListRow key={`${e.source}-${e.id}`} testId="m-event-row">
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-[17px] font-bold leading-tight text-m6m-navy">
-                {e.title}
-              </p>
-              {/* §2 — every date is mono. */}
-              <p className="mt-[2px] font-mono text-[11px] text-m6m-muted">
-                {formatRange(e.start_date, e.end_date)}
-              </p>
-              {/* §4.13.2 — project_label and member_name render WHERE SET. A
-                  general entry with no project has a null project_label, and
-                  inspections have a null member_name; A-44e asserts that neither
-                  leaves an empty slot behind. */}
-              {e.project_label || e.member_name ? (
-                <p className="mt-[2px] truncate text-[13px] text-m6m-muted">
-                  {[e.project_label, e.member_name].filter(Boolean).join(' · ')}
-                </p>
-              ) : null}
-            </div>
-            {/* Source is a TEXT label, never colour alone (A-44c). `color` may
-                tint the marker beside it; it may not carry the meaning. */}
-            <span
-              data-testid="m-event-source"
-              className="flex shrink-0 items-center gap-[5px] font-mono text-[11px] font-semibold text-m6m-muted"
-            >
-              <span
-                aria-hidden
-                className="block h-[8px] w-[8px] rounded-full"
-                style={{ background: e.color ?? '#687081' }}
-              />
-              {t(SOURCE_KEY[e.source])}
-            </span>
-          </ListRow>
-        ))}
-      </ul>
-    </section>
   );
 }

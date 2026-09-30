@@ -6,10 +6,21 @@ import { SectionHeader } from '../section-header';
 import { getMobileT, getMyLanguage } from '@/lib/i18n/server';
 import { dateLocale } from '@/lib/i18n/dates';
 import type { MsgKey } from '@/lib/i18n/messages';
-import { EmptyState, ListRow, SectionLabel } from '../../../mobile-ui';
+import { DayView } from '../../../schedule/day-view';
+import { getMyProfile } from '@/lib/services/profiles';
+import { getMembers } from '@/lib/services/members';
+import { getProject } from '@/lib/services/projects';
+import { canSchedule } from '@/lib/schedule/authority';
 
-// M6M §4.11.2 — M-12 · Schedule. The project's calendar as a LIST, not a grid:
-// a month grid at 402px cannot carry a legible event label.
+// M6M §4.11.2 — M-12 · Schedule.
+//
+// ⚠️ OVERTURNED [S121 5-A, RULED Josh 2026-09-30] — quoted, not deleted:
+//   M-12: "The project's calendar, as a list — not a grid. A month grid at
+//          402px cannot carry a legible event label."
+//   M-12: "CUT: create/edit/assign — schedule-client.ts's writes are desktop
+//          flows." (the line below, kept as written)
+// Now the SAME one-day column as /m/schedule, fixed to this project, with the
+// scheduling sheet. The month-grid objection stands: still no grid here.
 //
 // SAME UNION AS M-3's "Up next" (D-24) — getCalendarEvents({ projectId }) — so
 // the two can never disagree about the next event (A-32b).
@@ -21,7 +32,9 @@ import { EmptyState, ListRow, SectionLabel } from '../../../mobile-ui';
 //
 // CUT: a Gantt or dependency view. getDependencies() exists, but nothing specced
 // a mobile dependency visualisation and it is not derivable from locked patterns.
-// CUT: create/edit/assign — schedule-client.ts's writes are desktop flows.
+// [S121 Q12, RULED Josh: STILL no Gantt on mobile.]
+// SUPERSEDED [S121]: "CUT: create/edit/assign — schedule-client.ts's writes are
+// desktop flows." Scheduling from the phone is now the point.
 
 // S110 H — message keys, resolved with t() at render time.
 const SOURCE_KEY: Record<CalendarEvent['source'], MsgKey> = {
@@ -35,92 +48,40 @@ const SOURCE_KEY: Record<CalendarEvent['source'], MsgKey> = {
   compliance: 'project.schedule.source.compliance',
 };
 
-// [S112 audit F4] `locale` from dateLocale(): Spanish readers were shown English
-// weekdays and months. The zone stays UTC — these are date-only values.
-function formatDay(iso: string, locale: string): string {
-  const [y, m, d] = iso.split('-').map(Number);
-  return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString(locale, {
-    weekday: 'short',
-    month: 'short',
-    day: 'numeric',
-    timeZone: 'UTC',
-  });
-}
-
 export default async function ProjectSchedulePage({
   params,
 }: {
   params: { projectId: string };
 }) {
-  const [events, timeSettings, t, lang] = await Promise.all([
+  const [events, timeSettings, t, lang, profile, project] = await Promise.all([
     getCalendarEvents({ projectId: params.projectId }),
     getCompanyTimeSettings(),
     getMobileT(),
     getMyLanguage(),
+    getMyProfile(),
+    getProject(params.projectId),
   ]);
-  const locale = dateLocale(lang);
-
-  const today = companyToday(timeSettings.timezone);
-
-  // getCalendarEvents sorts plain ascending (schedule.ts:200). Rendering that
-  // untouched would put last month at the top — A-32 requires today first with
-  // past days ABOVE, so the split is explicit.
-  const byDay = new Map<string, CalendarEvent[]>();
-  for (const e of events) {
-    const bucket = byDay.get(e.start_date);
-    if (bucket) bucket.push(e);
-    else byDay.set(e.start_date, [e]);
-  }
-  const days = [...byDay.keys()].sort();
-  const past = days.filter((d) => d < today);
-  const upcoming = days.filter((d) => d >= today);
+  const role = profile?.role ?? null;
+  const members = canSchedule(role) ? await getMembers() : [];
 
   return (
     <div className="px-[18px] pb-[18px]">
       <SectionHeader projectId={params.projectId} title={t('project.tile.schedule')} />
-
-      {events.length === 0 ? (
-        <div className="pt-[18px]">
-          <EmptyState>{t('project.schedule.empty')}</EmptyState>
-        </div>
-      ) : (
-        [...past, ...upcoming].map((day) => (
-          <section key={day} data-testid="m-day-group" data-day={day}>
-            <SectionLabel>
-              {formatDay(day, locale)}
-              {day === today ? t('project.schedule.todaySuffix') : ''}
-            </SectionLabel>
-            <ul className="rounded-[15px] border border-m6m-border bg-m6m-card px-[12px]">
-              {byDay.get(day)!.map((e) => (
-                <ListRow key={`${e.source}-${e.id}`} testId="m-event-row">
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-[17px] font-bold leading-tight text-m6m-navy">
-                      {e.title}
-                    </p>
-                    <p className="mt-[2px] font-mono text-[11px] text-m6m-muted">
-                      {e.start_date === e.end_date
-                        ? e.start_date
-                        : `${e.start_date} – ${e.end_date}`}
-                    </p>
-                    {e.member_name ? (
-                      <p className="mt-[2px] truncate text-[13px] text-m6m-muted">
-                        {e.member_name}
-                      </p>
-                    ) : null}
-                  </div>
-                  {/* Source is a TEXT label, never colour alone. */}
-                  <span
-                    data-testid="m-event-source"
-                    className="shrink-0 font-mono text-[11px] font-semibold text-m6m-muted"
-                  >
-                    {t(SOURCE_KEY[e.source])}
-                  </span>
-                </ListRow>
-              ))}
-            </ul>
-          </section>
-        ))
-      )}
+      <DayView
+        events={events}
+        today={companyToday(timeSettings.timezone)}
+        locale={dateLocale(lang)}
+        role={role}
+        projects={project ? [{ id: project.id, name: project.name }] : []}
+        fixedProjectId={params.projectId}
+        members={members.map((m) => ({
+          id: m.id,
+          display_name: m.display_name,
+          member_type: m.member_type,
+          sub_type: m.sub_type ?? null,
+        }))}
+        sourceKey={SOURCE_KEY}
+      />
     </div>
   );
 }

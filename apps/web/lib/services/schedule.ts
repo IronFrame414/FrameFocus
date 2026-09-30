@@ -270,3 +270,24 @@ const COMPLIANCE_CALENDAR_LABELS: Record<ComplianceDocType, string> = {
   w9: 'W-9',
   other: 'Compliance doc',
 };
+
+/**
+ * [S121 5-D] The scheduling sheet's job picker: OPEN jobs (active, on hold —
+ * the same "open" as the sign-out picker, ASK-27), scoped by the caller's RLS.
+ * Ordered by name, then id (stable).
+ */
+export async function getScheduleJobChoices(): Promise<{ id: string; name: string }[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from('projects')
+    .select('id, name')
+    .eq('is_deleted', false)
+    .in('status', ['active', 'on_hold'])
+    .order('name', { ascending: true })
+    .order('id', { ascending: true });
+  if (error) {
+    console.error('[getScheduleJobChoices]', error.message);
+    return [];
+  }
+  return (data ?? []) as { id: string; name: string }[];
+}

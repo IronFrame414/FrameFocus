@@ -356,7 +356,11 @@ test.describe('M-28 · Team', () => {
     expect(crew + subs).toBe(all);
   });
 
-  test('A-47e · null schedule_color falls back to amber, never untinted', async ({ page }) => {
+  // [S121 5-G] Title updated in place — _superseded:_ "A-47e · null
+  // schedule_color falls back to amber, never untinted". The fallback is now
+  // the shared schedule colour (never amber-only); the assertion — never
+  // untinted — is unchanged.
+  test('A-47e · null schedule_color falls back to the shared schedule colour, never untinted', async ({ page }) => {
     await page.goto('/m/team');
     const avatars = page.getByTestId('m-member-avatar');
     const n = await avatars.count();

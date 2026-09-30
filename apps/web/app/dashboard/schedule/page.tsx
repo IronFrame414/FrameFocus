@@ -1,7 +1,6 @@
 import { createClient } from '@/lib/supabase-server';
-import { getCalendarEvents } from '@/lib/services/schedule';
+import { getCalendarEvents, getScheduleJobChoices } from '@/lib/services/schedule';
 import { getMembers, getMyMember } from '@/lib/services/members';
-import { SIGNOUT_OPEN_PROJECT_STATUSES } from '@/lib/material-signouts/signout';
 import { canSchedule } from '@/lib/schedule/authority';
 import { getCompanyTimeSettings } from '@/lib/services/company';
 import { companyToday } from '@framefocus/shared/utils/dates';
@@ -43,15 +42,7 @@ export default async function SchedulePage() {
       .order('start_date', { ascending: true, nullsFirst: false }),
     getCompanyTimeSettings(),
     // [S121 5-D] The scheduling sheet's jobs: open (active + on hold), RLS-scoped.
-    may
-      ? supabase
-          .from('projects')
-          .select('id, name')
-          .eq('is_deleted', false)
-          .in('status', [...SIGNOUT_OPEN_PROJECT_STATUSES])
-          .order('name', { ascending: true })
-          .order('id', { ascending: true })
-      : Promise.resolve({ data: [] as { id: string; name: string }[] }),
+    may ? getScheduleJobChoices() : Promise.resolve([]),
     may ? getMembers() : Promise.resolve([]),
   ]);
 
@@ -69,7 +60,7 @@ export default async function SchedulePage() {
           calendar={
             <CompanyCalendar
               events={events}
-              projects={(openJobs.data ?? []) as { id: string; name: string }[]}
+              projects={openJobs}
               members={members.map((m) => ({
                 id: m.id,
                 display_name: m.display_name,

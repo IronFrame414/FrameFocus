@@ -7,6 +7,7 @@ import {
   updateMemberProfile,
   type WriteOutcome,
 } from '@/lib/services/members-client';
+import { ColourPicker } from '@/components/schedule/colour-picker';
 import { useT } from '@/components/i18n/language-provider';
 import type { MsgKey, T } from '@/lib/i18n/messages';
 import { SetMobileHeader } from '../../../mobile-header';
@@ -71,7 +72,6 @@ const ACTIVE = [
 ];
 
 // A hex code, not language.
-const DEFAULT_TINT = '#f59e0b';
 
 export type TeamEditable = {
   id: string;
@@ -112,7 +112,7 @@ export function TeamEditForm({ member }: { member: TeamEditable }) {
 
   const [displayName, setDisplayName] = useState(member.display_name);
   const [memberType, setMemberType] = useState<string | null>(member.member_type);
-  const [scheduleColor, setScheduleColor] = useState(member.schedule_color ?? '');
+  const [scheduleColor, setScheduleColor] = useState<string | null>(member.schedule_color ?? null);
   const [active, setActive] = useState<string | null>(member.is_deleted ? 'inactive' : 'active');
 
   const [firstName, setFirstName] = useState(member.first_name);
@@ -140,7 +140,8 @@ export function TeamEditForm({ member }: { member: TeamEditable }) {
     const roster = await updateMember(member.id, {
       display_name: displayName.trim(),
       member_type: (memberType ?? member.member_type) as 'crew' | 'subcontractor',
-      schedule_color: scheduleColor.trim() || null,
+      // [S121 5-G] Crew only — a sub's colour is its trade's, never stored.
+      ...(memberType === 'subcontractor' ? {} : { schedule_color: scheduleColor }),
       is_deleted: active === 'inactive',
     });
 
@@ -212,13 +213,18 @@ export function TeamEditForm({ member }: { member: TeamEditable }) {
         />
       </div>
 
-      <TextField
-        label={t('directory.team.field.scheduleColour')}
-        value={scheduleColor}
-        onChange={setScheduleColor}
-        testId="m-team-edit-color"
-        placeholder={DEFAULT_TINT}
-      />
+      {/* [S121 5-G] The shared picker. SUPERSEDED: a free-text hex field
+          (m-team-edit-color, placeholder the flat amber DEFAULT_TINT). */}
+      <div className="mt-[14px]">
+        <FieldLabel>{t('sched.colour.label')}</FieldLabel>
+        <ColourPicker
+          memberId={member.id}
+          memberType={memberType}
+          value={scheduleColor}
+          onChange={setScheduleColor}
+          testIdPrefix="m-team-edit-color"
+        />
+      </div>
 
       {/* ── THE PROFILE HALF ───────────────────────────────────────────────── */}
       <div className="mt-[20px] border-t border-m6m-border pt-[14px]">

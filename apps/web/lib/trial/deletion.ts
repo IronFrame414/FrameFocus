@@ -355,7 +355,9 @@ export const COMPANY_TABLES: string[] = [
   'material_signout_photos', 'material_signouts',
   'safety_incident_injuries', 'safety_incident_witnesses', 'safety_incidents',
   'punch_list_items', 'punch_lists',
-  'task_dependencies', 'tasks', 'phases', 'inspections', 'schedule_entries',
+  // [S121 5-C] task_assignees references tasks (CASCADE) and company_members
+  // (NO ACTION), so it is walked before both.
+  'task_assignees', 'task_dependencies', 'tasks', 'phases', 'inspections', 'schedule_entries',
   'time_session_rate_snapshots', 'time_edit_logs', 'time_segments', 'time_clock_sessions',
   // Estimates redesign children (S103): estimate_events (cascades with estimates),
   // estimate_award_bases + estimate_sub_bid_requests (hang off estimates), and

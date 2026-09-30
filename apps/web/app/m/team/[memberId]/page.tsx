@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { scheduleColor } from '@framefocus/shared/utils/schedule-colors';
 import { notFound } from 'next/navigation';
 import { getMember } from '@/lib/services/members';
 import { getMyProfile } from '@/lib/services/profiles';
@@ -71,13 +72,21 @@ export default async function MemberDetailPage({
       <DeniedNotice kind={searchParams.denied} t={t} />
 
       <header className="mb-[14px] flex items-center gap-[12px]">
-        {/* schedule_color tint with §2's amber as the null fallback — the same
-            rule M-18 and M-28 use, so the three agree by construction (A-47e). */}
+        {/* [S121 5-G] THE schedule colour (the shared rule), the same as
+            M-28's list and every calendar bar. SUPERSEDED: "schedule_color
+            tint with §2's amber as the null fallback". */}
         <span
           data-testid="m-member-avatar"
           aria-hidden
-          className="flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-full font-mono text-[17px] font-semibold text-m6m-navy"
-          style={{ background: member.schedule_color ?? '#f59e0b' }}
+          className="flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-full font-mono text-[17px] font-semibold text-white"
+          style={{
+            background: scheduleColor({
+              memberId: member.id,
+              memberType: member.member_type,
+              explicit: member.schedule_color,
+              trade: member.trade ?? null,
+            }),
+          }}
         >
           {initials(member.display_name)}
         </span>

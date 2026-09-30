@@ -1,4 +1,5 @@
 import { getMembers } from '@/lib/services/members';
+import { scheduleColor } from '@framefocus/shared/utils/schedule-colors';
 import { getMyProfile } from '@/lib/services/profiles';
 import { canReachDetail } from '@/app/m/detail-access';
 import { getMobileT } from '@/lib/i18n/server';
@@ -93,15 +94,18 @@ export default async function MobileTeamPage({
           {members.map((m) => (
             <MemberRow key={m.id} href={canOpen ? `/m/team/${m.id}` : null} label={m.display_name}>
               <span className="flex items-center gap-[10px]">
-                {/* §4.13.5 — initials avatar tinted with schedule_color, FALLING
-                  BACK TO §2's AMBER when null. The column is nullable and the
-                  null case is the one a build skips; A-47e asserts it. */}
+                {/* §4.13.5 — initials avatar tinted with THE schedule colour.
+                  [S121 5-G] SUPERSEDED: "FALLING BACK TO §2's AMBER when null"
+                  — desktop fell back to a hash palette, so one member had two
+                  colours. Now the shared rule (crew: picked or a stable auto
+                  colour; subs/vendors: their trade's). White initials: every
+                  palette colour is ≥4.5:1 against white. Never untinted (A-47e). */}
                 <span
                   data-testid="m-member-avatar"
-                  data-tint={m.schedule_color ?? '#f59e0b'}
+                  data-tint={scheduleColor({ memberId: m.id, memberType: m.member_type, explicit: m.schedule_color, trade: m.trade ?? null })}
                   aria-hidden
-                  className="flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-full font-mono text-[13px] font-semibold text-m6m-navy"
-                  style={{ background: m.schedule_color ?? '#f59e0b' }}
+                  className="flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-full font-mono text-[13px] font-semibold text-white"
+                  style={{ background: scheduleColor({ memberId: m.id, memberType: m.member_type, explicit: m.schedule_color, trade: m.trade ?? null }) }}
                 >
                   {initials(m.display_name)}
                 </span>

@@ -56,7 +56,7 @@ export const EXPORT_CATEGORIES: ExportCategory[] = [
   {
     key: 'projects',
     label: 'Projects & schedule',
-    tables: ['projects', 'project_assignments', 'tasks', 'project_name_history'], // [S118 item 14]
+    tables: ['projects', 'project_assignments', 'tasks', 'task_assignees', 'project_name_history'], // [S118 item 14] + [S121 5-C]
     referencesFiles: true,
   },
   {
