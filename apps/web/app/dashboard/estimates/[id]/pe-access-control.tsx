@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import type { EstimatePeAccess } from '@/lib/services/estimate-assignments';
 import { setEstimatePeAccess } from '@/lib/services/estimate-assignments-client';
+import { showPeControls } from '@/lib/estimates/pe-visibility';
 
 // S119 D-2 — Owner/Admin choose which Project Executive this estimate is
 // assigned to [Josh, 2026-09-29]: "I also want to be able to add access to a PE
@@ -23,7 +24,9 @@ export function EstimatePeAccessControl({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  if (access.executives.length === 0 && !access.assignedMemberId) return null;
+  // [S121 Part 8] PRESENTATION ONLY — not a security control (see
+  // lib/estimates/pe-visibility.ts). No live PE and none assigned → no control.
+  if (!showPeControls(access)) return null;
 
   async function onChange(next: string) {
     const previous = value;
