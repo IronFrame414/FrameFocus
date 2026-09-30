@@ -19,7 +19,7 @@ import type { Phase, Task, TaskDependency } from '@/lib/services/tasks-client';
 import { createPhase, deletePhase } from '@/lib/services/tasks-client';
 import { rollupPhases, TASK_STATUS_LABELS } from '@/lib/services/tasks-shared';
 import { Calendar } from '@/components/schedule/calendar';
-import { Gantt } from '@/components/schedule/gantt';
+import { Gantt, ganttGroupsFromRollups } from '@/components/schedule/gantt';
 import { assigneeColor } from '@/components/schedule/member-color';
 import { TaskForm } from './task-form';
 import { color, font } from '@/lib/theme';
@@ -410,7 +410,14 @@ export function SchedulePanel({
       )}
 
       {view === 'gantt' && (
-        <Gantt rollups={rollups} unphased={unphased} dependencies={dependencies} onSelect={openEdit} />
+        <Gantt
+          groups={ganttGroupsFromRollups(rollups, unphased)}
+          dependencies={dependencies}
+          onSelect={(id) => {
+            const t = tasks.find((x) => x.id === id);
+            if (t) openEdit(t);
+          }}
+        />
       )}
 
       {view === 'calendar' && <Calendar events={calendarEvents} onSelect={onEventSelect} />}

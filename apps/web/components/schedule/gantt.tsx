@@ -2,13 +2,106 @@
 
 import type { Task, TaskDependency } from '@/lib/services/tasks-shared';
 import type { PhaseRollup } from '@/lib/services/tasks-shared';
+import type { CalendarEvent } from '@/lib/services/schedule';
 import { assigneeColor } from './member-color';
 
+// [S121 5-B, RULED Josh ASK-2] ONE BAR PER TASK; the people are ON the bar.
+// The Gantt now takes GROUPS of ITEMS so the project panel (phases +
+// dependency arrows) and the calendar's Gantt toggle (tasks grouped by job,
+// from the calendar's own events) render through this ONE component — not a
+// second Gantt (PARITY: one mechanism).
+
+export interface GanttItem {
+  id: string;
+  title: string;
+  start: string; // YYYY-MM-DD
+  end: string; // YYYY-MM-DD
+  color: string;
+  /** Every person on the task, comma-joined. */
+  names: string;
+  done: boolean;
+}
+
+export interface GanttGroup {
+  key: string;
+  label: string;
+  /** A phase's roll-up: its percent and its bracket (min start → max end). */
+  percent?: number | null;
+  start?: string | null;
+  end?: string | null;
+  items: GanttItem[];
+}
+
 interface GanttProps {
-  rollups: PhaseRollup[];
-  unphased: Task[];
-  dependencies: TaskDependency[];
-  onSelect?: (task: Task) => void;
+  groups: GanttGroup[];
+  dependencies?: Pick<TaskDependency, 'id' | 'predecessor_id' | 'successor_id'>[];
+  onSelect?: (id: string) => void;
+}
+
+function itemFromTask(task: Task): GanttItem {
+  return {
+    id: task.id,
+    title: task.title,
+    start: task.start_date ?? task.due_date!,
+    end: task.due_date ?? task.start_date!,
+    // The first assignee's colour; every name on the bar.
+    color: assigneeColor(task.assignees[0]),
+    names: task.assignees.map((a) => a.display_name).join(', '),
+    done: task.status === 'complete',
+  };
+}
+
+/** The project panel's shape: phases (with roll-ups) then "No phase". */
+export function ganttGroupsFromRollups(rollups: PhaseRollup[], unphased: Task[]): GanttGroup[] {
+  const groups: GanttGroup[] = rollups.map((r) => ({
+    key: `phase-${r.phase.id}`,
+    label: r.phase.name,
+    percent: r.percent,
+    start: r.start_date,
+    end: r.end_date,
+    items: r.tasks.filter((t) => t.is_scheduled).map(itemFromTask),
+  }));
+  const dated = unphased.filter((t) => t.is_scheduled);
+  if (dated.length > 0) groups.push({ key: 'no-phase', label: 'No phase', items: dated.map(itemFromTask) });
+  return groups;
+}
+
+/**
+ * The calendar's shape: its TASK events (one per person) folded back to ONE
+ * item per task, grouped by job. The colour is the first person's; the names
+ * are everyone's.
+ */
+export function ganttGroupsFromEvents(events: CalendarEvent[]): GanttGroup[] {
+  const byTask = new Map<string, { e: CalendarEvent; names: string[] }>();
+  for (const e of events) {
+    if (e.source !== 'task') continue;
+    const cur = byTask.get(e.id);
+    if (cur) {
+      if (e.member_name) cur.names.push(e.member_name);
+    } else byTask.set(e.id, { e, names: e.member_name ? [e.member_name] : [] });
+  }
+  const byProject = new Map<string, GanttItem[]>();
+  for (const { e, names } of byTask.values()) {
+    const label = e.project_label ?? 'Job';
+    const list = byProject.get(label) ?? [];
+    list.push({
+      id: e.id,
+      title: e.title,
+      start: e.start_date,
+      end: e.end_date,
+      color: e.color ?? '#475569',
+      names: names.join(', '),
+      done: e.detail.status === 'complete',
+    });
+    byProject.set(label, list);
+  }
+  return [...byProject.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([label, items]) => ({
+      key: `job-${label}`,
+      label,
+      items: items.sort((x, y) => x.start.localeCompare(y.start) || x.id.localeCompare(y.id)),
+    }));
 }
 
 const DAY_WIDTH = 28;
@@ -26,8 +119,8 @@ function daysBetween(a: Date, b: Date): number {
 interface GanttRow {
   kind: 'phase' | 'task';
   label: string;
-  task?: Task;
-  rollup?: PhaseRollup;
+  item?: GanttItem;
+  group?: GanttGroup;
 }
 
 /**
@@ -36,26 +129,15 @@ interface GanttRow {
  * on an SVG overlay. Undated (backlog) tasks are listed separately by the
  * parent panel — they never render here.
  */
-export function Gantt({ rollups, unphased, dependencies, onSelect }: GanttProps) {
-  // Rows: phase header + its dated tasks, then unphased dated tasks
+export function Gantt({ groups, dependencies = [], onSelect }: GanttProps) {
+  // Rows: group header + its items
   const rows: GanttRow[] = [];
-  for (const rollup of rollups) {
-    rows.push({ kind: 'phase', label: rollup.phase.name, rollup });
-    for (const task of rollup.tasks) {
-      if (task.is_scheduled) rows.push({ kind: 'task', label: task.title, task });
-    }
-  }
-  const datedUnphased = unphased.filter((t) => t.is_scheduled);
-  if (datedUnphased.length > 0) {
-    rows.push({
-      kind: 'phase',
-      label: 'No phase',
-      rollup: undefined,
-    });
-    for (const task of datedUnphased) rows.push({ kind: 'task', label: task.title, task });
+  for (const group of groups) {
+    rows.push({ kind: 'phase', label: group.label, group });
+    for (const item of group.items) rows.push({ kind: 'task', label: item.title, item });
   }
 
-  const datedTasks = rows.filter((r) => r.kind === 'task').map((r) => r.task!);
+  const datedTasks = rows.filter((r) => r.kind === 'task').map((r) => r.item!);
   if (datedTasks.length === 0) {
     return (
       <p style={{ fontSize: '0.875rem', color: '#6b7280', padding: '1.5rem 0' }}>
@@ -65,8 +147,8 @@ export function Gantt({ rollups, unphased, dependencies, onSelect }: GanttProps)
   }
 
   // Timeline range with 2-day padding each side
-  const starts = datedTasks.map((t) => t.start_date ?? t.due_date!).sort();
-  const ends = datedTasks.map((t) => t.due_date ?? t.start_date!).sort();
+  const starts = datedTasks.map((t) => t.start).sort();
+  const ends = datedTasks.map((t) => t.end).sort();
   const rangeStart = parseDate(starts[0]);
   rangeStart.setDate(rangeStart.getDate() - 2);
   const rangeEnd = parseDate(ends[ends.length - 1]);
@@ -80,14 +162,14 @@ export function Gantt({ rollups, unphased, dependencies, onSelect }: GanttProps)
   // Bar geometry per task id (for bars and dependency lines)
   const rowIndexByTask = new Map<string, number>();
   rows.forEach((row, i) => {
-    if (row.kind === 'task' && row.task) rowIndexByTask.set(row.task.id, i);
+    if (row.kind === 'task' && row.item) rowIndexByTask.set(row.item.id, i);
   });
 
-  function barFor(task: Task): { x: number; width: number; y: number } | null {
-    const rowIndex = rowIndexByTask.get(task.id);
+  function barFor(item: GanttItem): { x: number; width: number; y: number } | null {
+    const rowIndex = rowIndexByTask.get(item.id);
     if (rowIndex === undefined) return null;
-    const start = task.start_date ?? task.due_date!;
-    const end = task.due_date ?? task.start_date!;
+    const start = item.start;
+    const end = item.end;
     const x = xFor(start);
     const width = (daysBetween(parseDate(start), parseDate(end)) + 1) * DAY_WIDTH;
     const y = rowIndex * ROW_HEIGHT;
@@ -133,12 +215,12 @@ export function Gantt({ rollups, unphased, dependencies, onSelect }: GanttProps)
                 textOverflow: 'ellipsis',
                 cursor: row.kind === 'task' && onSelect ? 'pointer' : 'default',
               }}
-              onClick={() => row.kind === 'task' && row.task && onSelect?.(row.task)}
+              onClick={() => row.kind === 'task' && row.item && onSelect?.(row.item.id)}
             >
               {row.kind === 'task' ? `· ${row.label}` : row.label}
-              {row.kind === 'phase' && row.rollup && (
+              {row.kind === 'phase' && row.group?.percent != null && (
                 <span style={{ marginLeft: '0.375rem', fontWeight: 400, fontSize: '0.6875rem', color: '#6b7280' }}>
-                  {row.rollup.percent}%
+                  {row.group.percent}%
                 </span>
               )}
             </div>
@@ -184,8 +266,8 @@ export function Gantt({ rollups, unphased, dependencies, onSelect }: GanttProps)
             {/* Row stripes + phase brackets */}
             {rows.map((row, i) => {
               if (row.kind !== 'phase') return null;
-              const rollup = row.rollup;
-              if (!rollup?.start_date || !rollup.end_date) {
+              const rollup = row.group;
+              if (!rollup?.start || !rollup.end) {
                 return (
                   <div
                     key={`stripe-${i}`}
@@ -201,10 +283,9 @@ export function Gantt({ rollups, unphased, dependencies, onSelect }: GanttProps)
                   />
                 );
               }
-              const x = xFor(rollup.start_date);
+              const x = xFor(rollup.start);
               const width =
-                (daysBetween(parseDate(rollup.start_date), parseDate(rollup.end_date)) + 1) *
-                DAY_WIDTH;
+                (daysBetween(parseDate(rollup.start), parseDate(rollup.end)) + 1) * DAY_WIDTH;
               return (
                 <div key={`stripe-${i}`}>
                   <div
@@ -236,19 +317,19 @@ export function Gantt({ rollups, unphased, dependencies, onSelect }: GanttProps)
 
             {/* Task bars */}
             {rows.map((row, i) => {
-              if (row.kind !== 'task' || !row.task) return null;
-              const task = row.task;
+              if (row.kind !== 'task' || !row.item) return null;
+              const task = row.item;
               const bar = barFor(task);
               if (!bar) return null;
               // [S121 5-C / ASK-2] ONE bar per task; its colour is the first
               // assignee's, and every name is on it.
-              const color = assigneeColor(task.assignees[0]);
-              const names = task.assignees.map((a) => a.display_name).join(', ');
-              const done = task.status === 'complete';
+              const color = task.color;
+              const names = task.names;
+              const done = task.done;
               return (
                 <button
                   key={task.id}
-                  onClick={() => onSelect?.(task)}
+                  onClick={() => onSelect?.(task.id)}
                   data-testid="gantt-bar"
                   title={`${task.title}${names ? ` — ${names}` : ''}`}
                   style={{
@@ -272,6 +353,7 @@ export function Gantt({ rollups, unphased, dependencies, onSelect }: GanttProps)
                 >
                   {done ? '✓ ' : ''}
                   {task.title}
+                  {names ? ` · ${names}` : ''}
                 </button>
               );
             })}
@@ -286,8 +368,8 @@ export function Gantt({ rollups, unphased, dependencies, onSelect }: GanttProps)
                 const fromRow = rowIndexByTask.get(dep.predecessor_id);
                 const toRow = rowIndexByTask.get(dep.successor_id);
                 if (fromRow === undefined || toRow === undefined) return null;
-                const fromTask = rows[fromRow].task!;
-                const toTask = rows[toRow].task!;
+                const fromTask = rows[fromRow].item!;
+                const toTask = rows[toRow].item!;
                 const fromBar = barFor(fromTask);
                 const toBar = barFor(toTask);
                 if (!fromBar || !toBar) return null;

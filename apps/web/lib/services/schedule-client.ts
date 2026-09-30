@@ -150,3 +150,101 @@ export async function deleteInspection(
   if (!applied(data)) return { success: false, error: DISCARDED };
   return { success: true };
 }
+
+// ── [S121 Part 5] Scheduling from the calendar (desktop AND /m — one set) ──
+//
+// Who may: owner, admin, PM, foreman [RULED Josh, ASK-5] — plus a PE on their
+// own project (the existing arm, untouched — ASK-31). NOT crew, NOT a
+// subcontractor. The database decides (schedule_entries_insert/update_authorized,
+// tasks_update_authorized, task_assignees_*); these only write.
+
+/** [S121 5-E] Move / resize a general entry. end = start stores NULL (one day). */
+export async function updateScheduleEntryDates(
+  id: string,
+  start: string,
+  end: string
+): Promise<{ success: boolean; error?: string }> {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from('schedule_entries')
+    .update({ entry_date: start, end_date: end === start ? null : end })
+    .eq('id', id)
+    .select('id');
+  if (error) return { success: false, error: error.message };
+  if (!applied(data)) return { success: false, error: DISCARDED };
+  return { success: true };
+}
+
+/** [S121 5-E] Move / resize a task's own dates (shared by everyone on it). */
+export async function updateTaskDates(
+  id: string,
+  start: string,
+  end: string
+): Promise<{ success: boolean; error?: string }> {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from('tasks')
+    .update({ start_date: start, due_date: end })
+    .eq('id', id)
+    .select('id');
+  if (error) return { success: false, error: error.message };
+  if (!applied(data)) return { success: false, error: DISCARDED };
+  return { success: true };
+}
+
+/**
+ * [S121 5-E] THE move, for any bar. ⚠️ A resize that would put the end before
+ * the start is CLAMPED by the caller (lib/schedule/drag.ts) and never reaches
+ * here inverted; this refuses one anyway, in words.
+ */
+export async function moveCalendarEvent(
+  e: Pick<CalendarEvent, 'id' | 'source'>,
+  start: string,
+  end: string
+): Promise<{ success: boolean; error?: string }> {
+  if (end < start) return { success: false, error: 'A bar cannot end before it starts.' };
+  if (e.source === 'task') return updateTaskDates(e.id, start, end);
+  if (e.source === 'general') return updateScheduleEntryDates(e.id, start, end);
+  return { success: false, error: 'This item cannot be moved.' };
+}
+
+/** [S121 5-D] Member ids assigned to a project (live rows). */
+export async function listProjectMemberIds(projectId: string): Promise<string[]> {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from('project_assignments')
+    .select('member_id')
+    .eq('project_id', projectId)
+    .eq('is_deleted', false);
+  if (error) return [];
+  return [...new Set((data ?? []).map((r) => r.member_id as string).filter(Boolean))];
+}
+
+/** [S121 5-D] A project's open tasks, with their dates and people. */
+export async function listProjectTasksForSchedule(projectId: string): Promise<
+  { id: string; title: string; start_date: string | null; due_date: string | null; assignee_ids: string[] }[]
+> {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from('tasks')
+    .select('id, title, start_date, due_date, assignees:task_assignees(member_id, is_deleted)')
+    .eq('project_id', projectId)
+    .eq('is_deleted', false)
+    .neq('status', 'complete')
+    .order('title', { ascending: true })
+    .order('id', { ascending: true });
+  if (error) return [];
+  return ((data ?? []) as unknown as {
+    id: string;
+    title: string;
+    start_date: string | null;
+    due_date: string | null;
+    assignees: { member_id: string; is_deleted: boolean }[] | null;
+  }[]).map((t) => ({
+    id: t.id,
+    title: t.title,
+    start_date: t.start_date,
+    due_date: t.due_date,
+    assignee_ids: (t.assignees ?? []).filter((a) => !a.is_deleted).map((a) => a.member_id),
+  }));
+}

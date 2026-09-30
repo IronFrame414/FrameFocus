@@ -79,7 +79,7 @@ export interface CalendarEvent {
 }
 
 const ENTRY_JOIN =
-  '*, member:company_members(id, display_name, member_type, schedule_color, sub:subcontractors(trade_type)), project:projects(id, name, project_number)';
+  '*, member:company_members(id, display_name, member_type, schedule_color, sub:subcontractors!subcontractors_member_id_fkey(trade_type)), project:projects(id, name, project_number)';
 
 export async function getScheduleEntries(filters?: {
   projectId?: string;

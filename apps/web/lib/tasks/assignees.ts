@@ -17,7 +17,7 @@ export interface TaskAssignee {
 
 /** The embed every task read uses (PostgREST select fragment). */
 export const TASK_ASSIGNEES_EMBED =
-  'assignees:task_assignees(member_id, is_deleted, created_at, member:company_members(id, display_name, schedule_color, member_type, sub:subcontractors(trade_type)))';
+  'assignees:task_assignees(member_id, is_deleted, created_at, member:company_members(id, display_name, schedule_color, member_type, sub:subcontractors!subcontractors_member_id_fkey(trade_type)))';
 
 type RawAssignee = {
   member_id: string;
