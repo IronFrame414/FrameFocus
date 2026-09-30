@@ -410,3 +410,30 @@ Pattern to copy: `/m` check-in `check-in-form.tsx:331-376` — a wide camera lab
 - Tests inverted in place, old assertions quoted: `test/pwa-manifest.test.ts` (was `not.toBe('black-translucent')`, now `toBe('black-translucent')` + viewportFit `cover` + themeColor `#0f1729`); `e2e/m-pwa.spec.ts` A-26e (was `'black'`, now `'black-translucent'` + theme-color meta + `viewport-fit=cover`).
 
 **Proofs:** vitest `pwa-manifest` 13/13; `e2e/m-pwa.spec.ts` 6 passed, 0 `✘` (production build). **Pre-CI:** `npm run type-check` exit 0; lint exit 0; unit **152 files / 2042 tests** passed, exit 0, 0 cache hits. Prettier: `layout.tsx`, `mobile-shell.tsx`, `m-pwa.spec.ts` are NOT prettier-clean on main → edited by hand, not formatted.
+
+⚠️ **Slip (recorded):** CI triggers on every push. The Part 1 commit (`2b084a1f`) and the first Part 2 commit went up **without `[skip ci]`**, so run `36716750701` started on the Part 1 head and a Part 2 run started and was cancelled by the next push. The stack's real CI run is `36718415249` on the Part 2 head. Every later commit carries `[skip ci]` until the single request.
+
+### Part 2 — Held photos — branch `feature/s121-p2-held-photos` (stacked on Part 1), head `2bbc178c`
+
+**What changed (no migration):**
+- **The server check** (`capture-store.tsx` `clearLanded`, over `files-client.ts` `findUploadedFiles`): on app open and whenever the sync queue shrinks, the tray's shot ids are looked up in `files` (the shot id **is** the `files.id`). Rows found are removed from the phone and **reported**: "N photos were already uploaded to <project> — cleared from this list." ⚠️ A **failed** lookup (offline) clears **nothing** — "could not ask" is not "not uploaded".
+- **`queued` shots are no longer "no project"** (`unfiledShots`, `needsProject`). SUPERSEDED line quoted in place.
+- **Select → assign → upload:** a checkbox per held/failed row, "Select all", a project list, "Upload N photos". Serial, and each shot's own outcome is counted: result line "X uploaded · Y failed" (+ "· N waiting to upload" for queued). A photo that did not upload is never counted as uploaded.
+- **The project is stored on the shot** (`HeldShot.projectId`), so Retry survives a reload. A shot left `uploading` by a killed app becomes `failed` with "The upload was interrupted. Tap Retry." — after the server check, so one that did land is cleared, not retried.
+- **No silent sweep [ASK-26, reverses S114 C-4]:** `HeldShotStore.all()` no longer deletes. Photos 7+ days old stay, show "Taken N day(s) ago", and the tray asks "N photo(s) … older than 7 days. Delete them?" — **Delete N** / **Keep them**. The strip now says "N photos are waiting on this phone for a project" (the four DELETED countdown strings are removed).
+
+**Proofs (production build, rebuild-test, crew identity, 402px touch):**
+- e2e `e2e/m-held-photos-s121.spec.ts` **5 passed, 0 ✘**: GHOST (storage aborted → queued → signal back → service-role count of the file = **1** → the queued row leaves **live** and the tray says the project; then **Josh's case**: a pre-S121 ghost — a `queued` tray row carrying the landed file's real id — seeded, app reopened → notice with the project name, 0 queued rows, **0 left in IndexedDB**); GHOST CONTROL (a `queued` row whose id has **0** `files` rows is kept, no notice); SELECT (2 held, 1 selected → "1 uploaded · 0 failed"; service-role counts **a = 1, b = 0**; `project_id` = the chosen project; b still held); OLD (an 8-day-old shot survives reopen, IndexedDB count **1**; ask shown; Keep → still **1**; Delete → **0**).
+- S120's `m-held-photos-s120.spec.ts` still green (3/3) alongside.
+- **Sabotage (one build, two independent sabotages):** (a) `clearLanded` fed an empty id set → **GHOST ✘** (`m-capture-shot-queued` expected 0, received 1); (b) the S114 sweep restored in `all()` → **OLD ✘** (`m-capture-old-ask` not found — the shot was deleted on open). Controls: GHOST CONTROL and SELECT stayed green under both. Restored with `git checkout --`; `cmp` against pre-sabotage copies exit 0 for both files; 0 "SABOTAGE" markers.
+- Unit: new `test/s121-held-photos.test.ts`; `test/s114-held-deletion.test.ts` **inverted in place** with the superseded titles quoted ("%s says DELETED" → the delete strings are gone; "from soonestDeletion()" → from unfiledShots()). 4 files / 44 tests green.
+- **Pre-CI (stacked head):** type-check exit 0; lint exit 0; unit **153 files / 2052 tests**, exit 0, 0 cache hits.
+
+**Josh's 30 — plain answer.** The photos most likely to be "the 30" (the 26 of 2026-09-29) are **already on Best Western** on production. They showed as held because the tray never cleared them. After this ships, opening the app clears every such ghost and says where each went. **Any photo that was held, never queued, and older than 7 days at an app open before this ships was deleted by the old sweep and cannot be recovered.** Nothing on the server can say which, if any, those were.
+
+**What Josh does on his phone** (after this is merged and Vercel has deployed):
+1. With signal, **close the app completely** (swipe it away) and **open it again**. Do it twice: the first open fetches the new version, the second runs it.
+2. **If the red strip about waiting photos has gone**, those photos were already on the job. Check **Best Western → Photos** for 2026-09-29. Tapping the camera tray (`/m/capture`) shows "N photos were already uploaded to Best Western — cleared from this list."
+3. **If the strip still says "N photos are waiting on this phone for a project"**, tap it. Tick the photos (or **Select all**), tap the job, then **Upload N photos**. Read the line under the header: "X uploaded · Y failed". A failed row shows why, and **Retry**.
+4. If the tray asks **"… older than 7 days. Delete them?"**, tap **Keep them** unless you want them gone. Nothing is deleted unless you tap **Delete**.
+5. If the menu shows **"N waiting to sync"**, tap it, then **Try again** with signal.
