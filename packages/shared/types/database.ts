@@ -10875,6 +10875,19 @@ export type Database = {
         }
         Returns: string
       }
+      add_time_segment: {
+        Args: {
+          p_completion?: string
+          p_end: string
+          p_note?: string
+          p_project_id?: string
+          p_segment_type: string
+          p_session_id: string
+          p_start: string
+          p_task_id?: string
+        }
+        Returns: Json
+      }
       allocate_invoice_number: {
         Args: { p_company_id: string }
         Returns: string
@@ -11117,6 +11130,19 @@ export type Database = {
           p_unit_cost?: number
         }
         Returns: undefined
+      }
+      edit_time_segment: {
+        Args: {
+          p_completion?: string
+          p_end?: string
+          p_note?: string
+          p_project_id?: string
+          p_segment_id: string
+          p_segment_type: string
+          p_start: string
+          p_task_id?: string
+        }
+        Returns: Json
       }
       email_has_account: { Args: { p_email: string }; Returns: boolean }
       finish_site_visit: { Args: { p_estimate_id: string }; Returns: string }
@@ -11404,6 +11430,55 @@ export type Database = {
         }
         Returns: Json
       }
+      s121_time_edit_session: {
+        Args: { p_session_id: string }
+        Returns: {
+          approved_at: string | null
+          approved_by: string | null
+          clock_in: string
+          clock_out: string | null
+          company_id: string
+          created_at: string | null
+          created_by: string | null
+          deleted_at: string | null
+          gps_in: Json | null
+          gps_out: Json | null
+          id: string
+          is_deleted: boolean | null
+          member_id: string
+          qb_push_status: string
+          qb_synced_at: string | null
+          qb_time_activity_id: string | null
+          status: string | null
+          updated_at: string | null
+          updated_by: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "time_clock_sessions"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      s121_time_overlap_check: {
+        Args: {
+          p_end: string
+          p_exclude: string[]
+          p_member_id: string
+          p_start: string
+        }
+        Returns: undefined
+      }
+      s121_time_reopen: { Args: { p_session_id: string }; Returns: boolean }
+      s121_time_task_check: {
+        Args: {
+          p_closed: boolean
+          p_completion: string
+          p_project_id: string
+          p_task_id: string
+        }
+        Returns: undefined
+      }
       save_site_visit_measurement: {
         Args: {
           p_area_name: string
@@ -11493,6 +11568,16 @@ export type Database = {
       site_visit_assert_owner_of_visit: {
         Args: { p_access: string; p_estimate_id: string }
         Returns: undefined
+      }
+      split_time_segment: {
+        Args: {
+          p_at: string
+          p_second_completion?: string
+          p_second_note?: string
+          p_second_task_id?: string
+          p_segment_id: string
+        }
+        Returns: Json
       }
       strip_sql_line_comments: { Args: { p_src: string }; Returns: string }
       submit_delivery_check_in: {

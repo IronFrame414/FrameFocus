@@ -338,6 +338,99 @@ export async function approveSession(sessionId: string): Promise<Result> {
   return { success: true };
 }
 
+// ── [S121 Part 4] The week sheet's Owner/Admin edits. ⚠️ PAYROLL. ──
+// Each is ONE database function (migration 20262119000000): Owner/Admin only,
+// one transaction, an overlap refused (a gap allowed — ASK-23), the completion
+// gate kept, the edit audited in time_edit_logs, and an APPROVED day returned
+// to pending — reported back as `returnedToPending` so the sheet can warn that
+// the hours changed and offer Approve (ASK-11). The database's sentence is the
+// error the user reads.
+
+export interface SegmentEditResult {
+  success: boolean;
+  error?: string;
+  returnedToPending?: boolean;
+  segmentId?: string;
+  secondSegmentId?: string;
+}
+
+function editOutcome(
+  data: unknown,
+  error: { message: string } | null
+): SegmentEditResult {
+  if (error) return { success: false, error: error.message };
+  const d = (data ?? {}) as {
+    returned_to_pending?: boolean;
+    segment_id?: string;
+    second_segment_id?: string;
+  };
+  return {
+    success: true,
+    returnedToPending: d.returned_to_pending === true,
+    segmentId: d.segment_id,
+    secondSegmentId: d.second_segment_id,
+  };
+}
+
+export interface SegmentFields {
+  segment_type: SegmentType;
+  project_id: string | null;
+  task_id: string | null;
+  completion: Completion | null;
+  note: string | null;
+  segment_start: string;
+  segment_end: string | null;
+}
+
+export async function editSegmentFull(segmentId: string, f: SegmentFields): Promise<SegmentEditResult> {
+  const supabase = createClient();
+  const { data, error } = await supabase.rpc('edit_time_segment', {
+    p_segment_id: segmentId,
+    p_segment_type: f.segment_type,
+    p_start: f.segment_start,
+    p_end: f.segment_end ?? undefined,
+    p_project_id: f.project_id ?? undefined,
+    p_task_id: f.task_id ?? undefined,
+    p_completion: f.completion ?? undefined,
+    p_note: f.note ?? undefined,
+  });
+  return editOutcome(data, error);
+}
+
+export async function addSegment(
+  sessionId: string,
+  f: SegmentFields & { segment_end: string }
+): Promise<SegmentEditResult> {
+  const supabase = createClient();
+  const { data, error } = await supabase.rpc('add_time_segment', {
+    p_session_id: sessionId,
+    p_segment_type: f.segment_type,
+    p_start: f.segment_start,
+    p_end: f.segment_end,
+    p_project_id: f.project_id ?? undefined,
+    p_task_id: f.task_id ?? undefined,
+    p_completion: f.completion ?? undefined,
+    p_note: f.note ?? undefined,
+  });
+  return editOutcome(data, error);
+}
+
+export async function splitSegment(
+  segmentId: string,
+  at: string,
+  second: { task_id: string | null; completion: Completion | null; note: string | null }
+): Promise<SegmentEditResult> {
+  const supabase = createClient();
+  const { data, error } = await supabase.rpc('split_time_segment', {
+    p_segment_id: segmentId,
+    p_at: at,
+    p_second_task_id: second.task_id ?? undefined,
+    p_second_completion: second.completion ?? undefined,
+    p_second_note: second.note ?? undefined,
+  });
+  return editOutcome(data, error);
+}
+
 // ── Column allowlists (§S-2, both specs — approved S85 Phase 2 items 1 & 3).
 //    The service allowlist gives friendly errors; the DB column-scope triggers
 //    (migrations 20260721000000 / 20260721010000) are the enforcement — a
