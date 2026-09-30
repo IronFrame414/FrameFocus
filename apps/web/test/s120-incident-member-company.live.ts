@@ -194,7 +194,13 @@ describe('#178 / #1-s180u — the dead 6-arg SECURITY DEFINER overload is not re
   // The call above is also stopped by the member trigger, so on its own it
   // cannot prove the REVOKE. This one names no member at all: only the revoke
   // can refuse it.
-  it('even a harmless call (no parties) is refused: EXECUTE is revoked (0 incidents)', async () => {
+  // ⚠️ INVERTED IN PLACE [S121 7-A — the 6-arg overload is DROPPED
+  // (20262121000000), completing #1-s180u]. _Superseded:_ "even a harmless call
+  // (no parties) is refused: EXECUTE is revoked (0 incidents)" asserting
+  // error.code '42501' (permission denied). The function no longer EXISTS, so
+  // PostgREST finds no function matching these six named arguments: PGRST202.
+  // Still 0 incidents.
+  it('even a harmless call (no parties) is refused: the 6-arg overload no longer exists (0 incidents)', async () => {
     const { error } = await crew.rpc('create_safety_incident', {
       p_project_id: projectA,
       p_incident_date: new Date().toISOString().slice(0, 10),
@@ -209,6 +215,6 @@ describe('#178 / #1-s180u — the dead 6-arg SECURITY DEFINER overload is not re
       .eq('description', `${MARKER} six-arg-harmless`);
     console.log(`[S120I] 6-arg harmless: error=${error?.code ?? 'none'} incidents=${count}`);
     expect(count ?? 0).toBe(0);
-    expect(error?.code).toBe('42501');
+    expect(error?.code).toBe('PGRST202');
   });
 });
