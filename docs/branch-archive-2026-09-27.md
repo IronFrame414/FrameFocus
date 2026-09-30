@@ -238,7 +238,7 @@ is nothing unique to restore since the content is in main.
 | `origin/feature/s112-catalog-importer` | `3ac6f7da` | superseded by `scripts/import-cost-catalog.mjs` landed from `feature/s118-catalog-import` `f9dbfb5c` (S121 Part 6; range-diff `=`, same blobs) — deleted only once that is on main |
 
 **Kept, and why:** `feature/s114-c5-multi-upload` (`6409738e`) — a STOP (S121 §1.6), left as reference
-for `#1-s121lo`; `origin/feature/s112-staletimes-hold` (`9b90115a`) — assessed, not merged, Josh's call
+for `#181` (was `#1-s121lo`); `origin/feature/s112-staletimes-hold` (`9b90115a`) — assessed, not merged, Josh's call
 (S121 §1.7); `feature/s118-catalog-import` (local `f9dbfb5c`, origin `cbd2c2c1`) — landed by cherry-pick,
 deletable once Part 6 is on main.
 
