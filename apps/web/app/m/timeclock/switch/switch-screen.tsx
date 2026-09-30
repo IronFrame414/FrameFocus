@@ -9,6 +9,7 @@ import {
   type PickerTask,
   type SegmentType,
 } from '@/lib/services/time-tracking-client';
+import { taskOpenToMember } from '@/lib/tasks/assignees';
 import { SetMobileHeader } from '../../mobile-header';
 import { PROJECT_TYPES, type PickerProject } from '../timeclock-screen';
 import { useT } from '@/components/i18n/language-provider';
@@ -110,12 +111,15 @@ export function SwitchScreen({
     }
     let cancelled = false;
     listPickerTasks(projectId).then((rows) => {
-      if (!cancelled) setTasks(rows);
+      // [S121 Q29] The SAME rule as desktop's clock-in picker: no assignees,
+      // or this member is among them. SUPERSEDED: every task on the job (a
+      // PARITY gap found in S121 §1.5, A11).
+      if (!cancelled) setTasks(rows.filter((r) => taskOpenToMember(r.assignee_ids, session.member_id)));
     });
     return () => {
       cancelled = true;
     };
-  }, [mayPickTask, projectId]);
+  }, [mayPickTask, projectId, session.member_id]);
 
   const ready =
     nextType !== null &&

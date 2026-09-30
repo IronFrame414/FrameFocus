@@ -391,7 +391,7 @@ describe('the client arm — five tables, and WHY it cannot be probed directly',
 // ============================================================================
 describe('tasks — assigned only, never project-wide', () => {
   it('⚠️ the sub reads the task ASSIGNED to them and NOT the one beside it', async () => {
-    const { data } = await subC.from('tasks').select('id, title, assignee_id');
+    const { data } = await subC.from('tasks').select('id, title');
     const ids = ((data ?? []) as Array<{ id: string }>).map((r) => r.id);
 
     // Positive control — without it, "0 tasks" would pass a broken policy.
@@ -400,8 +400,22 @@ describe('tasks — assigned only, never project-wide', () => {
     expect(ids, 'the sub read a task on their project that is not theirs').not.toContain(taskUnassignedId);
 
     // Nothing the sub reads may belong to anyone else.
-    for (const t of (data ?? []) as Array<{ assignee_id: string | null; title: string }>) {
-      expect(t.assignee_id, `"${t.title}" is not assigned to the sub`).toBe(subMemberId);
+    // ⚠️ INVERTED IN PLACE [S121 5-C]. _Superseded:_ every row's
+    // `assignee_id` must equal the sub's member id. A task now has MANY
+    // assignees (task_assignees); assignee_id is only the earliest, so a task
+    // the sub is SECOND on legitimately carries someone else's id there. The
+    // rule is unchanged — "only tasks the sub is ON" — and is read from the
+    // join table, by the service role.
+    expect(ids.length, 'non-vacuous').toBeGreaterThan(0);
+    const { data: on } = await admin
+      .from('task_assignees')
+      .select('task_id')
+      .eq('member_id', subMemberId)
+      .eq('is_deleted', false)
+      .in('task_id', ids);
+    const onIds = new Set(((on ?? []) as Array<{ task_id: string }>).map((r) => r.task_id));
+    for (const t of (data ?? []) as Array<{ id: string; title: string }>) {
+      expect(onIds.has(t.id), `"${t.title}" is not assigned to the sub`).toBe(true);
     }
   });
 

@@ -12,6 +12,7 @@ import {
   type SessionWithSegments,
   type TimeSegment,
 } from '@/lib/services/time-tracking-client';
+import { taskOpenToMember } from '@/lib/tasks/assignees';
 import {
   ClockModal,
   fieldLabelStyle,
@@ -131,7 +132,8 @@ export function TimeclockClient({
       listPickerTasks(projectId).then((tasks) => {
         if (cancelled) return;
         setPickerTasks(
-          tasks.filter((t) => t.assignee_id === null || t.assignee_id === myMemberId)
+          // [S121 5-C] no assignees, or I am AMONG them (one shared rule).
+          tasks.filter((t) => taskOpenToMember(t.assignee_ids, myMemberId))
         );
       });
     } else {

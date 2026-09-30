@@ -18,13 +18,40 @@ export async function createTask(task: {
   priority?: TaskPriority | null;
   start_date?: string | null;
   due_date?: string | null;
-  assignee_id?: string | null;
+  /** [S121 5-C] Everyone on the task. Written through set_task_assignees
+   *  after the insert. SUPERSEDED: `assignee_id?: string | null` (one person). */
+  assignee_ids?: string[];
 }): Promise<{ success: boolean; id?: string; error?: string }> {
   const supabase = createClient();
+  const { assignee_ids, ...row } = task;
 
-  const { data, error } = await supabase.from('tasks').insert(task).select('id').single();
+  const { data, error } = await supabase.from('tasks').insert(row).select('id').single();
   if (error) return { success: false, error: error.message };
+  if (assignee_ids && assignee_ids.length > 0) {
+    const set = await setTaskAssignees(data.id, assignee_ids);
+    if (!set.success) {
+      return { success: false, id: data.id, error: `The task was saved, but not its people: ${set.error}` };
+    }
+  }
   return { success: true, id: data.id };
+}
+
+/**
+ * [S121 5-C] Make the task's live assignees EXACTLY `memberIds` — one database
+ * call, one transaction (set_task_assignees; the join table's RLS decides who
+ * may: owner/admin/PM/foreman on the project, or its PE — never crew).
+ */
+export async function setTaskAssignees(
+  taskId: string,
+  memberIds: string[]
+): Promise<{ success: boolean; error?: string }> {
+  const supabase = createClient();
+  const { error } = await supabase.rpc('set_task_assignees', {
+    p_task_id: taskId,
+    p_member_ids: [...new Set(memberIds)],
+  });
+  if (error) return { success: false, error: error.message };
+  return { success: true };
 }
 
 /**

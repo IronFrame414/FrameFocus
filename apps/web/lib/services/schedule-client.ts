@@ -22,12 +22,19 @@ export async function findOverlaps(
   const supabase = createClient();
   const warnings: string[] = [];
 
-  const { data: tasks } = await supabase
-    .from('tasks')
-    .select('title, start_date, due_date')
-    .eq('assignee_id', memberId)
+  // [S121 5-C] The member's tasks are the ones they are AMONG the assignees of
+  // (task_assignees), not the ones whose single assignee_id is theirs.
+  // SUPERSEDED: `.from('tasks')…eq('assignee_id', memberId)`.
+  const { data: rows } = await supabase
+    .from('task_assignees')
+    .select('task:tasks!inner(title, start_date, due_date, is_deleted, is_scheduled)')
+    .eq('member_id', memberId)
     .eq('is_deleted', false)
-    .eq('is_scheduled', true);
+    .eq('task.is_deleted', false)
+    .eq('task.is_scheduled', true);
+  const tasks = (rows ?? []).map(
+    (r) => r.task as unknown as { title: string; start_date: string | null; due_date: string | null }
+  );
 
   for (const t of tasks ?? []) {
     const tStart = t.start_date ?? t.due_date!;

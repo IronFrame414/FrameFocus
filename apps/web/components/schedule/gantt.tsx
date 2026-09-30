@@ -2,7 +2,7 @@
 
 import type { Task, TaskDependency } from '@/lib/services/tasks-shared';
 import type { PhaseRollup } from '@/lib/services/tasks-shared';
-import { memberColor } from './member-color';
+import { assigneeColor } from './member-color';
 
 interface GanttProps {
   rollups: PhaseRollup[];
@@ -240,13 +240,17 @@ export function Gantt({ rollups, unphased, dependencies, onSelect }: GanttProps)
               const task = row.task;
               const bar = barFor(task);
               if (!bar) return null;
-              const color = memberColor(task.assignee_id, task.assignee?.schedule_color ?? null);
+              // [S121 5-C / ASK-2] ONE bar per task; its colour is the first
+              // assignee's, and every name is on it.
+              const color = assigneeColor(task.assignees[0]);
+              const names = task.assignees.map((a) => a.display_name).join(', ');
               const done = task.status === 'complete';
               return (
                 <button
                   key={task.id}
                   onClick={() => onSelect?.(task)}
-                  title={`${task.title}${task.assignee ? ` — ${task.assignee.display_name}` : ''}`}
+                  data-testid="gantt-bar"
+                  title={`${task.title}${names ? ` — ${names}` : ''}`}
                   style={{
                     position: 'absolute',
                     top: i * ROW_HEIGHT + 6,

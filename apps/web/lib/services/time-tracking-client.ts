@@ -681,25 +681,36 @@ export interface PickerTask {
   id: string;
   title: string;
   status: string;
-  assignee_id: string | null;
+  /** [S121 5-C] EVERY live assignee. SUPERSEDED: `assignee_id` (one person). */
+  assignee_ids: string[];
 }
 
 /**
  * Task picker read (6A-1 §2.3): non-complete tasks on the chosen job. The
- * caller filters to "unassigned OR assigned to me" — member id lives with the
- * caller.
+ * caller filters with taskOpenToMember() (lib/tasks/assignees.ts) — "no
+ * assignees, or I am among them" — the member id lives with the caller.
  */
 export async function listPickerTasks(projectId: string): Promise<PickerTask[]> {
   const supabase = createClient();
   const { data, error } = await supabase
     .from('tasks')
-    .select('id, title, status, assignee_id')
+    .select('id, title, status, assignees:task_assignees(member_id, is_deleted)')
     .eq('project_id', projectId)
     .eq('is_deleted', false)
     .neq('status', 'complete')
     .order('title', { ascending: true });
   if (error) return [];
-  return (data ?? []) as PickerTask[];
+  return ((data ?? []) as unknown as {
+    id: string;
+    title: string;
+    status: string;
+    assignees: { member_id: string; is_deleted: boolean }[] | null;
+  }[]).map((t) => ({
+    id: t.id,
+    title: t.title,
+    status: t.status,
+    assignee_ids: (t.assignees ?? []).filter((a) => !a.is_deleted).map((a) => a.member_id),
+  }));
 }
 
 export async function deleteSession(id: string): Promise<Result> {

@@ -20,7 +20,7 @@ import { createPhase, deletePhase } from '@/lib/services/tasks-client';
 import { rollupPhases, TASK_STATUS_LABELS } from '@/lib/services/tasks-shared';
 import { Calendar } from '@/components/schedule/calendar';
 import { Gantt } from '@/components/schedule/gantt';
-import { memberColor } from '@/components/schedule/member-color';
+import { assigneeColor } from '@/components/schedule/member-color';
 import { TaskForm } from './task-form';
 import { color, font } from '@/lib/theme';
 
@@ -647,16 +647,20 @@ function TaskRows({ tasks, onSelect }: { tasks: Task[]; onSelect: (t: Task) => v
           }}
         >
           <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <span
-              style={{
-                width: '10px',
-                height: '10px',
-                borderRadius: '9999px',
-                backgroundColor: memberColor(t.assignee_id, t.assignee?.schedule_color ?? null),
-                display: 'inline-block',
-                opacity: t.assignee_id ? 1 : 0.3,
-              }}
-            />
+            {/* [S121 5-C] one dot per assignee (SUPERSEDED: one dot from assignee_id). */}
+            {(t.assignees.length > 0 ? t.assignees : [null]).map((a, i) => (
+              <span
+                key={a?.id ?? `none-${i}`}
+                style={{
+                  width: '10px',
+                  height: '10px',
+                  borderRadius: '9999px',
+                  backgroundColor: assigneeColor(a),
+                  display: 'inline-block',
+                  opacity: a ? 1 : 0.3,
+                }}
+              />
+            ))}
             <span style={{ fontWeight: 500, textDecoration: t.status === 'complete' ? 'line-through' : 'none' }}>
               {t.title}
             </span>
@@ -674,7 +678,7 @@ function TaskRows({ tasks, onSelect }: { tasks: Task[]; onSelect: (t: Task) => v
             )}
           </span>
           <span style={{ color: '#6b7280', fontSize: '0.8125rem' }}>
-            {t.assignee?.display_name ?? 'Unassigned'}
+            {t.assignees.length > 0 ? t.assignees.map((a) => a.display_name).join(', ') : 'Unassigned'}
             {' · '}
             {t.start_date || t.due_date
               ? `${t.start_date ?? '…'} → ${t.due_date ?? '…'}`

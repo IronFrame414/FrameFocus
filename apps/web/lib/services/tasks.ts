@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase-server';
 import type { Phase, Task, TaskDependency } from '@/lib/services/tasks-shared';
+import { liveAssignees, TASK_ASSIGNEES_EMBED } from '@/lib/tasks/assignees';
 
 // Pure logic + types live in tasks-shared.ts (safe for client components);
 // this file holds the server-side reads.
@@ -19,13 +20,17 @@ export async function getTasks(projectId: string): Promise<Task[]> {
 
   const { data, error } = await supabase
     .from('tasks')
-    .select('*, assignee:company_members(id, display_name, schedule_color)')
+    .select(`*, ${TASK_ASSIGNEES_EMBED}`)
     .eq('project_id', projectId)
     .eq('is_deleted', false)
     .order('created_at', { ascending: true });
 
   if (error) return [];
-  return (data ?? []) as unknown as Task[];
+  // [S121 5-C] Every live assignee (task_assignees), earliest first.
+  return ((data ?? []) as unknown as (Task & { assignees: unknown })[]).map((t) => ({
+    ...t,
+    assignees: liveAssignees(t.assignees),
+  }));
 }
 
 export async function getPhases(projectId: string): Promise<Phase[]> {

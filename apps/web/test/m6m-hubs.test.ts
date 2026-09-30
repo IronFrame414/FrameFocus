@@ -21,8 +21,11 @@ import { calendarDayInZone, companyToday } from '@framefocus/shared/utils/dates'
 // full ordering is stated outright.
 
 function evt(over: Partial<CalendarEvent> & { start_date: string }): CalendarEvent {
+  const id = over.id ?? `${over.source ?? 'general'}-${over.title ?? over.start_date}`;
   return {
-    id: over.id ?? `${over.source ?? 'general'}-${over.title ?? over.start_date}`,
+    // [S121 5-C] every event carries a unique key (a task is one event per person).
+    key: over.key ?? `${over.source ?? 'general'}-${id}`,
+    id,
     source: over.source ?? 'general',
     title: over.title ?? 'Untitled',
     end_date: over.end_date ?? over.start_date,
