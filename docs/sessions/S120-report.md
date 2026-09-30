@@ -1130,3 +1130,27 @@ section runs in its **own** command, after the previous row is pushed.
 ---
 
 ## What a person still has to click / what Josh has to decide
+
+**To click (nothing is blocking; none of these stops a merge):**
+- **Nothing for the JWT key switch.** Production already signs with **ES256** (`in_use`), and the
+  legacy HS256 key is `previously_used` (1.8). Revoking HS256 is optional and is ASK-4.
+- **Look at the portal signature step once** if you want to see it: it has been 16px since S118. That
+  is now ruled and pinned (Part 5), so there is nothing to change.
+- **On your phone after the deploy:**
+  - Menu → **"N waiting to sync"** shows exactly which photos this phone still holds (thumbnail, date,
+    project, why).
+  - The red "Tap to choose a project" bar opens the tray when you have signal, and says the photos are
+    safe when you do not.
+  - A task-bound clock-out now asks **"Is the task finished?"**
+- **Where the 30 photos are cannot be read from here** (2-C). They live on your phone. Anything held
+  **without a project** longer than 7 days was swept by design; queued photos never are.
+
+**To decide:** questions 1–10 at the top of this report. Each was built on its stated default, so
+nothing waits on you, but ASK-5 (Juan Cardona's stop time, payroll) has **no** default action. Also
+still open for you:
+- **The unmerged branches** (1.1). In particular, **the S118 item-8 cost-catalog importer is not on
+  main** (`feature/s118-catalog-import`, and its local and origin copies have diverged).
+- **The four library-only photo inputs** (2-C): whether they should open the camera directly. That
+  would remove library selection.
+- **`#1-s180u`:** drop the dead `create_safety_incident` overload, now unreachable since S120.
+- **The `force-dynamic` list** (3-D): all 13 routes keep it, per the audit; nothing is proposed.
