@@ -12,6 +12,8 @@ import {
 import { SetMobileHeader } from '../../mobile-header';
 import { PROJECT_TYPES, type PickerProject } from '../timeclock-screen';
 import { useT } from '@/components/i18n/language-provider';
+import { CompletionChoice } from '@/components/time/completion-choice';
+import type { Completion } from '@/lib/services/time-tracking-client';
 import type { MsgKey } from '@/lib/i18n/messages';
 
 // M6M §4.12.2 — the 7b interaction, honouring all three §4.5a constraints:
@@ -34,6 +36,13 @@ import type { MsgKey } from '@/lib/i18n/messages';
 // segments; no new data), the "Ends '…' at HH:MM" header, and the
 // "Mark '<task>' complete" row — the ONLY surface that may write `completion`,
 // and only on a `work` segment carrying a `task_id`.
+//
+// S120 2-A — _Superseded:_ the row was a "Mark complete" CHECKBOX, and an
+// unticked box wrote completion = NULL, which time_segments_completion_gate_check
+// refuses once a task-bound segment ends — so switching away from a task
+// without finishing it failed. It is now the required two-way question
+// (CompletionChoice), shared with the /m clock-out, which now asks it too (so
+// switch is no longer the ONLY surface that writes `completion`).
 
 // Labels are message keys, resolved with t() at render [S110 H].
 const ALL_TYPES: { id: SegmentType; key: MsgKey }[] = [
@@ -78,7 +87,7 @@ export function SwitchScreen({
   const [taskId, setTaskId] = useState<string | null>(null);
   const [tasks, setTasks] = useState<PickerTask[]>([]);
   const [note, setNote] = useState('');
-  const [markComplete, setMarkComplete] = useState(false);
+  const [completion, setCompletion] = useState<Completion | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -109,7 +118,10 @@ export function SwitchScreen({
   }, [mayPickTask, projectId]);
 
   const ready =
-    nextType !== null && (!needsProject || projectId !== null) && (!noteRequired || note.trim());
+    nextType !== null &&
+    (!needsProject || projectId !== null) &&
+    (!noteRequired || note.trim()) &&
+    (!offerComplete || completion !== null);
 
   async function submit() {
     if (!ready || nextType === null) return;
@@ -122,7 +134,7 @@ export function SwitchScreen({
         segment_type: openSegment.segment_type,
         task_id: openSegment.task_id,
         note: noteRequired ? note.trim() : null,
-        completion: offerComplete && markComplete ? 'complete' : null,
+        completion: offerComplete ? completion : null,
       },
       next: {
         segment_type: nextType,
@@ -213,18 +225,13 @@ export function SwitchScreen({
         )}
 
         {offerComplete ? (
-          <label
-            data-testid="m-mark-complete"
-            className="mt-[10px] flex min-h-[44px] items-center gap-[10px] text-[15px] font-semibold text-m6m-navy"
-          >
-            <input
-              type="checkbox"
-              checked={markComplete}
-              onChange={(e) => setMarkComplete(e.target.checked)}
-              className="h-[22px] w-[22px]"
+          <div className="mt-[10px]">
+            <CompletionChoice
+              value={completion}
+              onChange={setCompletion}
+              testIdPrefix="m-switch-completion"
             />
-            {t('field.switch.markComplete')}
-          </label>
+          </div>
         ) : null}
       </section>
 

@@ -6,11 +6,12 @@ import { safeNextPath } from '@/lib/safe-next';
 import { landingPathFor, surfacePreferenceFrom, SURFACE_COOKIE } from '@/lib/device';
 import { dashboardDeniedRedirect } from '@/lib/dashboard-access';
 import {
-  isMyCompanyLocked,
+  checkMyCompanyLock,
   isLockExemptApiPath,
   isLockExemptPagePath,
   myCompanyLockReason,
 } from '@/lib/trial/lock-guard';
+import { LOCK_OK_COOKIE, LOCK_OK_TTL_S, signLockOk, verifyLockOk } from '@/lib/trial/lock-cookie';
 
 type CookieEntry = { name: string; value: string; options?: Record<string, unknown> };
 
@@ -179,13 +180,20 @@ export async function middleware(request: NextRequest) {
   // profile is read (and discarded) on a request the lock then redirects; that
   // is one wasted read, never a changed outcome.
   const lockApplies = !!user && !isLockExemptPagePath(pathname) && !isLockExemptApiPath(pathname);
-  const [locked, profileResult] = await Promise.all([
-    lockApplies ? isMyCompanyLocked(supabase) : Promise.resolve(false),
+  // S120 3-B — a healthy tenant's "not locked" is cached for LOCK_OK_TTL_S in a
+  // signed, user-bound cookie (lib/trial/lock-cookie.ts), so the RPC leaves the
+  // request path. Only a DEFINITE false is ever cached; a locked answer, and a
+  // failed check (null, which still fails open as before), never are.
+  const lockCached =
+    lockApplies && !!user && (await verifyLockOk(request.cookies.get(LOCK_OK_COOKIE)?.value, user.id));
+  const [lockAnswer, profileResult] = await Promise.all([
+    lockApplies && !lockCached ? checkMyCompanyLock(supabase) : Promise.resolve(false),
     user && pathname.startsWith('/dashboard')
       ? supabase.from('profiles').select('role, company_id').eq('user_id', user.id).single()
       : Promise.resolve(null),
   ]);
 
+  const locked = lockAnswer === true;
   if (lockApplies) {
     if (locked) {
       // Register backlog §4, Q12 — THE PORTAL CARVE-OUT. A paid-cancellation
@@ -321,6 +329,21 @@ export async function middleware(request: NextRequest) {
           return NextResponse.redirect(url);
         }
       }
+    }
+  }
+
+  // S120 3-B — remember a DEFINITE "not locked" on the response the request
+  // continues with (set after any refresh has replaced supabaseResponse).
+  if (lockApplies && !lockCached && lockAnswer === false && user) {
+    const value = await signLockOk(user.id);
+    if (value) {
+      supabaseResponse.cookies.set(LOCK_OK_COOKIE, value, {
+        httpOnly: true,
+        sameSite: 'lax',
+        secure: request.nextUrl.protocol === 'https:',
+        path: '/',
+        maxAge: LOCK_OK_TTL_S,
+      });
     }
   }
 

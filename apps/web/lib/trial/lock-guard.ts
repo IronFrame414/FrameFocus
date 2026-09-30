@@ -19,12 +19,22 @@ import type { SupabaseClient } from '@supabase/supabase-js';
  * force underneath; this guard only shortens a one-hour window.
  */
 export async function isMyCompanyLocked(supabase: SupabaseClient): Promise<boolean> {
+  return (await checkMyCompanyLock(supabase)) === true;
+}
+
+/**
+ * S120 3-B — the same RPC, TRI-STATE: true / false / null (the check itself
+ * failed). The middleware treats null exactly as isMyCompanyLocked always did
+ * (not locked — fail open), but only a DEFINITE false may be cached in the
+ * lock-ok cookie (lock-cookie.ts): a fail-open answer is never remembered.
+ */
+export async function checkMyCompanyLock(supabase: SupabaseClient): Promise<boolean | null> {
   try {
     const { data, error } = await supabase.rpc('is_my_company_locked');
-    if (error) return false;
+    if (error) return null;
     return data === true;
   } catch {
-    return false;
+    return null;
   }
 }
 

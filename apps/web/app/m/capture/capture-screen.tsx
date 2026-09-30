@@ -7,6 +7,7 @@ import { buildPhotoEntry } from '@/lib/offline/capture';
 import { SetMobileHeader } from '../mobile-header';
 import { useCaptureStore } from '../capture-store';
 import type { HeldShot } from '@/lib/offline/held-shots';
+import { BlobThumb, capturedWhen } from '@/components/offline/blob-thumb';
 import { useOfflineSync } from '../offline-sync';
 import { ErrorNotice, OptionStack, PrimaryButton, SecondaryButton } from '../write-ui';
 import { useT } from '@/components/i18n/language-provider';
@@ -226,8 +227,14 @@ export function CaptureScreen({ projects }: { projects: CaptureProjectChoice[] }
                 data-testid={`m-capture-shot-${s.status}`}
                 className="flex items-center justify-between gap-[10px] rounded-[12px] border border-m6m-border bg-m6m-card px-[12px] py-[10px]"
               >
-                <div className="min-w-0">
+                {/* S120 2-C — the photo itself and when it was taken: a file name
+                    cannot tell you which of 300 camera-roll shots this is. */}
+                <BlobThumb blob={s.blob} testId="m-capture-thumb" />
+                <div className="min-w-0 flex-1">
                   <p className="truncate text-[14px] text-m6m-navy">{s.fileName}</p>
+                  <p data-testid="m-capture-taken" className="font-mono text-[11px] text-m6m-muted">
+                    {capturedWhen(s.takenAt)}
+                  </p>
                   <p className="text-[12px] text-m6m-muted">
                     {s.status === 'held' && t('field.capture.waitingProject')}
                     {s.status === 'uploading' && t('field.capture.uploading')}

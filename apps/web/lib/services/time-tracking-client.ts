@@ -162,6 +162,14 @@ async function endSegmentAt(
   end: SegmentEnd,
   at: string
 ): Promise<{ ok: boolean; error?: string; taskWarning?: string; segmentClientId?: string }> {
+  // S120 2-A — the rule time_segments_completion_gate_check enforces, said in
+  // words BEFORE the write, for every caller on every surface: a task-bound
+  // segment cannot end without its outcome. The /m clock-out omitted it and
+  // surfaced the raw check-constraint text instead.
+  if (end.task_id && !end.completion) {
+    return { ok: false, error: 'Say whether the task is finished before ending it.' };
+  }
+
   const supabase = createClient();
 
   const updates: Record<string, unknown> = {

@@ -808,6 +808,9 @@ function NavSheet({
   const router = useRouter();
   const t = useT();
   const [signingOut, setSigningOut] = useState(false);
+  // S120 2-C — everything still on this phone (queued, needing attention, or
+  // held for review): the count the "Waiting to sync" row carries.
+  const waiting = useOfflineSync()?.entries.length ?? 0;
 
   const handleSignOut = useCallback(async () => {
     setSigningOut(true);
@@ -914,6 +917,24 @@ function NavSheet({
           </button>
         ) : null}
 
+        {/* S120 2-C — THE ROAD TO THE HELD-PHOTO LIST, online or not. /m/offline
+            listed what is still on this phone, but was reachable only from the
+            OFFLINE strip or by typing the URL — so with a connection, 30 queued
+            photos had no screen at all. A row, not an eighth tile: the grid's
+            tiles and order are ruled (§3.3, pinned by m-shell.spec). */}
+        <Link
+          href="/m/offline"
+          data-testid="m-sheet-waiting"
+          aria-current={pathname === '/m/offline' ? 'page' : undefined}
+          className={`mt-[10px] flex h-[58px] w-full items-center justify-center gap-[8px] rounded-[14px] bg-m6m-card text-[15px] font-bold ${
+            pathname === '/m/offline'
+              ? 'border-[1.5px] border-m6m-blue text-m6m-blue'
+              : 'border border-m6m-border text-m6m-navy'
+          }`}
+        >
+          {t('shell.waitingCount', { n: waiting })}
+        </Link>
+
         {/* [S110 C, RULED Josh Q7] — "Your account", every role, above Sign out.
             /m/account (name + password, #162) was linked ONLY from a card on
             /m/settings, the LAST tile of this sheet, on a page that presents
@@ -971,25 +992,52 @@ function NavSheet({
 // /m/capture itself (the tray shows each shot's countdown) and on the dark
 // photo screens (no header there).
 // ---------------------------------------------------------------------------
+// S120 2-B — THE DEAD TAP. Josh: "Tap to choose a project" did nothing. Measured
+// (S120, production build, 402x874 touch context): ONLINE the tap works — it
+// lands on /m/capture with the tray and the project prompt. OFFLINE it is a
+// client navigation into /m/capture, a SERVER-rendered route (its project list
+// is loaded on the server), so with no signal the page cannot load: the URL
+// changed and the screen went blank. Neither a missing handler nor a throwing
+// one — a navigation that cannot be served. So offline the strip no longer
+// navigates: the tap opens an in-place note that says the photos are safe on
+// this phone and what to do, which needs no network at all.
 function HeldPhotosStrip({ pathname }: { pathname: string }) {
   const capture = useCaptureStore();
   const t = useT();
+  const [offlineNote, setOfflineNote] = useState(false);
   if (!capture?.ready || !capture.needsProject) return null;
   if (pathname.startsWith('/m/capture')) return null;
   const warning = soonestDeletion(capture.batch.shots);
   if (!warning) return null;
   const { count: n, days: soonest } = warning;
   return (
-    <Link
-      href="/m/capture"
-      data-testid="m-held-photos-strip"
-      role="alert"
-      className="flex min-h-[44px] w-full items-center border-y border-m6m-danger-border bg-[#fdf1f0] px-[18px] py-[10px] text-[13px] font-semibold text-m6m-danger"
-    >
-      {soonest === 0
-        ? t(n === 1 ? 'field.capture.deleteTodayOne' : 'field.capture.deleteTodayMany', { n })
-        : t(n === 1 ? 'field.capture.deleteSoonOne' : 'field.capture.deleteSoonMany', { n, d: soonest })}
-    </Link>
+    <>
+      <Link
+        href="/m/capture"
+        data-testid="m-held-photos-strip"
+        role="alert"
+        onClick={(e) => {
+          if (typeof navigator !== 'undefined' && !navigator.onLine) {
+            e.preventDefault();
+            setOfflineNote(true);
+          }
+        }}
+        className="flex min-h-[44px] w-full items-center border-y border-m6m-danger-border bg-[#fdf1f0] px-[18px] py-[10px] text-[13px] font-semibold text-m6m-danger"
+      >
+        {soonest === 0
+          ? t(n === 1 ? 'field.capture.deleteTodayOne' : 'field.capture.deleteTodayMany', { n })
+          : t(n === 1 ? 'field.capture.deleteSoonOne' : 'field.capture.deleteSoonMany', { n, d: soonest })}
+      </Link>
+      {offlineNote ? (
+        <p
+          data-testid="m-held-photos-offline"
+          role="status"
+          className="border-b border-m6m-danger-border bg-[#fdf1f0] px-[18px] pb-[10px] text-[13px] text-m6m-navy"
+        >
+          {t('field.capture.heldOffline', { n })}
+        </p>
+      ) : null}
+    </>
   );
 }
 

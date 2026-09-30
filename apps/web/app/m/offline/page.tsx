@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { WifiOff } from 'lucide-react';
 import { SetMobileHeader } from '../mobile-header';
@@ -8,6 +8,8 @@ import { useOfflineSync } from '../offline-sync';
 import type { QueueEntry } from '@/lib/offline/queue';
 import { useT } from '@/components/i18n/language-provider';
 import type { MsgKey } from '@/lib/i18n/messages';
+import { createClient } from '@/lib/supabase-browser';
+import { BlobThumb, capturedWhen } from '@/components/offline/blob-thumb';
 
 // M6M §4.4 — M-4, the offline / failure state.
 //
@@ -45,6 +47,19 @@ function capturedAt(iso: string): string {
   return new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
 }
 
+// S120 2-C — HELD PHOTOS GET A LIST YOU CAN READ. Josh had 30 photos queued on
+// his phone and ~300 in his camera roll, and nothing said WHICH 30: this card
+// listed "Photo · 10:32 · Queued" and nothing else, and it was reachable online
+// only by typing the URL. A photo entry now shows the photo itself (the queued
+// blob — the only copy the queue holds), the DATE and time it was taken, the
+// project it will file to, and why it is still here. The entry point is the
+// nav sheet's "Waiting to sync" row (mobile-shell.tsx), online or not.
+/** The queued photo's own blob, when the entry carries one. */
+function entryBlob(e: QueueEntry): Blob | null {
+  const b = (e.payload as { blob?: unknown }).blob;
+  return typeof Blob !== 'undefined' && b instanceof Blob ? b : null;
+}
+
 export default function MobileOfflinePage() {
   const router = useRouter();
   const t = useT();
@@ -76,6 +91,38 @@ export default function MobileOfflinePage() {
 
   const entries = offlineSync?.entries ?? [];
 
+  // Project names for the photo rows — best effort, online only. Offline the
+  // row still shows the photo and when it was taken, which is what identifies it.
+  const projectIds = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          entries
+            .map((e) => (e.payload as { project_id?: unknown }).project_id)
+            .filter((v): v is string => typeof v === 'string')
+        )
+      ).sort(),
+    [entries]
+  );
+  const [projectNames, setProjectNames] = useState<Record<string, string>>({});
+  useEffect(() => {
+    if (!online || projectIds.length === 0) return;
+    let cancelled = false;
+    createClient()
+      .from('projects')
+      .select('id, name')
+      .in('id', projectIds)
+      .then(({ data }) => {
+        if (cancelled || !data) return;
+        setProjectNames(
+          Object.fromEntries((data as Array<{ id: string; name: string }>).map((r) => [r.id, r.name]))
+        );
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [online, projectIds]);
+
   return (
     <div className="px-[18px] py-[18px]">
       <SetMobileHeader
@@ -83,7 +130,10 @@ export default function MobileOfflinePage() {
         sub={online ? t('shell.connectionRestored') : t('shell.noConnection')}
       />
 
-      {/* Centred block — §4.4. */}
+      {/* Centred block — §4.4. S120 2-C: only while actually offline — the page
+          is now also the held-photo list, reached online from the nav sheet,
+          and "No connection" over a working connection would be false. */}
+      {!online ? (
       <div className="flex flex-col items-center pt-[24px] text-center">
         <div className="flex h-[72px] w-[72px] items-center justify-center rounded-[18px] border border-m6m-border bg-m6m-card">
           {/* The struck-through wifi glyph. lucide's WifiOff carries the slash
@@ -108,6 +158,7 @@ export default function MobileOfflinePage() {
           {t('shell.lastTry', { time: lastTry ? hhmm(lastTry) : '—' })}
         </p>
       </div>
+      ) : null}
 
       {/* "Waiting to sync" — §4.4. */}
       <section
@@ -128,13 +179,23 @@ export default function MobileOfflinePage() {
                 data-state={e.state}
                 className="flex min-h-[52px] items-center gap-[10px] border-b border-m6m-border py-[8px] last:border-b-0"
               >
+                {entryBlob(e) ? <BlobThumb blob={entryBlob(e)!} testId="m-queued-thumb" /> : null}
                 <div className="min-w-0 flex-1">
                   <p className="text-[15px] font-semibold text-m6m-navy">
                     {t(ENTITY_KEY[e.entity])}
                   </p>
                   <p className="font-mono text-[11px] text-m6m-muted">
-                    {capturedAt(e.captured_at)}
+                    {entryBlob(e) ? capturedWhen(e.captured_at) : capturedAt(e.captured_at)}
                   </p>
+                  {(() => {
+                    const pid = (e.payload as { project_id?: unknown }).project_id;
+                    const name = typeof pid === 'string' ? projectNames[pid] : undefined;
+                    return name ? (
+                      <p data-testid="m-queued-project" className="truncate text-[13px] text-m6m-navy/80">
+                        {name}
+                      </p>
+                    ) : null;
+                  })()}
                   {e.state === 'conflicted' ? (
                     // A-19e — names the record, states the outcome, offers no
                     // retry: nothing about this will succeed on one.
@@ -153,7 +214,12 @@ export default function MobileOfflinePage() {
                     >
                       {e.last_error}
                     </p>
-                  ) : null}
+                  ) : (
+                    // S120 2-C — why it is still here, when nothing has failed yet.
+                    <p data-testid="m-entry-why" className="mt-[2px] text-[13px] text-m6m-navy/80">
+                      {t('shell.notUploadedYet')}
+                    </p>
+                  )}
                 </div>
                 {e.state === 'conflicted' ? (
                   <span
