@@ -877,6 +877,7 @@ list **exactly** the named file, pushes, and **always** relinks rebuild-test (re
 | --- | --- | --- | --- | --- | --- |
 | 1 | `20262110000000_s120_pdf_file_id_service_only` | exactly that file | ledger `20262110000000`; `enforce_pdf_file_id_service_only` md5 `f49d6bfd678f5fa11b25faa0f96a24a2`; triggers `daily_logs:23:O, deliveries:23:O, material_signouts:23:O, safety_incidents:23:O` | ledger 2110; md5 = rebuild-test's; 4 triggers, `tgtype 23`, enabled `O` | **MATCH** |
 | 2 | `20262111000000_s120_email_has_account_rate_limit` | exactly that file | ledger `20262111000000`; `email_has_account` md5 `e30ddcf7abe41c5934d6cae375457e0c`, VOLATILE, SECURITY DEFINER; EXECUTE anon **false**, authenticated **true**; `email_account_checks` RLS **on**, policies `email_account_checks_select_owner_admin:SELECT` only; 0 rows | ledger 2111; md5 = rebuild-test's; `v` / definer; anon false; authenticated true; RLS on; exactly 1 SELECT policy | **MATCH** |
+| 3 | `20262112000000_s120_record_payment_contact_company` | exactly that file | ledger `20262112000000`; `record_client_payment` md5 `d2dbd30021df040a50f71825a24a4b00`; contains the `#177 [S120]` marker | ledger 2112; md5 = rebuild-test after 2112 (`d2dbd300…`) | **MATCH** |
 
 ⚠️ **Process slip, recorded.** Row 1's report entry failed to save: the edit's anchor, this heading,
 had been dropped by my own 3-D edit. Section 2 had been queued in the same command, so it ran before
