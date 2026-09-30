@@ -781,7 +781,31 @@ its own shell (exit 144). It did not stop the server (PID 219061, stopped next b
 did not touch the sabotage edit, which had already been written and read back. Every later stop used
 listed PIDs.
 
-## Production verification rows
+#### 3-D: the `force-dynamic` audit (REPORT ONLY; nothing changed; a security ruling)
+
+`git grep "dynamic = 'force-dynamic'" origin/main -- apps/web/app` finds **13 routes**, and this is the
+full list. The judgement for each was made by reading its data calls on `origin/main`.
+
+| route | reads tenant data? | judgement |
+| --- | --- | --- |
+| `api/quickbooks/accounts` | yes: `companies`, `company_members`, `company_payment_accounts`, `profiles`, and the QB account cache via the admin client | **keep**: the caller's chart of accounts |
+| `api/quickbooks/callback` | yes: `companies`, `profiles`, `qb_sync_queue` (admin) | **keep**: the OAuth handshake writes the tenant's connection |
+| `api/quickbooks/connect` | yes: `profiles` (the caller's role) | **keep**: per-caller authority decision |
+| `api/quickbooks/customer-conflict` | yes: `contacts`, `qb_sync_queue` (admin) | **keep** |
+| `api/quickbooks/disconnect` | yes: `companies`, `qb_account_cache`, token blob (admin) | **keep**: writes the tenant's connection |
+| `api/quickbooks/income-item` | yes: `companies`, `qb_sync_queue` (admin) | **keep** |
+| `api/quickbooks/webhook` | yes: resolves `companies` by realm, writes `qb_webhook_events` (admin) | **keep**: an Intuit POST, and each delivery is its own event |
+| `dashboard/notifications` | yes: `getNotifications()`, the caller's own notifications | **keep**: a cached render would serve one person's notifications to another |
+| `dashboard/settings/accounting` | yes: member defaults, payment accounts, QB connection and queue | **keep**: its own comment names the stale pre-connection render it prevents |
+| `dashboard/settings` | yes: company, settings bundle, contract templates and boxes, add-ons | **keep**: its comment records the stale-template-map defect it fixed |
+| `m/notifications` | yes: `getNotifications()` | **keep**, same as the desktop page |
+| `onboarding/complete` | yes: `profiles`, `companies`, Stripe (admin) | **keep**: a per-caller redirect route |
+| `resubscribe` | yes: `getResubscribeContext()` (admin) | **keep**: per-tenant resubscribe state |
+
+**None is a candidate for removal: 13 of 13 render or act on tenant- or caller-specific data.** Pages
+without the flag are already dynamic, because they read cookies through `createClient()`. Josh rules;
+nothing was changed.
+
 
 ---
 
