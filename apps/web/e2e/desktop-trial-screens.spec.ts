@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { signInAs } from './sign-in-as';
+import { LOCK_OK_COOKIE, LOCK_OK_TTL_S } from '../lib/trial/lock-cookie';
 import {
   adminClient,
   assertNoTrace,
@@ -266,6 +267,14 @@ test.describe('/locked — the tenant whose trial expired', () => {
     await signInAs(page, LOCKED_EMAIL);
     await lockThrowaway(admin, locked.companyId);
 
+    // S120 3-B — INVERTED IN PLACE. Superseded, quoted: the navigation came
+    // straight after the lock ("await page.goto('/dashboard')" on the next
+    // line). The middleware now caches a healthy tenant's "not locked" for
+    // LOCK_OK_TTL_S in a signed cookie (lib/trial/lock-cookie.ts, ruled S120
+    // SPEC 3-B: "prove a locked tenant still gets locked within the TTL"), and
+    // the sign-in above minted one. So the claim is now "caught WITHIN the TTL":
+    // wait it out, then navigate.
+    await page.waitForTimeout((LOCK_OK_TTL_S + 2) * 1000);
     await page.goto('/dashboard');
     await expect(page).toHaveURL(/\/locked$/);
   });
@@ -312,6 +321,41 @@ test.describe('/locked — the tenant whose trial expired', () => {
     });
     expect(res.status()).toBe(403);
     expect((await res.json()).code).toBe('TRIAL_LOCKED');
+  });
+
+  test('⚠️ S120 3-B — a lock-ok cookie minted for ANOTHER user does not unlock a locked tenant', async ({
+    page,
+    browser,
+  }) => {
+    // A genuine cookie, from a healthy tenant's owner.
+    const healthy = await browser.newContext();
+    const hp = await healthy.newPage();
+    await signInAs(hp, OWNER);
+    const res0 = await hp.request.get('/api/s120-lock-probe', { failOnStatusCode: false });
+    const minted = (await healthy.cookies()).find((c) => c.name === LOCK_OK_COOKIE);
+    await healthy.close();
+    expect(minted, `the healthy owner was never given a ${LOCK_OK_COOKIE} cookie (status ${res0.status()})`).toBeTruthy();
+
+    await lockThrowaway(admin, locked.companyId);
+    await signInAs(page, LOCKED_EMAIL, /\/locked/);
+    await page.context().addCookies([{ ...minted!, domain: 'localhost', path: '/' }]);
+    const res = await page.request.post('/api/trial/export', {
+      data: { categories: ['contacts'], format: 'zip' },
+      failOnStatusCode: false,
+    });
+    expect(res.status()).toBe(403);
+    expect((await res.json()).code).toBe('TRIAL_LOCKED');
+  });
+
+  test('⚠️ S120 3-B — the payment path still passes for a LOCKED tenant (never the lock guard)', async ({
+    page,
+  }) => {
+    await lockThrowaway(admin, locked.companyId);
+    await signInAs(page, LOCKED_EMAIL, /\/locked/);
+    const res = await page.request.post('/api/stripe/checkout', { data: {}, failOnStatusCode: false });
+    const body = (await res.json().catch(() => ({}))) as { code?: string };
+    // The route may refuse the empty body on its own terms; the LOCK must not.
+    expect(body.code, `checkout answered ${res.status()} with the lock code`).not.toBe('TRIAL_LOCKED');
   });
 });
 
