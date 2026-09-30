@@ -6,13 +6,20 @@ import MarkupEditor from './markup-editor';
 import { getMyProfile } from '@/lib/services/profiles';
 import { canDeletePhoto } from '@/lib/photos/delete-permission';
 import { DeletePhotoButton } from './delete-photo-button';
+import { markupReturnTo } from '@/lib/markup/return-to';
 
 export default async function MarkupPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string; fileId: string }>;
+  searchParams: Promise<{ from?: string | string[] }>;
 }) {
   const { id: projectId, fileId } = await params;
+  // [S122 0-B-5] Back goes where the user came from — Files or Photos — via a
+  // fixed token, never a path (lib/markup/return-to.ts).
+  // SUPERSEDED: every "← Back to files" link was hard-coded to the Files tab.
+  const back = markupReturnTo(projectId, (await searchParams).from);
 
   const file = await getFile(fileId);
   if (!file) notFound();
@@ -24,8 +31,8 @@ export default async function MarkupPage({
         <p style={{ color: '#a00', marginBottom: '1rem' }}>
           Markup is only available for image files. This file is {file.mime_type ?? 'unknown'}.
         </p>
-        <Link href={`/dashboard/projects/${projectId}/files`} style={{ color: '#06c' }}>
-          ← Back to files
+        <Link href={back.href} style={{ color: '#06c' }} data-testid="markup-back">
+          {back.label}
         </Link>
       </div>
     );
@@ -38,8 +45,8 @@ export default async function MarkupPage({
         <p style={{ color: '#a00', marginBottom: '1rem' }}>
           Could not load image. Try refreshing the page.
         </p>
-        <Link href={`/dashboard/projects/${projectId}/files`} style={{ color: '#06c' }}>
-          ← Back to files
+        <Link href={back.href} style={{ color: '#06c' }} data-testid="markup-back">
+          {back.label}
         </Link>
       </div>
     );
@@ -58,10 +65,11 @@ export default async function MarkupPage({
     <div style={{ padding: '2rem' }}>
       <div style={{ marginBottom: '1rem' }}>
         <Link
-          href={`/dashboard/projects/${projectId}/files`}
+          href={back.href}
           style={{ color: '#06c', textDecoration: 'none', fontSize: '0.875rem' }}
+          data-testid="markup-back"
         >
-          ← Back to files
+          {back.label}
         </Link>
       </div>
       <div
@@ -75,7 +83,7 @@ export default async function MarkupPage({
         }}
       >
         <h1 style={{ fontSize: '1.5rem', fontWeight: 600, margin: 0 }}>Markup: {file.file_name}</h1>
-        {canDelete && <DeletePhotoButton fileId={fileId} projectId={projectId} />}
+        {canDelete && <DeletePhotoButton fileId={fileId} returnHref={back.href} />}
       </div>
       {/* filePath is passed for #129 [S122]: the editor writes the flattened
           derivative beside the original, and derivativePathFor() needs the

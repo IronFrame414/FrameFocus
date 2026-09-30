@@ -62,8 +62,14 @@ export default async function MobileSettingsPage() {
       <SetMobileHeader title={t('shell.tile.settings')} sub={company?.name ?? null} />
 
       {/* ── You ────────────────────────────────────────────────────────────
-          §4.13.7's first bound block. display_name and member_type from
-          getMyMember(); role from getMyProfile(). The point of the block is
+          §4.13.7's first bound block. display_name from getMyMember(); role
+          from getMyProfile(). [S122 0-B-6, Josh Q2-A] member_type is NOT shown:
+          it is `crew` or `subcontractor`, so every owner, admin, PM and foreman
+          read "Owner crew" — on a new owner's first visit it looked like a
+          demotion. It either repeats the role or misleads. /m/team still uses
+          it for filtering, where it belongs.
+          SUPERSEDED: a second mono tag, data-testid="m-settings-member-type",
+          rendering member_type beside the role. The point of the block is
           identity confirmation: a shared site phone, or a handset that has been
           in a pocket since the last shift, makes "am I still me?" a real
           question — and clocking in as the wrong identity puts wrong-person
@@ -89,16 +95,6 @@ export default async function MobileSettingsPage() {
             {profile?.role && profile.role in ROLE_KEY
               ? t(ROLE_KEY[profile.role as CompanyRole])
               : (profile?.role ?? '—')}
-          </span>
-          <span
-            data-testid="m-settings-member-type"
-            className="font-mono text-[11px] text-m6m-muted"
-          >
-            {member?.member_type === 'subcontractor'
-              ? t('directory.team.typeTag.subcontractor')
-              : member?.member_type
-                ? t('directory.team.typeTag.crew')
-                : '—'}
           </span>
         </p>
       </section>

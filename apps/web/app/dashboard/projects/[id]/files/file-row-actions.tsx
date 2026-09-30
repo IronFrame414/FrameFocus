@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useConfirm, useAlert } from '@/components/confirm/confirm-provider';
 import { softDeleteFile } from '@/lib/services/files-client';
 import { sheetExportFromPath } from '@/lib/markup/export-marked';
+import { markupHref } from '@/lib/markup/return-to';
 
 export default function FileRowActions({
   fileId,
@@ -86,7 +87,8 @@ export default function FileRowActions({
     <div style={{ display: 'flex', gap: '0.5rem' }}>
       {isImage && (
         <Link
-          href={`/dashboard/projects/${projectId}/files/${fileId}/markup`}
+          // [S122 0-B-5] carries ?from=files so the markup screen's back link returns here.
+          href={markupHref(projectId, fileId, 'files')}
           style={{
             ...btnStyle,
             textDecoration: 'none',

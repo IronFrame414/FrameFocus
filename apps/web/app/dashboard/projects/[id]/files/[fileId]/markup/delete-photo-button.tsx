@@ -16,7 +16,7 @@ import { softDeleteFile } from '@/lib/services/files-client';
 // database refused (RLS, or a frozen site-visit photo) is reported as a failure,
 // never as a delete. Who sees this button: `canDeletePhoto` (lib/photos), the
 // same rule /m reads.
-export function DeletePhotoButton({ fileId, projectId }: { fileId: string; projectId: string }) {
+export function DeletePhotoButton({ fileId, returnHref }: { fileId: string; returnHref: string }) {
   const router = useRouter();
   const confirm = useConfirm();
   const [busy, setBusy] = useState(false);
@@ -32,8 +32,11 @@ export function DeletePhotoButton({ fileId, projectId }: { fileId: string; proje
       setError(`Could not delete this photo: ${result.error}`);
       return;
     }
-    // Back to the grid it came from, re-rendered without it.
-    router.push(`/dashboard/projects/${projectId}/photos`);
+    // Back to where the user came from, re-rendered without it [S122 0-B-5]:
+    // the page resolves `returnHref` from its `?from=` token.
+    // SUPERSEDED: it always pushed the project's Photos grid, even when the
+    // user came from Files.
+    router.push(returnHref);
     router.refresh();
   }
 
