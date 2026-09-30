@@ -781,6 +781,57 @@ its own shell (exit 144). It did not stop the server (PID 219061, stopped next b
 did not touch the sabotage edit, which had already been written and read back. Every later stop used
 listed PIDs.
 
+#### 3-B: `is_my_company_locked()` out of the request path (branch `feature/s120-speed`)
+
+**Built** (`lib/trial/lock-cookie.ts`, `lib/trial/lock-guard.ts`, `middleware.ts`):
+- A healthy tenant's **"not locked"** answer is cached for **`LOCK_OK_TTL_S = 30` seconds** in the
+  cookie `ff_lock_ok`. The cookie is `httpOnly`, `sameSite=lax`, and `secure` on https. Its value is
+  `<user id>.<expiry>.<HMAC-SHA256>`, keyed by a key derived from the server-only service-role secret.
+- **Only a DEFINITE `false` is cached.** A locked answer is never cached, so a tenant who pays is
+  unlocked on the next request. A failed check is never cached either. That needed a new tri-state
+  `checkMyCompanyLock()` (true / false / null). `isMyCompanyLocked()` is now a wrapper over it and
+  behaves the same as before.
+- **It fails toward the old path.** A missing secret, a malformed, expired, foreign-user or forged
+  value, or any crypto error verifies as false, and then the RPC runs exactly as before (and that
+  RPC still fails open). Nothing in this code path can lock a healthy tenant.
+- **The TTL window:** a tenant that **becomes** locked keeps working for at most **30 s**. It is
+  then caught, and the trial-lock job also bans every login.
+- **The payment routes stay exempt:** `lockApplies` is unchanged, so the exempt paths never reach
+  the cache or the RPC.
+
+**Existing test swept (the S157 rule):** `desktop-trial-screens.spec.ts`, "a session that was ALREADY
+OPEN when the lock landed is caught". It navigated straight after the lock, and its sign-in has now
+minted a cookie. It was **inverted in place**, with the superseded line quoted: it waits
+`LOCK_OK_TTL_S + 2` seconds and then asserts `/locked`. Two negatives were added. A **genuine
+`ff_lock_ok` cookie minted for a healthy owner, added to a LOCKED tenant's session, does not
+unlock it** (`/api/trial/export` → 403 `TRIAL_LOCKED`). And **`/api/stripe/checkout` never answers
+`TRIAL_LOCKED` for a locked tenant.**
+
+**Unit:** `lib/trial/lock-cookie.test.ts` has 7 tests: round trip; another user; expiry at 30 s; a
+forged longer or shorter expiry; another secret; garbage, empty and absent; no secret means the
+cache is off. With `lock-guard.test.ts` and `s120-middleware-claims.test.ts` that is **26/26**.
+
+**Speed: before and after, measured the same way** with `s120-measure.mjs` (its method is written in
+its header). A production build against rebuild-test, one real sign-in, then sequential GETs with a
+**cookie jar** that honours `Set-Cookie`. Run 0 is discarded; medians are shown. BEFORE is the
+security-branch build, whose middleware and lock guard are identical to `main`. AFTER is
+`feature/s120-speed`.
+
+| path | runs | BEFORE median | AFTER median |
+| --- | --- | --- | --- |
+| `/api/s120-probe-nonexistent` (the middleware runs, then Next 404s: **the middleware's own toll**) | 25 | **56 ms** | **20 ms** |
+| `/api/chat/threads` | 15 | 230 ms | 212 ms |
+| `/m/timeclock` | 15 | 308 ms | 255 ms |
+
+The AFTER probe's warm-up run (no cookie yet) took 53 ms, which is the uncached cost. Every later run
+was 17–25 ms. ⚠️ **The limits of this instrument, stated.** The fetch-log preload does **not** see the
+middleware's fetches, because the Edge sandbox has its own `fetch`. So the lock RPC shows up only as
+wall time, never as a counted call, and the `calls` column counts the route's own fetches (unchanged,
+5 and 13). The absolute numbers are Codespace → rebuild-test (`us-east-2`), **not production**.
+Production's function and database sit together (`iad1` / `us-east-1`, see 1.4), so there the RPC is
+cheaper and the saving smaller. Each figure comes from a single run of N requests, not repeated
+sessions.
+
 #### 3-D: the `force-dynamic` audit (REPORT ONLY; nothing changed; a security ruling)
 
 `git grep "dynamic = 'force-dynamic'" origin/main -- apps/web/app` finds **13 routes**, and this is the
