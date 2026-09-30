@@ -199,7 +199,8 @@ def classify(live, defs):
 
     A name with ONE live function is judged against its LATEST definition only.
     A name with several live overloads (e.g. create_safety_incident, defined
-    with two signatures in two files and never dropped) is judged per overload
+    with two signatures in two files until S121 dropped the 6-arg one in
+    20262121000000) is judged per overload
     against every definition of that name, taking the best grade — the
     signature, not the version order, is what pairs them.
     """

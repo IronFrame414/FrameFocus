@@ -11140,30 +11140,18 @@ export type Database = {
         }
         Returns: string
       }
-      create_safety_incident:
-        | {
-            Args: {
-              p_description: string
-              p_incident_date: string
-              p_incident_type: string
-              p_injuries?: Json
-              p_project_id: string
-              p_witnesses?: Json
-            }
-            Returns: string
-          }
-        | {
-            Args: {
-              p_description: string
-              p_incident_date: string
-              p_incident_type: string
-              p_injuries: Json
-              p_prevention_notes: string
-              p_project_id: string
-              p_witnesses: Json
-            }
-            Returns: string
-          }
+      create_safety_incident: {
+        Args: {
+          p_description: string
+          p_incident_date: string
+          p_incident_type: string
+          p_injuries: Json
+          p_prevention_notes: string
+          p_project_id: string
+          p_witnesses: Json
+        }
+        Returns: string
+      }
       create_site_visit: {
         Args: {
           p_contact_address_id?: string
