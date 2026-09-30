@@ -705,3 +705,11 @@ Each section ran through `section.sh`: every newer migration file held out of th
 
 ### Back in the original session (framefocus-fe) — the handover
 The section above was written by a **second session** (`framefocus-d8`) started on 7-A in the same Codespace. It messaged this session at 19:16 and **stood down**: this session owns 7-A, production and the merge. Its commits `56c22553` (probe #1 inverted; docstring) and `1666ac7f` (an empty CI request) were **reviewed and kept**. It removed this session's report worktree, which **lost one report append** (re-written here). `1666ac7f`'s run `36764019665` was cancelled by concurrency in favour of **`36764462965` on `5e975983`, a byte-identical tree** (tree `4c71dea7…` for both). The peer's production pre-check (ledger ends `…2120`; two overloads; the 7-arg md5 `5829b327…`; 0 dependents) matches this session's rebuild-test expectation. It is re-read immediately before applying.
+
+### Production — 7-A, and the merge
+- **CI `36764462965` green on base `66a3a1a2` (= main):** e2e **674 passed, 24 skipped, 0 flaky, 0 failed**.
+- **Pre-check, PRODUCTION (re-read immediately before):** latest `20262120000000`; the 6-arg overload EXECUTE authenticated `false`; **0** other functions reference it; **0** dependents; the 7-arg `true`.
+
+| # | migration | dry run | verification on PRODUCTION | expected | verdict |
+| --- | --- | --- | --- | --- | --- |
+| 5 | `20262121000000_s121_drop_create_safety_incident_6arg` | exactly that file | ledger `…2116–2121`; overloads **1**: `create_safety_incident(uuid,date,text,text,text,jsonb,jsonb)` md5 `5829b3278603c48706567ce5b4d2c1aa`, EXECUTE authenticated `true` | 1 overload, md5 = rebuild-test's, grant unchanged | **MATCH** — relinked, `LINKED_REF=nmyphyhmfttxkdoposvf` |
