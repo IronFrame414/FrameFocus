@@ -343,7 +343,7 @@ export function ScheduleSheet({
         ) : null}
         {taskMode === 'new' ? (
           <input
-            data-testid="ss-task-new"
+            data-testid="ss-task-title"
             value={newTitle}
             onChange={(e) => setNewTitle(e.target.value)}
             placeholder={t('sched.newTaskName')}

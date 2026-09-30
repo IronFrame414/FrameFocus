@@ -30,7 +30,7 @@
 // their OWN general entries; tasks and inspections stay project-scoped. No UI
 // filter here disagrees with it (no ownMemberId — the M-25 reasoning stands).
 
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useT } from '@/components/i18n/language-provider';
 import type { CalendarEvent } from '@/lib/services/schedule';
@@ -93,11 +93,23 @@ export function DayView({
   const [sheet, setSheet] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // A SAVED move shows at once and stays until fresh data arrives (the same
+  // rule as the desktop calendar — no snap-back, no second drag from stale dates).
+  const [overrides, setOverrides] = useState<Record<string, { start: string; end: string }>>({});
+  useEffect(() => setOverrides({}), [events]);
+  const current = useMemo(
+    () =>
+      events.map((e) => {
+        const o = overrides[`${e.source}:${e.id}`];
+        return o ? { ...e, start_date: o.start, end_date: o.end } : e;
+      }),
+    [events, overrides]
+  );
   const drag = useRef<{ e: CalendarEvent; mode: DragMode; x0: number } | null>(null);
 
   const onDay = useMemo(
-    () => events.filter((e) => e.start_date <= day && e.end_date >= day),
-    [events, day]
+    () => current.filter((e) => e.start_date <= day && e.end_date >= day),
+    [current, day]
   );
   // A task's bars are per person; the detail lists everyone on it.
   const namesByTask = useMemo(() => {
@@ -152,7 +164,10 @@ export function DayView({
     }
     const r = await moveCalendarEvent(d.e, p.start, p.end);
     if (!r.success) setNote(r.error ?? null);
-    else setNote(p.clamped ? t('sched.day.clamped') : null);
+    else {
+      setOverrides((o) => ({ ...o, [`${d.e.source}:${d.e.id}`]: { start: p.start, end: p.end } }));
+      setNote(p.clamped ? t('sched.day.clamped') : null);
+    }
     setPreview(null);
     router.refresh();
   }

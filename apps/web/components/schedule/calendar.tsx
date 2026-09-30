@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { CalendarEvent } from '@/lib/services/schedule-client';
 import { layoutWeek } from '@/lib/schedule/lanes';
 import { addDays, applyDrag, daysBetween, type DragMode } from '@/lib/schedule/drag';
@@ -81,6 +81,12 @@ export function Calendar({
   const dragRef = useRef<DragState | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  // A SAVED move shows at once and stays until fresh data arrives. Without it
+  // the bar snapped back to its old days until the refresh landed — and a
+  // second drag in that window started from the stale range (found by the
+  // S121 e2e: a resize wrote the old start back).
+  const [overrides, setOverrides] = useState<Record<string, { start: string; end: string }>>({});
+  useEffect(() => setOverrides({}), [events]);
 
   // Build the visible week rows
   let weeks: string[] = [];
@@ -107,10 +113,17 @@ export function Calendar({
 
   // The bars as they render: a dragged bar shows its PREVIEW range.
   const shown = useMemo(() => {
-    if (!drag) return events;
+    // A move changes the TASK/ENTRY, so every bar of it (one per person) moves.
+    const base = events.map((e) => {
+      const o = overrides[`${e.source}:${e.id}`];
+      return o ? { ...e, start_date: o.start, end_date: o.end } : e;
+    });
+    if (!drag) return base;
     const r = applyDrag({ start: drag.event.start_date, end: drag.event.end_date }, drag.mode, drag.deltaDays);
-    return events.map((e) => (e.key === drag.event.key ? { ...e, start_date: r.start, end_date: r.end } : e));
-  }, [events, drag]);
+    return base.map((e) =>
+      e.source === drag.event.source && e.id === drag.event.id ? { ...e, start_date: r.start, end_date: r.end } : e
+    );
+  }, [events, drag, overrides]);
 
   const todayKey = toKey(new Date());
   const monthNum = anchor.getMonth();
@@ -162,6 +175,7 @@ export function Calendar({
     setSaving(true);
     const err = await onMove!(cur.event, r.start, r.end);
     setSaving(false);
+    if (!err) setOverrides((o) => ({ ...o, [`${cur.event.source}:${cur.event.id}`]: { start: r.start, end: r.end } }));
     setDrag(null);
     if (err) setNote(err);
     else if (r.clamped) setNote('A bar cannot end before it starts — it was kept to one day.');

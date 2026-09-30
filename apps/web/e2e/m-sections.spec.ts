@@ -103,7 +103,25 @@ test.describe('§4.11 common rules', () => {
       // These are read-only surfaces in v1 — none is in D-6's offline-write set,
       // so the "disabled with a plain message" branch has nothing to apply to.
       // The assertion is that no write is offered at all.
-      expect(await page.getByTestId('m-content').getByRole('button').count()).toBe(0);
+      if (s === 'schedule') {
+        // ⚠️ INVERTED IN PLACE FOR THE SCHEDULE [S121 5-A, RULED Josh —
+        // scheduling from the phone]. _Superseded:_ "no button at all" on the
+        // schedule. It now carries NAVIGATION (‹ › Today) and tap-to-open
+        // details for everyone — and its WRITE controls (+ Schedule, the sheet,
+        // move mode) only for the roles that may schedule. This runs as the
+        // CREW identity, which may not: so still no write control, and no field.
+        await expect(page.getByTestId('m-day-view')).toBeVisible();
+        expect(await page.getByTestId('m-day-add').count()).toBe(0);
+        expect(await page.getByTestId('schedule-sheet').count()).toBe(0);
+        expect(await page.getByTestId('m-event-move').count()).toBe(0);
+        const buttons = page.getByTestId('m-content').getByRole('button');
+        for (let i = 0; i < (await buttons.count()); i++) {
+          const id = (await buttons.nth(i).getAttribute('data-testid')) ?? '';
+          expect(['m-day-prev', 'm-day-next', 'm-day-today', 'm-event-open'], `unexpected control ${id}`).toContain(id);
+        }
+      } else {
+        expect(await page.getByTestId('m-content').getByRole('button').count()).toBe(0);
+      }
       expect(
         await page.getByTestId('m-content').locator('input, select, textarea').count()
       ).toBe(0);
@@ -180,15 +198,14 @@ test.describe('M-11 · Overview', () => {
 // M-12 Schedule — §4.11.2
 // ===========================================================================
 test.describe('M-12 · Schedule', () => {
-  test('A-32 · today first, then ascending, with past days above', async ({ page }) => {
+  // ⚠️ INVERTED IN PLACE [S121 5-A — M-12's LIST is overturned].
+  // _Superseded:_ "A-32 · today first, then ascending, with past days above"
+  // (m-day-group sections ascending). Now the SAME one-day column as M-25.
+  test('A-32 · the project schedule is the one-day column — no day groups, no grid', async ({ page }) => {
     await page.goto(routeFor('schedule'));
-    const groups = page.getByTestId('m-day-group');
-    const n = await groups.count();
-    if (n === 0) test.skip(true, 'no events on this project');
-    const days: string[] = [];
-    for (let i = 0; i < n; i++) days.push((await groups.nth(i).getAttribute('data-day'))!);
-    // Ascending overall — never newest-first.
-    expect(days).toEqual([...days].sort());
+    await expect(page.getByTestId('m-day-view')).toBeVisible();
+    await expect(page.getByTestId('m-day-group')).toHaveCount(0);
+    await expect(page.getByTestId('calendar-week')).toHaveCount(0);
   });
 });
 
