@@ -9,7 +9,45 @@ production runbook (docs only)"), fetched and pruned 2026-09-30. Report branch
 
 ## Phase 2 — questions for Josh
 
-_(Filled at the end of Phase 1.)_
+Posted 2026-09-30 at the end of Phase 1. **Unattended: the session proceeds on each default. If Josh
+answers, his answer wins, and anything already built on the default is changed.** The status column is
+updated as the session goes.
+
+1. **[ASK-1] `#176`: how should `email_has_account` be constrained?** Options: A) a rate limit; B) same-company
+   scope. **Default: A, the rate limit.** It is the narrower change: it alters how often the function
+   answers, not what it answers, and the invite flow needs a platform-wide answer (invite-new vs
+   link-existing). _Status: default taken; Josh has not answered._
+2. **[ASK-2] "Also send to": one address or several?** Options: A) one; B) several. **Default: A, one.**
+   Josh wrote "an additional email address", singular, and one is the narrower surface. _Status: default
+   taken; Josh has not answered._
+3. **[ASK-3] SPEC 3-A had already shipped.** `main` has used `getClaims()` in middleware since H-1b
+   (`160a57d5`, S116). The spec described the older tree. Options: A) add the four proofs the spec asks
+   for (valid session, stale-token refresh with the cookie written, tampered, expired) and sabotage the
+   refresh persistence, with no middleware behaviour change; B) re-open the middleware design.
+   **Default: A.** The shipped code is the ruled code (S116 Q9), and what is missing is proof, not
+   behaviour.
+4. **[ASK-4] The asymmetric JWT key switch is ALREADY DONE on production** (ES256 `in_use`, HS256
+   `previously_used`). The only related action left is **revoking** the legacy HS256 key. Options: A)
+   leave it as `previously_used`; B) revoke it (your click, or mine on your say-so, since it is
+   reachable through the Management API). **Default: A, leave it.** Revoking is irreversible for any
+   integration still using the legacy JWT secret, and nothing in this session needs it.
+5. **[ASK-5] Payroll: confirm Juan Cardona's stop time.** Production has **0 open segments** now. The
+   spec's two open segments best match Josh's `6bfa15c1` (task-bound, closed 21:40:47 UTC with
+   `completion='complete'`) and **Juan Cardona's `bbfc0765`** (Riverwood, **no task**, closed
+   21:15:38 UTC). This session did not close either one. Question: **is 21:15:38 UTC (16:15 Central)
+   Juan's real stop time?** No default action (stop rule 3). Nothing will be changed.
+6. **[ASK-6] The unmerged branches carry content that is not on main** (1.1): the S118 item-8 cost-catalog
+   importer (`feature/s118-catalog-import`, whose local and origin copies have **diverged**), the
+   report tails for S116, S110 and S180, C-5 multi-upload, and the staleTimes hold. Options: A) keep
+   all of them and decide later; B) land the docs-only report tails and the importer now. **Default: A,
+   keep.** Landing them is not on this spec's list, and the importer is code nobody reviewed for merge.
+7. **[ASK-7] `#177` is treated as an integrity guard, not stop-rule-3 "payment authority".** The fix
+   adds only "the contact must be in your company". Who may record a payment, and for how much, does
+   not change. Options: A) build it; B) stop it as money code. **Default: A, build it.** It is
+   narrower than any authority change and closes a cross-tenant reference.
+8. **[ASK-8] 4-A: who may add an estimate recipient?** Options: A) Owner/Admin only (the same
+   authority as send); B) anyone who may edit the estimate. **Default: A**, the narrower one, as the
+   spec's own unattended default.
 
 ---
 
