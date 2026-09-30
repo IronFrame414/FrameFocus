@@ -30,7 +30,8 @@ export interface SignoutPdfData {
   acknowledgement: string | null;
   returnRows: [string, string | null][] | null;
   returnSignature: SignoutPdfSignature | null;
-  photoSets: [SignoutPdfPhotoSet, SignoutPdfPhotoSet];
+  /** Release, return, and [S121 3-F] where it was put. */
+  photoSets: [SignoutPdfPhotoSet, SignoutPdfPhotoSet, SignoutPdfPhotoSet];
   generatedAt: string; // ISO
   timeZone: string;
 }

@@ -4,7 +4,12 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { randomUUID } from 'crypto';
 import type { Database } from '@framefocus/shared/types/database';
 import { SignoutDocument, type SignoutPdfData, type SignoutPdfPhotoSet } from '@/lib/material-signouts/signout-template';
-import { RELEASE_CONDITION_KEY, RETURN_CONDITION_KEY, STATUS_KEY } from '@/lib/material-signouts/signout';
+import {
+  NOT_RETURNED_REASON_KEY,
+  RELEASE_CONDITION_KEY,
+  RETURN_CONDITION_KEY,
+  STATUS_KEY,
+} from '@/lib/material-signouts/signout';
 import { getMaterialSignout, getSignoutPhotos, type SignoutPhoto } from '@/lib/services/material-signouts';
 import { getCompanyTimeSettings } from '@/lib/services/company';
 import { downloadPhotoBase64 } from '@/lib/change-orders/co-data';
@@ -108,7 +113,11 @@ export async function regenerateSignoutPdf(
           [t('signout.receiverContact'), record.receiver_contact_name],
           [t('signout.receiverPhone'), record.receiver_phone],
           [t('signout.receiverDriver'), record.receiver_driver_name],
-          [t('signout.receiverVehicle'), record.receiver_vehicle],
+          // [S121 3-B] The input is gone; the column is kept. A record that
+          // HOLDS a vehicle (pre-S121) still prints it — never silently hidden.
+          ...(record.receiver_vehicle
+            ? ([[t('signout.receiverVehicle'), record.receiver_vehicle]] as [string, string | null][])
+            : []),
         ],
       },
     ],
@@ -137,6 +146,16 @@ export async function regenerateSignoutPdf(
             t('signout.conditionAtReturn'),
             record.condition_at_return ? t(RETURN_CONDITION_KEY[record.condition_at_return]) : null,
           ],
+          // [S121 3-F / ASK-28]
+          ...(record.return_location_note
+            ? ([[t('signout.returnLocationNote'), record.return_location_note]] as [string, string | null][])
+            : []),
+          ...(record.not_returned_reason
+            ? ([[t('signout.notReturnedReasonRow'), t(NOT_RETURNED_REASON_KEY[record.not_returned_reason])]] as [
+                string,
+                string | null,
+              ][])
+            : []),
           [t('signout.returnNotes'), record.return_notes],
         ]
       : null,
@@ -152,6 +171,7 @@ export async function regenerateSignoutPdf(
     photoSets: [
       await photoSet(t('signout.photosRelease'), photos.filter((p) => p.stage === 'release')),
       await photoSet(t('signout.photosReturn'), photos.filter((p) => p.stage === 'return')),
+      await photoSet(t('signout.photosReturnLocation'), photos.filter((p) => p.stage === 'return_location')),
     ],
     generatedAt: new Date().toISOString(),
     timeZone: timezone,

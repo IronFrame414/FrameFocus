@@ -15,11 +15,11 @@ export default async function MobileNewSignoutPage({ params }: { params: { proje
       <SectionHeader projectId={params.projectId} title={t('signout.new')} />
       <SignoutNewForm
         projectId={params.projectId}
-        defaultJobName={data.defaultJobName}
+        jobs={data.jobs}
         defaultJobAddress={data.defaultJobAddress}
         defaultSignerName={data.viewer.signerName}
         today={data.today}
-        hrefBase={`/m/p/${params.projectId}/signouts`}
+        surface="m"
       />
     </div>
   );

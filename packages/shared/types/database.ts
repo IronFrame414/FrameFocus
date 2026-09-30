@@ -6102,6 +6102,7 @@ export type Database = {
           manufacturer: string | null
           material_type: string
           model_sku: string | null
+          not_returned_reason: string | null
           pdf_file_id: string | null
           project_id: string
           quantity: string
@@ -6125,6 +6126,7 @@ export type Database = {
           released_signer_name: string
           released_title: string | null
           return_location: string | null
+          return_location_note: string | null
           return_notes: string | null
           return_signature_data: string | null
           return_signature_type: string | null
@@ -6158,6 +6160,7 @@ export type Database = {
           manufacturer?: string | null
           material_type: string
           model_sku?: string | null
+          not_returned_reason?: string | null
           pdf_file_id?: string | null
           project_id: string
           quantity: string
@@ -6181,6 +6184,7 @@ export type Database = {
           released_signer_name: string
           released_title?: string | null
           return_location?: string | null
+          return_location_note?: string | null
           return_notes?: string | null
           return_signature_data?: string | null
           return_signature_type?: string | null
@@ -6214,6 +6218,7 @@ export type Database = {
           manufacturer?: string | null
           material_type?: string
           model_sku?: string | null
+          not_returned_reason?: string | null
           pdf_file_id?: string | null
           project_id?: string
           quantity?: string
@@ -6237,6 +6242,7 @@ export type Database = {
           released_signer_name?: string
           released_title?: string | null
           return_location?: string | null
+          return_location_note?: string | null
           return_notes?: string | null
           return_signature_data?: string | null
           return_signature_type?: string | null
@@ -11026,6 +11032,8 @@ export type Database = {
       close_material_signout: {
         Args: {
           p_condition_at_return: string
+          p_not_returned_reason?: string
+          p_return_location_note?: string
           p_return_notes: string
           p_returned_date: string
           p_returned_time: string
@@ -11208,6 +11216,7 @@ export type Database = {
         Args: { p_item_ids: string[]; p_po_id: string }
         Returns: undefined
       }
+      material_signout_caller_name: { Args: never; Returns: string }
       may_enter_client_thread: { Args: never; Returns: boolean }
       member_profile_role: { Args: { p_member_id: string }; Returns: string }
       my_assigned_site_address_ids: { Args: never; Returns: string[] }
@@ -11516,15 +11525,6 @@ export type Database = {
         Returns: undefined
       }
       sync_po_commitment: { Args: { p_po_id: string }; Returns: undefined }
-      test_invite_lookup: {
-        Args: { p_token: string }
-        Returns: {
-          found_email: string
-          found_id: string
-          found_role: string
-          found_status: string
-        }[]
-      }
       time_member_rank: { Args: { p_member_id: string }; Returns: number }
       time_role_rank: { Args: { p_role: string }; Returns: number }
       time_session_member: { Args: { p_session_id: string }; Returns: string }

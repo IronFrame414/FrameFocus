@@ -161,7 +161,7 @@ async function file(tag: string, category = 'material_signout', project = projec
   return data!.id as string;
 }
 
-async function photo(signoutId: string, stage: 'release' | 'return'): Promise<void> {
+async function photo(signoutId: string, stage: 'release' | 'return' | 'return_location'): Promise<void> {
   const fid = await file(`${stage}-${signoutId.slice(0, 6)}-${fileIds.length}`);
   const { error } = await admin.from('material_signout_photos').insert({
     company_id: companyId,
@@ -211,7 +211,19 @@ function receipt(role: CompanyRole, id: string) {
     p_user_agent: 'vitest',
   });
 }
+// ⚠️ [S121 3-D/3-F + ASK-28, RULED Josh] A close now carries its EVIDENCE:
+// came back → a 'return' photo + a 'return_location' photo + where it was put;
+// not returned → a reason. SUPERSEDED: this helper sent only the eight S118
+// arguments to a record with no return photos, and the close succeeded. The
+// role map and state rules below are UNCHANGED; the helper now supplies the
+// evidence so they keep testing what they tested. The evidence rule itself is
+// test/s121-signout.live.ts.
+async function evidence(id: string): Promise<void> {
+  await photo(id, 'return');
+  await photo(id, 'return_location');
+}
 function close(role: CompanyRole, id: string, condition = 'same_as_released') {
+  const came = condition !== 'not_returned';
   return session[role].rpc('close_material_signout', {
     p_signout_id: id,
     p_condition_at_return: condition,
@@ -221,6 +233,8 @@ function close(role: CompanyRole, id: string, condition = 'same_as_released') {
     p_signer_name: 'Office',
     p_signature_type: 'type',
     p_signature_data: SIG,
+    p_return_location_note: came ? 'Back in the shop, bay 2' : undefined,
+    p_not_returned_reason: came ? undefined : 'lost',
   });
 }
 
@@ -402,6 +416,7 @@ describe('CLOSE — Owner/Admin/PM/PE only (total map), through the function', (
   forEveryRole(CLOSE, (role, may) => {
     it(`${role}: close_material_signout → ${may ? 'returned' : 'refused, still open'}`, async () => {
       const id = await open(`close-${role}`);
+      await evidence(id);
       await close(role, id);
       const r = await row(id);
       expect(r.status, role).toBe(may ? 'returned' : 'open');
@@ -412,6 +427,7 @@ describe('CLOSE — Owner/Admin/PM/PE only (total map), through the function', (
   it('the condition decides the closed state', async () => {
     const a = await open('close-damage');
     const b = await open('close-missing');
+    await evidence(a);
     await close('owner', a, 'damage_occurred');
     await close('owner', b, 'not_returned');
     expect((await row(a)).status).toBe('damaged_on_return');
@@ -423,6 +439,7 @@ describe('CLOSE — Owner/Admin/PM/PE only (total map), through the function', (
     const { error: e1 } = await close('owner', p);
     expect(e1?.message).toMatch(/only an open/i);
     const o = await open('close-twice');
+    await evidence(o);
     await close('owner', o);
     const { error: e2 } = await close('owner', o, 'not_returned');
     expect(e2?.message).toMatch(/only an open/i);
