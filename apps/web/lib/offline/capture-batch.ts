@@ -1,4 +1,4 @@
-import { canAdmit, type HeldShot, type HeldStatus } from './held-shots';
+import { canAdmit, HELD_TTL_MS, type HeldShot, type HeldStatus } from './held-shots';
 
 // S107 Part A — THE BATCH RULES. Pure, so every one of them can be asserted
 // without a camera, a phone, or a database.
@@ -120,9 +120,56 @@ export function batchProgress(batch: CaptureBatch): BatchProgress {
   };
 }
 
+/**
+ * [S121 Part 2] Shots with NO project yet — never sent anywhere. A `queued`
+ * shot is NOT one of them (its queue entry carries the project), and neither is
+ * a shot that remembers the project it was sent to.
+ *
+ * SUPERSEDED [S121]: needsProject used to be `batch.shots.length > 0`, so a
+ * queued shot counted as "no project" forever — the strip said "N photos with
+ * no project" about photos already filed, and "Save" skipped them. That is the
+ * "30 photos that won't land" Josh reported (S121 report §1.3).
+ */
+export function unfiledShots(batch: CaptureBatch): HeldShot[] {
+  return batch.shots.filter((s) => s.status !== 'queued' && !s.projectId);
+}
+
 /** Shots that still need a project before anything can be sent (A-21 / §7a). */
 export function needsProject(batch: CaptureBatch): boolean {
-  return batch.projectId === null && batch.shots.length > 0;
+  return batch.projectId === null && unfiledShots(batch).length > 0;
+}
+
+/**
+ * [S121 Part 2] Split held shots by whether the server already has them. The
+ * shot id IS the `files.id` (uploadFile's idempotency id), so a shot whose id
+ * comes back from `files` is on a project — its tray row is a ghost left by a
+ * queue upload that nothing cleared. Pure: the lookup is the caller's.
+ */
+export function splitLanded(
+  shots: readonly HeldShot[],
+  landedIds: ReadonlySet<string>
+): { landed: HeldShot[]; kept: HeldShot[] } {
+  return {
+    landed: shots.filter((s) => landedIds.has(s.id)),
+    kept: shots.filter((s) => !landedIds.has(s.id)),
+  };
+}
+
+/**
+ * [S121 ASK-26] Shots old enough that the tray ASKS whether to delete them.
+ * Offered, never taken — nothing calls a delete without the user's yes.
+ */
+export function oldShots(shots: readonly HeldShot[], now: number = Date.now()): HeldShot[] {
+  return shots.filter((s) => now - new Date(s.takenAt).getTime() >= HELD_TTL_MS);
+}
+
+/**
+ * [S121 Part 2] A shot left `uploading` when the app was killed mid-send is not
+ * uploading any more. After the server check has cleared the ones that DID land,
+ * the rest read as failed, with a retry — never as a spinner that never ends.
+ */
+export function settleInterrupted(shots: readonly HeldShot[], message: string): HeldShot[] {
+  return shots.map((s) => (s.status === 'uploading' ? { ...s, status: 'failed', error: message } : s));
 }
 
 /** Shots the user can retry — failures only, never a whole-batch retry. */

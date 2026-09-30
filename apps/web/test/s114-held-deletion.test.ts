@@ -38,30 +38,47 @@ describe('S114 C-4 — soonestDeletion', () => {
   });
 });
 
-describe('S114 C-4 — the words lead with the deletion (EN; ES mirrors)', () => {
+// ⚠️ INVERTED IN PLACE [S121, RULED Josh ASK-26 — reverses S114 C-4]. There is
+// no silent deletion any more, so the words must NOT threaten one.
+// _Superseded:_ describe('S114 C-4 — the words lead with the deletion (EN; ES
+// mirrors)') — it.each(heldNotice, deleteTodayOne, deleteTodayMany,
+// deleteSoonOne, deleteSoonMany)('%s says DELETED'), and "the old reassurance
+// ("They stay here if you close the app") is gone". The four delete* keys are
+// removed; heldNotice now says nothing is deleted without asking.
+describe('S121 ASK-26 — the words no longer threaten a deletion (EN; ES mirrors)', () => {
+  it('heldNotice says nothing is deleted without asking — and does not say DELETED', () => {
+    const notice = (en as Record<string, string>)['field.capture.heldNotice'];
+    expect(notice).toMatch(/Nothing is deleted without asking you/);
+    expect(notice).not.toMatch(/DELETED/);
+  });
+
   it.each([
-    'field.capture.heldNotice',
     'field.capture.deleteTodayOne',
     'field.capture.deleteTodayMany',
     'field.capture.deleteSoonOne',
     'field.capture.deleteSoonMany',
-  ] as const)('%s says DELETED', (key) => {
-    expect((en as Record<string, string>)[key]).toMatch(/DELETED/);
+  ] as const)('%s — the countdown-to-deletion string — is gone', (key) => {
+    expect((en as Record<string, string>)[key]).toBeUndefined();
   });
 
-  it('the old reassurance ("They stay here if you close the app") is gone', () => {
-    expect((en as Record<string, string>)['field.capture.heldNotice']).not.toMatch(/stay here/);
+  it('the strip says the photos are WAITING, and the tray ASKS before deleting old ones', () => {
+    expect((en as Record<string, string>)['field.capture.waitingStripMany']).toMatch(/waiting/);
+    expect((en as Record<string, string>)['field.capture.oldAsk']).toMatch(/Delete them\?/);
   });
 });
 
-describe('S114 C-4 — the strip is mounted in the /m shell and uses the shared rule', () => {
+// ⚠️ INVERTED IN PLACE [S121]. _Superseded:_ "rendered under the offline strip,
+// from soonestDeletion()" → expect(src).toContain('soonestDeletion(capture.batch.shots)').
+describe('S114 C-4 / S121 — the strip is mounted in the /m shell and counts UNFILED shots', () => {
   const src = readFileSync(
     fileURLToPath(new URL('../app/m/mobile-shell.tsx', import.meta.url)),
     'utf8'
   );
-  it('rendered under the offline strip, from soonestDeletion()', () => {
+  it('rendered under the offline strip, from unfiledShots() — not a deletion countdown', () => {
     expect(src).toContain('<HeldPhotosStrip pathname={pathname} />');
-    expect(src).toContain('soonestDeletion(capture.batch.shots)');
+    expect(src).toContain('unfiledShots(capture.batch).length');
+    expect(src).not.toContain('const warning = soonestDeletion(');
+    expect(src).not.toMatch(/^import .*soonestDeletion/m);
     expect(src).toContain('data-testid="m-held-photos-strip"');
   });
 });

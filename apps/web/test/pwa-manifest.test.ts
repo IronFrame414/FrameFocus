@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { existsSync } from 'fs';
 import { join } from 'path';
 import { crewManifest as manifest } from '@/lib/crew-manifest';
-import { metadata } from '../app/layout';
+import { metadata, viewport } from '../app/layout';
 import { brand } from '@/lib/brand';
 
 // M6M §7.1 / §7.2 — the manifest and the icon links.
@@ -97,11 +97,19 @@ describe('§7.2 — layout icon links and iOS install meta', () => {
     expect((metadata.appleWebApp as { capable: boolean }).capable).toBe(true);
   });
 
-  // black-translucent renders content UNDER the status bar and needs
-  // safe-area-inset padding that the unbuilt mobile shell does not have yet.
-  it('does not use black-translucent while the shell lacks safe-area handling', () => {
-    expect((metadata.appleWebApp as { statusBarStyle: string }).statusBarStyle).not.toBe(
+  // SUPERSEDED [S121 1-A, Josh ASK-33] — was: "black-translucent renders
+  // content UNDER the status bar and needs safe-area-inset padding that the
+  // unbuilt mobile shell does not have yet." /
+  // it('does not use black-translucent while the shell lacks safe-area handling')
+  // → expect(statusBarStyle).not.toBe('black-translucent').
+  // INVERTED IN PLACE: the app bar now pads env(safe-area-inset-top), so the
+  // navy header fills the status-bar strip. Translucent is REQUIRED, and it is
+  // only safe together with viewportFit 'cover' + the theme colour.
+  it('uses black-translucent with viewport-fit cover and the navy theme colour', () => {
+    expect((metadata.appleWebApp as { statusBarStyle: string }).statusBarStyle).toBe(
       'black-translucent'
     );
+    expect(viewport.viewportFit).toBe('cover');
+    expect(viewport.themeColor).toBe('#0f1729');
   });
 });

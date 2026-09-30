@@ -1,4 +1,4 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import { Barlow, IBM_Plex_Mono } from 'next/font/google';
 import { brand } from '@/lib/brand';
 import './globals.css';
@@ -72,17 +72,28 @@ export const metadata: Metadata = {
     capable: true,
     // The home-screen label on iOS. Same short form as the manifest.
     title: brand.shortName,
-    // 'black', deliberately, and NOT 'black-translucent': translucent makes
-    // content render UNDER the status bar, which needs safe-area-inset padding
-    // at the TOP of the shell. The shell is built now [S105] but pads the
-    // safe area at the bottom only (the tab bar) — the app bar does not, so
-    // translucent would still ship an overlap. 'black' does not overlay and
-    // sits closer to the navy app bar than 'default' (a white strip) would.
-    // Revisit only with top safe-area padding in hand, and check A-26e still
-    // holds — this pair of metas is the iOS Web Push precondition (D-10);
-    // losing them silently blocks Gate 4.
-    statusBarStyle: 'black',
+    // 'black-translucent' [S121 1-A, RULED Josh ASK-33]: the status-bar strip
+    // must be the header navy, not white or black. Translucent renders the page
+    // UNDER the status bar, so the /m app bar pads itself down by
+    // env(safe-area-inset-top) (mobile-shell.tsx) and its navy fills the strip;
+    // the status-bar text stays WHITE, on navy. That padding only resolves
+    // because `viewport` below sets viewportFit: 'cover'.
+    // SUPERSEDED [S97/S105]: "'black', deliberately, and NOT 'black-translucent'
+    // … the app bar does not [pad the top safe area], so translucent would
+    // still ship an overlap." The app bar now does.
+    // Check A-26e still holds — this pair of metas is the iOS Web Push
+    // precondition (D-10); losing them silently blocks Gate 4.
+    statusBarStyle: 'black-translucent',
   },
+};
+
+// [S121 1-A] Next 14 emits <meta name="theme-color"> ONLY from this export —
+// before it, no page carried one, so the OS chrome had no navy to use.
+// viewportFit 'cover' is what makes env(safe-area-inset-*) non-zero on iOS;
+// without it every safe-area padding in the shell resolved to 0.
+export const viewport: Viewport = {
+  themeColor: brand.themeColor,
+  viewportFit: 'cover',
 };
 
 export default function RootLayout({

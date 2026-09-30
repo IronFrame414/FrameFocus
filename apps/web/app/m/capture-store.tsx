@@ -14,10 +14,15 @@ import {
   removeShot as removeFromBatch,
   resolveBatchProject,
   setShotStatus,
+  settleInterrupted,
   shotLanded,
+  splitLanded,
   type BatchProgress,
   type CaptureBatch,
 } from '@/lib/offline/capture-batch';
+import { findUploadedFiles } from '@/lib/services/files-client';
+import { useOfflineSync } from './offline-sync';
+import { useT } from '@/components/i18n/language-provider';
 
 // M6M §6 / S107 Part A — WHERE SHOTS LIVE BETWEEN THE SHUTTER AND THE PROJECT.
 //
@@ -54,8 +59,16 @@ interface CaptureStore {
   hold: (file: File, projectId: string | null) => Promise<{ ok: boolean; reason?: string }>;
   setStatus: (id: string, status: HeldShot['status'], error?: string | null) => Promise<void>;
   landed: (id: string) => Promise<void>;
+  /** [S121 Part 2] Remember the project a shot is being sent to, ON the shot,
+   *  so a failure survives a reload with its retry intact. */
+  assign: (id: string, projectId: string) => Promise<void>;
   discard: (id: string) => Promise<void>;
+  /** [S121 ASK-26] Delete several — only ever on the user's explicit yes. */
+  discardMany: (ids: readonly string[]) => Promise<void>;
   discardAll: () => Promise<void>;
+  /** [S121 Part 2] Photos the server check found ALREADY on a project, and
+   *  cleared from the tray — reported, never cleared silently. */
+  alreadyLanded: { count: number; projects: string[] };
   pinProject: (projectId: string | null) => void;
   /** Days until this shot is swept — for the warning that must precede it. */
   expiresInDays: (shot: HeldShot) => number;
@@ -71,7 +84,15 @@ export function useCaptureStore(): CaptureStore | null {
 export function CaptureStoreProvider({ children }: { children: React.ReactNode }) {
   const [batch, setBatch] = useState<CaptureBatch>(() => emptyBatch());
   const [ready, setReady] = useState(false);
+  const [alreadyLanded, setAlreadyLanded] = useState<{ count: number; projects: string[] }>({
+    count: 0,
+    projects: [],
+  });
   const storeRef = useRef<HeldShotStore | null>(null);
+  const offlineSync = useOfflineSync();
+  const t = useT();
+  const tRef = useRef(t);
+  tRef.current = t;
 
   const store = useCallback((): HeldShotStore | null => {
     if (typeof indexedDB === 'undefined') return null;
@@ -79,16 +100,67 @@ export function CaptureStoreProvider({ children }: { children: React.ReactNode }
     return storeRef.current;
   }, []);
 
-  // Rehydrate on mount. `all()` sweeps expired shots as it reads — the "at app
-  // start" half of the cleanup rule. ⚠️ A failure here must not blank the tray
-  // silently; it leaves the batch empty and `ready` true, and the screen says
-  // so rather than pretending there was never anything held.
+  // ===========================================================================
+  // [S121 Part 2] THE SERVER CHECK — clears ghosts, and only ghosts.
+  // ===========================================================================
+  // A shot queued for later kept its tray row, and NOTHING removed that row when
+  // the queue later uploaded it: it sat in the tray for ever as "waiting", the
+  // strip counted it as a photo with no project, and "Save" skipped it. The shot
+  // id is the `files.id`, so asking the server which ids exist tells us exactly
+  // which rows are ghosts. ⚠️ A FAILED lookup (offline) clears NOTHING — "could
+  // not ask" is not "not uploaded". Cleared rows are counted and reported.
+  const clearLanded = useCallback(
+    async (candidates: readonly HeldShot[]): Promise<Set<string>> => {
+      const found = await findUploadedFiles(candidates.map((c) => c.id));
+      if (!found || found.size === 0) return new Set();
+      const { landed } = splitLanded(candidates, new Set(found.keys()));
+      for (const l of landed) {
+        try {
+          await store()?.remove(l.id);
+        } catch (err) {
+          console.error('[capture-store] could not clear a landed shot', err);
+        }
+      }
+      const ids = new Set(landed.map((l) => l.id));
+      setBatch((b) => ({ ...b, shots: b.shots.filter((x) => !ids.has(x.id)) }));
+      const names = landed.map((l) => found.get(l.id)?.projectName ?? '').filter(Boolean);
+      setAlreadyLanded((prev) => ({
+        count: prev.count + landed.length,
+        projects: Array.from(new Set([...prev.projects, ...names])),
+      }));
+      return ids;
+    },
+    [store]
+  );
+
+  // Rehydrate on mount. ⚠️ [S121 ASK-26] `all()` no longer sweeps anything.
+  // ⚠️ A failure here must not blank the tray silently; it leaves the batch
+  // empty and `ready` true, and the screen says so rather than pretending there
+  // was never anything held.
   useEffect(() => {
     let cancelled = false;
     void (async () => {
       try {
         const s = store();
-        const shots = s ? await s.all() : [];
+        const loaded = s ? await s.all() : [];
+        // Ghosts out first (a shot killed mid-upload may in fact have landed),
+        // then whatever is still `uploading` was interrupted: it is failed,
+        // with a retry — never a spinner that never ends.
+        let cleared = new Set<string>();
+        try {
+          cleared = await clearLanded(loaded);
+        } catch (err) {
+          console.error('[capture-store] server check failed', err);
+        }
+        const shots = settleInterrupted(
+          loaded.filter((x) => !cleared.has(x.id)),
+          tRef.current('field.capture.interrupted')
+        );
+        for (const x of shots) {
+          if (x.status === 'failed' && loaded.find((l) => l.id === x.id)?.status === 'uploading') {
+            await s?.put(x).catch(() => {});
+          }
+        }
         if (!cancelled) setBatch((b) => ({ ...b, shots }));
       } catch (err) {
         console.error('[capture-store] could not read held shots', err);
@@ -99,7 +171,19 @@ export function CaptureStoreProvider({ children }: { children: React.ReactNode }
     return () => {
       cancelled = true;
     };
-  }, [store]);
+  }, [store, clearLanded]);
+
+  // [S121 Part 2] Whenever the sync queue shrinks, a queued photo may have just
+  // landed: re-check the `queued` rows. This is what stops a ghost forming.
+  const queueSize = offlineSync?.entries.length ?? 0;
+  const prevQueueSize = useRef(queueSize);
+  useEffect(() => {
+    const shrank = queueSize < prevQueueSize.current;
+    prevQueueSize.current = queueSize;
+    if (!ready || !shrank) return;
+    const queued = batch.shots.filter((x) => x.status === 'queued');
+    if (queued.length) void clearLanded(queued).catch(() => {});
+  }, [queueSize, ready, batch.shots, clearLanded]);
 
   const hold = useCallback(
     async (file: File, projectId: string | null) => {
@@ -180,6 +264,38 @@ export function CaptureStoreProvider({ children }: { children: React.ReactNode }
     [store]
   );
 
+  const assign = useCallback(
+    async (id: string, projectId: string) => {
+      let updated: HeldShot | undefined;
+      setBatch((b) => {
+        const nb = { ...b, shots: b.shots.map((x) => (x.id === id ? { ...x, projectId } : x)) };
+        updated = nb.shots.find((x) => x.id === id);
+        return nb;
+      });
+      try {
+        if (updated) await store()?.put(updated);
+      } catch (err) {
+        console.error('[capture-store] project write failed', err);
+      }
+    },
+    [store]
+  );
+
+  const discardMany = useCallback(
+    async (ids: readonly string[]) => {
+      const drop = new Set(ids);
+      setBatch((b) => ({ ...b, shots: b.shots.filter((x) => !drop.has(x.id)) }));
+      for (const id of ids) {
+        try {
+          await store()?.remove(id);
+        } catch (err) {
+          console.error('[capture-store] discard failed', err);
+        }
+      }
+    },
+    [store]
+  );
+
   const discard = useCallback(
     async (id: string) => {
       setBatch((b) => removeFromBatch(b, id));
@@ -213,13 +329,28 @@ export function CaptureStoreProvider({ children }: { children: React.ReactNode }
       hold,
       setStatus,
       landed,
+      assign,
       discard,
+      discardMany,
       discardAll,
+      alreadyLanded,
       pinProject,
       expiresInDays: (shot: HeldShot) => daysUntilExpiry(shot),
       needsProject: needsProject(batch),
     }),
-    [batch, ready, hold, setStatus, landed, discard, discardAll, pinProject]
+    [
+      batch,
+      ready,
+      hold,
+      setStatus,
+      landed,
+      assign,
+      discard,
+      discardMany,
+      discardAll,
+      alreadyLanded,
+      pinProject,
+    ]
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

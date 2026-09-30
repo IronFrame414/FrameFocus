@@ -33,7 +33,7 @@ import {
   resolveCaptureProjectId,
   useCaptureStore,
 } from './capture-store';
-import { soonestDeletion } from '@/lib/offline/held-shots';
+import { unfiledShots } from '@/lib/offline/capture-batch';
 import { getOpenClockProjectId } from '@/lib/services/time-tracking-client';
 import { MobileChatOverlay } from '@/components/chat/mobile-chat-overlay';
 import { useT } from '@/components/i18n/language-provider';
@@ -480,7 +480,13 @@ function MobileShellInner({
       {/* ------------------------------------------------------------------ */}
       {/* §3.1 — APP BAR                                                      */}
       {/* ------------------------------------------------------------------ */}
-      <header className="shrink-0 bg-m6m-navy">
+      {/* [S121 1-A] paddingTop = the iOS status-bar inset, so under
+          'black-translucent' the navy fills the status-bar strip. 0 where
+          there is no inset (desktop, Android, a browser tab). */}
+      <header
+        className="shrink-0 bg-m6m-navy"
+        style={{ paddingTop: 'env(safe-area-inset-top)' }}
+      >
         <div className="flex h-[58px] items-center gap-3 px-[18px]">
           {insideProject ? (
             // §3.1: "Inside a project, the hamburger is replaced by a back
@@ -624,7 +630,13 @@ function MobileShellInner({
       <nav
         data-testid="m-tabbar"
         aria-label={t('shell.primaryNav')}
-        className="flex shrink-0 items-start justify-between border-t border-m6m-border bg-m6m-card px-[14px] pt-[10px] pb-[14px]"
+        // [S121 1-B] relative z-10: the camera overhangs the content region
+        // by 26px. That region is `relative` (positioned, z auto), and CSS
+        // paints positioned boxes AFTER non-positioned ones, so while this nav
+        // was unpositioned every form field scrolled OVER the camera. Proven
+        // with elementFromPoint at 402px (S121 report). Stays below NavPending
+        // (z-30) and the NavSheet (z-30/40).
+        className="relative z-10 flex shrink-0 items-start justify-between border-t border-m6m-border bg-m6m-card px-[14px] pt-[10px] pb-[14px]"
         style={{ paddingBottom: 'calc(14px + env(safe-area-inset-bottom))' }}
       >
         <TabItem {...TABS[0]} active={activeHref === TABS[0].href} />
@@ -991,6 +1003,9 @@ function NavSheet({
 // down to the SOONEST deletion, and links to the tray to file them. Hidden on
 // /m/capture itself (the tray shows each shot's countdown) and on the dark
 // photo screens (no header there).
+// ⚠️ [S121, RULED Josh ASK-26] THE DELETION IS GONE — reverses S114 C-4. The
+// sweep is no longer automatic, so the strip no longer counts down to one. It
+// still shows while any shot has no project, and still links to the tray.
 // ---------------------------------------------------------------------------
 // S120 2-B — THE DEAD TAP. Josh: "Tap to choose a project" did nothing. Measured
 // (S120, production build, 402x874 touch context): ONLINE the tap works — it
@@ -1007,9 +1022,12 @@ function HeldPhotosStrip({ pathname }: { pathname: string }) {
   const [offlineNote, setOfflineNote] = useState(false);
   if (!capture?.ready || !capture.needsProject) return null;
   if (pathname.startsWith('/m/capture')) return null;
-  const warning = soonestDeletion(capture.batch.shots);
-  if (!warning) return null;
-  const { count: n, days: soonest } = warning;
+  // [S121 ASK-26] Counts UNFILED shots only (a queued shot has its project),
+  // and no longer counts down to a deletion — nothing is deleted without a yes.
+  // SUPERSEDED [S114 C-4]: `soonestDeletion(capture.batch.shots)` over EVERY
+  // tray row, worded "N photos with no project will be DELETED … in d day(s)".
+  const n = unfiledShots(capture.batch).length;
+  if (n === 0) return null;
   return (
     <>
       <Link
@@ -1024,9 +1042,7 @@ function HeldPhotosStrip({ pathname }: { pathname: string }) {
         }}
         className="flex min-h-[44px] w-full items-center border-y border-m6m-danger-border bg-[#fdf1f0] px-[18px] py-[10px] text-[13px] font-semibold text-m6m-danger"
       >
-        {soonest === 0
-          ? t(n === 1 ? 'field.capture.deleteTodayOne' : 'field.capture.deleteTodayMany', { n })
-          : t(n === 1 ? 'field.capture.deleteSoonOne' : 'field.capture.deleteSoonMany', { n, d: soonest })}
+        {t(n === 1 ? 'field.capture.waitingStripOne' : 'field.capture.waitingStripMany', { n })}
       </Link>
       {offlineNote ? (
         <p
