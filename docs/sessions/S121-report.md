@@ -461,3 +461,48 @@ Pattern to copy: `/m` check-in `check-in-form.tsx:331-376` — a wide camera lab
 - **Pre-CI:** type-check exit 0; lint exit 0; unit **152 files / 2044 tests**, exit 0, 0 cache hits.
 
 ⚠️ **Rebuild-test now carries Part 3's migrations.** The Part 1+2 CI run (`36718415249`, on main's s118 spec) may go red in the sign-out close for that reason alone. **Order:** Part 3 merges first; Part 1+2 is rebased onto the new main and re-run, which the merge rule requires anyway.
+
+### CI — Parts 1 and 2
+
+- Run `36716750701` (Part 1 head, the slip run): **success**.
+- Run `36718415249` (Part 1+2 stacked head, base `7cf348a0`): **1 failed / 659 passed / 22 skipped** (35.7 min). The one failure is `e2e/s118-material-signouts.spec.ts:111`, **main's** version of that spec: expected `released_signer_name: 'Crew Tester'`, received **`'Casey Crew'`**. That is the Part 3 trigger (`20262117000000`) on rebuild-test doing its job, as recorded under Part 3, not a Part 1/2 defect. **Plan: Part 3 merges first; Part 1+2 is rebased onto the new main (which carries the rewritten spec) and re-run.**
+
+### Part 4 — Timesheets (payroll) — branch `feature/s121-p4-timesheets`, **stacked on Part 3** (both carry migrations), head `94bc9e33`
+
+**Migration `20262119000000_s121_time_segment_edits`** (rebuild-test: dry run listed exactly this file — with Part 3's two files present locally only for the push, because the CLI refuses a remote version it cannot see locally; **never `migration repair`**):
+- `edit_time_segment`, `add_time_segment`, `split_time_segment`: SECURITY DEFINER. Gate first: `s121_time_edit_session` (**Owner/Admin**, same company, session row locked). **One plpgsql call = one transaction.** Optional arguments trail with `DEFAULT NULL`. The first draft had them mid-list, and PostgREST could not resolve a call that omitted them; that draft was re-applied on rebuild-test by DROP + CREATE of the three functions only, and each now has exactly one overload (verified by `pg_proc`). Helpers `s121_time_edit_session / _overlap_check / _task_check / _reopen` are **not executable by `authenticated` or `anon`** (verified `has_function_privilege`).
+- **Overlap refused, gap allowed (ASK-23)**: half-open intervals across **all of the member's live segments** (any session). An open segment counts as running to now. The message is in company time.
+- **Completion gate kept**: a task on another job is refused; a closed task-bound new segment or split second half needs its outcome, in words, before the CHECK would fire. A split copies nothing onto the first half: it keeps its own task and outcome.
+- **Approved → pending (ASK-11)**: `status='pending'`, `approved_by`/`approved_at` NULL; each function returns `returned_to_pending`.
+- **Audit (ASK-10 / ASK-29), extending `time_edit_logs`**: `audit_time_segment_edit` and `audit_time_clock_session_edit` now also log under a transaction-local flag `framefocus.time_edit` (set only by these functions), with `changes.action` = edit / add / split. A new `AFTER INSERT` trigger logs added and split segments under the flag. An Owner/Admin editing **their own** time through the sheet is logged; ordinary self-clocking stays unlogged.
+- **Not changed:** approval authority (`can_approve_member`), the supervisor attribution-only path, every RLS policy, the rate snapshot (frozen at **first** approval; a re-approval keeps it), and the session clock-in/out edit path. ⚠️ **Flag for Josh:** an approved session already pushed to QuickBooks keeps `qb_push_status` when it returns to pending. Whether a re-approved, edited day must re-push is a QuickBooks question this build does not touch.
+
+**UI:**
+- **4-A:** the whole row toggles the day breakdown. Checkbox, "Approve week", "Days" and the name button stop the click.
+- **4-B:** "Details" (row action and each day line) opens a `ModalSheet` (the repo's reusable sheet) with every day, every segment, task and outcome, paid/worked/OT, and **Approve day** / **Approve week** inside. The old `/timesheets/[sessionId]` page stays for direct links; the queue no longer links to it (superseded link quoted in place).
+- **4-C:** Owner/Admin get **Edit**, **Split** (split time with seconds, second half's task + outcome + note) and **+ Add segment** (closed sessions). A save that reopens an approved day shows **"Hours changed — <day> is back to pending and must be approved again."** with **Approve** (if the viewer may approve that member) and **Later**.
+- **4-D:** PM and foreman see the sheet and may approve (unchanged rank rule) but get **no** edit controls. The database refuses them regardless.
+
+**Proofs:**
+- Live `test/s121-time-edits.live.ts` **44/44**:
+  - **Total map** over all 8 roles × 3 functions (24 cases; refusals judged by the service role — segment count / original end / note).
+  - A supervisor control (foreman still cannot move a crew segment end directly).
+  - **Split to the second**: 12:30–16:00 split at 14:07:13 → **5,833 s + 6,767 s = 12,600 s**; contiguous; the day total unchanged.
+  - Gate: a refused split changes nothing (the first half **not** shortened).
+  - Overlap refused for add and edit and across the member's other sessions; a gap and end-to-start touching accepted.
+  - Reopen for split/add/edit; a pending day stays pending; a refused edit does not reopen.
+  - Audit: 3 rows for a split of an approved day (half, new half, status approved→pending); an owner's own sheet edit is logged, a plain self-update is not (control, the write read back as landed); nobody can insert into the log.
+- **DB sabotages** (rebuild-test; each restored from the migration text and **md5 read back identical**):
+  - (1) gate removed → **10 ✘**: every excluded role's **add** (6), and **edit** for PE/PM/foreman/crew (4). Split, and edit for client/sub, stayed refused **by the pre-existing column-scope trigger** — a second layer.
+  - (1b) gate removed + `time_segments_column_scope` DISABLED → **all 6 excluded split cases ✘**. Trigger re-enabled, `tgenabled` `O`; gate md5 `dc41fce6…` = pre.
+  - (2) overlap check → no-op → **3 ✘** (the gap/touch cases stay green, as they should); md5 `83e8d55c…` = pre.
+  - (3) reopen → no-op → **2 ✘**; md5 `ef22201b…` = pre.
+  - (4) audit flag ignored → **3 ✘**; md5 `11fbfe95…` = pre.
+- e2e `e2e/desktop-timesheets-s121.spec.ts` **4 passed, 0 ✘** (production build):
+  - 4-A: a click at 62% of the row width opens the days; the checkbox checks and unchecks without collapsing.
+  - 4-B/4-C: the sheet carries both days and all 6 segments; a split of an **approved** Monday → the pop-up, **4 segments**, status **pending**, the halves sum to **3 h 30 m** in ms; the pop-up's Approve → **approved**.
+  - An overlapping add → the database sentence, **3 segments** still; a gap add → **4**.
+  - 4-D: the PM sees 8 segments, **0** Edit/Split/Add, 1 Approve day.
+- **UI sabotages:** checkbox stopPropagation removed → **4-A ✘** (days collapsed); `isAdmin = true` forced → **4-D ✘** (Edit expected 0, received 8). Each restored by copy, `cmp` exit 0, 0 SABOTAGE markers, rebuilt, 4 passed.
+- **Pre-CI (stacked head):** type-check exit 0; lint exit 0; unit **152 files / 2044 tests**, exit 0, 0 cache hits.
+- **CI requested on this stacked head** (Part 3 + 4).
