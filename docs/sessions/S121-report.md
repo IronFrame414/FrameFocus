@@ -83,3 +83,19 @@ Control: `files` total on production 307 (295 `photos`, 2 `material_signout`, 9 
 **Server trace of failures: none.** `uploadFile` runs in the browser straight against Storage + `files` (`files-client.ts:161-257`); no client-error table exists. `sync_conflicts` is for edits only.
 
 **Per-photo upload already exists:** `sendOne(shot, projectId)` (`capture-screen.tsx:70-136`) over `uploadFile(file, { project_id, id })` (`files-client.ts:93-136`), idempotent on `id`. The one-project-per-batch pin (`capture-batch.ts:272-341`) blocks sending different selections to different projects.
+
+### 1.4 — The material sign-out photo control (SPEC 3-D) — ref `origin/main` `7cf348a0`; counts on PRODUCTION
+
+**Verdict: (i) — it IS the S118 "release photo required" control** (ruled `S118-ship-today.md:258-259`, recorded `S118-report.md:416-417`). It was built, and it is enforced in the database.
+
+- **Why it reads as "after signature":** the new-sign-out form (`components/material-signouts/signout-new-form.tsx`) takes the **company's** signature and creates the record (`:217-278`). The photo input exists only on the record page (`signout-detail.tsx:193-214`, `PhotoInput`, `accept="image/*" multiple`, **no `capture`**). So today the order is: company signs → release photos → receiving party signs. The photo always follows the employee's signature by design.
+- A second control, stage `return`, shows while the record is `open` — a different photo set.
+- **Enforcement today:** UI (receiver block replaced by "Take at least one photo…", `signout-detail.tsx:355-358`); RLS `material_signout_photos_insert_staff` (`20262080000000:199-217`: release only while `pending_receipt`, return only while `open`); and `record_material_signout_receipt()` (SECURITY DEFINER) **raises if there is no live release photo** (`:252-258`). `close_material_signout()` has **no** photo check — the return photos are not required today.
+- **Write paths:** create = a **plain client INSERT** into `material_signouts` (`material-signouts-client.ts:13-18`) under `material_signouts_insert_staff` — **not** a function. Receipt = `record_material_signout_receipt` (DEFINER). Return = `close_material_signout` (DEFINER, Owner/Admin/PM/PE).
+- **Where things are today (for 3-A/B/C/E/F):**
+  - S1 Job: free-text job address / job name / date (`signout-new-form.tsx:136-143`); the project is fixed by the URL `projectId` — **there is no job picker; the sign-out is reached from inside a project.**
+  - S4 "Vehicle / unit #" → `receiver_vehicle` (`:213`). S5 "Your title" → `released_title` (`:219`); signer name from `SignatureCapture` `defaultName` (editable today) → `released_signer_name` NOT NULL (blank passes).
+  - **External party signs on the record page (`signout-detail.tsx:352-407`), not on page 1** — after the release photo.
+  - "Return page" = Section 6 of the same record page (`:409-491`), not a separate route.
+- **PRODUCTION counts:** `material_signouts` = **1 row**; `receiver_vehicle` populated **0**; `released_title` populated **0**; `material_signout_photos` = 1. **3-B: no row holds a vehicle value, so hiding the input loses no visible data** — plan keeps the column anyway (no DROP; one row, nothing gained).
+- **Project statuses (CHECK):** `active, on_hold, complete, archived, cancelled` (`20260704211000:120`). Production: 6 live projects, all `active`.
