@@ -7,6 +7,24 @@ for the spec's list [Josh, 2026-09-29].
 production runbook (docs only)"), fetched and pruned 2026-09-30. Report branch
 `feature/s120-report`, cut from `fad4787e`.
 
+## Final status (2026-09-30)
+
+| part | outcome | `main` | production |
+| --- | --- | --- | --- |
+| 0 housekeeping | 43 local and 33 remote branches deleted with proof; 7 stale worktrees and 5 litter files removed; 7 unmerged branches kept and listed | — | — |
+| 1 security (#175–#180) | each hole proven real, fixed, and sabotaged red | **`7242e399`** | 6 migrations, verified by object; fingerprint == baseline |
+| 2 defects (2-A, 2-B, 2-C) | reproduced, fixed, e2e plus sabotage | **`df3e1636`** (with Part 3) | no migration |
+| 3 speed | 3-A proven 4 ways (it had shipped S116); 3-B middleware toll 56 → 20 ms; 3-C same region; 3-D report only (13 keep); 3-E nothing to revert | **`df3e1636`** | no migration |
+| 4 features | "Also send to" contacts are now actually sent, plus one typed address | **`60148872`** | 1 migration, verified; fingerprint == baseline |
+| 5 design | both signature fields 16px (already true), now pinned | **`d8afb05c`** | no migration |
+| 6 verify | 6-A: 0 open segments (read only); 6-B: item 16 re-proven, sabotage 9 red | — | read only |
+| 7 settled | untouched: no PE read path and no PM rule was changed | — | — |
+
+Vercel reports **success** for all four merge commits (`7242e399`, `df3e1636`, `60148872`, `d8afb05c`).
+Production's last fingerprint: policies 491, triggers 309, functions 352, constraints 1077, latest
+`20262116000000`. The CLI was left linked to **rebuild-test** (`nmyphyhmfttxkdoposvf`), read back after
+every section. **Nothing stopped.** No stop rule fired, so no item was stopped.
+
 ## Phase 2 — questions for Josh
 
 Posted 2026-09-30 at the end of Phase 1. **Unattended: the session proceeds on each default. If Josh
@@ -16,7 +34,7 @@ updated as the session goes.
 1. **[ASK-1] `#176`: how should `email_has_account` be constrained?** Options: A) a rate limit; B) same-company
    scope. **Default: A, the rate limit.** It is the narrower change: it alters how often the function
    answers, not what it answers, and the invite flow needs a platform-wide answer (invite-new vs
-   link-existing). _Status: default taken; Josh has not answered._
+   link-existing). _Status: default taken and built; Josh had not answered by session end._
 2. **[ASK-2] "Also send to": one address or several?** Options: A) one; B) several. **Default: A, one.**
    Josh wrote "an additional email address", singular, and one is the narrower surface. _Status: default
    taken; Josh has not answered._
