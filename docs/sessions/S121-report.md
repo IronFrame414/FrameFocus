@@ -391,3 +391,22 @@ Pattern to copy: `/m` check-in `check-in-form.tsx:331-376` — a wide camera lab
 ---
 
 ## Phase 3 — build log
+
+### Part 1 — Mobile chrome — branch `feature/s121-p1-mobile-chrome` (from `origin/main` `7cf348a0`), commit `ffd... see git log`
+
+**1-B, cause stated before the fix** (production build, rebuild-test, owner identity, **402×874**, `/m/p/<Lakeview>/signouts/new` scrolled 400px):
+- `document.elementFromPoint(camera centre, camera top + 6px)` → **`so-condition-notes` (the textarea), not the camera.** The ancestor chain of the hit: every element `z-index: auto`, `transform: none`; the only positioned ancestors are the content wrapper (`relative`) and `m-shell` (`relative`, `overflow: hidden` — the camera is inside it, so it does not clip the camera). The tab-bar `<nav>` is **not positioned**.
+- **Cause: paint order.** CSS paints positioned boxes (the `relative` content region and everything in it) after non-positioned in-flow boxes (the nav and its camera). **Not a z-index that loses** (there is none), **not overflow clipping, not a transform.**
+- Fix: `relative z-10` on the nav (`mobile-shell.tsx`). Below `NavPending` (z-30) and `NavSheet` (z-30/40).
+- Screenshots: `S121-evidence/p1-1b-before-402.png` (camera top cut by the notes box) → `p1-1b-after-402.png` (camera whole). After: `elementFromPoint` → the camera.
+- **e2e** `e2e/m-pwa.spec.ts` "S121 1-B · the camera stays the top layer over scrolled content": injects a field-like box into `<main>`, scrolls mid-page, asserts the point at the camera's top edge is the camera, **with a non-vacuity guard** (the probe must be under that point — it fired on my first draft, which scrolled to the bottom where the FAB padding leaves nothing behind the camera; fixed to scroll mid-page).
+- **Sabotage:** removed `relative z-10` → production rebuild → `✘ … camera stays the top layer` at line 94 (`hit.camera` false), 1 failed / 5 passed. Restored with `git checkout --`; `cmp` against the pre-sabotage copy exit 0; rebuilt.
+
+**1-A:**
+- `app/layout.tsx`: new `export const viewport = { themeColor: brand.themeColor ('#0f1729'), viewportFit: 'cover' }` — **before this, no page emitted `theme-color`** and `env(safe-area-inset-*)` resolved to 0 on iOS.
+- `apple-mobile-web-app-status-bar-style`: **was `black`, now `black-translucent`** (Josh ASK-33). Status-bar text is white; it sits on the navy header, so no dark-on-dark.
+- `/m` `<header>`: `padding-top: env(safe-area-inset-top)` so the navy fills the strip. App-wide: every `/m` screen shares this shell header.
+- Read back on the rendered page (402px, production build): `theme-color` = `#0f1729`; status-bar style = `black-translucent`; viewport = `width=device-width, initial-scale=1, viewport-fit=cover`; header background `rgb(15, 23, 41)`; header padding-top `0px` **in Chromium, which has no inset** — ⚠️ **a headless browser cannot draw the iOS status bar; the final proof is Josh's phone** (ruled acceptable, ASK-33).
+- Tests inverted in place, old assertions quoted: `test/pwa-manifest.test.ts` (was `not.toBe('black-translucent')`, now `toBe('black-translucent')` + viewportFit `cover` + themeColor `#0f1729`); `e2e/m-pwa.spec.ts` A-26e (was `'black'`, now `'black-translucent'` + theme-color meta + `viewport-fit=cover`).
+
+**Proofs:** vitest `pwa-manifest` 13/13; `e2e/m-pwa.spec.ts` 6 passed, 0 `✘` (production build). **Pre-CI:** `npm run type-check` exit 0; lint exit 0; unit **152 files / 2042 tests** passed, exit 0, 0 cache hits. Prettier: `layout.tsx`, `mobile-shell.tsx`, `m-pwa.spec.ts` are NOT prettier-clean on main → edited by hand, not formatted.
