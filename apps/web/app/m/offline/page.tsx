@@ -9,6 +9,7 @@ import type { QueueEntry } from '@/lib/offline/queue';
 import { useT } from '@/components/i18n/language-provider';
 import type { MsgKey } from '@/lib/i18n/messages';
 import { createClient } from '@/lib/supabase-browser';
+import { BlobThumb, capturedWhen } from '@/components/offline/blob-thumb';
 
 // M6M §4.4 — M-4, the offline / failure state.
 //
@@ -46,48 +47,13 @@ function capturedAt(iso: string): string {
   return new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
 }
 
-// ---------------------------------------------------------------------------
-// S120 2-C — HELD PHOTOS GET A LIST YOU CAN READ.
-//
-// Josh had 30 photos queued on his phone and ~300 in his camera roll, and
-// nothing in the app said WHICH 30: this card listed "Photo · 10:32 · Queued"
-// and nothing else, and it was reachable online only by typing the URL. A
-// photo entry now shows its thumbnail (the queued blob itself — the only copy
-// the queue holds), the DATE and time it was taken, the project it will file
-// to, and why it is still here. The entry point is the nav sheet's "Waiting to
-// sync" row (mobile-shell.tsx), online or not.
-// ---------------------------------------------------------------------------
-
-/** Date AND time — a queue can hold photos from more than one day. */
-function capturedWhen(iso: string): string {
-  return new Date(iso).toLocaleString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-  });
-}
-
-function PhotoThumb({ blob }: { blob: Blob }) {
-  const [src, setSrc] = useState<string | null>(null);
-  useEffect(() => {
-    const url = URL.createObjectURL(blob);
-    setSrc(url);
-    return () => URL.revokeObjectURL(url);
-  }, [blob]);
-  return src ? (
-    // eslint-disable-next-line @next/next/no-img-element -- a local blob: URL, not an optimisable asset
-    <img
-      src={src}
-      alt=""
-      data-testid="m-queued-thumb"
-      className="h-[52px] w-[52px] shrink-0 rounded-[10px] border border-m6m-border object-cover"
-    />
-  ) : (
-    <span className="h-[52px] w-[52px] shrink-0 rounded-[10px] border border-m6m-border bg-m6m-surface" />
-  );
-}
-
+// S120 2-C — HELD PHOTOS GET A LIST YOU CAN READ. Josh had 30 photos queued on
+// his phone and ~300 in his camera roll, and nothing said WHICH 30: this card
+// listed "Photo · 10:32 · Queued" and nothing else, and it was reachable online
+// only by typing the URL. A photo entry now shows the photo itself (the queued
+// blob — the only copy the queue holds), the DATE and time it was taken, the
+// project it will file to, and why it is still here. The entry point is the
+// nav sheet's "Waiting to sync" row (mobile-shell.tsx), online or not.
 /** The queued photo's own blob, when the entry carries one. */
 function entryBlob(e: QueueEntry): Blob | null {
   const b = (e.payload as { blob?: unknown }).blob;
@@ -213,7 +179,7 @@ export default function MobileOfflinePage() {
                 data-state={e.state}
                 className="flex min-h-[52px] items-center gap-[10px] border-b border-m6m-border py-[8px] last:border-b-0"
               >
-                {entryBlob(e) ? <PhotoThumb blob={entryBlob(e)!} /> : null}
+                {entryBlob(e) ? <BlobThumb blob={entryBlob(e)!} testId="m-queued-thumb" /> : null}
                 <div className="min-w-0 flex-1">
                   <p className="text-[15px] font-semibold text-m6m-navy">
                     {t(ENTITY_KEY[e.entity])}

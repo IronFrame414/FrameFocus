@@ -152,6 +152,8 @@ export const en = {
   'field.capture.deleteTodayMany': '{n} photos with no project will be DELETED from this phone today. Tap to choose a project.',
   'field.capture.deleteSoonOne': '{n} photo with no project will be DELETED from this phone in {d} day(s). Tap to choose a project.',
   'field.capture.deleteSoonMany': '{n} photos with no project will be DELETED from this phone in {d} day(s). Tap to choose a project.',
+  // S120 2-B — what the strip says when tapped with no signal (it cannot open the tray then).
+  'field.capture.heldOffline': 'No signal right now. Your {n} photo(s) are safe on this phone — tap this bar again when you have signal to choose a project.',
   'field.capture.noProjects': 'No active projects to file these against.',
   'field.capture.saveOne': 'Save {n} photo',
   'field.capture.saveMany': 'Save {n} photos',
@@ -391,6 +393,7 @@ export const es: Record<keyof typeof en, string> = {
   'field.capture.deleteTodayMany': '{n} fotos sin proyecto se BORRARÁN de este teléfono hoy. Toca para elegir un proyecto.',
   'field.capture.deleteSoonOne': '{n} foto sin proyecto se BORRARÁ de este teléfono en {d} día(s). Toca para elegir un proyecto.',
   'field.capture.deleteSoonMany': '{n} fotos sin proyecto se BORRARÁN de este teléfono en {d} día(s). Toca para elegir un proyecto.',
+  'field.capture.heldOffline': 'Sin señal ahora. Tus {n} foto(s) están a salvo en este teléfono — toca esta barra otra vez cuando tengas señal para elegir un proyecto.',
   'field.capture.noProjects': 'No hay proyectos activos para archivarlas.',
   'field.capture.saveOne': 'Guardar {n} foto',
   'field.capture.saveMany': 'Guardar {n} fotos',

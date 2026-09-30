@@ -98,7 +98,9 @@ test.afterAll(async () => {
   await admin.from('tasks').delete().eq('id', taskId);
 });
 
-test('clock-out of a task-bound segment asks the outcome (no default) and then clocks out', async ({ page }) => {
+test('clock-out of a task-bound segment asks the outcome (no default) and then clocks out', async ({
+  page,
+}) => {
   const { sessionId, segmentId } = await openTaskShift();
   await page.goto('/m/timeclock');
   await expect(page.getByTestId('m-clock-out')).toBeVisible();
@@ -108,8 +110,14 @@ test('clock-out of a task-bound segment asks the outcome (no default) and then c
 
   // The question is there, neither answer is chosen, and nothing submits yet.
   await expect(page.getByTestId('m-clock-out-completion')).toBeVisible();
-  await expect(page.getByTestId('m-clock-out-completion-complete')).toHaveAttribute('aria-checked', 'false');
-  await expect(page.getByTestId('m-clock-out-completion-incomplete')).toHaveAttribute('aria-checked', 'false');
+  await expect(page.getByTestId('m-clock-out-completion-complete')).toHaveAttribute(
+    'aria-checked',
+    'false'
+  );
+  await expect(page.getByTestId('m-clock-out-completion-incomplete')).toHaveAttribute(
+    'aria-checked',
+    'false'
+  );
   await expect(page.getByTestId('m-clock-out-go')).toBeDisabled();
   await expectTapTarget(page, 'm-clock-out-completion-complete');
   await expectTapTarget(page, 'm-clock-out-completion-incomplete');
@@ -127,19 +135,31 @@ test('clock-out of a task-bound segment asks the outcome (no default) and then c
     .select('segment_end, completion, note')
     .eq('id', segmentId)
     .single();
-  const { data: ses } = await admin.from('time_clock_sessions').select('clock_out').eq('id', sessionId).single();
+  const { data: ses } = await admin
+    .from('time_clock_sessions')
+    .select('clock_out')
+    .eq('id', sessionId)
+    .single();
   expect(seg!.segment_end).not.toBeNull();
   expect(seg!.completion).toBe('incomplete');
   expect(seg!.note).toBe(`${RUN} framed the uppers`);
   expect(ses!.clock_out).not.toBeNull();
 });
 
-test('switching away from a task-bound segment asks the outcome (no default) and then switches', async ({ page }) => {
+test('switching away from a task-bound segment asks the outcome (no default) and then switches', async ({
+  page,
+}) => {
   const { sessionId, segmentId } = await openTaskShift();
   await page.goto('/m/timeclock/switch');
   await expect(page.getByTestId('m-switch-completion')).toBeVisible();
-  await expect(page.getByTestId('m-switch-completion-complete')).toHaveAttribute('aria-checked', 'false');
-  await expect(page.getByTestId('m-switch-completion-incomplete')).toHaveAttribute('aria-checked', 'false');
+  await expect(page.getByTestId('m-switch-completion-complete')).toHaveAttribute(
+    'aria-checked',
+    'false'
+  );
+  await expect(page.getByTestId('m-switch-completion-incomplete')).toHaveAttribute(
+    'aria-checked',
+    'false'
+  );
   await expectTapTarget(page, 'm-switch-completion-complete');
 
   await page.getByTestId('m-switch-note').fill(`${RUN} switching to a break`);
@@ -165,5 +185,7 @@ test('switching away from a task-bound segment asks the outcome (no default) and
     .is('segment_end', null);
   expect(ended!.segment_end).not.toBeNull();
   expect(ended!.completion).toBe('incomplete');
-  expect(((open ?? []) as Array<{ segment_type: string }>).map((r) => r.segment_type)).toEqual(['break']);
+  expect(((open ?? []) as Array<{ segment_type: string }>).map((r) => r.segment_type)).toEqual([
+    'break',
+  ]);
 });
