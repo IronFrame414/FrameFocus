@@ -11,6 +11,10 @@ import { companyToday } from '@framefocus/shared/utils/dates';
 import { getChangeOrders } from '@/lib/services/change-orders';
 import { getRevisedContract } from '@/lib/services/contract-value';
 import { getPhases, getTasks, rollupPhases } from '@/lib/services/tasks';
+import { getCalendarEvents } from '@/lib/services/schedule';
+import { getMembers, getMyMember } from '@/lib/services/members';
+import { canSchedule } from '@/lib/schedule/authority';
+import { SchedulingCalendar } from '@/components/schedule/scheduling-calendar';
 import { getProjectAssignments } from '@/lib/services/project-assignments';
 import { projectHasUnsignedContract } from '@/lib/services/contracts';
 import { memberColor } from '@/components/schedule/member-color';
@@ -92,6 +96,8 @@ export default async function ProjectOverviewPage({ params }: { params: { id: st
     { data: coTz },
     // R16 / Q3.2 [S150] — see the banner below.
     owesContractSignature,
+    // [S121 5-I] The project's schedule on its overview.
+    [scheduleEvents, scheduleMembers],
   ] = await Promise.all([
     Promise.all([
       getRevisedContract(params.id),
@@ -119,6 +125,15 @@ export default async function ProjectOverviewPage({ params }: { params: { id: st
       : Promise.all([getProjectQbExclusion(project.id), countQbLinkedRecords(project.id)]),
     supabase.from('companies').select('timezone').maybeSingle(),
     projectHasUnsignedContract(project.id),
+    (async () => {
+      // Crew and subs see their own bars (5B §9), as on the Schedule tab.
+      const own =
+        profile.role === 'crew_member' || profile.role === 'subcontractor' ? await getMyMember() : null;
+      return Promise.all([
+        getCalendarEvents({ projectId: params.id, ownMemberId: own?.id }),
+        canSchedule(profile.role) ? getMembers() : Promise.resolve([]),
+      ]);
+    })(),
   ]);
   // [S111] Owner/Admin, and a Project Executive on its own project (RLS).
   const canSeeFinancials = seesProjectMoney(profile.role);
@@ -595,6 +610,26 @@ export default async function ProjectOverviewPage({ params }: { params: { id: st
             </div>
           )}
         </div>
+      </div>
+
+      {/* [S121 5-I, RULED Josh] The project's schedule, INTERACTIVE, with the
+          same Week / Month / Gantt toggle as the Schedule tab — the same
+          SchedulingCalendar (click a day, drag, resize for the roles that may).
+          The desktop overview had no "Up next"; /m keeps its own (D-24). */}
+      <div data-testid="overview-schedule" style={{ ...cardStyle, padding: '18px 20px', marginTop: '16px' }}>
+        <div style={railTitleStyle}>Schedule</div>
+        <SchedulingCalendar
+          events={scheduleEvents}
+          projects={[{ id: project.id, name: project.name }]}
+          fixedProjectId={project.id}
+          members={scheduleMembers.map((m) => ({
+            id: m.id,
+            display_name: m.display_name,
+            member_type: m.member_type,
+            sub_type: m.sub_type ?? null,
+          }))}
+          role={profile.role}
+        />
       </div>
 
       {/* Preserved detail cards (checkpoint decision: no functional loss) */}

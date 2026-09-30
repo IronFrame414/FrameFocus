@@ -18,7 +18,7 @@ import {
 import type { Phase, Task, TaskDependency } from '@/lib/services/tasks-client';
 import { createPhase, deletePhase } from '@/lib/services/tasks-client';
 import { rollupPhases, TASK_STATUS_LABELS } from '@/lib/services/tasks-shared';
-import { Calendar } from '@/components/schedule/calendar';
+import { SchedulingCalendar } from '@/components/schedule/scheduling-calendar';
 import { Gantt, ganttGroupsFromRollups } from '@/components/schedule/gantt';
 import { assigneeColor } from '@/components/schedule/member-color';
 import { TaskForm } from './task-form';
@@ -26,6 +26,8 @@ import { color, font } from '@/lib/theme';
 
 interface SchedulePanelProps {
   projectId: string;
+  /** [S121 5-D] For the scheduling sheet's fixed project line. */
+  projectName: string;
   tasks: Task[];
   phases: Phase[];
   dependencies: TaskDependency[];
@@ -35,6 +37,7 @@ interface SchedulePanelProps {
     id: string;
     display_name: string;
     member_type: string;
+    sub_type?: 'subcontractor' | 'vendor' | null;
     schedule_color: string | null;
   }[];
   canManage: boolean;
@@ -82,6 +85,7 @@ const primaryButton = (busy: boolean): React.CSSProperties => ({
 
 export function SchedulePanel({
   projectId,
+  projectName,
   tasks,
   phases,
   dependencies,
@@ -420,7 +424,18 @@ export function SchedulePanel({
         />
       )}
 
-      {view === 'calendar' && <Calendar events={calendarEvents} onSelect={onEventSelect} />}
+      {view === 'calendar' && (
+        // [S121 Part 5] The project's calendar SCHEDULES (click a day, drag,
+        // resize) through the same wrapper as the company Schedule.
+        <SchedulingCalendar
+          events={calendarEvents}
+          projects={[{ id: projectId, name: projectName }]}
+          fixedProjectId={projectId}
+          members={members}
+          role={role}
+          onSelect={onEventSelect}
+        />
+      )}
 
       {/* General (task-less) schedule entries */}
       {canManage && (
