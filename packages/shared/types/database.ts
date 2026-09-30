@@ -10212,6 +10212,67 @@ export type Database = {
           },
         ]
       }
+      task_assignees: {
+        Row: {
+          company_id: string
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          id: string
+          is_deleted: boolean
+          member_id: string
+          task_id: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          company_id?: string
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          is_deleted?: boolean
+          member_id: string
+          task_id: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          is_deleted?: boolean
+          member_id?: string
+          task_id?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "task_assignees_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "task_assignees_member_id_fkey"
+            columns: ["member_id"]
+            isOneToOne: false
+            referencedRelation: "company_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "task_assignees_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       task_dependencies: {
         Row: {
           company_id: string
@@ -11226,6 +11287,7 @@ export type Database = {
       is_my_recent_segment: { Args: { p_segment_id: string }; Returns: boolean }
       is_platform_admin: { Args: never; Returns: boolean }
       is_project_creator: { Args: { p_project_id: string }; Returns: boolean }
+      is_task_assignee: { Args: { p_task_id: string }; Returns: boolean }
       issue_po_lines: {
         Args: { p_item_ids: string[]; p_po_id: string }
         Returns: undefined
@@ -11546,6 +11608,10 @@ export type Database = {
       set_po_total_amount: {
         Args: { p_amount: number; p_budget_item_id?: string; p_po_id: string }
         Returns: string
+      }
+      set_task_assignees: {
+        Args: { p_member_ids: string[]; p_task_id: string }
+        Returns: number
       }
       set_winning_bid: {
         Args: { p_line_item_id: string; p_sub_bid_id: string }
