@@ -615,6 +615,47 @@ the live `md5` = `d2dbd30021df040a50f71825a24a4b00`, containing the `#177 [S120]
 from the live `pg_get_functiondef` and read back as `md5 d2dbd300…`, **identical**. Leftover `S120C`
 rows: **0**.
 
+#### 1-D `#178`: incident parties must be members of the incident's company
+
+⚠️ **The entry understated it.** On **production**, **both** overloads carry EXECUTE for
+`authenticated`, including the 6-arg **SECURITY DEFINER** one that the entry and `#1-s180u` call
+"dead". It has no caller: the route passes `p_prevention_notes`, and a grep over apps/web, the tests
+and scripts finds no 6-arg call. It is still **reachable**, and as DEFINER it bypasses child-table RLS.
+The child tables' INSERT and UPDATE policies check the row's company and the incident's reporter,
+**never the member's company**. Production holds 0 injury and 0 witness rows. Rebuild-test holds 2 +
+3, with 0 naming a member outside the row's company.
+
+**Fix** (`20262113000000_s120_incident_member_company.sql`), placed **below both functions**:
+- `enforce_incident_party_member_company()` (SECURITY DEFINER, the `enforce_employee_document_owner`
+  pattern) runs as `BEFORE INSERT OR UPDATE OF member_id, company_id` on `safety_incident_injuries`
+  and `safety_incident_witnesses`. A non-null `member_id` must be a `company_members` row of the
+  row's company, or the write raises 42501.
+- `REVOKE ALL` on the 6-arg overload from PUBLIC, anon and authenticated. **Dropping it** (the
+  `#1-s180u` proposal) is the wider and irreversible step, and it was **not** taken.
+
+**BEFORE** (`s120-incident-member-company.live.ts`, as the crew reporter, service-role counts): a
+foreign **injured party** via the 7-arg call lands (1 row), a foreign **witness** lands (1), a
+**direct INSERT** of a foreign witness lands, and the **6-arg overload** is callable and writes an
+incident with a foreign injured party. **4 red / 1 green** (the own-company control).
+
+**AFTER** (the dry run listed exactly `20262113000000_…` with `2114` held out; the push exited 0; both
+triggers are present as `tgtype 23`; the 6-arg ACL no longer has `authenticated`): **6/6.** Every
+foreign path gets **42501 with 0 rows**. The own-company control lands **1 injury and 1 witness**. The
+6-arg call gets 42501 and 0 incidents, and a **harmless** 6-arg call (no parties) is also refused
+with 42501 and 0 incidents. That last test was added so that the revoke is proven by something only
+the revoke can refuse.
+
+**Sabotage:**
+- **S1: both triggers disabled** (read back `tgenabled = D/D`) → **4 red.** Restored with `enable
+  trigger` and read back `O/O`.
+- **S2: EXECUTE re-granted** on the 6-arg overload (read back `has_function_privilege = true`) →
+  **1 red**, which is exactly the harmless-call test. Restored with `revoke` and read back
+  `has_function_privilege = false`, with an ACL identical to the post-migration ACL.
+
+The final run after both restores is **6/6**, with 0 leftover `S120I` incidents. ⚠️ A test flaw was
+found under S1 and fixed. The 6-arg test's foreign-injury count pooled **every** marker incident, so
+under S1 it went red for rows written by the 7-arg tests. It is now scoped to its own incident.
+
 ---
 
 ## Production verification rows
