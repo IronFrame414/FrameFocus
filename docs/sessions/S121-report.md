@@ -99,3 +99,54 @@ Control: `files` total on production 307 (295 `photos`, 2 `material_signout`, 9 
   - "Return page" = Section 6 of the same record page (`:409-491`), not a separate route.
 - **PRODUCTION counts:** `material_signouts` = **1 row**; `receiver_vehicle` populated **0**; `released_title` populated **0**; `material_signout_photos` = 1. **3-B: no row holds a vehicle value, so hiding the input loses no visible data** — plan keeps the column anyway (no DROP; one row, nothing gained).
 - **Project statuses (CHECK):** `active, on_hold, complete, archived, cancelled` (`20260704211000:120`). Production: 6 live projects, all `active`.
+
+### 1.2 — The spec's eight findings — code ref `origin/main` `7cf348a0`; DB ref **rebuild-test** (via MCP), not production
+
+| # | claim | verdict | evidence |
+| --- | --- | --- | --- |
+| 1 | `tasks.assignee_id` singular | **CONFIRMED** | `20260704213000_module5_5b_tasks_scheduling.sql:89` (uuid), FK `:109`, index `:118`; `database.ts:10275`. No `task_assignees` table exists. |
+| 2 | `company_members.schedule_color` exists, feeds `CalendarEvent.color` | **CONFIRMED** | `20260704210000:23` (text, nullable, **no default**); `schedule.ts:152` (tasks), `:177` (entries). **Addition:** auto-assigned nowhere — rebuild-test 0 of 629 members carry a colour; desktop falls back to a hash palette (`member-color.ts:19`), `/m` to amber `#f59e0b` (`m/team/page.tsx:104`) — **a PARITY divergence today.** Editable only on `/m` (`team-edit-form.tsx:216-221`); desktop team profile has no field. |
+| 3 | `is_scheduled` gates the calendar | **CONFIRMED, with a correction** | `schedule.ts:124`. ⚠️ **`is_scheduled` is a GENERATED column** (`5b:83`) — it cannot be "set"; it derives from the task's dates. The spec's "must set it" becomes "must give the task its dates". |
+| 4 | `schedule_entries` shape | **CONFIRMED** | `5b:198-214`; plus `schedule_entries_date_range_check` (end ≥ start). Labels `schedule.ts:27-32`. |
+| 5 | `findOverlaps` non-blocking | **CONFIRMED** | `schedule-client.ts:12-16`; no EXCLUDE/UNIQUE on rebuild-test. |
+| 6 | subs/vendors are members with `sub_type`, `trade_type` | **CONFIRMED** | `member_type ∈ crew, subcontractor`; `sub_type ∈ subcontractor, vendor`. ⚠️ **`trade_type` is FREE TEXT, nullable, no CHECK** — a trade→colour map must normalise text and have a fallback. rebuild-test: 0 of 4 null. |
+| 7 | "34 of 41 members have no `profile_id`" | **CORRECTED — stale** | The comment (`assignment-notify.ts:19-20`, repeated `recipients.ts:57`, `safety-incidents/[id]/notify/route.ts:73`) names no DB. rebuild-test now: 621 of 629. The point stands: most subs have no login. |
+| 8 | `task_dependencies`, `phases`, `DependencyType` exist | **CONFIRMED** | `5b:16`, `5b:143`; `tasks-shared.ts:13-17`. |
+
+### 1.5 — Every reader and writer of `tasks.assignee_id` — ref `origin/main` `7cf348a0`; DB ref rebuild-test
+
+Greps over `apps packages scripts supabase` (excl. node_modules/.next/.turbo): `assignee_id` 110 lines / 41 files; `assignee:` 9/7; `\.assignee` 45/18; `tasks_assignee` 4/3; `assignee` superset 236/53 — every non-migration line of the superset was read. `supabase/functions` does not exist. On rebuild-test every `pg_policies` qual/check, `pg_proc` body and `pg_views` definition was searched for `assignee` / `\mtasks\M`.
+
+**DB layer**
+| # | object | latest def | use | migration to many |
+| --- | --- | --- | --- | --- |
+| D1 | `tasks_select_visible` | `20260912000000:264-287` | non-sub arm `can_view_project OR assignee_id = get_my_member_id()`; **sub arm `assignee_id = get_my_member_id()` only** | `is_task_assignee(tasks.id)` SQL SECURITY DEFINER helper (no RLS recursion) |
+| D2 | `tasks_update_authorized` | `5b:361-375` | crew arm `OR assignee_id = get_my_member_id()`; **no WITH CHECK** | same helper. ⚠️ Today USING-as-CHECK is what stops crew reassigning; once assignment lives in the join table, **the join table's own INSERT/UPDATE policies must carry that guard** (owner/admin/pm/foreman + PE arm). The comment at `5b:371-372` claiming a service-layer column restriction is **false** (`updateTask` takes `Record<string, unknown>`). |
+| D3 | FK + `idx_tasks_assignee_id` | `5b:109,118` | schema | kept this build; `scripts/.db-expected.json:2063,4072` |
+| D4 | `client_schedule(uuid)` | `20261019000000:233-259` | deliberately does **not** read it | unchanged; `s164-m9-read-arms.live.ts:398-404` must stay green |
+
+**App layer**
+| # | file:line | use | migration |
+| --- | --- | --- | --- |
+| A1 | `lib/services/tasks.ts:22` `getTasks` | embeds single assignee | embed `task_assignees(member:company_members(...))` |
+| A2 | `lib/services/tasks-shared.ts:19-27` `Task` type | `assignee: {...} \| null` | `assignees: MemberRef[]` |
+| A3 | `schedule-panel.tsx:655,657,677` | colour dot, "Unassigned" | multiple names/dots |
+| A4 | `components/schedule/gantt.tsx:243,249` | bar colour + tooltip | first assignee's colour / neutral when several; name list |
+| A5 | `task-form.tsx:53,89,177-201,210,223` | single select; overlap check | multi-select; `findOverlaps` per member |
+| A6 | `tasks-client.ts:13-28` `createTask`, `:34-55` `updateTask` | writes | write via one RPC (task + assignees atomic); keep `assignee_id` = first assignee for back-compat until the column is retired |
+| **A7** | **`schedule.ts:118-157` `getCalendarEvents`; crew self-filter `:135`** | **load-bearing** | `ownMemberId ∈ assignees`; event per assignee or `members[]` |
+| A8 | `schedule-client.ts:25-30` `findOverlaps` | `.eq('assignee_id', memberId)` | `task_assignees` `!inner` on `member_id` |
+| A9 | `time-tracking-client.ts:587-610` `listPickerTasks` | selects `assignee_id` | return `assignee_ids[]` |
+| A10 | `timeclock-client.tsx:134`, `components/time/clock-modal.tsx:169` | `assignee_id === null \|\| === me` | "no assignees OR me ∈ assignees" |
+| A11 | `m/timeclock/switch/switch-screen.tsx:112`, `day-detail-client.tsx:178,187` | `listPickerTasks` **without** the filter | ⚠️ **existing PARITY gap: `/m` switch shows every task, desktop filters.** Flagged; in scope only if Josh says so. |
+| A12 | `time-tracking-client.ts:77-91` `completeTaskFromSegment` | crew completes a task **only through D2's assignee arm** | follows D2 automatically |
+| A13 | `schedule-panel.tsx:294` | crew get the full task form incl. assignee; only D2 blocks the write | see D2 |
+| A14 | `packages/shared/types/database.ts:10275,10298,10321,10345` | generated | regenerate |
+
+`getCalendarEvents` callers passing `ownMemberId` for crew/sub: `dashboard/page.tsx:47`, `dashboard/schedule/page.tsx:34`, `dashboard/projects/[id]/schedule/page.tsx:36`. Deliberately not: `m/schedule/page.tsx:58`, `m/p/[projectId]/page.tsx:93`, `m/p/[projectId]/schedule/page.tsx:56` (M6M §4.13.2).
+
+**Notifications:** **none for tasks** — `assignment-notify.ts` covers projects (`:118`) and punch (`:162`) only; there is no `/api/tasks`.
+
+**Tests that assert task-assignee behaviour:** `s133-subcontractor-read-floor.live.ts:110,392-405` (sub sees only its task; every row's `assignee_id === subMemberId` — **must be inverted in place to the join table**), `:684` owner control; `s164-m9-read-arms.live.ts:398-404`. **Nothing tests** `findOverlaps`, the `ownMemberId` filter, the picker filter, or crew UPDATE via the assignee arm — the build must add them.
+
+**Not tasks, left alone:** `punch_list_items.assignee_id` (its own RLS, `punch*.ts`, `api/punch-items/route.ts:76-83`, `lib/assignee-picker.ts:110`, many tests).
