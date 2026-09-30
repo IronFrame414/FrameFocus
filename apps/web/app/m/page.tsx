@@ -7,6 +7,9 @@ import { redirect } from 'next/navigation';
 // opening the installed app from the home screen lands here and continues to
 // the timeclock.
 //
+// [S119 E-2] next.config.js now answers `/m` first, before middleware and this
+// layout, so this page is the fallback, not the path a launch takes.
+//
 // A server-side redirect, not a client one: it costs no bundle, cannot flash an
 // empty shell, and survives with JS disabled.
 

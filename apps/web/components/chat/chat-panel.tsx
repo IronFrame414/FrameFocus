@@ -48,12 +48,12 @@ export function ChatPanel({ myProfileId }: ChatPanelProps) {
     }
   }, []);
 
-  useEffect(() => {
-    void loadBadge();
-  }, [loadBadge]);
-
   // Refreshed when the panel closes, so reading a thread clears the badge
-  // without a page reload.
+  // without a page reload. [S119 E-3] This effect is ALSO the mount fetch: the
+  // panel starts closed, so it fires once on mount. _Superseded:_ a second
+  // `useEffect(() => { void loadBadge(); }, [loadBadge])` fetched on mount too —
+  // two identical /api/chat/threads calls (each a full middleware run) on every
+  // dashboard page load (measured S119: 2 per cold load of project Photos).
   useEffect(() => {
     if (!open) void loadBadge();
   }, [open, loadBadge]);

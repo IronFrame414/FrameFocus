@@ -208,6 +208,60 @@ function groupByCostCode(items: BudgetItem[]): BudgetGroup[] {
 }
 
 /**
+ * [S119 E-1] The committed-side inputs of getBudgetRollup: the approved
+ * expenses, then — in parallel, since each needs only the expense ids — the
+ * sub-contracts they name, their allocations and their payments. The four
+ * queries are exactly the ones getBudgetRollup ran in series before.
+ */
+async function loadCommittedInputs(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  projectId: string
+) {
+  const { data: expenseRows } = await supabase
+    .from('expenses')
+    .select(
+      'id, amount, status, state, sub_contract_id, purchase_order_id, is_retainage, closed_out_at, is_deleted'
+    )
+    .eq('project_id', projectId)
+    .eq('is_deleted', false)
+    .eq('status', 'approved');
+
+  const expenses = expenseRows ?? [];
+  const expenseIds = expenses.map((e) => e.id);
+
+  // 113c §5 — which sub-contracts are formal-and-unsigned. Their committed
+  // contributions flag the line as awaiting the sub's signature.
+  const subContractIds = [...new Set(expenses.map((e) => e.sub_contract_id).filter(Boolean))] as string[];
+  const [{ data: contractRows }, { data: allocRows }, { data: paymentRows }] = await Promise.all([
+    subContractIds.length
+      ? supabase
+          .from('subcontractor_contracts')
+          .select('id, requires_formal_contract, status')
+          .in('id', subContractIds)
+      : Promise.resolve({ data: [] as { id: string; requires_formal_contract: boolean; status: string }[] }),
+    expenseIds.length
+      ? supabase
+          .from('expense_allocations')
+          .select('expense_id, budget_item_id, amount')
+          .in('expense_id', expenseIds)
+          .eq('is_deleted', false)
+      : Promise.resolve({ data: [] as { expense_id: string; budget_item_id: string; amount: number }[] }),
+    expenseIds.length
+      ? supabase
+          .from('expense_payments')
+          .select('expense_id, amount, retainage_withheld, is_deleted')
+          .in('expense_id', expenseIds)
+      : Promise.resolve({
+          data: [] as Pick<
+            ExpensePayment,
+            'expense_id' | 'amount' | 'retainage_withheld' | 'is_deleted'
+          >[],
+        }),
+  ]);
+  return { expenses, contractRows, allocRows, paymentRows };
+}
+
+/**
  * Budget rollup grouped by INSTRUMENT, then cost_code (money representation
  * §7.1). budgeted_amount is the pre-markup COST baseline, tax-inclusive on
  * taxed rows (A-1) — sell is derived elsewhere; the budget sum sits below
@@ -221,6 +275,16 @@ function groupByCostCode(items: BudgetItem[]): BudgetGroup[] {
  */
 export async function getBudgetRollup(projectId: string): Promise<BudgetRollup> {
   const supabase = await createClient();
+
+  // [S119 E-1] THREE INDEPENDENT CHAINS, STARTED TOGETHER. None reads anything
+  // from another: (1) the budget lines and signed COs; (2) the approved
+  // expenses, then — all three from the expense ids alone — their contracts,
+  // allocations and payments; (3) the §5.4 selection subcategories. Every query,
+  // filter and derivation below is unchanged; only the waiting moved.
+  // _Superseded:_ the eight reads ran in series — (1), then expenses, then
+  // contracts, then allocations, then payments, then (3) — sequential depth 8.
+  const expenseChain = loadCommittedInputs(supabase, projectId);
+  const subcategoriesPromise = loadSelectionSubcategories(supabase, projectId);
 
   const [{ data: itemRows }, { data: cos }] = await Promise.all([
     supabase
@@ -243,52 +307,12 @@ export async function getBudgetRollup(projectId: string): Promise<BudgetRollup> 
   ]);
 
   // --- Derived remaining-committed per line ---------------------------------
-  const { data: expenseRows } = await supabase
-    .from('expenses')
-    .select(
-      'id, amount, status, state, sub_contract_id, purchase_order_id, is_retainage, closed_out_at, is_deleted'
-    )
-    .eq('project_id', projectId)
-    .eq('is_deleted', false)
-    .eq('status', 'approved');
-
-  const expenses = expenseRows ?? [];
-  const expenseIds = expenses.map((e) => e.id);
-
-  // 113c §5 — which sub-contracts are formal-and-unsigned. Their committed
-  // contributions flag the line as awaiting the sub's signature.
-  const subContractIds = [...new Set(expenses.map((e) => e.sub_contract_id).filter(Boolean))] as string[];
-  const { data: contractRows } = subContractIds.length
-    ? await supabase
-        .from('subcontractor_contracts')
-        .select('id, requires_formal_contract, status')
-        .in('id', subContractIds)
-    : { data: [] as { id: string; requires_formal_contract: boolean; status: string }[] };
+  const { expenses, contractRows, allocRows, paymentRows } = await expenseChain;
   const awaitingContracts = new Set(
     (contractRows ?? [])
       .filter((c) => c.requires_formal_contract && c.status !== 'signed')
       .map((c) => c.id)
   );
-
-  const { data: allocRows } = expenseIds.length
-    ? await supabase
-        .from('expense_allocations')
-        .select('expense_id, budget_item_id, amount')
-        .in('expense_id', expenseIds)
-        .eq('is_deleted', false)
-    : { data: [] as { expense_id: string; budget_item_id: string; amount: number }[] };
-
-  const { data: paymentRows } = expenseIds.length
-    ? await supabase
-        .from('expense_payments')
-        .select('expense_id, amount, retainage_withheld, is_deleted')
-        .in('expense_id', expenseIds)
-    : {
-        data: [] as Pick<
-          ExpensePayment,
-          'expense_id' | 'amount' | 'retainage_withheld' | 'is_deleted'
-        >[],
-      };
 
   const paymentsByExpense = new Map<string, Pick<ExpensePayment, 'amount' | 'is_deleted'>[]>();
   for (const p of paymentRows ?? []) {
@@ -332,7 +356,7 @@ export async function getBudgetRollup(projectId: string): Promise<BudgetRollup> 
   // CHOSEN options' cost. Three reads, none per-row. Under the caller's RLS:
   // a reader below Owner/Admin has no budgeted_amount to compare against and
   // the subcategory is not built for them (see BudgetItem.selection_subcategory).
-  const subcategoryByItem = await loadSelectionSubcategories(supabase, projectId);
+  const subcategoryByItem = await subcategoriesPromise;
 
   const items: BudgetItem[] = ((itemRows ?? []) as unknown as Array<
     BudgetItemRow & { project_budget_amounts?: { budgeted_amount: number }[] | { budgeted_amount: number } | null }

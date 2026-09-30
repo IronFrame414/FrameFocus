@@ -67,7 +67,13 @@ import { effectiveBudget, getBudgetRollup } from '@/lib/services/budget';
 // ============================================================================
 
 const state = vi.hoisted(() => ({ client: null as unknown as SupabaseClient }));
-vi.mock('@/lib/supabase-server', () => ({ createClient: async () => state.client }));
+// [S119 E-1] + getRequestUser: S115 H-2 routed the profitability path through it and
+// this mock was never given one, so F1/F2 threw "No getRequestUser export" (measured
+// S119 on main). _Superseded, quoted:_ `vi.mock('@/lib/supabase-server', () => ({ createClient: async () => state.client }));`
+vi.mock('@/lib/supabase-server', () => ({
+  createClient: async () => state.client,
+  getRequestUser: async () => (await state.client.auth.getUser()).data.user,
+}));
 vi.mock('@/lib/supabase-browser', () => ({ createClient: () => state.client }));
 
 const MARKER = 'S175S5';

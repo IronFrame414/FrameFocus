@@ -207,8 +207,53 @@ function burdenedRate(s: SnapshotRow): number {
   return rate;
 }
 
+/**
+ * [S119 E-1] The labor-side inputs of getJobCostRollup — the same three
+ * dependent reads it made in series after the expenses side, now started first.
+ */
+async function loadLaborInputs(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  projectId: string
+) {
+  const { data: segmentRows } = await supabase
+    .from('time_segments')
+    .select('session_id, segment_start, segment_end')
+    .eq('project_id', projectId)
+    .eq('is_deleted', false)
+    .not('segment_end', 'is', null);
+
+  const segments = (segmentRows ?? []) as SegmentSlice[];
+  const sessionIds = [...new Set(segments.map((s) => s.session_id))];
+
+  const { data: sessionRows } = sessionIds.length
+    ? await supabase
+        .from('time_clock_sessions')
+        .select('id, member_id')
+        .in('id', sessionIds)
+        .eq('status', 'approved')
+        .eq('is_deleted', false)
+    : { data: [] as { id: string; member_id: string }[] };
+
+  const approvedSessions = new Map((sessionRows ?? []).map((s) => [s.id, s.member_id]));
+
+  const { data: snapshotRows } = approvedSessions.size
+    ? await supabase
+        .from('time_session_rate_snapshots')
+        .select('session_id, hourly_rate, burden_multiplier, fixed_burden_per_hour, burden_source')
+        .in('session_id', [...approvedSessions.keys()])
+    : { data: [] as SnapshotRow[] };
+
+  return { segments, approvedSessions, snapshotRows };
+}
+
 export async function getJobCostRollup(projectId: string): Promise<JobCostRollup> {
   const supabase = await createClient();
+
+  // [S119 E-1] The LABOR side reads nothing from the expenses side, so its
+  // three-read chain (segments → sessions → snapshots) starts now and runs
+  // beside the expenses chain. Same queries; only the waiting moved.
+  // _Superseded:_ both chains ran one after the other — sequential depth 6.
+  const laborInputs = loadLaborInputs(supabase, projectId);
 
   // --- Expenses side (7C §2.6 as amended — derived at read) ----------------
   // Receipts (7A, non-payable rows) contribute their full approved amount.
@@ -325,33 +370,7 @@ export async function getJobCostRollup(projectId: string): Promise<JobCostRollup
   // warranty carry project_id by CHECK) on APPROVED sessions, priced at each
   // session's frozen burdened snapshot rate. OT premium is NOT job-attributed
   // (v1 open item — straight burdened rate).
-  const { data: segmentRows } = await supabase
-    .from('time_segments')
-    .select('session_id, segment_start, segment_end')
-    .eq('project_id', projectId)
-    .eq('is_deleted', false)
-    .not('segment_end', 'is', null);
-
-  const segments = (segmentRows ?? []) as SegmentSlice[];
-  const sessionIds = [...new Set(segments.map((s) => s.session_id))];
-
-  const { data: sessionRows } = sessionIds.length
-    ? await supabase
-        .from('time_clock_sessions')
-        .select('id, member_id')
-        .in('id', sessionIds)
-        .eq('status', 'approved')
-        .eq('is_deleted', false)
-    : { data: [] as { id: string; member_id: string }[] };
-
-  const approvedSessions = new Map((sessionRows ?? []).map((s) => [s.id, s.member_id]));
-
-  const { data: snapshotRows } = approvedSessions.size
-    ? await supabase
-        .from('time_session_rate_snapshots')
-        .select('session_id, hourly_rate, burden_multiplier, fixed_burden_per_hour, burden_source')
-        .in('session_id', [...approvedSessions.keys()])
-    : { data: [] as SnapshotRow[] };
+  const { segments, approvedSessions, snapshotRows } = await laborInputs;
 
   const snapshots = new Map(
     ((snapshotRows ?? []) as SnapshotRow[]).map((s) => [s.session_id, s])
