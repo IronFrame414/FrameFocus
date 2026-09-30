@@ -586,6 +586,35 @@ returned 200 and wrote an invitation, which the teardown removed. **Restored** f
 Signup and invite-accept end to end are the CI e2e suite (onboarding and invite specs) on this branch
 (stop rule 7).
 
+#### 1-C `#177`: `record_client_payment` checks the contact's company (ASK-7 default A)
+
+The fix was built from the **live** body: `md5(prosrc)` `6470d732…`, identical on production and
+rebuild-test. `20261830000000` is the last migration to define it (grep over `supabase/migrations`).
+It makes **one** addition: `IF NOT EXISTS (SELECT 1 FROM contacts WHERE id = p_contact_id AND
+company_id = v_company) THEN RAISE 'Client % not found.'`. The check runs **unconditionally and
+before the loop**. The authority rules (Owner/Admin/PE, amounts, PE whole-payment) are unchanged,
+and a `diff` against the live body shows only the added block. Migration:
+`20262112000000_s120_record_payment_contact_company.sql`.
+
+**BEFORE, on rebuild-test** (`s120-payment-contact-company.live.ts`, service-role counts):
+- An Owner calling with `p_applications = []` and **another company's contact** → **recorded, 1
+  row**.
+- A second oracle was found: a foreign contact **succeeded** while a nonexistent id raised an **FK
+  error**, which confirms the foreign contact exists.
+
+**2 red / 1 green.**
+
+**AFTER** (the dry run listed exactly `20262112000000_…` with `2114` held out, the push exited 0, and
+the live `md5` = `d2dbd30021df040a50f71825a24a4b00`, containing the `#177 [S120]` marker): **3/3.**
+- The foreign contact gets "Client <id> not found." with **0 rows**.
+- The foreign id and a ghost id get the **same** message.
+- The positive control (own contact, `[]`) gives exactly **1** row.
+
+**Sabotage.** The check was replaced with `IF false THEN` and read back (`md5 d10c8e29…`,
+`sabotaged = true`). Result: **2 red**, because the foreign payment was recorded again. **Restored**
+from the live `pg_get_functiondef` and read back as `md5 d2dbd300…`, **identical**. Leftover `S120C`
+rows: **0**.
+
 ---
 
 ## Production verification rows
