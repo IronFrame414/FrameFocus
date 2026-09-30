@@ -656,6 +656,38 @@ The final run after both restores is **6/6**, with 0 leftover `S120I` incidents.
 found under S1 and fixed. The 6-arg test's foreign-injury count pooled **every** marker incident, so
 under S1 it went red for rows written by the 7-arg tests. It is now scoped to its own incident.
 
+#### 1-E `#179`: the payment functions no longer confirm that a foreign invoice exists
+
+**Every error string** in both live bodies was checked. A foreign id can reach **only** the invoice
+lookup's two messages:
+- In both functions, every later message (status, contact mismatch, `OVER_APPLIED`, totals, PE rules)
+  sits **after** the company check.
+- The payment lookup in `apply_client_credit` is already company-scoped ("Payment % not found.").
+- `#177`'s new contact check already says "not found" for both the foreign and the ghost case.
+
+Migration `20262114000000_s120_payment_not_found.sql` changes **one line in each** function:
+"belongs to another company" → "not found". `apply_client_credit` was built from its live body
+(`dea91f86…`), and `record_client_payment` from the `20262112000000` body, so `#177` is carried
+(read back: `has177 = true`).
+
+**Existing test swept (the S157 rule):** `s97ct-isolation.live.ts` test 12 accepted either message.
+It was **inverted in place**, with the superseded assertion quoted, and now requires `not found` and
+never `another company`.
+
+**BEFORE** (`s120-payment-not-found.live.ts`): `record_client_payment` returned foreign = "Invoice <id>
+belongs to another company." and ghost = "Invoice <id> not found." `apply_client_credit` returned the
+same two. **2 red.**
+
+**AFTER** (the dry run listed exactly `20262114000000_…`, the push exited 0, the live md5 is
+`apply_client_credit 0e5d3476…` and `record_client_payment ac570ea1…`, and
+`still_discriminates = false` for both): both functions return foreign = ghost = "Invoice <id> not
+found.", with 0 applications written. **19/19** across `s120-payment-not-found`,
+`s120-payment-contact-company` and `s97ct-isolation`.
+
+**Sabotage:** the old message was restored in both functions (read back `sabotaged = true/true`) →
+**3 red**: both S120 tests and S97 test 12. **Restored** from the live definitions and read back as
+`0e5d3476… / ac570ea1…`, **identical**.
+
 ---
 
 ## Production verification rows
