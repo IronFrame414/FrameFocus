@@ -596,3 +596,20 @@ Each section ran through `section.sh`: every newer migration file held out of th
 - Unit: new `s121-task-events` (10), `s121-schedule-colors`, `s121-schedule-drag` (11), `s121-schedule-lanes` (6), `s121-schedule-authority` (26). The /m i18n anti-rot guard is green: every new /m string is a `sched.*` key with Spanish.
 - **Pre-CI:** type-check 0; lint 0; unit **157 files / 2123 tests**, 0 cache hits.
 - ⚠️ Left in place, noted: `app/m/schedule/scroll-to-today.tsx` is now unused (the list it scrolled is gone); `scripts/.db-expected.json` (a local replay fingerprint, not in CI) predates this schema.
+
+### Part 6 — Cost catalog +5% — branch `feature/s121-p6-catalog` (from main `fe616f1f`)
+
+- **Reconciled (1.8): local `f9dbfb5c` won** — identical content to origin `cbd2c2c1` (range-diff `=` ×4, same blob), on the newer base. Landed by cherry-picking its 3 content commits (`3cfa2eb7`, `1be1da16`, `f9dbfb5c` → `bf93d57a`, `93e0f017`, `ab81bcbb`), **dropping the empty park commit `8482dfdd`**. Landed blob `2caa9d6b` = the reconciled blob.
+- **The company:** production `profiles.user_id = 10d59c4b…` (`josh@worthprop.com`) → **Worth Properties** `dc4da2a7-b636-4b56-9a30-39861109c827`, role owner (production has 2 companies).
+- **SQL mode generated** (`--markup-percent 5 --sql-out … --company-id dc4da2a7… --created-by 10d59c4b…`): 282 candidate rows; **the worked examples, as printed:**
+  ```
+  0.29 × 1.05 =   0.3045 →   0.30   PEX copper crimp rings 1/2 in.
+  4.18 × 1.05 =   4.3890 →   4.39   Painter's caulk, acrylic latex + silicone, 10.1 oz
+ 12.92 × 1.05 =  13.5660 →  13.57   2x6x12, #2 premium SPF
+ 33.60 × 1.05 =  35.2800 →  35.28   Behr Premium Plus interior eggshell (5-gal pail)
+649.00 × 1.05 = 681.4500 → 681.45   Water heater, 40 gal gas short, 34k BTU
+  ```
+- ⚠️ **DRY RUN on PRODUCTION (read-only, the importer's own name normalisation): `csv_rows 282 · would_insert 0 · already_present 282 · present_at_raw_cost 0 · present_at_plus5 282 · present_other_price 0`**; all 282 created in ONE batch at **2026-09-29 15:34:03.527 UTC**; the live catalog is 290 rows (282 + 8 others).
+- **So the import Josh asked for is ALREADY DONE on production, at +5%, every row.** It was run on 2026-09-29, the day of the ruling (it is not recorded in S120's report, so this is its first written record). **Nothing was written this session.** Re-running the statement would insert **0** rows (it is idempotent by name), and it never updates, so no price could be double-marked-up.
+- **Five rows spot-checked by object** (production): `2x6x12, #2 premium SPF` **13.57**; `Behr … eggshell (5-gal pail)` **35.28**; `Painter's caulk …` **4.39**; `PEX copper crimp rings 1/2 in.` **0.30**; `Water heater, 40 gal gas short, 34k BTU` **681.45**. Each equals its worked example exactly, each `created_by josh@worthprop.com` at 15:34:03 on 2026-09-29.
+- **What ships:** the script itself (so the method is on main). No data change. `origin/feature/s112-catalog-importer` becomes deletable once this lands (7-C).
