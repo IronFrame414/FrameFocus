@@ -10877,14 +10877,14 @@ export type Database = {
       }
       add_time_segment: {
         Args: {
-          p_completion: string
+          p_completion?: string
           p_end: string
-          p_note: string
-          p_project_id: string
+          p_note?: string
+          p_project_id?: string
           p_segment_type: string
           p_session_id: string
           p_start: string
-          p_task_id: string
+          p_task_id?: string
         }
         Returns: Json
       }
@@ -11133,14 +11133,14 @@ export type Database = {
       }
       edit_time_segment: {
         Args: {
-          p_completion: string
-          p_end: string
-          p_note: string
-          p_project_id: string
+          p_completion?: string
+          p_end?: string
+          p_note?: string
+          p_project_id?: string
           p_segment_id: string
           p_segment_type: string
           p_start: string
-          p_task_id: string
+          p_task_id?: string
         }
         Returns: Json
       }
@@ -11572,9 +11572,9 @@ export type Database = {
       split_time_segment: {
         Args: {
           p_at: string
-          p_second_completion: string
-          p_second_note: string
-          p_second_task_id: string
+          p_second_completion?: string
+          p_second_note?: string
+          p_second_task_id?: string
           p_segment_id: string
         }
         Returns: Json

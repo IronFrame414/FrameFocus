@@ -283,15 +283,17 @@ $function$;
 REVOKE ALL ON FUNCTION public.s121_time_reopen(uuid) FROM PUBLIC, anon, authenticated;
 
 -- ── EDIT one segment (times + attribution) ─────────────────────────────────
+-- Optional arguments TRAIL, with DEFAULT NULL, so a client may omit them
+-- (PostgREST resolves by the named arguments sent).
 CREATE OR REPLACE FUNCTION public.edit_time_segment(
   p_segment_id uuid,
   p_segment_type text,
-  p_project_id uuid,
-  p_task_id uuid,
-  p_completion text,
-  p_note text,
   p_start timestamptz,
-  p_end timestamptz
+  p_end timestamptz DEFAULT NULL,
+  p_project_id uuid DEFAULT NULL,
+  p_task_id uuid DEFAULT NULL,
+  p_completion text DEFAULT NULL,
+  p_note text DEFAULT NULL
 )
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -330,19 +332,19 @@ BEGIN
   RETURN jsonb_build_object('segment_id', p_segment_id, 'returned_to_pending', v_reopened);
 END;
 $function$;
-REVOKE ALL ON FUNCTION public.edit_time_segment(uuid, text, uuid, uuid, text, text, timestamptz, timestamptz) FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION public.edit_time_segment(uuid, text, uuid, uuid, text, text, timestamptz, timestamptz) TO authenticated;
+REVOKE ALL ON FUNCTION public.edit_time_segment(uuid, text, timestamptz, timestamptz, uuid, uuid, text, text) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.edit_time_segment(uuid, text, timestamptz, timestamptz, uuid, uuid, text, text) TO authenticated;
 
 -- ── ADD a segment to a session ─────────────────────────────────────────────
 CREATE OR REPLACE FUNCTION public.add_time_segment(
   p_session_id uuid,
   p_segment_type text,
-  p_project_id uuid,
-  p_task_id uuid,
-  p_completion text,
-  p_note text,
   p_start timestamptz,
-  p_end timestamptz
+  p_end timestamptz,
+  p_project_id uuid DEFAULT NULL,
+  p_task_id uuid DEFAULT NULL,
+  p_completion text DEFAULT NULL,
+  p_note text DEFAULT NULL
 )
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -377,8 +379,8 @@ BEGIN
   RETURN jsonb_build_object('segment_id', v_id, 'returned_to_pending', v_reopened);
 END;
 $function$;
-REVOKE ALL ON FUNCTION public.add_time_segment(uuid, text, uuid, uuid, text, text, timestamptz, timestamptz) FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION public.add_time_segment(uuid, text, uuid, uuid, text, text, timestamptz, timestamptz) TO authenticated;
+REVOKE ALL ON FUNCTION public.add_time_segment(uuid, text, timestamptz, timestamptz, uuid, uuid, text, text) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.add_time_segment(uuid, text, timestamptz, timestamptz, uuid, uuid, text, text) TO authenticated;
 
 -- ── SPLIT one closed segment at p_at into two contiguous halves ────────────
 -- ⚠️ The halves are [start, p_at) and [p_at, end): together EXACTLY the
@@ -388,9 +390,9 @@ GRANT EXECUTE ON FUNCTION public.add_time_segment(uuid, text, uuid, uuid, text, 
 CREATE OR REPLACE FUNCTION public.split_time_segment(
   p_segment_id uuid,
   p_at timestamptz,
-  p_second_task_id uuid,
-  p_second_completion text,
-  p_second_note text
+  p_second_task_id uuid DEFAULT NULL,
+  p_second_completion text DEFAULT NULL,
+  p_second_note text DEFAULT NULL
 )
 RETURNS jsonb
 LANGUAGE plpgsql
