@@ -878,6 +878,12 @@ exactly as migration `20262060000000` wrote it, read back as md5 `5d367bd1fa1102
 `{authenticated}`, SELECT. That is **identical** to the pre-sabotage snapshot. **Item 16 matches all
 three rulings, and its load-bearing negative can fail.** No fix was owed.
 
+### ✅ PART 4 MERGED to `main` as `60148872`
+
+CI `36666972441` on `40e3bc25` (base `df3e1636`, which was current `main`) was **green**: unit 151 / 2038;
+E2E **657 passed, 22 skipped, 0 `✘`**, 38.7 min. `git diff 40e3bc25 main` is **empty**. The migration was
+**on production first** (row 7 below).
+
 ### PART 5 — DESIGN (branch `feature/s120-design`)
 
 **5-A: both signature name fields at 16px.** This was **already true on `main`.** Since S118 item 11,
@@ -1120,6 +1126,7 @@ list **exactly** the named file, pushes, and **always** relinks rebuild-test (re
 | 6 | `20262115000000_s120_deletion_jobs_user_ids` | exactly that file | ledger `20262115000000`; `deletion_jobs.user_ids` = `ARRAY/_uuid`, nullable YES, default none; rows populated 0 | ledger 2115; nullable uuid[] with no default (no constraint over the 3 existing rows) | **MATCH** |
 
 **Production AFTER all six sections:** `schema_fingerprint()` = policies **491** / `8ba22dc70e404269be96b8d0e96bebfe`, triggers **308** / `3d9153d54f17e70c48942accebb34506`, functions **351** / `afaa0b60c9270a2bb45985c8caf06d10`, constraints **1077** / `834c7f95f3375df0752d8089573079e5`, latest `20262115000000`. That is **identical, on all four md5s, to the committed baseline** on `feature/s120-security` (generated from rebuild-test). **Part 1 is on production.**
+| 7 | `20262116000000_s120_estimate_recipients` | exactly that file | ledger `20262116000000`; `enforce_estimate_recipients` md5 `10c2da16b14b3ca1201cc173ef3c574e`; trigger `23:O`; `estimates.also_send_to_email` = `text`, nullable, no default; fingerprint 491 / **309** / **352** / 1077, all four md5 = Part 4's committed baseline | ledger 2116; md5 = rebuild-test's; trigger present; nullable column; fingerprint = baseline | **MATCH** |
 
 ⚠️ **Process slip, recorded.** Row 1's report entry failed to save: the edit's anchor, this heading,
 had been dropped by my own 3-D edit. Section 2 had been queued in the same command, so it ran before
