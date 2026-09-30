@@ -37,3 +37,49 @@ Every measurement names its ref.
 - **That is the 11 S120 kept branches, all present.** `s112-default-acl-guard` exists neither locally nor on origin (see the 7-C audit).
 - ⚠️ **Spec discrepancy:** the spec names `s112-staletimes-hold`'s commit as `3b603c07`; the branch tip is `9b90115a` (2 ahead, cherry +1 −1). Resolved in 1.7.
 - New this session: `feature/s121-assess` (this branch). Worktrees: `git worktree list` → one (`/workspaces/FrameFocus`). Branches before: 6 local + 15 remote feature/main refs; deleted: 0.
+
+### 1.3 — The held photos (SPEC Part 2) — code ref `origin/main` `7cf348a0`; data ref PRODUCTION `jwkcknyuyvcwcdeskrmz` (read-only `select`, CLI relinked to rebuild-test after every query, read back `LINKED_REF=nmyphyhmfttxkdoposvf` each time)
+
+**Two stores on the phone, both IndexedDB.**
+- **Held tray** `m6m-held-shots` (`lib/offline/held-shots.ts:118`). Every tab-bar camera / library / capture-screen shot lands here first. A shot record has **no project field** (`held-shots.ts:47-58`); the project lives only on the in-memory batch and resets on every app load (`capture-store.tsx:72`). Cap 25 (`held-shots.ts:43`).
+- **Sync queue** `m6m-offline` (`lib/offline/idb-storage.ts:299`). A photo enters it only when a project was chosen and the upload failed or the phone was offline (`capture-screen.tsx:75-111`). The queue entry carries its own copy of the blob and a fixed project id, and its file id **is the shot id** (`capture-screen.tsx:79-84`).
+
+**The actual defect — reproduced from the code, verified by reading it myself:**
+1. When a shot is queued its tray row is set to `queued` (`capture-screen.tsx:106`) and **kept**.
+2. A tray row is removed **only** by a direct-upload success (`capture.landed`, `capture-screen.tsx:131` — the only caller in `app/`, `lib/`, `components/`), by Discard, or by the sweep.
+3. When the queue later uploads the photo successfully, **nothing removes its tray row.** (`grep -rn "\.landed(" app lib components` → 1 hit, the one above.)
+4. "Save N photos" skips `queued` rows (`fileAll`, `capture-screen.tsx:146`), and the red strip counts every tray row as "photos with no project".
+
+**So a photo that already landed stays in the tray forever, shown as held, and choosing a project does nothing to it.** That is "photos that won't land in a project" exactly — the photos may well have landed.
+
+**Production, by object** — `files` where `category='photos'` and `created_by = 10d59c4b…` (auth user `josh@worthprop.com`), by day:
+
+| day | project | n | deleted |
+| --- | --- | --- | --- |
+| 2026-09-30 | Best Western | 1 | no |
+| 2026-09-29 | Best Western | 26 (23 jpeg + 3 png) | no |
+| 2026-09-28 | Best Western | 1 | no |
+| 2026-09-27 | (no project) | 1 | no |
+| 2026-09-25 | Best Western | 256 | no |
+| 2026-09-23 | Kitchen Repair - Leak | 1 | **yes** |
+| 2026-09-05 | Riverwood | 5 | no |
+
+Control: `files` total on production 307 (295 `photos`, 2 `material_signout`, 9 `other`, 1 `contracts`); the query that returned these rows is the same one that counts 291 photos for this creator. (A first query joining `profiles.id = files.created_by` returned **0 rows**; it was the join, not the data — `profiles.id` does not equal the auth user id on production. That zero is recorded, not used.)
+
+**Diagnosis:** this is **none of** the spec's three shapes cleanly. It is a fourth: **queued, uploaded, and never cleared from the tray.** The 26 Best Western photos of 2026-09-29 are the strongest candidates for Josh's "30". This cannot be proved from here: the tray lives on his phone, and the tray row carries no server id I can match except the shot id, which becomes the `files.id`.
+
+**The 7-day sweep** (`HeldShotStore.all()`, `held-shots.ts:155-161`, run on every `/m` shell load via `capture-store.tsx:86-102`):
+- Deletes every tray row with `now − takenAt ≥ 7 days`, **regardless of status and regardless of project** (the record has no project). **Correction to S120's report** (`S120-report.md:826-827, 1170-1171`), which says it sweeps only photos with no project.
+- It deletes the blob itself, before anything renders.
+- A photo that reached the **queue** survives the sweep — its copy lives in the queue entry, which nothing sweeps (`queue.ts:189-191`).
+- **Has it taken Josh's 30?** For any photo older than 7 days that never reached the queue, **yes, if the app has been opened since it turned 7 days** — and they are unrecoverable. For the 2026-09-29 batch (1 day old), **no, not yet** — but those are the ones already on production. **Plain answer: the photos most likely to be "the 30" are not lost; they are already on Best Western. Anything held and never queued for more than 7 days is gone.** Which case each of his 30 is in can only be read on the phone.
+
+**What has to change so the next 30 are not lost or ghosted** (goes into the Part 2 plan):
+1. Clear the tray row when its queue entry succeeds (or at the moment it is queued, since the queue now holds the copy).
+2. Never auto-delete `failed` / `uploading` rows; replace the silent 7-day delete with a confirm, which reverses Josh's S114 ruling (`mobile-shell.tsx:986-993`) — **his call.**
+3. Stop counting `queued` rows as "no project" in the strip and in `needsProject` (`capture-batch.ts:385-387`, `mobile-shell.tsx:1010`).
+4. A photo's project should be stored on the shot, so it survives a reload.
+
+**Server trace of failures: none.** `uploadFile` runs in the browser straight against Storage + `files` (`files-client.ts:161-257`); no client-error table exists. `sync_conflicts` is for edits only.
+
+**Per-photo upload already exists:** `sendOne(shot, projectId)` (`capture-screen.tsx:70-136`) over `uploadFile(file, { project_id, id })` (`files-client.ts:93-136`), idempotent on `id`. The one-project-per-batch pin (`capture-batch.ts:272-341`) blocks sending different selections to different projects.
