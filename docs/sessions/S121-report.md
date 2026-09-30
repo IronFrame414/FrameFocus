@@ -179,9 +179,6 @@ Order: **1 → 2 → 3 → 4 → 5 → 6 → 7 → 8**. Each part ships whole or
 
 The rulings narrow or correct the plan; none widens authority. Josh's message closed "Plan approved. Proceed to Phase 3." — the revised rows above are his own, so they are recorded here rather than re-presented and waited on.
 
----
-
-## Phase 3 — build log
 
 ---
 
@@ -390,3 +387,7 @@ Pattern to copy: `/m` check-in `check-in-form.tsx:331-376` — a wide camera lab
 - **The S112 claim holds, in shape and roughly in size:** 52 → 369 ms (S112) vs 49 → 301 ms (now) unthrottled; 51 → 639 ms vs 47 → 798 ms Fast 3G; 51 → 2,129 ms vs 49 → 2,308 ms Slow 3G. **Every tab revisit becomes one round trip.**
 - **Does the hold still make sense? Yes.** Josh already ruled it NOT SHIPPED at S116 Q8, reopenable only as a correctness decision with a named stale-after-mutation case `router.refresh()` cannot fix. Nothing measured here changes that. **Recommendation: keep it parked; no action.** Merging is Josh's call.
 - Restores: `next.config.js` restored with `git checkout --`, then `git diff --quiet origin/main -- apps/web/next.config.js` exit 0 and `cmp` against the pre-edit copy exit 0. Both servers killed by PID; port 3000 free.
+
+---
+
+## Phase 3 — build log
