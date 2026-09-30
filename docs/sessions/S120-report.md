@@ -853,6 +853,42 @@ files rows: 0.
 **Pre-CI:** `lint-job.sh` on the branch gave `TYPE_EXIT=0 LINT_EXIT=0 TEST_EXIT=0`, **149 files / 2028
 tests**.
 
+### ✅ PARTS 2 + 3 MERGED to `main` as `df3e1636`
+
+The stacked head `aed6658b` (Part 2's two commits, then Part 3's three, then a CI request) ran as CI
+`36663223224` on base `7242e399`, which was current `main`. Result: **green**. Unit **151 files / 2038
+tests**; E2E **655 passed, 22 skipped, 0 `✘`** (read from the full job log), 42.8 min. There were no
+migrations, so merge condition 3 is vacuous. `git diff aed6658b main` is **empty**, so the merged tree
+is the tested tree.
+
+### PART 6 — VERIFY
+
+**6-A (open time segments):** see 1.5. Production had **0 open segments**. ⚠️ **2-A changes what they
+mean:** Josh's was **task-bound**, so on `/m` it could not be clocked out. The reproduction above shows
+exactly that refusal, so he was **stuck, not still working**, as he said. Juan Cardona's had **no
+task**, so the 2-A defect cannot explain it, and its stop time stays a question for Josh (ASK-5).
+
+**6-B (item 16), re-proven by this session, not taken from S118's report.** On rebuild-test (whose
+policies equal production's, per 1.6), `s118-employee-documents.live.ts` passed **39/39**. Sabotage:
+`employee_documents_select_own` was widened to company-wide, read back as qual `(company_id =
+get_my_company_id()) AND (is_deleted = false)`, md5 `93138fdf…`. Result: **9 red**, including **both
+employee-to-employee negatives** ("crew reads ZERO of the foreman's rows…" and "foreman reads ZERO of
+the crew member's rows…"), the unfiltered-read test, 5 role rows and the portal probe. **Restored**
+exactly as migration `20262060000000` wrote it, read back as md5 `5d367bd1fa1102ba66e7518e5a2c5a84`,
+`{authenticated}`, SELECT. That is **identical** to the pre-sabotage snapshot. **Item 16 matches all
+three rulings, and its load-bearing negative can fail.** No fix was owed.
+
+### PART 5 — DESIGN (branch `feature/s120-design`)
+
+**5-A: both signature name fields at 16px.** This was **already true on `main`.** Since S118 item 11,
+the portal and the material sign-out render **one** component, `components/signature/signature-capture.tsx`,
+whose two inputs (`-name` and `-typed`) are `fontSize: '16px'`. The portal's
+`app/portal/[projectId]/portal-writes-ui.tsx` wraps it with labels only, and both sign-out files import
+it. **Fields changed: none.** The portal and the internal surface match because they are the same
+element. The external `/sign` and `/sign-co` pages use `1rem` (16px). **Pinned:**
+`test/s120-signature-16px.test.ts` has 4 tests, **4/4**. Sabotage (typed field → 14px) turned **2 red**:
+this pin and the existing `m6m-field-font-size` guard. Restored, identical to HEAD.
+
 ### PART 4 — FEATURES (branch `feature/s120-features`, cut from `7242e399`)
 
 ⚠️ **The spec's premise was partly false, measured before building.** 4-A ("multiple send-to contacts,
