@@ -244,7 +244,13 @@ test.describe('S116 C-5 · expense receipts through the shared upload queue', ()
 
     // The minimum valid form: job (pre-filled by ?project=), supplier, amount;
     // the split stays its default single Miscellaneous row = the full amount.
-    const fileInput = page.locator('input[type="file"]');
+    // ⚠️ INVERTED IN PLACE [S121 7-B — camera first, library kept]. _Superseded:_
+    // `expect(page.locator('input[type="file"]')).toHaveCount(1)`. The form now
+    // has a camera input (one shot) AND the library input (multiple); this
+    // 3-receipt proof drives the LIBRARY input.
+    await expect(page.locator('input[type="file"]')).toHaveCount(2);
+    await expect(page.getByTestId('expense-receipt-camera')).toHaveAttribute('capture', 'environment');
+    const fileInput = page.locator('input[type="file"][multiple]');
     await expect(fileInput).toHaveCount(1);
     await fileInput.setInputFiles(
       NAMES.map((name) => ({ name, mimeType: 'image/png', buffer: PNG }))

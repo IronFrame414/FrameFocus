@@ -12,9 +12,11 @@
 > register) is the assignment authority, unchanged from CLAUDE.md's rule that *main's file is the
 > authority*. **Numbers are IMMUTABLE — never reused, reassigned, or compacted — and they span all
 > THREE files.** The next free number is **one above the highest number appearing in ANY of the
-> three files**. The highest currently allocated is **#180** (in this file — S119, `#175`–`#180`, 2026-09-29,
+> three files**. The highest currently allocated is **#181** (in this file — S121, 2026-09-30, converted from
+> `#1-s121lo` when `feature/s121-p78-leftovers` landed), so the next free number is **#182**. _Superseded, quoted:
+> "The highest currently allocated is **#180** (in this file — S119, `#175`–`#180`, 2026-09-29,
 > converted from `#1-s119a`–`#5-s119a` plus `#180` filed at landing when `feature/s119-profile-insert-floor`
-> landed), so the next free number is **#181**. _Superseded, quoted: "The highest currently allocated is **#174** (in this file — S118, `#173`–`#174`, 2026-09-29,
+> landed), so the next free number is **#181**."_ _Earlier superseded, quoted: "The highest currently allocated is **#174** (in this file — S118, `#173`–`#174`, 2026-09-29,
 > converted from `#1-bidtok`/`#2-bidtok` when `feature/s112-bid-token-status` landed), so the next free
 > number is **#175**."_ _Earlier superseded, quoted: "The highest currently allocated is **#172** (in this file —
 > S116, `#171`–`#172`, 2026-09-29, converted from `#1-s115r`/`#2-s115r` when `feature/s115-report`
@@ -2356,6 +2358,19 @@ numbering". **RULED Option A [Josh, S180]:** deferred to a focused build; `files
 
 **⚠️ Per-component verification = a test PER SURFACE**, not one test over the batch: **8 components, 8
 proofs, each stating what it uploaded and what landed.** A single batch test is not acceptance.
+
+## `#181` (was `#1-s121lo`) — C-5 step 2: `multiple` on the 4 new photo inputs, on main's upload queue [Josh, S121 Q25]
+
+**Filed, not built — RULED [Josh, S121 ASK-35: "B. File it as tech debt."].** C-5 step 1 (the 8
+existing-`multiple` inputs onto the shared queue) landed from the S116 rebuild (`5b5cc366`, S118,
+8 per-surface proofs). **Step 2 is owed:** add `multiple` to the four NEW inputs — estimate Files tab
+(`estimate-files-tab.tsx` ~`:166`), `/m` daily log (`m/logs/new/log-form.tsx` ~`:394/414`), `/m`
+delivery check-in (`…/deliveries/check-in/check-in-form.tsx` ~`:335/362`), `/m` incident
+(`…/safety/new/incident-form.tsx` ~`:350/370`) — on `runUploadBatch` + `UploadBatchList`, **one proof
+per surface** (the `#2-s180u` ruling above stands for this step too).
+**NOT from `feature/s114-c5-multi-upload`:** S121 §1.6 audited it — it is the version S116 replaced
+(`uploadRemaining`, 0 per-surface proofs, a duplicate-on-retry defect), it conflicts in 10 files, and
+merging it would add a second upload mechanism (PARITY). Build step 2 fresh from main.
 
 ## `#166` (was `#1-s114c`) — ⚠️ Photo comments: Josh ASKED for this; it is DEFERRED, not delivered
 

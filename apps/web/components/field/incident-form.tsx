@@ -489,15 +489,33 @@ export function IncidentForm({
         <label className={label}>Photos</label>
         {effectiveProjectId ? (
           <>
-            <input
-              type="file"
-              accept="image/*"
-              multiple
-              onChange={(e) => {
-                if (e.target.files) setPendingPhotos((p) => [...p, ...Array.from(e.target.files!)]);
-              }}
-              className="text-[13px] text-[#374151]"
-            />
+            {/* [S121 7-B] Camera first; the library stays as the secondary
+                control. SUPERSEDED: one library-only input (kept, second). */}
+            <label className="mr-3 inline-block text-[13px] text-[#374151]">
+              Take photo:{' '}
+              <input
+                type="file"
+                accept="image/*"
+                capture="environment"
+                data-testid="incident-photo-camera"
+                onChange={(e) => {
+                  if (e.target.files) setPendingPhotos((p) => [...p, ...Array.from(e.target.files!)]);
+                }}
+                className="text-[13px] text-[#374151]"
+              />
+            </label>
+            <label className="inline-block text-[13px] text-[#374151]">
+              or choose from library:{' '}
+              <input
+                type="file"
+                accept="image/*"
+                multiple
+                onChange={(e) => {
+                  if (e.target.files) setPendingPhotos((p) => [...p, ...Array.from(e.target.files!)]);
+                }}
+                className="text-[13px] text-[#374151]"
+              />
+            </label>
             {pendingPhotos.length > 0 ? (
               <ul className="mt-1">
                 {pendingPhotos.map((file, i) => (

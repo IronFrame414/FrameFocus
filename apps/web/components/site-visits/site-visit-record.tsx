@@ -527,19 +527,36 @@ export function SiteVisitRecord({
           />
         </div>
         {/* [S110 ruling 3] ADDING stays open at every status. */}
+        {/* [S121 7-B] The PRIMARY control opens the CAMERA — a site visit is
+            a fresh photo. The library stays, as the SECONDARY control beside it
+            (the /m delivery check-in pattern). SUPERSEDED: one library-only
+            `accept="image/*" multiple` input (sv-photo-input, kept below). */}
         {canWrite ? (
-          <label className="mt-[10px] flex h-[52px] cursor-pointer items-center justify-center rounded-[14px] bg-m6m-blue text-[16px] font-bold text-white">
-            {t('visit.photos.add')}
-            <input
-              ref={fileInput}
-              data-testid="sv-photo-input"
-              type="file"
-              accept="image/*"
-              multiple
-              className="hidden"
-              onChange={(e) => void onPhotos(e.target.files)}
-            />
-          </label>
+          <div className="mt-[10px] flex gap-[8px]">
+            <label className="flex h-[52px] flex-1 cursor-pointer items-center justify-center rounded-[14px] bg-m6m-blue text-[16px] font-bold text-white">
+              {t('visit.photos.add')}
+              <input
+                data-testid="sv-photo-camera"
+                type="file"
+                accept="image/*"
+                capture="environment"
+                className="hidden"
+                onChange={(e) => void onPhotos(e.target.files)}
+              />
+            </label>
+            <label className="flex h-[52px] shrink-0 cursor-pointer items-center justify-center rounded-[14px] border border-m6m-border bg-m6m-card px-[12px] text-[14px] font-semibold text-m6m-navy">
+              {t('visit.photos.library')}
+              <input
+                ref={fileInput}
+                data-testid="sv-photo-input"
+                type="file"
+                accept="image/*"
+                multiple
+                className="hidden"
+                onChange={(e) => void onPhotos(e.target.files)}
+              />
+            </label>
+          </div>
         ) : null}
       </section>
 
