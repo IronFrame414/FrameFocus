@@ -688,6 +688,54 @@ found.", with 0 applications written. **19/19** across `s120-payment-not-found`,
 **3 red**: both S120 tests and S97 test 12. **Restored** from the live definitions and read back as
 `0e5d3476… / ac570ea1…`, **identical**.
 
+#### 1-F `#180`: trial deletion remembers whose logins it must delete
+
+- **Migration** `20262115000000_s120_deletion_jobs_user_ids.sql` adds `deletion_jobs.user_ids
+  uuid[]`: **nullable, no default, no constraint**, so stop rule 2 does not apply. Production has 3
+  jobs, all `complete`, and none in flight.
+- **Code** (`lib/trial/deletion.ts`): the job select carries `user_ids`. On the first run the ids are
+  read from `profiles` **and persisted before a single row goes**. If the persist fails, nothing is
+  deleted that run, the job goes to `pending`, and it stops with an alarm at `MAX_ATTEMPTS`. Every
+  retry replays the persisted list. A job predating the column (`NULL`) reads `profiles` once, as
+  before, and persists the result.
+- ⚠️ **A trap found while building it:** replaying the list means re-banning and re-deleting logins an
+  earlier run already removed, and GoTrue answers those with **404 `user_not_found`**. Counted as
+  failures, those would hold the job open forever. `isUserGone()` absorbs **only** that answer, in
+  `banAuthUsers` and `deleteAuthUsers`. Every other error fails the step exactly as before, and a user
+  who no longer exists cannot sign in. **`banAuthUsers` still runs first on every run.**
+- **Types:** `packages/shared/types/database.ts` +32 lines (`deletion_jobs.user_ids` ×3 and the
+  `email_account_checks` block). The regeneration also dropped `test_invite_lookup`, which is drift
+  between rebuild-test and main and unrelated to this session, so that hunk was **restored** and not
+  committed.
+
+**Test** `apps/web/test/s120-deletion-auth-retry.test.ts` (unit, so it runs in CI). It uses a
+**stateful** fake across two runs, where the job row, the deleted tables and the surviving auth users
+persist between runs.
+- **BEFORE** (the same test against `origin/main`'s `deletion.ts`, read back with `isUserGone = 0`
+  and `user_ids = 0`): **4 red.** Run 2 made **no `deleteUser` calls** and left `user-2` alive, but
+  the job ended **`state = complete`, `auth_done = true`**. The lie is reproduced.
+- **AFTER: 6/6**, including both of S119's ban-first tests. Run 1 leaves the job `pending` with
+  `auth_done = false` and `user_ids = [user-1, user-2]`. Run 2 retries `user-2` and deletes it, and
+  the job completes with `auth_done = true`. If run 2 still fails, the job stays `pending` with
+  `auth_done = false`. The persisted logins are banned before any `deleteUser`.
+- **Sabotage:** `isUserGone` was made to return `false` (read back: 1 hit) → **2 red**. The retry's
+  ban of the already-deleted `user-1` failed and held the job. **Restored**, `cmp`-identical to the
+  fixed file. ⚠️ A process slip: the first restore after the BEFORE run failed on a wrong relative
+  path (`cd ..`). It was caught in the same step's output and redone with absolute paths, then
+  `cmp`-identical, and the green re-run was 6/6.
+
+#### Part 1: state
+
+- **Fingerprint baseline** regenerated from rebuild-test (ledger at `20262115000000`, with agreement
+  confirmed on all six replayable dimensions): policies 490 → **491**, triggers 302 → **308**,
+  functions 349 → **351**, constraints 1074 → **1077**. Each delta is a Part 1 object.
+- **Pre-CI** `lint-job.sh` (it matches `ci.yml`): `TYPE_EXIT=0 LINT_EXIT=0 TEST_EXIT=0`, **149 files /
+  2026 tests**. That is +1 file and +4 tests on S119's 148 / 2022, which is exactly
+  `s120-deletion-auth-retry`. `next build`: **BUILD_EXIT=0**.
+- **CI requested:** run `36657779145` on `1f5393ad` (base is `main` `fad4787e`, confirmed current).
+  The six migrations are on rebuild-test and **NOT yet on production**. They go to production one
+  section at a time after CI is green.
+
 ---
 
 ## Production verification rows
