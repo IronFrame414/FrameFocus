@@ -440,6 +440,9 @@ export const COMPANY_TABLES: string[] = [
   // precedent) [Q4].
   'client_access_events',
   'push_subscriptions', 'notifications', 'invitations',
+  // #176 [S120] the email_has_account rate-limit ledger (20262111000000): a
+  // counter hanging off companies only, created_by SET NULL; nothing to retain.
+  'email_account_checks',
   // S118 item 16 — employee_documents.member_id references company_members with
   // NO ACTION (documents survive the PERSON), so they must go before members when
   // the whole COMPANY goes. Their objects live in the employee-documents bucket.
