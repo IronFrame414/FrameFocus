@@ -464,6 +464,50 @@ S179 GATED rule).
 
 ## Phase 3 — parts
 
+### PART 1 — SECURITY (branch `feature/s120-security`, cut from `fad4787e`)
+
+#### 1-A `#175`: PDF pointer → cross-tenant deletion
+
+**Audit by call site** (every `admin.from('files').delete()` in `apps/web/lib` and `apps/web/app`, 8
+sites):
+- The **three the entry names** delete whatever `pdf_file_id` points at: daily-log, delivery, incident.
+- **A fourth the entry does not name:** `material-signout-pdf-service.ts:196-207` (S118 item 11). It
+  checks `category === 'material_signout'` but **not the company**. Users cannot set the pointer
+  today (the INSERT policy requires `pdf_file_id IS NULL`, and there is no user UPDATE policy), but
+  the same fix is applied to it.
+- `selection-spec-pdf-service` selects its stale rows by the record's own `project_id` and category.
+  `invoice-pdf-service` selects by `invoice_id` on files the user can only write in their own
+  company. `trash-purge` and `lien-releases/generate` delete the row they themselves just created.
+  **None of these follows a user-writable pointer.**
+
+**Production before the fix** (read only): 0 rows in all four tables, so **0 pointers are foreign or
+miscategorised**. There is no damage to assess.
+
+**Probe: `apps/web/test/s120-pdf-pointer-scope.live.ts`.** It is **written without returning rows**
+and **judged by the service role**. The regeneration runs through the **real routes, in-process, as
+the crew author**. The victims are company B files **in the same category** the cleanup expects, so
+only a company check can save them.
+
+⚠️ **A measurement error, caught and corrected.** The first run judged an object's existence with
+`storage.download()`. It reported **every** removed object as still present, **including the positive
+control**. The download is served from the storage CDN after the object is gone (the S112 Q6 / S180
+finding). The probe now judges by **listing** the object's folder. The first run's object column is
+void.
+
+**BEFORE the fix, on rebuild-test (run 2, list-based):**
+
+| arm | daily_logs | deliveries | safety_incidents |
+| --- | --- | --- | --- |
+| author UPDATE `pdf_file_id` → foreign id | **lands** (pointer = victim) | **lands** | **lands** |
+| author INSERT with `pdf_file_id` set | **lands** (1 row with pointer) | — | — |
+| regenerate (route 200) with the pointer on a foreign file | foreign **object destroyed**; row kept\* | foreign **row + object destroyed** | foreign **row + object destroyed** |
+| positive control: own stale PDF removed | ✓ | ✓ | ✓ |
+
+\* The daily-log victim's row survived only because the INSERT probe's row still referenced it, so the
+FK refused the delete. The object had already been removed.
+
+**7 red / 4 green. The hole is real, on all three tables, for a crew-level author.**
+
 ---
 
 ## Production verification rows
