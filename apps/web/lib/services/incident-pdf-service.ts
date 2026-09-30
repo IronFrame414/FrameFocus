@@ -119,6 +119,12 @@ export async function regenerateIncidentPdf(
       .from('files')
       .select('file_path')
       .eq('id', previousFileId)
+      // #175 [S120]: only this record's OWN previous PDF — same company, same
+      // category. The pointer is frozen to the service role (migration
+      // 20262110000000), and this check means a pointer that reached a
+      // foreign file by any other route still deletes nothing but our own.
+      .eq('company_id', incident.company_id)
+      .eq('category', 'safety')
       .maybeSingle();
     if (old) {
       await admin.storage.from(BUCKET).remove([old.file_path]);

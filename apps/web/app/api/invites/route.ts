@@ -72,6 +72,25 @@ export async function POST(request: NextRequest) {
     p_email: email,
   });
   if (takenErr) {
+    // #176 [S120]: the check is rate-limited per caller (30 per rolling hour,
+    // migration 20262111000000). Over the limit is the caller's own state,
+    // not a server fault — its own status and message.
+    if (takenErr.code === '54000') {
+      console.error('invite address check rate-limited', {
+        route: 'POST /api/invites',
+        check: 'email_has_account rate limit',
+        user: user.id,
+      });
+      return NextResponse.json(
+        { error: 'Too many invitations checked in the last hour. Try again later.', code: 'rate_limited' },
+        { status: 429 }
+      );
+    }
+    console.error('invite address check failed', {
+      route: 'POST /api/invites',
+      check: 'email_has_account',
+      message: takenErr.message,
+    });
     return NextResponse.json({ error: takenErr.message }, { status: 500 });
   }
   if (taken === true) {

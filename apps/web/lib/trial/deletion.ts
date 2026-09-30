@@ -440,6 +440,9 @@ export const COMPANY_TABLES: string[] = [
   // precedent) [Q4].
   'client_access_events',
   'push_subscriptions', 'notifications', 'invitations',
+  // #176 [S120] the email_has_account rate-limit ledger (20262111000000): a
+  // counter hanging off companies only, created_by SET NULL; nothing to retain.
+  'email_account_checks',
   // S118 item 16 — employee_documents.member_id references company_members with
   // NO ACTION (documents survive the PERSON), so they must go before members when
   // the whole COMPANY goes. Their objects live in the employee-documents bucket.
@@ -640,6 +643,18 @@ export async function deleteStorage(
  * client logins are the ones this catches. Same duration as a removed team
  * member (team.ts). Idempotent: re-banning a banned user is a no-op.
  */
+/**
+ * #180 [S120] — a login that no longer EXISTS is already revoked and already
+ * deleted. Since the job persists its user ids (deletion_jobs.user_ids), a
+ * retry replays the whole list, including users an earlier run already
+ * removed; GoTrue answers those with 404 `user_not_found`. Counting that as a
+ * failure would hold the job open forever. ONLY that answer is absorbed —
+ * every other error still fails the step exactly as before.
+ */
+function isUserGone(error: { status?: number; code?: string } | null): boolean {
+  return Boolean(error) && (error!.code === 'user_not_found' || error!.status === 404);
+}
+
 export async function banAuthUsers(
   admin: SupabaseClient<Database>,
   userIds: string[]
@@ -648,7 +663,7 @@ export async function banAuthUsers(
   const failures: string[] = [];
   for (const id of userIds) {
     const { error } = await admin.auth.admin.updateUserById(id, { ban_duration: '876000h' });
-    if (!error) banned += 1;
+    if (!error || isUserGone(error)) banned += 1;
     else failures.push(`ban ${id}: ${error.message}`);
   }
   return { banned, failures };
@@ -664,7 +679,7 @@ export async function deleteAuthUsers(
   const failures: string[] = [];
   for (const id of userIds) {
     const { error } = await admin.auth.admin.deleteUser(id);
-    if (!error) deleted += 1;
+    if (!error || isUserGone(error)) deleted += 1;
     else failures.push(`auth ${id}: ${error.message}`);
   }
   return { deleted, failures };
@@ -823,13 +838,19 @@ export async function runTrialDeletion(
     // reaches MAX_ATTEMPTS and stops instead of running forever.
     const { data: existing } = await admin
       .from('deletion_jobs')
-      .select('id, tables_done, attempts, state')
+      .select('id, tables_done, attempts, state, user_ids')
       .eq('company_id', row.company_id)
       .not('state', 'eq', 'complete')
       .maybeSingle();
 
     const job = existing as
-      | { id: string; tables_done: string[]; attempts: number; state: string }
+      | {
+          id: string;
+          tables_done: string[];
+          attempts: number;
+          state: string;
+          user_ids: string[] | null;
+        }
       | null;
 
     if (job && job.state === 'stopped') continue; // needs a human
@@ -864,13 +885,52 @@ export async function runTrialDeletion(
 
     // The auth user ids must be read BEFORE profiles are deleted — afterwards
     // there is nothing left to join them from.
-    const { data: profiles } = await admin
-      .from('profiles')
-      .select('user_id')
-      .eq('company_id', row.company_id);
-    const userIds = ((profiles ?? []) as Array<{ user_id: string | null }>)
-      .map((p) => p.user_id)
-      .filter((v): v is string => Boolean(v));
+    //
+    // #180 [S120] — so they are read ONCE, on the job's first run, and
+    // persisted on the job. _Superseded:_ they were re-read from `profiles` on
+    // every run, so a retry after deleteRows read [] and an auth user whose
+    // delete had failed was never retried — the job then completed with
+    // auth_done = true over an orphaned login. A job that predates the column
+    // (user_ids NULL) reads `profiles` as before, once, and persists that.
+    let userIds: string[];
+    if (job?.user_ids) {
+      userIds = job.user_ids;
+    } else {
+      const { data: profiles } = await admin
+        .from('profiles')
+        .select('user_id')
+        .eq('company_id', row.company_id);
+      userIds = ((profiles ?? []) as Array<{ user_id: string | null }>)
+        .map((p) => p.user_id)
+        .filter((v): v is string => Boolean(v));
+      // Persisted BEFORE a single row goes. If it cannot be written, nothing is
+      // deleted this run: a walk that forgot its logins is the defect itself.
+      const { error: persistError } = await admin
+        .from('deletion_jobs')
+        .update({ user_ids: userIds })
+        .eq('id', jobId);
+      if (persistError) {
+        const stop = attempts >= MAX_ATTEMPTS;
+        await admin
+          .from('deletion_jobs')
+          .update({
+            state: stop ? 'stopped' : 'pending',
+            tables_done: tablesDone,
+            last_error: `could not persist user_ids: ${persistError.message}`.slice(0, 2000),
+          })
+          .eq('id', jobId);
+        if (stop) {
+          outcome.stopped += 1;
+          await alertDeletionStopped(
+            admin,
+            row.company_id,
+            `Could not record the company's logins after ${attempts} attempts. ` +
+              `Nothing was deleted for this company.`
+          );
+        }
+        continue;
+      }
+    }
 
     await detachSurvivors(admin, row.company_id);
 
@@ -902,8 +962,10 @@ export async function runTrialDeletion(
     }
 
     // [S119 A-1] No login may outlive its profile: ban them all first, and hold
-    // the job — before a single row goes — if any ban fails. On a retry after
-    // `profiles` is gone, userIds is empty and this is a no-op.
+    // the job — before a single row goes — if any ban fails. #180 [S120]: on a
+    // retry the persisted list is replayed; a login already gone counts as
+    // revoked (isUserGone). _Superseded:_ "On a retry after `profiles` is gone,
+    // userIds is empty and this is a no-op."
     const lock = await banAuthUsers(admin, userIds);
     if (lock.failures.length > 0) {
       const stop = attempts >= MAX_ATTEMPTS;

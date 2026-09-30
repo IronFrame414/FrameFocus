@@ -271,7 +271,13 @@ describe('S97CT-ISO — cross-company WRITES are refused (#104)', () => {
     });
 
     expect(error).not.toBeNull();
-    expect(error!.message).toMatch(/belongs to another company|not found/i);
+    // #179 [S120] — INVERTED IN PLACE. Superseded, quoted:
+    //   expect(error!.message).toMatch(/belongs to another company|not found/i);
+    // "belongs to another company" confirmed that A's invoice exists. Since
+    // 20262114000000 a foreign invoice gets the same "not found" as a
+    // nonexistent one, so the old message must never come back.
+    expect(error!.message).toMatch(/not found/i);
+    expect(error!.message).not.toMatch(/another company/i);
 
     // and nothing was recorded on either side
     const { count } = await admin

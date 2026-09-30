@@ -2810,6 +2810,7 @@ export type Database = {
           storage_done: boolean
           tables_done: string[]
           updated_at: string
+          user_ids: string[] | null
         }
         Insert: {
           attempts?: number
@@ -2824,6 +2825,7 @@ export type Database = {
           storage_done?: boolean
           tables_done?: string[]
           updated_at?: string
+          user_ids?: string[] | null
         }
         Update: {
           attempts?: number
@@ -2838,6 +2840,7 @@ export type Database = {
           storage_done?: boolean
           tables_done?: string[]
           updated_at?: string
+          user_ids?: string[] | null
         }
         Relationships: [
           {
@@ -3024,6 +3027,35 @@ export type Database = {
             columns: ["po_item_id"]
             isOneToOne: false
             referencedRelation: "purchase_order_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      email_account_checks: {
+        Row: {
+          company_id: string
+          created_at: string
+          created_by: string | null
+          id: string
+        }
+        Insert: {
+          company_id?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "email_account_checks_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
             referencedColumns: ["id"]
           },
         ]

@@ -199,6 +199,9 @@ export async function regenerateSignoutPdf(
       .from('files')
       .select('file_path, category')
       .eq('id', previousFileId)
+      // #175 [S120]: and of this record's OWN company — the category check alone
+      // would let a pointer reach another company's material_signout PDF.
+      .eq('company_id', record.company_id)
       .maybeSingle();
     if (old && old.category === 'material_signout') {
       await admin.storage.from(BUCKET).remove([old.file_path]);
