@@ -30,8 +30,7 @@ import { admin, assertRebuildTest, sessionFor } from './live-session';
 const h = vi.hoisted(() => ({ client: null as unknown }));
 vi.mock('@/lib/supabase-server', () => ({
   createClient: async () => h.client,
-  getRequestUser: async () =>
-    (await (h.client as SupabaseClient).auth.getUser()).data.user ?? null,
+  getRequestUser: async () => (await (h.client as SupabaseClient).auth.getUser()).data.user ?? null,
 }));
 
 const MARKER = 'S120P';
@@ -124,7 +123,12 @@ async function pointerOf(kind: Kind): Promise<string | null> {
 async function setPointer(kind: Kind, fileId: string | null): Promise<void> {
   must(
     `set pointer ${kind}`,
-    (await admin.from(kind).update({ pdf_file_id: fileId } as never).eq('id', record[kind]!)).error
+    (
+      await admin
+        .from(kind)
+        .update({ pdf_file_id: fileId } as never)
+        .eq('id', record[kind]!)
+    ).error
   );
 }
 
@@ -163,17 +167,30 @@ async function sweep(): Promise<void> {
     const { data } = await admin.from(kind).select('id, pdf_file_id').like(col, val);
     for (const r of (data ?? []) as Array<{ id: string; pdf_file_id: string | null }>) {
       if (r.pdf_file_id) {
-        const { data: f } = await admin.from('files').select('id, file_path').eq('id', r.pdf_file_id).maybeSingle();
-        await admin.from(kind).update({ pdf_file_id: null } as never).eq('id', r.id);
+        const { data: f } = await admin
+          .from('files')
+          .select('id, file_path')
+          .eq('id', r.pdf_file_id)
+          .maybeSingle();
+        await admin
+          .from(kind)
+          .update({ pdf_file_id: null } as never)
+          .eq('id', r.id);
         if (f) {
           await admin.storage.from(BUCKET).remove([(f as { file_path: string }).file_path]);
-          await admin.from('files').delete().eq('id', (f as { id: string }).id);
+          await admin
+            .from('files')
+            .delete()
+            .eq('id', (f as { id: string }).id);
         }
       }
       await admin.from(kind).delete().eq('id', r.id);
     }
   }
-  const { data: fs } = await admin.from('files').select('id, file_path').like('file_name', `${MARKER}%`);
+  const { data: fs } = await admin
+    .from('files')
+    .select('id, file_path')
+    .like('file_name', `${MARKER}%`);
   for (const f of (fs ?? []) as Array<{ id: string; file_path: string }>) {
     await admin.storage.from(BUCKET).remove([f.file_path]);
     await admin.from('files').delete().eq('id', f.id);
@@ -184,10 +201,19 @@ async function sweep(): Promise<void> {
 beforeAll(async () => {
   assertRebuildTest();
   await sweep();
-  const { data: prof } = await admin.from('profiles').select('company_id').eq('email', OWNER).single();
+  const { data: prof } = await admin
+    .from('profiles')
+    .select('company_id')
+    .eq('email', OWNER)
+    .single();
   companyA = (prof as { company_id: string }).company_id;
-  const { data: ap } = await admin.from('profiles').select('id, user_id, company_id').eq('email', AUTHOR).single();
-  if ((ap as { company_id: string }).company_id !== companyA) throw new Error('author is not in company A');
+  const { data: ap } = await admin
+    .from('profiles')
+    .select('id, user_id, company_id')
+    .eq('email', AUTHOR)
+    .single();
+  if ((ap as { company_id: string }).company_id !== companyA)
+    throw new Error('author is not in company A');
   const { data: am } = await admin
     .from('company_members')
     .select('id')
@@ -198,30 +224,61 @@ beforeAll(async () => {
   author = await sessionFor(AUTHOR);
   // A project of company A the author can SEE (the routes read through RLS),
   // picked by stable order and scoped to what the probe depends on.
-  const { data: vp } = await author.from('projects').select('id').eq('company_id', companyA).order('id').limit(1).single();
+  const { data: vp } = await author
+    .from('projects')
+    .select('id')
+    .eq('company_id', companyA)
+    .order('id')
+    .limit(1)
+    .single();
   projectA = (vp as { id: string }).id;
-  const { data: bp } = await admin.from('projects').select('id, company_id').neq('company_id', companyA).order('id').limit(1).single();
+  const { data: bp } = await admin
+    .from('projects')
+    .select('id, company_id')
+    .neq('company_id', companyA)
+    .order('id')
+    .limit(1)
+    .single();
   projectB = (bp as { id: string }).id;
   companyB = (bp as { company_id: string }).company_id;
 
   const today = new Date().toISOString().slice(0, 10);
   const { data: dl, error: dlErr } = await admin
     .from('daily_logs')
-    .insert({ company_id: companyA, project_id: projectA, log_date: today, author_member_id: authorMember, work_performed: `${MARKER} work` })
+    .insert({
+      company_id: companyA,
+      project_id: projectA,
+      log_date: today,
+      author_member_id: authorMember,
+      work_performed: `${MARKER} work`,
+    })
     .select('id')
     .single();
   must('daily_log', dlErr);
   record.daily_logs = (dl as { id: string }).id;
   const { data: dv, error: dvErr } = await admin
     .from('deliveries')
-    .insert({ company_id: companyA, project_id: projectA, delivery_date: today, vendor_name: `${MARKER} vendor`, received_by: authorMember })
+    .insert({
+      company_id: companyA,
+      project_id: projectA,
+      delivery_date: today,
+      vendor_name: `${MARKER} vendor`,
+      received_by: authorMember,
+    })
     .select('id')
     .single();
   must('delivery', dvErr);
   record.deliveries = (dv as { id: string }).id;
   const { data: si, error: siErr } = await admin
     .from('safety_incidents')
-    .insert({ company_id: companyA, project_id: projectA, incident_date: today, incident_type: 'near_miss', description: `${MARKER} incident`, reported_by_member_id: authorMember })
+    .insert({
+      company_id: companyA,
+      project_id: projectA,
+      incident_date: today,
+      incident_type: 'near_miss',
+      description: `${MARKER} incident`,
+      reported_by_member_id: authorMember,
+    })
     .select('id')
     .single();
   must('incident', siErr);
@@ -234,7 +291,10 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await sweep();
-  const { count } = await admin.from('files').select('id', { count: 'exact', head: true }).like('file_name', `${MARKER}%`);
+  const { count } = await admin
+    .from('files')
+    .select('id', { count: 'exact', head: true })
+    .like('file_name', `${MARKER}%`);
   expect(count ?? 0, 'S120P files survived teardown').toBe(0);
 }, 240_000);
 
@@ -252,9 +312,14 @@ describe('WRITE — the author cannot point a record at a file (no returning; ju
   for (const k of KINDS) {
     it(`${k}: UPDATE pdf_file_id → a foreign file id is refused; the pointer is unchanged`, async () => {
       await setPointer(k, null);
-      const { error } = await author.from(k).update({ pdf_file_id: victim[k]!.id } as never).eq('id', record[k]!);
+      const { error } = await author
+        .from(k)
+        .update({ pdf_file_id: victim[k]!.id } as never)
+        .eq('id', record[k]!);
       const after = await pointerOf(k);
-      console.log(`[S120P] ${k} author UPDATE → error=${error?.code ?? 'none'} pointer=${after === victim[k]!.id ? 'VICTIM' : String(after)}`);
+      console.log(
+        `[S120P] ${k} author UPDATE → error=${error?.code ?? 'none'} pointer=${after === victim[k]!.id ? 'VICTIM' : String(after)}`
+      );
       expect(after).toBeNull();
       expect(error?.code).toBe('42501');
     });
@@ -274,7 +339,9 @@ describe('WRITE — the author cannot point a record at a file (no returning; ju
       .select('id', { count: 'exact', head: true })
       .eq('work_performed', `${MARKER} insert-probe`)
       .not('pdf_file_id', 'is', null);
-    console.log(`[S120P] daily_logs author INSERT with pointer → error=${error?.code ?? 'none'} rows-with-pointer=${count}`);
+    console.log(
+      `[S120P] daily_logs author INSERT with pointer → error=${error?.code ?? 'none'} rows-with-pointer=${count}`
+    );
     expect(count ?? 0).toBe(0);
     expect(error).not.toBeNull();
   });
@@ -288,7 +355,9 @@ describe('DELETE — regeneration (real route, as the author) never removes anot
       const status = await regenerate(k);
       const after = await exists(victim[k]!);
       const pointer = await pointerOf(k);
-      console.log(`[S120P] ${k} regenerate status=${status} victim before=${JSON.stringify(before)} after=${JSON.stringify(after)}`);
+      console.log(
+        `[S120P] ${k} regenerate status=${status} victim before=${JSON.stringify(before)} after=${JSON.stringify(after)}`
+      );
       expect(before).toEqual({ row: true, object: true });
       expect(status).toBe(200);
       // The regeneration really ran: the record now points at a NEW PDF.
