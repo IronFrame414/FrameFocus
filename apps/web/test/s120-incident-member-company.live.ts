@@ -6,7 +6,8 @@
  * overloads, as the crew reporter, and by a direct child-row INSERT; every
  * outcome judged by the SERVICE ROLE (rows naming the foreign member).
  * Positive control: the same calls naming a member of the reporter's OWN
- * company still land.
+ * company still land. [S121 7-A: the 6-arg overload is DROPPED
+ * (20262121000000); its two probes below now assert that it no longer exists.]
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
@@ -158,7 +159,13 @@ describe('#178 — a direct child-row write cannot name a foreign member either'
 });
 
 describe('#178 / #1-s180u — the dead 6-arg SECURITY DEFINER overload is not reachable', () => {
-  it('calling it with a foreign injured party writes nothing (service-role count 0) and is refused', async () => {
+  // ⚠️ INVERTED IN PLACE [S121 7-A — the 6-arg overload is DROPPED
+  // (20262121000000), completing #1-s180u]. _Superseded:_ "calling it with a
+  // foreign injured party writes nothing (service-role count 0) and is refused"
+  // asserting only `expect(error).not.toBeNull()` (refused for any reason: the
+  // revoke or the member trigger). The function no longer EXISTS: PGRST202.
+  // Still 0 incidents and 0 foreign injuries.
+  it('calling it with a foreign injured party writes nothing (service-role count 0): the 6-arg overload no longer exists', async () => {
     const { error } = await crew.rpc('create_safety_incident', {
       p_project_id: projectA,
       p_incident_date: new Date().toISOString().slice(0, 10),
@@ -188,12 +195,13 @@ describe('#178 / #1-s180u — the dead 6-arg SECURITY DEFINER overload is not re
     );
     expect(n).toBe(0);
     expect(incidents ?? 0).toBe(0);
-    expect(error).not.toBeNull();
+    expect(error?.code).toBe('PGRST202');
   });
 
   // The call above is also stopped by the member trigger, so on its own it
   // cannot prove the REVOKE. This one names no member at all: only the revoke
-  // can refuse it.
+  // can refuse it. [S121: after the DROP, both assert PGRST202; this one still
+  // names no member, so nothing but the missing function can refuse it.]
   // ⚠️ INVERTED IN PLACE [S121 7-A — the 6-arg overload is DROPPED
   // (20262121000000), completing #1-s180u]. _Superseded:_ "even a harmless call
   // (no parties) is refused: EXECUTE is revoked (0 incidents)" asserting
