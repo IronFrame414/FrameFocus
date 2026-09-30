@@ -480,7 +480,13 @@ function MobileShellInner({
       {/* ------------------------------------------------------------------ */}
       {/* §3.1 — APP BAR                                                      */}
       {/* ------------------------------------------------------------------ */}
-      <header className="shrink-0 bg-m6m-navy">
+      {/* [S121 1-A] paddingTop = the iOS status-bar inset, so under
+          'black-translucent' the navy fills the status-bar strip. 0 where
+          there is no inset (desktop, Android, a browser tab). */}
+      <header
+        className="shrink-0 bg-m6m-navy"
+        style={{ paddingTop: 'env(safe-area-inset-top)' }}
+      >
         <div className="flex h-[58px] items-center gap-3 px-[18px]">
           {insideProject ? (
             // §3.1: "Inside a project, the hamburger is replaced by a back
@@ -624,7 +630,13 @@ function MobileShellInner({
       <nav
         data-testid="m-tabbar"
         aria-label={t('shell.primaryNav')}
-        className="flex shrink-0 items-start justify-between border-t border-m6m-border bg-m6m-card px-[14px] pt-[10px] pb-[14px]"
+        // [S121 1-B] relative z-10: the camera overhangs the content region
+        // by 26px. That region is `relative` (positioned, z auto), and CSS
+        // paints positioned boxes AFTER non-positioned ones, so while this nav
+        // was unpositioned every form field scrolled OVER the camera. Proven
+        // with elementFromPoint at 402px (S121 report). Stays below NavPending
+        // (z-30) and the NavSheet (z-30/40).
+        className="relative z-10 flex shrink-0 items-start justify-between border-t border-m6m-border bg-m6m-card px-[14px] pt-[10px] pb-[14px]"
         style={{ paddingBottom: 'calc(14px + env(safe-area-inset-bottom))' }}
       >
         <TabItem {...TABS[0]} active={activeHref === TABS[0].href} />

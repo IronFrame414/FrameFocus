@@ -49,9 +49,49 @@ test('A-26e · the mobile document head carries the iOS install metas (the D-10 
     'content',
     'yes'
   );
+  // SUPERSEDED [S121 1-A, Josh ASK-33] — was: toHaveAttribute('content', 'black').
+  // Inverted in place: translucent + the header's safe-area padding is what
+  // paints the status-bar strip navy.
   await expect(
     page.locator('meta[name="apple-mobile-web-app-status-bar-style"]')
-  ).toHaveAttribute('content', 'black');
+  ).toHaveAttribute('content', 'black-translucent');
+  // [S121 1-A] The OS chrome colour and the inset both depend on these two.
+  await expect(page.locator('meta[name="theme-color"]')).toHaveAttribute('content', '#0f1729');
+  await expect(page.locator('meta[name="viewport"]')).toHaveAttribute(
+    'content',
+    /viewport-fit=cover/
+  );
+});
+
+test('S121 1-B · the camera stays the top layer over scrolled content', async ({ page }) => {
+  await page.goto('/m/timeclock');
+  const camera = page.getByTestId('m-camera');
+  await expect(camera).toBeVisible();
+  // A field-like box filling the content region, scrolled so it sits behind
+  // the camera's overhang — the shape Josh hit on the sign-out form. It is
+  // appended INSIDE <main>, so it paints exactly where page content paints.
+  const hit = await page.evaluate(() => {
+    const main = document.querySelector('[data-testid="m-content"]') as HTMLElement;
+    const box = document.createElement('textarea');
+    box.setAttribute('data-testid', 's121-probe-field');
+    box.style.cssText = 'display:block;width:100%;height:3000px;background:#fff';
+    main.appendChild(box);
+    // Mid-scroll, NOT the bottom: the FAB-inset padding clears the end of the
+    // scroll room, so at the very bottom nothing sits behind the camera.
+    main.scrollTop = 1000;
+    const r = document.querySelector('[data-testid="m-camera"]')!.getBoundingClientRect();
+    const el = document.elementFromPoint(r.left + r.width / 2, r.top + 6);
+    return {
+      camera: !!el?.closest('[data-testid="m-camera"]'),
+      probeUnderCamera: document
+        .elementsFromPoint(r.left + r.width / 2, r.top + 6)
+        .some((e) => e.getAttribute('data-testid') === 's121-probe-field'),
+    };
+  });
+  // Non-vacuity: the probe really is under that point — otherwise "camera on
+  // top" would pass with nothing behind it.
+  expect(hit.probeUnderCamera).toBe(true);
+  expect(hit.camera).toBe(true);
 });
 
 test('the manifest is linked once and serves with M6M\'s two owned fields', async ({ page }) => {
