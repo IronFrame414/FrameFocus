@@ -857,6 +857,32 @@ full list. The judgement for each was made by reading its data calls on `origin/
 without the flag are already dynamic, because they read cookies through `createClient()`. Josh rules;
 nothing was changed.
 
+---
+
+## Production verification rows
+
+**Part 1 CI:** run `36657779145` on `1f5393ad` (base `fad4787e`, which is current `main`) was **green**.
+Lint & Type Check passed: unit **149 files / 2026 tests**. E2E: **644 passed, 22 skipped, 0 `✘`**
+(the `✘` count was read from the full job log), 30.5 min.
+
+**Production before any section:** `schema_fingerprint()` = policies 490 / `1c0ca77c…`, triggers 302 /
+`2fcd222a…`, functions 349 / `985d5448…`, constraints 1074 / `c32e668a…`, latest migration
+`20262100000000`. That is **identical to the committed pre-session baseline** on `origin/main`.
+
+Each section was applied with `section.sh`, which holds out the other files, requires the dry run to
+list **exactly** the named file, pushes, and **always** relinks rebuild-test (read back as
+`LINKED_REF=nmyphyhmfttxkdoposvf` every time).
+
+| # | migration | dry run | verification by object on PRODUCTION | expected | verdict |
+| --- | --- | --- | --- | --- | --- |
+| 1 | `20262110000000_s120_pdf_file_id_service_only` | exactly that file | ledger `20262110000000`; `enforce_pdf_file_id_service_only` md5 `f49d6bfd678f5fa11b25faa0f96a24a2`; triggers `daily_logs:23:O, deliveries:23:O, material_signouts:23:O, safety_incidents:23:O` | ledger 2110; md5 = rebuild-test's; 4 triggers, `tgtype 23`, enabled `O` | **MATCH** |
+| 2 | `20262111000000_s120_email_has_account_rate_limit` | exactly that file | ledger `20262111000000`; `email_has_account` md5 `e30ddcf7abe41c5934d6cae375457e0c`, VOLATILE, SECURITY DEFINER; EXECUTE anon **false**, authenticated **true**; `email_account_checks` RLS **on**, policies `email_account_checks_select_owner_admin:SELECT` only; 0 rows | ledger 2111; md5 = rebuild-test's; `v` / definer; anon false; authenticated true; RLS on; exactly 1 SELECT policy | **MATCH** |
+
+⚠️ **Process slip, recorded.** Row 1's report entry failed to save: the edit's anchor, this heading,
+had been dropped by my own 3-D edit. Section 2 had been queued in the same command, so it ran before
+row 1 was committed. At that point I held two unpushed results, one more than the rule allows.
+Nothing was lost: both sections were verified above before this entry was written. From here on each
+section runs in its **own** command, after the previous row is pushed.
 
 ---
 
