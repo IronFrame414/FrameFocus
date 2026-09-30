@@ -508,6 +508,38 @@ FK refused the delete. The object had already been removed.
 
 **7 red / 4 green. The hole is real, on all three tables, for a crew-level author.**
 
+**The fix (commit `ac36ea54`), in two halves:**
+1. Migration `20262110000000_s120_pdf_file_id_service_only.sql`: `enforce_pdf_file_id_service_only()`
+   as a `BEFORE INSERT OR UPDATE OF pdf_file_id` trigger on `daily_logs`, `deliveries`,
+   `safety_incidents` and `material_signouts`. When `auth.uid()` is set, a non-null value on INSERT or
+   any change on UPDATE raises 42501. The service role (the pipeline's repoint) passes, which is the
+   same test `enforce_daily_logs_column_scope` already applies to the same repoint.
+2. Services: the stale-file select now adds `.eq('company_id', <record>.company_id)` and
+   `.eq('category', <expected>)` in the daily-log, delivery and incident services, and
+   `.eq('company_id', record.company_id)` in material-signout (which already checked the category).
+
+**AFTER, on rebuild-test** (migration applied: the dry run listed exactly
+`20262110000000_s120_pdf_file_id_service_only.sql`, the push exited 0, 4 triggers are present
+(`tgtype 23`, enabled `O`), and the function's `md5(prosrc)` = `f49d6bfd678f5fa11b25faa0f96a24a2`):
+**11/11 green.**
+
+| arm | daily_logs | deliveries | safety_incidents |
+| --- | --- | --- | --- |
+| author UPDATE → foreign id | **42501**, pointer stays null | **42501** | **42501** |
+| author INSERT with a pointer | **42501**, 0 rows with a pointer (service-role count) | — | — |
+| regenerate with a foreign pointer (route 200, repointed to a new PDF) | victim row **and** object **survive** | survive | survive |
+| positive control: own stale PDF | removed (row + object) | removed | removed |
+
+**Each half proven on its own, by sabotage:**
+- **The trigger half.** With the services fixed and the migration not yet applied, WRITE went **4
+  red**: the author's UPDATE lands 3/3 and the INSERT 1/1. DELETE stayed 3 green and the positive
+  control 3 green.
+- **The service half.** With the migration applied and the three services reverted to `origin/main`
+  (read back as `3 files changed, 18 deletions`, with the `#175 [S120]` marker count at 0 in each),
+  DELETE went **3 red** and the foreign row **and** object were destroyed on all three. WRITE stayed
+  4 green and the positive control 3 green. **Restored** with `git checkout`, and `git diff --quiet
+  HEAD` confirms the services are **identical** to `ac36ea54`. Leftover fixture files: **0**.
+
 ---
 
 ## Production verification rows
