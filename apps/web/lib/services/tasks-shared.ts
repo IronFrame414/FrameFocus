@@ -3,6 +3,8 @@
 // this file, never from tasks.ts (which pulls in next/headers).
 
 import type { Database } from '@framefocus/shared/types/database';
+import type { TaskAssignee } from '@/lib/tasks/assignees';
+export type { TaskAssignee };
 
 type TaskRow = Database['public']['Tables']['tasks']['Row'];
 type PhaseRow = Database['public']['Tables']['phases']['Row'];
@@ -19,11 +21,10 @@ export type DependencyType =
 export type Task = Omit<TaskRow, 'status' | 'priority'> & {
   status: TaskStatus;
   priority: TaskPriority | null;
-  assignee: {
-    id: string;
-    display_name: string;
-    schedule_color: string | null;
-  } | null;
+  /** [S121 5-C] EVERY live assignee, earliest first (task_assignees).
+   *  SUPERSEDED: `assignee: {id, display_name, schedule_color} | null` — the
+   *  single tasks.assignee_id, which is now only the earliest of these. */
+  assignees: TaskAssignee[];
 };
 
 export type Phase = PhaseRow;

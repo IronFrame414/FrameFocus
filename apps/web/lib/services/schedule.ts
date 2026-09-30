@@ -2,6 +2,9 @@ import { createClient } from '@/lib/supabase-server';
 import { getExpiringCompliance } from '@/lib/services/payables';
 import type { ComplianceDocType, ComplianceStatus } from '@/lib/services/payables-shared';
 import type { Database } from '@framefocus/shared/types/database';
+import { scheduleColor } from '@framefocus/shared/utils/schedule-colors';
+import { liveAssignees, TASK_ASSIGNEES_EMBED } from '@/lib/tasks/assignees';
+import { taskEvents } from '@/lib/schedule/task-events';
 
 type ScheduleEntryRow = Database['public']['Tables']['schedule_entries']['Row'];
 type InspectionRow = Database['public']['Tables']['inspections']['Row'];
@@ -16,9 +19,16 @@ export type ScheduleEntry = Omit<ScheduleEntryRow, 'general_kind'> & {
     display_name: string;
     member_type: string;
     schedule_color: string | null;
+    sub?: { trade_type: string | null }[] | { trade_type: string | null } | null;
   } | null;
   project: { id: string; name: string; project_number: string } | null;
 };
+
+function tradeOf(m: ScheduleEntry['member']): string | null {
+  const sub = m?.sub;
+  if (!sub) return null;
+  return (Array.isArray(sub) ? sub[0]?.trade_type : sub.trade_type) ?? null;
+}
 
 export type Inspection = Omit<InspectionRow, 'result'> & {
   result: InspectionResult;
@@ -37,6 +47,9 @@ export const GENERAL_KIND_LABELS: Record<GeneralKind, string> = {
  * inspection has no member, so it renders at job level, not a person's row).
  */
 export interface CalendarEvent {
+  /** [S121 5-C] UNIQUE per rendered bar. A task with three people is three
+   *  events (Q20 — the calendar answers "who is where"): same `id`, three keys. */
+  key: string;
   id: string;
   source: 'task' | 'general' | 'inspection' | 'compliance';
   title: string;
@@ -46,7 +59,13 @@ export interface CalendarEvent {
   member_name: string | null;
   /** company_members.member_type ('crew' | 'subcontractor'); null for inspections. */
   member_type: string | null;
+  /** [S121 5-G] THE bar colour, resolved once here by scheduleColor(). */
   color: string | null;
+  /** [S121 5-G] "no trade" for a sub/vendor with no trade_type. */
+  color_note?: string | null;
+  /** [S121 5-C] For a task: EVERY live assignee's member id (the whole set,
+   *  whichever one this bar is for). */
+  member_ids?: string[];
   project_id: string | null;
   project_label: string | null;
   detail: {
@@ -60,7 +79,7 @@ export interface CalendarEvent {
 }
 
 const ENTRY_JOIN =
-  '*, member:company_members(id, display_name, member_type, schedule_color), project:projects(id, name, project_number)';
+  '*, member:company_members(id, display_name, member_type, schedule_color, sub:subcontractors!subcontractors_member_id_fkey(trade_type)), project:projects(id, name, project_number)';
 
 export async function getScheduleEntries(filters?: {
   projectId?: string;
@@ -114,53 +133,48 @@ export async function getCalendarEvents(options: {
   const supabase = await createClient();
   const events: CalendarEvent[] = [];
 
-  // Source 1: dated tasks
+  // Source 1: dated tasks — [S121 5-C] ONE EVENT PER ASSIGNEE (Q20).
+  // SUPERSEDED: one event per task from the single `assignee:company_members`
+  // embed, and the crew self-filter
+  //   `if (options.ownMemberId && assignee?.id !== options.ownMemberId) continue`.
   let taskQuery = supabase
     .from('tasks')
     .select(
-      'id, title, status, start_date, due_date, notes:description, project_id, assignee:company_members(id, display_name, member_type, schedule_color), project:projects(id, name, project_number)'
+      `id, title, status, start_date, due_date, notes:description, project_id, ${TASK_ASSIGNEES_EMBED}, project:projects(id, name, project_number)`
     )
     .eq('is_deleted', false)
     .eq('is_scheduled', true);
   if (options.projectId) taskQuery = taskQuery.eq('project_id', options.projectId);
 
   const { data: tasks } = await taskQuery;
-  for (const t of tasks ?? []) {
-    const assignee = t.assignee as unknown as {
-      id: string;
-      display_name: string;
-      member_type: string;
-      schedule_color: string | null;
-    } | null;
-    if (options.ownMemberId && assignee?.id !== options.ownMemberId) continue;
-    const project = t.project as unknown as {
-      id: string;
-      name: string;
-      project_number: string;
-    } | null;
-    const start = t.start_date ?? t.due_date!;
-    const end = t.due_date ?? t.start_date!;
-    events.push({
-      id: t.id,
-      source: 'task',
-      title: t.title,
-      start_date: start,
-      end_date: end,
-      member_id: assignee?.id ?? null,
-      member_name: assignee?.display_name ?? null,
-      member_type: assignee?.member_type ?? null,
-      color: assignee?.schedule_color ?? null,
-      project_id: t.project_id,
-      project_label: project ? project.project_number : null,
-      detail: { status: t.status },
-    });
-  }
+  // ⚠️ The crew self-filter and the one-bar-per-person expansion live in ONE
+  // pure function (lib/schedule/task-events.ts), tested arm by arm.
+  events.push(
+    ...taskEvents(
+      (tasks ?? []).map((t) => {
+        const project = t.project as unknown as { project_number: string } | null;
+        return {
+          id: t.id,
+          title: t.title,
+          status: t.status,
+          start_date: t.start_date,
+          due_date: t.due_date,
+          project_id: t.project_id,
+          project_label: project ? project.project_number : null,
+          assignees: liveAssignees(t.assignees),
+        };
+      }),
+      options.ownMemberId
+    )
+  );
 
   // Source 2: general schedule entries (RLS already limits crew to own)
   const entries = await getScheduleEntries({ projectId: options.projectId });
   for (const e of entries) {
     if (options.ownMemberId && e.member_id !== options.ownMemberId) continue;
+    const trade = tradeOf(e.member);
     events.push({
+      key: `general-${e.id}`,
       id: e.id,
       source: 'general',
       title:
@@ -174,7 +188,13 @@ export async function getCalendarEvents(options: {
       member_id: e.member_id,
       member_name: e.member?.display_name ?? null,
       member_type: e.member?.member_type ?? null,
-      color: e.member?.schedule_color ?? null,
+      color: scheduleColor({
+        memberId: e.member_id,
+        memberType: e.member?.member_type ?? null,
+        explicit: e.member?.schedule_color ?? null,
+        trade,
+      }),
+      color_note: e.member?.member_type === 'subcontractor' && !trade ? 'no trade' : null,
       project_id: e.project_id,
       project_label: e.project?.project_number ?? null,
       detail: { kind: e.general_kind, notes: e.notes },
@@ -186,6 +206,7 @@ export async function getCalendarEvents(options: {
   for (const i of inspections) {
     if (!i.scheduled_date) continue;
     events.push({
+      key: `inspection-${i.id}`,
       id: i.id,
       source: 'inspection',
       title: `Inspection: ${i.inspection_type}`,
@@ -219,6 +240,7 @@ export async function getCalendarEvents(options: {
     for (const doc of expiring) {
       if (!doc.expiration_date) continue; // NULL never alerts (W-9 rule)
       events.push({
+        key: `compliance-${doc.id}`,
         id: `compliance:${doc.id}`,
         source: 'compliance',
         title: `${COMPLIANCE_CALENDAR_LABELS[doc.doc_type]} ${
@@ -248,3 +270,24 @@ const COMPLIANCE_CALENDAR_LABELS: Record<ComplianceDocType, string> = {
   w9: 'W-9',
   other: 'Compliance doc',
 };
+
+/**
+ * [S121 5-D] The scheduling sheet's job picker: OPEN jobs (active, on hold —
+ * the same "open" as the sign-out picker, ASK-27), scoped by the caller's RLS.
+ * Ordered by name, then id (stable).
+ */
+export async function getScheduleJobChoices(): Promise<{ id: string; name: string }[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from('projects')
+    .select('id, name')
+    .eq('is_deleted', false)
+    .in('status', ['active', 'on_hold'])
+    .order('name', { ascending: true })
+    .order('id', { ascending: true });
+  if (error) {
+    console.error('[getScheduleJobChoices]', error.message);
+    return [];
+  }
+  return (data ?? []) as { id: string; name: string }[];
+}

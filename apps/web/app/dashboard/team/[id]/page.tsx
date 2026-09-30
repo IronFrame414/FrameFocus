@@ -7,6 +7,7 @@ import { getGLMappingSettings } from '@/lib/services/company';
 import EditForm from './edit-form';
 import TransferForm from './transfer-form';
 import PayRateSection from './pay-rate-section';
+import { ScheduleColourSection } from './schedule-colour-section';
 
 export default async function TeamMemberEditPage({ params }: { params: { id: string } }) {
   const supabase = await createClient();
@@ -79,7 +80,8 @@ export default async function TeamMemberEditPage({ params }: { params: { id: str
   // this page for them.
   const { data: memberRow } = await supabase
     .from('company_members')
-    .select('id')
+    // [S121 5-G] + the schedule colour and, for a sub, the trade it follows.
+    .select('id, member_type, schedule_color, sub:subcontractors!subcontractors_member_id_fkey(trade_type)')
     .eq('profile_id', target.id)
     .eq('is_deleted', false)
     .maybeSingle();
@@ -136,6 +138,16 @@ export default async function TeamMemberEditPage({ params }: { params: { id: str
             created_at: target.created_at,
           }}
           callerRole={caller.role as 'owner' | 'admin'}
+        />
+      )}
+      {memberRow && (
+        <ScheduleColourSection
+          memberId={memberRow.id}
+          memberType={memberRow.member_type}
+          value={memberRow.schedule_color}
+          trade={
+            (Array.isArray(memberRow.sub) ? memberRow.sub[0]?.trade_type : (memberRow.sub as { trade_type: string | null } | null)?.trade_type) ?? null
+          }
         />
       )}
       {memberRow && (

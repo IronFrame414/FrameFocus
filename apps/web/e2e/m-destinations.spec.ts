@@ -147,34 +147,28 @@ test.describe('M-25 · Schedule', () => {
     }
   });
 
-  test('A-44d · groups by day, past ABOVE today, upcoming ascending', async ({ page }) => {
+  // ⚠️ INVERTED IN PLACE [S121 5-A, RULED Josh — M-25's LIST is overturned].
+  // _Superseded:_ "A-44d · groups by day, past ABOVE today, upcoming ascending"
+  // — m-day-group sections either side of m-today-anchor, each side ascending.
+  // The screen is now ONE DAY at a time (Q10): it opens on today and ‹ › walk
+  // the days; every row shown overlaps the day shown.
+  test('A-44d · ONE day at a time — opens on today; every row overlaps it; › moves one day', async ({ page }) => {
     await page.goto('/m/schedule');
-    const groups = page.getByTestId('m-day-group');
-    const count = await groups.count();
-    if (count === 0) test.skip(true, 'no events on rebuild-test');
-
-    const days: string[] = [];
-    for (let i = 0; i < count; i++) {
-      days.push((await groups.nth(i).getAttribute('data-day'))!);
+    const view = page.getByTestId('m-day-view');
+    await expect(view).toBeVisible();
+    const day = (await view.getAttribute('data-day'))!;
+    expect(day).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    await expect(page.getByTestId('m-day-group')).toHaveCount(0);
+    const rows = page.getByTestId('m-event-row');
+    for (let i = 0; i < (await rows.count()); i++) {
+      const s = (await rows.nth(i).getAttribute('data-start'))!;
+      const e = (await rows.nth(i).getAttribute('data-end'))!;
+      expect(s <= day && e >= day, `${s}–${e} does not cover ${day}`).toBe(true);
     }
-
-    // The anchor separates past from upcoming in DOM order.
-    const anchorY = (await page.getByTestId('m-today-anchor').boundingBox())!.y;
-    const past: string[] = [];
-    const upcoming: string[] = [];
-    for (let i = 0; i < count; i++) {
-      const y = (await groups.nth(i).boundingBox())!.y;
-      (y < anchorY ? past : upcoming).push(days[i]);
-    }
-
-    // Each side ascending, and every past day earlier than every upcoming day.
-    expect(past).toEqual([...past].sort());
-    expect(upcoming).toEqual([...upcoming].sort());
-    if (past.length && upcoming.length) {
-      expect(past[past.length - 1] < upcoming[0]).toBe(true);
-    }
-    // Past days are NOT dropped — the whole set is still rendered.
-    expect(past.length + upcoming.length).toBe(count);
+    await page.getByTestId('m-day-next').click();
+    const next = new Date(`${day}T00:00:00Z`);
+    next.setUTCDate(next.getUTCDate() + 1);
+    await expect(view).toHaveAttribute('data-day', next.toISOString().slice(0, 10));
   });
 
   test('A-44e · rows carry title + mono range; a null project_label leaves no empty slot', async ({
@@ -356,7 +350,11 @@ test.describe('M-28 · Team', () => {
     expect(crew + subs).toBe(all);
   });
 
-  test('A-47e · null schedule_color falls back to amber, never untinted', async ({ page }) => {
+  // [S121 5-G] Title updated in place — _superseded:_ "A-47e · null
+  // schedule_color falls back to amber, never untinted". The fallback is now
+  // the shared schedule colour (never amber-only); the assertion — never
+  // untinted — is unchanged.
+  test('A-47e · null schedule_color falls back to the shared schedule colour, never untinted', async ({ page }) => {
     await page.goto('/m/team');
     const avatars = page.getByTestId('m-member-avatar');
     const n = await avatars.count();

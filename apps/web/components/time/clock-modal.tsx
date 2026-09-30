@@ -22,6 +22,7 @@ import {
   type SegmentType,
   type SessionWithSegments,
 } from '@/lib/services/time-tracking-client';
+import { taskOpenToMember } from '@/lib/tasks/assignees';
 // D-34's shared capture [S106] — see the re-export below for why this file no
 // longer defines its own.
 import { captureGps, DESKTOP_FIX_TIMEOUT_MS } from '@/lib/gps';
@@ -166,7 +167,8 @@ export function ClockModal({
     if (mode === 'clock-in' && segType === 'work' && projectId) {
       void listPickerTasks(projectId).then((tasks) => {
         if (cancelled) return;
-        setPickerTasks(tasks.filter((t) => t.assignee_id === null || t.assignee_id === myMemberId));
+        // [S121 5-C] no assignees, or I am AMONG them (one shared rule).
+        setPickerTasks(tasks.filter((t) => taskOpenToMember(t.assignee_ids, myMemberId)));
       });
     } else {
       setPickerTasks([]);

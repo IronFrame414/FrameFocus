@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase-server';
-import { getCalendarEvents } from '@/lib/services/schedule';
-import { getMyMember } from '@/lib/services/members';
+import { getCalendarEvents, getScheduleJobChoices } from '@/lib/services/schedule';
+import { getMembers, getMyMember } from '@/lib/services/members';
+import { canSchedule } from '@/lib/schedule/authority';
 import { getCompanyTimeSettings } from '@/lib/services/company';
 import { companyToday } from '@framefocus/shared/utils/dates';
 import { CompanyCalendar } from './company-calendar';
@@ -30,7 +31,8 @@ export default async function SchedulePage() {
 
   // Timeline rows (step 10, §8.12.2): active projects, caller-RLS-scoped —
   // crew receive assigned jobs only. Dates compared as company-calendar days.
-  const [events, { data: projects }, { timezone }] = await Promise.all([
+  const may = canSchedule(profile?.role);
+  const [events, { data: projects }, { timezone }, openJobs, members] = await Promise.all([
     getCalendarEvents({ ownMemberId: myMember?.id }),
     supabase
       .from('projects')
@@ -39,6 +41,9 @@ export default async function SchedulePage() {
       .eq('status', 'active')
       .order('start_date', { ascending: true, nullsFirst: false }),
     getCompanyTimeSettings(),
+    // [S121 5-D] The scheduling sheet's jobs: open (active + on hold), RLS-scoped.
+    may ? getScheduleJobChoices() : Promise.resolve([]),
+    may ? getMembers() : Promise.resolve([]),
   ]);
 
   return (
@@ -52,7 +57,19 @@ export default async function SchedulePage() {
 
       <div style={{ ...cardStyle, padding: '18px 20px' }}>
         <ScheduleViews
-          calendar={<CompanyCalendar events={events} />}
+          calendar={
+            <CompanyCalendar
+              events={events}
+              projects={openJobs}
+              members={members.map((m) => ({
+                id: m.id,
+                display_name: m.display_name,
+                member_type: m.member_type,
+                sub_type: m.sub_type ?? null,
+              }))}
+              role={profile?.role ?? null}
+            />
+          }
           projects={projects ?? []}
           todayYmd={companyToday(timezone)}
         />

@@ -11,6 +11,9 @@ export type CompanyMember = Omit<MemberRow, 'member_type'> & {
   // Optional: only the list `getMembers()` embeds it; the single-row fetchers
   // (`getMember`/`getMyMember`) do not, so it is absent there rather than lied about.
   sub_type?: 'subcontractor' | 'vendor' | null;
+  /** [S121 5-G] The linked sub's trade_type — a sub/vendor's schedule colour
+   *  follows it. Same optionality as sub_type (list reads only). */
+  trade?: string | null;
 };
 
 /**
@@ -27,7 +30,7 @@ export async function getMembers(filters?: {
     .from('company_members')
     // #89: embed the linked sub's type via subcontractors.member_id so pickers
     // can distinguish subcontractor from vendor. Reverse embed → array (0/1 rows).
-    .select('*, subcontractors!subcontractors_member_id_fkey(sub_type)')
+    .select('*, subcontractors!subcontractors_member_id_fkey(sub_type, trade_type)')
     .eq('is_deleted', false)
     .order('display_name', { ascending: true });
 
@@ -39,7 +42,10 @@ export async function getMembers(filters?: {
   if (error) return [];
   return (data ?? []).map((row) => {
     const { subcontractors, ...m } = row as Record<string, unknown> & {
-      subcontractors?: { sub_type?: string }[] | { sub_type?: string } | null;
+      subcontractors?:
+        | { sub_type?: string; trade_type?: string | null }[]
+        | { sub_type?: string; trade_type?: string | null }
+        | null;
     };
     const sub = Array.isArray(subcontractors) ? subcontractors[0] : subcontractors;
     const subType = sub?.sub_type;
@@ -47,6 +53,7 @@ export async function getMembers(filters?: {
       ...m,
       sub_type:
         subType === 'vendor' || subType === 'subcontractor' ? subType : null,
+      trade: sub?.trade_type ?? null,
     } as CompanyMember;
   });
 }
@@ -56,11 +63,16 @@ export async function getMember(id: string): Promise<CompanyMember | null> {
 
   const { data } = await supabase
     .from('company_members')
-    .select('*')
+    // [S121 5-G] + the sub's trade, so this member's colour matches the list's.
+    .select('*, subcontractors!subcontractors_member_id_fkey(trade_type)')
     .eq('id', id)
     .single();
-
-  return (data as CompanyMember | null) ?? null;
+  if (!data) return null;
+  const { subcontractors, ...m } = data as Record<string, unknown> & {
+    subcontractors?: { trade_type?: string | null }[] | { trade_type?: string | null } | null;
+  };
+  const sub = Array.isArray(subcontractors) ? subcontractors[0] : subcontractors;
+  return { ...m, trade: sub?.trade_type ?? null } as CompanyMember;
 }
 
 /**

@@ -3,7 +3,13 @@
 import { useState } from 'react';
 import { useConfirm } from '@/components/confirm/confirm-provider';
 import type { Phase, Task, TaskPriority, TaskStatus } from '@/lib/services/tasks-client';
-import { createTask, updateTask, deleteTask, createDependency } from '@/lib/services/tasks-client';
+import {
+  createTask,
+  updateTask,
+  deleteTask,
+  createDependency,
+  setTaskAssignees,
+} from '@/lib/services/tasks-client';
 import { findOverlaps } from '@/lib/services/schedule-client';
 
 interface TaskFormProps {
@@ -50,7 +56,11 @@ export function TaskForm({
   const [title, setTitle] = useState(editing?.title ?? '');
   const [description, setDescription] = useState(editing?.description ?? '');
   const [phaseId, setPhaseId] = useState(editing?.phase_id ?? '');
-  const [assigneeId, setAssigneeId] = useState(editing?.assignee_id ?? '');
+  // [S121 5-C] MANY people on a task. SUPERSEDED: one `assigneeId` from
+  // editing.assignee_id (now only the earliest of the task's assignees).
+  const [assigneeIds, setAssigneeIds] = useState<string[]>(
+    () => editing?.assignees.map((a) => a.id) ?? []
+  );
   const [priority, setPriority] = useState<string>(editing?.priority ?? '');
   const [status, setStatus] = useState<TaskStatus>(editing?.status ?? 'not_started');
   const [startDate, setStartDate] = useState(editing?.start_date ?? '');
@@ -61,16 +71,20 @@ export function TaskForm({
   const [error, setError] = useState<string | null>(null);
 
   // Soft double-booking warning (5B §5): non-blocking, never a hard stop.
-  async function checkOverlap(memberId: string, start: string, due: string) {
+  // [S121 5-C] Checked for EACH assignee; still only a warning (stop rule 9).
+  async function checkOverlap(memberIds: string[], start: string, due: string) {
     setOverlapWarning(null);
-    if (!memberId || (!start && !due)) return;
-    const overlaps = await findOverlaps(memberId, start || due, due || start);
-    const relevant = overlaps.filter((o) => !editing || !o.includes(editing.title));
-    if (relevant.length > 0) {
-      setOverlapWarning(
-        `Heads up — this member is already scheduled: ${relevant.slice(0, 3).join('; ')}${relevant.length > 3 ? '…' : ''}`
-      );
+    if (memberIds.length === 0 || (!start && !due)) return;
+    const lines: string[] = [];
+    for (const memberId of memberIds) {
+      const overlaps = await findOverlaps(memberId, start || due, due || start);
+      const relevant = overlaps.filter((o) => !editing || !o.includes(editing.title));
+      if (relevant.length > 0) {
+        const name = members.find((m) => m.id === memberId)?.display_name ?? 'A member';
+        lines.push(`${name}: ${relevant.slice(0, 2).join('; ')}${relevant.length > 2 ? '…' : ''}`);
+      }
     }
+    if (lines.length > 0) setOverlapWarning(`Heads up — already scheduled: ${lines.join(' · ')}`);
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -86,7 +100,6 @@ export function TaskForm({
       title: title.trim(),
       description: description.trim() || null,
       phase_id: phaseId || null,
-      assignee_id: assigneeId || null,
       priority: (priority || null) as TaskPriority | null,
       start_date: startDate || null,
       due_date: dueDate || null,
@@ -95,8 +108,15 @@ export function TaskForm({
     let result: { success: boolean; id?: string; error?: string };
     if (editing) {
       result = await updateTask(editing.id, { ...payload, status });
+      // [S121 5-C] The people, through the one assignee path. A crew member
+      // editing their own task leaves them alone (they may not change them).
+      const before = editing.assignees.map((a) => a.id).sort().join(',');
+      if (result.success && canManage && before !== [...assigneeIds].sort().join(',')) {
+        const set = await setTaskAssignees(editing.id, assigneeIds);
+        if (!set.success) result = { success: false, error: set.error };
+      }
     } else {
-      result = await createTask({ project_id: projectId, ...payload });
+      result = await createTask({ project_id: projectId, ...payload, assignee_ids: assigneeIds });
     }
 
     if (result.success) {
@@ -174,19 +194,27 @@ export function TaskForm({
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
         <div>
-          <label style={labelStyle}>Assignee</label>
-          <select
-            value={assigneeId}
-            onChange={(e) => {
-              setAssigneeId(e.target.value);
-              void checkOverlap(e.target.value, startDate, dueDate);
-            }}
-            style={inputStyle}
-            disabled={!canManage}
+          <label style={labelStyle}>People</label>
+          {/* [S121 5-C] MANY people, subs and vendors on one task (ASK-2). */}
+          <div
+            data-testid="task-assignees"
+            style={{ ...inputStyle, maxHeight: '140px', overflowY: 'auto', padding: '0.25rem 0.5rem' }}
           >
-            <option value="">Unassigned</option>
             {members.map((m) => (
-              <option key={m.id} value={m.id}>
+              <label key={m.id} style={{ display: 'flex', gap: '0.375rem', alignItems: 'center', fontSize: '0.8125rem', padding: '2px 0' }}>
+                <input
+                  type="checkbox"
+                  data-testid={`task-assignee-${m.id}`}
+                  checked={assigneeIds.includes(m.id)}
+                  disabled={!canManage}
+                  onChange={(e) => {
+                    const next = e.target.checked
+                      ? [...assigneeIds, m.id]
+                      : assigneeIds.filter((id) => id !== m.id);
+                    setAssigneeIds(next);
+                    void checkOverlap(next, startDate, dueDate);
+                  }}
+                />
                 {m.display_name}
                 {m.member_type === 'subcontractor'
                   ? // #89: label by the resolved sub_type — a vendor is a
@@ -196,9 +224,9 @@ export function TaskForm({
                     ? ' (Vendor)'
                     : ' (Sub)'
                   : ''}
-              </option>
+              </label>
             ))}
-          </select>
+          </div>
         </div>
         <div>
           <label style={labelStyle}>Start</label>
@@ -207,7 +235,7 @@ export function TaskForm({
             value={startDate}
             onChange={(e) => {
               setStartDate(e.target.value);
-              void checkOverlap(assigneeId, e.target.value, dueDate);
+              void checkOverlap(assigneeIds, e.target.value, dueDate);
             }}
             style={inputStyle}
             disabled={!canManage}
@@ -220,7 +248,7 @@ export function TaskForm({
             value={dueDate}
             onChange={(e) => {
               setDueDate(e.target.value);
-              void checkOverlap(assigneeId, startDate, e.target.value);
+              void checkOverlap(assigneeIds, startDate, e.target.value);
             }}
             style={inputStyle}
             disabled={!canManage}

@@ -23,7 +23,13 @@ import { getCompanyTimeSettings } from '@/lib/services/company';
 import { companyToday } from '@framefocus/shared/utils/dates';
 import { Tile, TileGrid, daysLeft } from '../../mobile-ui';
 import { selectUpNext, upNextDateLine } from './up-next';
-import { getMobileT } from '@/lib/i18n/server';
+import { getMobileT, getMyLanguage } from '@/lib/i18n/server';
+import { dateLocale } from '@/lib/i18n/dates';
+import { getMyProfile } from '@/lib/services/profiles';
+import { getMembers } from '@/lib/services/members';
+import { canSchedule } from '@/lib/schedule/authority';
+import { DayView } from '../../schedule/day-view';
+import type { CalendarEvent } from '@/lib/services/schedule';
 import type { MsgKey } from '@/lib/i18n/messages';
 
 // M6M §4.3 — M-3 · Project sections hub.
@@ -75,6 +81,14 @@ const PROJECT_STATUS_KEY: Record<string, MsgKey> = {
   cancelled: 'project.status.cancelled',
 };
 
+// [S121 5-I] The day view's source labels — the project schedule screen's keys.
+const OVERVIEW_SOURCE_KEY: Record<CalendarEvent['source'], MsgKey> = {
+  task: 'project.schedule.source.task',
+  general: 'project.schedule.source.general',
+  inspection: 'project.schedule.source.inspection',
+  compliance: 'project.schedule.source.compliance',
+};
+
 export default async function MobileProjectHubPage({
   params,
 }: {
@@ -86,8 +100,18 @@ export default async function MobileProjectHubPage({
   // Company-tz calendar day [S106], not UTC: this is BOTH the Up-next `>= today`
   // boundary and the days-left basis, so a UTC derivation dropped today's own
   // schedule row and shifted the countdown every evening west of UTC.
-  const [timeSettings0, punchCounts, events, changeOrders, withPo, orderless, assignments, photos] =
-    await Promise.all([
+  const [
+    timeSettings0,
+    punchCounts,
+    events,
+    changeOrders,
+    withPo,
+    orderless,
+    assignments,
+    photos,
+    lang,
+    profile,
+  ] = await Promise.all([
       getCompanyTimeSettings(),
       getOpenPunchCounts([params.projectId]),
       getCalendarEvents({ projectId: params.projectId }),
@@ -99,7 +123,11 @@ export default async function MobileProjectHubPage({
       // real signature is snake_case, the same correction M-16 already carries.
       // [S114 C-2] the Photos view's own filter, so this badge matches the screen.
       getFiles({ project_id: params.projectId, photo_view: true }),
+      getMyLanguage(),
+      getMyProfile(),
     ]);
+  const role = profile?.role ?? null;
+  const scheduleMembers = canSchedule(role) ? await getMembers() : [];
 
   const today = companyToday(timeSettings0.timezone);
   const punch = punchCounts.get(params.projectId) ?? { mine: 0, total: 0 };
@@ -288,6 +316,28 @@ export default async function MobileProjectHubPage({
             )}
           </div>
         </section>
+
+        {/* [S121 5-I, RULED Josh] The project's schedule on its overview.
+            "Up next" (D-24) is KEPT above; the one-day view — interactive,
+            the same DayView as /m/schedule — sits under it. (No week, month
+            or Gantt on mobile — Q11/Q12.) */}
+        <div data-testid="m-overview-schedule" className="mt-[14px]">
+          <DayView
+            events={events}
+            today={today}
+            locale={dateLocale(lang)}
+            role={role}
+            projects={[{ id: project.id, name: project.name }]}
+            fixedProjectId={project.id}
+            members={scheduleMembers.map((m) => ({
+              id: m.id,
+              display_name: m.display_name,
+              member_type: m.member_type,
+              sub_type: m.sub_type ?? null,
+            }))}
+            sourceKey={OVERVIEW_SOURCE_KEY}
+          />
+        </div>
 
         <h2 className="mb-[8px] mt-[18px] font-mono text-[11px] font-medium uppercase tracking-wide text-m6m-muted">
           {t('project.hub.sections')}

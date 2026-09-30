@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation';
 import { getTasks, getPhases, getDependencies } from '@/lib/services/tasks';
 import { getCalendarEvents, getInspections } from '@/lib/services/schedule';
 import { getMembers, getMyMember } from '@/lib/services/members';
+import { getProject } from '@/lib/services/projects';
 import { SchedulePanel } from './schedule-panel';
 
 export default async function ProjectSchedulePage({ params }: { params: { id: string } }) {
@@ -25,7 +26,7 @@ export default async function ProjectSchedulePage({ params }: { params: { id: st
   const isCrew = profile.role === 'crew_member' || profile.role === 'subcontractor';
   const myMember = isCrew ? await getMyMember() : null;
 
-  const [tasks, phases, dependencies, members, inspections, calendarEvents] = await Promise.all([
+  const [tasks, phases, dependencies, members, inspections, calendarEvents, project] = await Promise.all([
     getTasks(params.id),
     getPhases(params.id),
     getDependencies(params.id),
@@ -34,6 +35,7 @@ export default async function ProjectSchedulePage({ params }: { params: { id: st
     // Crew sees the in-project CALENDAR own-only (5B §9 interpretation);
     // the task list + Gantt below still show the full work breakdown.
     getCalendarEvents({ projectId: params.id, ownMemberId: myMember?.id }),
+    getProject(params.id),
   ]);
 
   const canManage = supervisesProjectWork(profile.role);
@@ -41,6 +43,7 @@ export default async function ProjectSchedulePage({ params }: { params: { id: st
   return (
     <SchedulePanel
       projectId={params.id}
+      projectName={project?.name ?? 'This project'}
       tasks={tasks}
       phases={phases}
       dependencies={dependencies}

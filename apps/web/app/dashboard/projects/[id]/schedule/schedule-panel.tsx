@@ -18,14 +18,16 @@ import {
 import type { Phase, Task, TaskDependency } from '@/lib/services/tasks-client';
 import { createPhase, deletePhase } from '@/lib/services/tasks-client';
 import { rollupPhases, TASK_STATUS_LABELS } from '@/lib/services/tasks-shared';
-import { Calendar } from '@/components/schedule/calendar';
-import { Gantt } from '@/components/schedule/gantt';
-import { memberColor } from '@/components/schedule/member-color';
+import { SchedulingCalendar } from '@/components/schedule/scheduling-calendar';
+import { Gantt, ganttGroupsFromRollups } from '@/components/schedule/gantt';
+import { assigneeColor } from '@/components/schedule/member-color';
 import { TaskForm } from './task-form';
 import { color, font } from '@/lib/theme';
 
 interface SchedulePanelProps {
   projectId: string;
+  /** [S121 5-D] For the scheduling sheet's fixed project line. */
+  projectName: string;
   tasks: Task[];
   phases: Phase[];
   dependencies: TaskDependency[];
@@ -35,6 +37,7 @@ interface SchedulePanelProps {
     id: string;
     display_name: string;
     member_type: string;
+    sub_type?: 'subcontractor' | 'vendor' | null;
     schedule_color: string | null;
   }[];
   canManage: boolean;
@@ -82,6 +85,7 @@ const primaryButton = (busy: boolean): React.CSSProperties => ({
 
 export function SchedulePanel({
   projectId,
+  projectName,
   tasks,
   phases,
   dependencies,
@@ -410,10 +414,28 @@ export function SchedulePanel({
       )}
 
       {view === 'gantt' && (
-        <Gantt rollups={rollups} unphased={unphased} dependencies={dependencies} onSelect={openEdit} />
+        <Gantt
+          groups={ganttGroupsFromRollups(rollups, unphased)}
+          dependencies={dependencies}
+          onSelect={(id) => {
+            const t = tasks.find((x) => x.id === id);
+            if (t) openEdit(t);
+          }}
+        />
       )}
 
-      {view === 'calendar' && <Calendar events={calendarEvents} onSelect={onEventSelect} />}
+      {view === 'calendar' && (
+        // [S121 Part 5] The project's calendar SCHEDULES (click a day, drag,
+        // resize) through the same wrapper as the company Schedule.
+        <SchedulingCalendar
+          events={calendarEvents}
+          projects={[{ id: projectId, name: projectName }]}
+          fixedProjectId={projectId}
+          members={members}
+          role={role}
+          onSelect={onEventSelect}
+        />
+      )}
 
       {/* General (task-less) schedule entries */}
       {canManage && (
@@ -647,16 +669,20 @@ function TaskRows({ tasks, onSelect }: { tasks: Task[]; onSelect: (t: Task) => v
           }}
         >
           <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <span
-              style={{
-                width: '10px',
-                height: '10px',
-                borderRadius: '9999px',
-                backgroundColor: memberColor(t.assignee_id, t.assignee?.schedule_color ?? null),
-                display: 'inline-block',
-                opacity: t.assignee_id ? 1 : 0.3,
-              }}
-            />
+            {/* [S121 5-C] one dot per assignee (SUPERSEDED: one dot from assignee_id). */}
+            {(t.assignees.length > 0 ? t.assignees : [null]).map((a, i) => (
+              <span
+                key={a?.id ?? `none-${i}`}
+                style={{
+                  width: '10px',
+                  height: '10px',
+                  borderRadius: '9999px',
+                  backgroundColor: assigneeColor(a),
+                  display: 'inline-block',
+                  opacity: a ? 1 : 0.3,
+                }}
+              />
+            ))}
             <span style={{ fontWeight: 500, textDecoration: t.status === 'complete' ? 'line-through' : 'none' }}>
               {t.title}
             </span>
@@ -674,7 +700,7 @@ function TaskRows({ tasks, onSelect }: { tasks: Task[]; onSelect: (t: Task) => v
             )}
           </span>
           <span style={{ color: '#6b7280', fontSize: '0.8125rem' }}>
-            {t.assignee?.display_name ?? 'Unassigned'}
+            {t.assignees.length > 0 ? t.assignees.map((a) => a.display_name).join(', ') : 'Unassigned'}
             {' · '}
             {t.start_date || t.due_date
               ? `${t.start_date ?? '…'} → ${t.due_date ?? '…'}`
