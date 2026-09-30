@@ -1,22 +1,22 @@
 {
   "_": "S108 C2 baseline. Regenerate with `npm run db:fingerprint` and commit in the SAME commit as any migration.",
   "generated_from": "nmyphyhmfttxkdoposvf",
-  "generated_at": "2026-09-30T01:56:33.340Z",
+  "generated_at": "2026-09-30T03:32:56.136Z",
   "policies": {
     "n": 491,
     "md5": "8ba22dc70e404269be96b8d0e96bebfe"
   },
   "triggers": {
-    "n": 308,
-    "md5": "3d9153d54f17e70c48942accebb34506"
+    "n": 309,
+    "md5": "d22bcaf1a71a4fe4391386490a034b3d"
   },
   "functions": {
-    "n": 351,
-    "md5": "afaa0b60c9270a2bb45985c8caf06d10"
+    "n": 352,
+    "md5": "ecf6756bc3c716d7cb9ba954c3e9d577"
   },
   "constraints": {
     "n": 1077,
     "md5": "834c7f95f3375df0752d8089573079e5"
   },
-  "latest_migration": "20262115000000"
+  "latest_migration": "20262116000000"
 }

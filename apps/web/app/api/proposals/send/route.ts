@@ -23,6 +23,11 @@ import {
 } from '@/lib/services/signing-service';
 import { ProposalEmail } from '@/lib/email/templates/proposal-email';
 import { contactDisplayName } from '@framefocus/shared/utils/contact-name';
+import {
+  collectCopyRecipients,
+  copySigningPhrase,
+  sendProposalCopies,
+} from '@/lib/services/proposal-copies';
 
 // Spec 2 (4E E5) — "Send Proposal": generate PDF → signing session →
 // Resend email with attachment + signing link → estimate to `sent`.
@@ -61,7 +66,9 @@ export async function POST(request: NextRequest) {
   // RLS-scoped fetch — cross-tenant ids 404 here.
   const { data: estimate } = await supabase
     .from('estimates')
-    .select('id, status, name, estimate_number, company_id, contact_id, expiration_days')
+    .select(
+      'id, status, name, estimate_number, company_id, contact_id, expiration_days, also_send_to, also_send_to_email'
+    )
     .eq('id', input.estimate_id)
     .eq('is_deleted', false)
     .maybeSingle();
@@ -257,16 +264,40 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  // S120 4-A/4-B — the "Also send to" contacts and the typed address get a COPY
+  // (no signing link). Before S120 no route read also_send_to at all, so those
+  // recipients were silently never emailed. A failed copy does not undo the
+  // send: it is logged and returned so the sender is told.
+  const copies = await sendProposalCopies(admin, {
+    companyId: estimate.company_id,
+    estimateId: estimate.id,
+    recipients: collectCopyRecipients(estimate, contact.email),
+    sender,
+    subject,
+    bodyText: replaceTemplateVariables(input.body, {
+      ...variables,
+      signing_link: copySigningPhrase(contactName),
+    }),
+    company,
+    pdf: { filename: `${estimate.estimate_number}-proposal.pdf`, content: generated.buffer },
+    resend: false,
+  });
+
   // Send event (R3) — server-side, via the service-role client, so company_id
   // and actor_id are passed EXPLICITLY (auth.uid()/get_my_company_id() defaults
   // are null under service role). Best-effort: a failed event write must not
   // undo a completed send. [Build decision, S103 §0.]
+  // S120 — THE ONE RECORD OF THE SEND: every address it went to, and how.
   await admin.from('estimate_events').insert({
     company_id: estimate.company_id,
     estimate_id: estimate.id,
     kind: 'send',
     actor_id: user.id,
+    payload: {
+      recipients: [{ email: contact.email, kind: 'signer', status: 'sent' }, ...copies],
+    },
   });
 
-  return NextResponse.json({ success: true });
+  const failedCopies = copies.filter((c) => c.status === 'failed').map((c) => c.email);
+  return NextResponse.json({ success: true, copies, failedCopies });
 }
