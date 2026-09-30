@@ -325,3 +325,73 @@ rebuild-test; same scripts, same identities (`josh+qa-admin`, `josh+crew`), proj
 ### Item E — second CI
 - Rebased onto main `ab2b406e`; lint-job **0/0/0** (148 / 2022); local `next build` **BUILD_EXIT=0**. CI
   **36644578588** on `a379b73b`.
+
+### ✅ Item E MERGED to main as `a8436ba3` (R8)
+- CI **36644578588** GREEN on `a379b73b` (base = main `ab2b406e`): vitest 148 / 2022; E2E **644 passed, 22
+  skipped, 0 `✘`**. `git diff a8436ba3 a379b73b` → empty. No migration.
+
+---
+
+## FINAL REPORT
+
+### Per item
+| item | state | main | production |
+| --- | --- | --- | --- |
+| **A** security fix (A-1 profile/company INSERT, A-2 selection images, deletion ban-first, A-3 debt) | ✅ merged | `27ba82ed` | §A1 `20262075000000` + §A2 `20262076000000` verified |
+| **B** item 11, material sign-out | ✅ merged | `27ba82ed` | §B `20262080000000` verified |
+| **C** item 14, project rename | ✅ merged | `ab2b406e` | §C `20262090000000` verified |
+| **D** item 13, PE per-estimate assignment | ✅ merged | `ab2b406e` | §D `20262100000000` verified |
+| **E** item 15, slow spots | ✅ merged | `a8436ba3` | no migration |
+Vercel: `27ba82ed` success 22:05Z, `ab2b406e` success 23:20Z. Production `schema_fingerprint()` == the committed
+baseline (490/302/349/1074, latest `20262100000000`); ledger **272**. Nothing stopped.
+
+### ITEM A — the confirmation recipe, before and after (rebuild-test)
+| probe (profile-less login; writes without `.select()`, counted with the service role) | BEFORE the fix | AFTER |
+| --- | --- | --- |
+| insert `{self, <other company>, 'admin'}` | error none; **profiles 1; target members 1** | 42501; profiles 0; members 0 |
+| insert `'owner'` into an owner-less company | error none; **profiles 1** | 42501; 0 |
+| insert a `companies` row | error none; **rows 1** | 42501; 0 |
+| control: a user WITH a profile | **23505** (unique key) | 42501; unchanged |
+| A-2: foreign files returned to owner / PM / linked client | **6 of 6** each; client signed **2** URLs (one another tenant's object) | 1 (the legit photo); 1 URL |
+Sabotage (old policies + old function body): 8 red, restored identical. Onboarding after the fix: owner sign-up
+(real form) ✓, invite accept (real form) ✓, both also at the trigger level ✓.
+
+### Production verification rows (every value matched its expectation)
+§A1 ledger 268 · policies 7 · profiles INSERT 0 · companies INSERT 0 · table note · profile-less 0 — §A2 ledger
+269 · md5 `6e8d61aa` · DEFINER · anon false/auth true — §B ledger 270 · RLS both · 4 policies, no update/delete ·
+category 2 · 5 md5s · anon 0 · rows 0/0 — §C ledger 271 · RLS · 1 SELECT policy · trigger · 3 md5s · anon
+false/auth true · rows 0 — §D ledger 272 · RLS · 4 assignment policies · 20 PE policies · trigger · 7 md5s ·
+anon false/auth true · rows 0 · PM snapshot == rebuild-test — fingerprint == baseline after §B and after §D.
+Two pooler connection drops (one push, one dry run) → re-read production (unchanged) → retried; never a partial apply.
+
+### Unattended decisions (each built as the narrower option; the alternative recorded)
+1. A-1: **drop** both INSERT policies (alt: constrain `WITH CHECK (user_id = auth.uid() AND company_id IS NULL …)`).
+2. A-1 `deletion.ts`: the literal reorder is impossible (193 NO ACTION FKs to `auth.users`) → **ban every login
+   before any row goes**, hold the job if a ban fails (alt: GoTrue soft-delete first).
+3. A-2: check company + project + category `photos` + the path's company/project folders; **not** tags (alt: + tag).
+4. Stacked B on A (baseline can only be generated when rebuild-test = tree).
+5. Owner sign-up e2e gated in CI (`S119_ONBOARDING=1`) — rebuild-test's auth mailer rate limit (alt: flaky red).
+6. D: one PE per estimate (alt: several); PE cannot submit for review (alt: draft→review like a PM); PE sends no
+   bid requests and shares nothing with bidders (alt: allow, like the authoring PM); catalog/scope library stay
+   company-level; assignments not in the company export (alt: export them); path-2 reads left as they are.
+7. E-2: `next.config` redirect ahead of middleware (alt: middleware rewrite — one request, but the URL stays `/m`).
+8. E-1: fixed a pre-existing red mock in `s175-stage5-selection-money` to get a real money baseline.
+
+### Debt filed (A-3 + one found) — converted at landing
+`#175` PDF regeneration deletes what `pdf_file_id` names (⚠️ **measured cross-tenant deletion**, not within-company) ·
+`#176` `email_has_account` existence oracle · `#177` `record_client_payment` contact company unchecked with no
+applications · `#178` `create_safety_incident` trusts member ids · `#179` "belongs to another company" wording ·
+`#180` trial deletion never retries an auth delete that failed after `profiles` went (login stays banned).
+(A-3's `convert_estimate_to_project` item was withdrawn by D-1 and not filed.)
+
+### ⚠️ For Josh before a client sees it — the portal signature fields are 2px larger
+Moving `SignatureCapture` to `components/signature/` (shared by the portal and the sign-out) forced its two name
+inputs from 14px to 16px — the iOS focus-zoom guard (`m6m-field-font-size`) fails any /m input under 16px, and the
+component is now on /m. Visible on the client portal's proposal / CO / selection signature step.
+
+### What a person still has to click
+- Look at the portal signature step (above) and accept or ask for a portal-only size.
+- Answer the questions at the end of the session message (C vs D-1; the path-2 PE read; #175).
+- One confirmation email went to `josh+s119-owner-…@worthprop.com` (the owner sign-up proof); the account was deleted.
+- Old branches superseded by this session's (safe to delete when you like): `feature/s118-material-signout`,
+  `feature/s118-project-rename`, `feature/s118-slow-spots` (local only). CLI left linked to rebuild-test.
