@@ -59,9 +59,9 @@ function toB64url(buf: ArrayBuffer): string {
   return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
-function fromB64url(s: string): Uint8Array {
+function fromB64url(s: string): Uint8Array<ArrayBuffer> {
   const b = atob(s.replace(/-/g, '+').replace(/_/g, '/'));
-  const out = new Uint8Array(b.length);
+  const out = new Uint8Array(new ArrayBuffer(b.length));
   for (let i = 0; i < b.length; i++) out[i] = b.charCodeAt(i);
   return out;
 }
