@@ -713,3 +713,39 @@ The section above was written by a **second session** (`framefocus-d8`) started 
 | # | migration | dry run | verification on PRODUCTION | expected | verdict |
 | --- | --- | --- | --- | --- | --- |
 | 5 | `20262121000000_s121_drop_create_safety_incident_6arg` | exactly that file | ledger `…2116–2121`; overloads **1**: `create_safety_incident(uuid,date,text,text,text,jsonb,jsonb)` md5 `5829b3278603c48706567ce5b4d2c1aa`, EXECUTE authenticated `true` | 1 overload, md5 = rebuild-test's, grant unchanged | **MATCH** — relinked, `LINKED_REF=nmyphyhmfttxkdoposvf` |
+
+## Close — what landed, what a person still has to click, what Josh has to decide
+
+### Merges to `main` (all under the S180 three-condition rule; every migration verified on production by object before its merge)
+
+| Part | merge SHA | migration(s) on production |
+| --- | --- | --- |
+| 3 — Material sign-out | `483143d9` | `20262117000000`, `20262118000000` — MATCH |
+| 4 — Timesheets (payroll) | `fe616f1f` | `20262119000000` — MATCH |
+| 1 + 2 — Mobile chrome, held photos | `30650e21` | none |
+| 5 — The schedule | `a72c7aa8` | `20262120000000` — MATCH |
+| 6 + 7-B + 7-C + 8 — catalog, camera inputs, branches, PE picker | `66a3a1a2` | none (the catalog was already on production: 282 rows at +5%, nothing written) |
+| 7-A — DROP the 6-arg `create_safety_incident` | `6565df04` | `20262121000000` — MATCH |
+| This report | (the docs-only merge that carries this section) | none |
+
+`feature/s121-p7a-drop` has been deleted locally and on origin (`git ls-remote --heads origin feature/s121-p7a-drop` → 0 lines). Critical Path was not built, per the spec.
+
+### What a person still has to click (Josh, on the phone — Q23)
+1. **Held photos:** open `/m` → Capture. The 26 photos from 9/29 that already landed on Best Western should clear from the tray as uploaded after the first server check. Any photo still held shows its age and asks you what to do; nothing is deleted automatically (Q16 A).
+2. **Status bar:** with the PWA installed on the home screen, the strip behind the clock and battery should be navy with light text, and the header should sit below the notch. The `black-translucent` value only takes effect when the app is launched from the home screen, so if it looks wrong, remove the icon and re-add it once.
+3. **The schedule on the phone:** a one-day column, ‹ ›, + Schedule, and press-and-hold to move.
+
+### What Josh has to decide
+- **The staleTimes hold** (`s112-staletimes-hold`): re-measured 49→301 ms, 47→798 ms and 49→2308 ms. **The hold stays.** Not merged.
+- **QuickBooks re-push:** when an approved day is edited it goes back to pending, but anything already pushed to QB is not re-pushed or reversed. Decide whether a re-approval should re-sync it.
+- **The session clock edit** (the older clock-in/out edit path) does not reopen an approved day. The week sheet does. Should they match?
+- **The four docs-tail branches** (`s110-site-visit-access`, `s116-report`, `s180-branch-archive`, `s180-unattended`): delete them? They are unmerged docs only, and nothing was deleted without a ruling.
+- **`#181`:** `s114-c5-multi-upload` step 2. The reason it was reverted still applies (stop rule 11), so it is filed and not merged.
+- **Flaky tests:** the 5-E drag e2e (flaked once, then passed) and the s118 sign-out spec (flaked once). Separately, concurrent CI runs collide on shared rebuild-test fixtures (the chat switcher and the s111 thumbnails): two red runs this session came from main's run and a branch run sharing a fixture, not from code.
+- **`app/m/schedule/scroll-to-today.tsx`** is now unused, because the one-day view replaced the month list. Delete it?
+- **`scripts/.db-expected.json`** is stale: it predates `20262117`–`20262121`. Regenerate it?
+
+### End state
+- `main` = `6565df04` before this report lands.
+- The CLI is linked to rebuild-test (`LINKED_REF=nmyphyhmfttxkdoposvf`, read back after section 5).
+- `origin/feature/s121-assess` is the only S121 branch left, and it goes after this merge.
