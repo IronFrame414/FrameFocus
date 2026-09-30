@@ -277,6 +277,54 @@ The `experimental` block, verbatim:
 setting exists only on the held branch `origin/feature/s112-staletimes-hold` (`3b603c07`), which never
 merged. **SPEC 3-E therefore has nothing to revert.** No `staleTimes` block will be added.
 
+### 1.4 — Regions (read only; nothing changed)
+
+| what | region | source |
+| --- | --- | --- |
+| Vercel function region (production) | **`iad1`** (Washington DC / N. Virginia) | The live `x-vercel-id` response header, read 2026-09-30 from `https://frame-focus-eight.vercel.app/sign-in`: `iad1::iad1::xmx6q-…`. The first field is the edge POP and the second is the function region. `apps/web/vercel.json` on `origin/main` declares no `regions`, and no route sets `preferredRegion` (`git grep` on `origin/main`, 0 hits), so this is the project default. |
+| Supabase **production** (`jwkcknyuyvcwcdeskrmz`) | **`us-east-1`** (N. Virginia) | Management API `GET /v1/projects/jwkcknyuyvcwcdeskrmz` → `region: "us-east-1"`, `ACTIVE_HEALTHY` |
+| Supabase rebuild-test (`nmyphyhmfttxkdoposvf`) | `us-east-2` (Ohio) | the same API |
+
+**Finding (3-C): the production function and the production database are in the same region**
+(`iad1` ≈ `us-east-1`), so no round trip pays cross-country latency, and there is nothing to decide.
+The latency toll is the **number** of round trips per request (3-A, 3-B), not their distance.
+⚠️ Local measurements this session run from the Codespace against rebuild-test (`us-east-2`), so their
+absolute numbers are **not** production numbers. Only a before and after taken the same way is
+comparable.
+
+### 1.5 — Open time segments on PRODUCTION (read only; NOTHING closed)
+
+Measured 2026-09-30 01:33 UTC through the Management API query endpoint, with the read-only guarded
+tool:
+
+| open `time_segments` (`segment_end IS NULL`) | open `time_clock_sessions` (`clock_out IS NULL`) | total segments |
+| --- | --- | --- |
+| **0** | **0** | 17 |
+
+**There are no open segments now. The two that the spec says were open have since been closed, and
+not by this session** (this session writes nothing to production data). Here is every clock session
+from the last 3 days (UTC):
+
+| session | member | role | clock in | clock out |
+| --- | --- | --- | --- | --- |
+| `17a75c24` | Josh Bishop | owner | 09-27 16:26 | 09-27 21:30 |
+| `42cc5583` | Josh Bishop | owner | 09-28 11:16 | 09-28 21:04 |
+| `aac7a20a` | Scott Hillegass | foreman | 09-29 11:15 | 09-29 22:47 |
+| `697fc3a3` | Jacy Drennan | crew_member | 09-29 12:04 | 09-29 20:04 |
+| `a51b3cbb` | Juan Cardona | crew_member | 09-29 12:58 | 09-29 16:28 |
+| `6bfa15c1` | **Josh Bishop** | owner | **09-29 15:48** | 09-29 21:40 |
+| `bbfc0765` | **Juan Cardona** | crew_member | **09-29 16:29** | 09-29 21:15 |
+
+The spec's "10:50" and "12:29" best match `6bfa15c1`, which is Josh: a shop segment from 15:48 UTC,
+then a **task-bound** work segment ("Upper cabinets and hood", Edwards – Kitchen Remodel) closed at
+21:40:47 UTC with `completion = 'complete'`. They also match `bbfc0765`, which is **Juan Cardona,
+crew**: a Riverwood work segment from 16:29 UTC, with **no task**, closed at 21:15:38 UTC. The spec
+did not give a timezone, so the match is by elapsed pattern, not by proof. Josh's segment is the only
+task-bound segment on production. It is consistent with his account of being unblocked by hand in the
+SQL editor (2-A). **Juan's segment carries no task, so the 2-A completion gate cannot have held him.**
+Whoever closed it, the `21:15:38` stop time is recorded as fact and **Josh should confirm that it was
+Juan's real stop time** (payroll; stop rule 3).
+
 ---
 
 ## Phase 3 — parts
