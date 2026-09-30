@@ -521,3 +521,12 @@ Each section ran through `section.sh`: every newer migration file held out of th
 **Part 3 MERGED → `main` `483143d9`** (merge commit of `feature/s121-p3-signout` `47202a35`). The three conditions: (1) CI `36720889843` **green** on base `7cf348a0` = main at merge time; (2) every agreed check passed, with the numbers above; (3) both migrations on production, verified by object: **MATCH ×2**. Josh's phone steps for the sign-out: nothing to do — open **New sign-out** from a job; it now asks for the job, your signature (your own name, fixed), one photo, and the other party's signature on the same page.
 
 **Parts 1+2 rebased onto `483143d9`** (clean) → pre-CI: type-check 0, lint 0, unit **153 files / 2054 tests** (0 cache hits) → CI **`36727805772`** requested on the Part 2 head (`a0a40bc9`; it carries Part 1's commit `c7024b41`). The Part 1 branch itself was NOT pushed rebased (its commit has no `[skip ci]` — it would have started a second run).
+
+### Production — Part 4 migration, and the merge
+
+- **CI:** `36723997296` **green** on the Part 3+4 stacked head `94bc9e33` (base `7cf348a0`).
+- **Rebased onto current main `483143d9`** (the Part 3 merge): the Part 3 commits dropped as already upstream, leaving the 3 Part 4 commits (`4e1e4a34`, `fb118a80`, `9ae062be`). **Tree-identity proof:** `git diff --quiet 94bc9e33 9ae062be` → exit **0**; tree ids `8961b1e5d977dabb7c8542cfb54acd6b9cac1e9d` = `8961b1e5d977dabb7c8542cfb54acd6b9cac1e9d`. **The changed-path list is EMPTY.** The rebased tree is byte-identical to the tested tree, so the green run is a run of exactly this tree.
+
+| # | migration | dry run | verification on PRODUCTION | expected (rebuild-test) | verdict |
+| --- | --- | --- | --- | --- | --- |
+| 3 | `20262119000000_s121_time_segment_edits` | exactly that file | ledger `…2116,2117,2118,2119`; md5 `add_time_segment` `df3cfcab…`, `edit_time_segment` `c78e1908…`, `split_time_segment` `5a08970a…`, `s121_time_edit_session` `dc41fce6…`, `s121_time_overlap_check` `83e8d55c…`, `s121_time_task_check` `f8e8de32…`, `s121_time_reopen` `ef22201b…`, `audit_time_segment_edit` `11fbfe95…`, `audit_time_clock_session_edit` `0e4c2233…`; triggers `time_segments_insert_audit`/`time_segments_edit_audit`/`time_clock_sessions_edit_audit` = `O`; EXECUTE authenticated: the 3 RPCs `true`, helpers `false`; anon `false` ×3; overloads 1 each | all nine md5 = rebuild-test's; triggers `O`; grants as listed | **MATCH** — relinked, `LINKED_REF=nmyphyhmfttxkdoposvf` |
