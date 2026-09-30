@@ -5,6 +5,7 @@ import {
   type SessionWithMemberAndSegments,
 } from '@/lib/services/time-tracking';
 import { getMyMember } from '@/lib/services/members';
+import { getProjects } from '@/lib/services/projects';
 import { getCompanyTimeSettings } from '@/lib/services/company';
 import {
   PROJECT_BEARING_TYPES,
@@ -66,10 +67,31 @@ export default async function TimesheetsPage({
 
   const { weekStart, weekEnd } = weekWindowForYmd(searchParams.week, timeZone, weekStartsOn);
 
-  const [sessions, myMember] = await Promise.all([
+  const [sessions, myMember, activeProjects] = await Promise.all([
     getSessionsForReview({ from: weekStart.toISOString(), to: weekEnd.toISOString() }),
     getMyMember(),
+    getProjects({ status: 'active' }),
   ]);
+
+  // [S121 4-B] Names for every project/task the week's segments reference (any
+  // status — a job may have closed since), for the week sheet. A project RLS
+  // hides from this viewer resolves client-side to "Restricted project".
+  const weekProjectIds = [
+    ...new Set(sessions.flatMap((s) => s.segments.map((g) => g.project_id)).filter((id): id is string => id != null)),
+  ];
+  const weekTaskIds = [
+    ...new Set(sessions.flatMap((s) => s.segments.map((g) => g.task_id)).filter((id): id is string => id != null)),
+  ];
+  const [projectRows, taskRows] = await Promise.all([
+    weekProjectIds.length > 0
+      ? supabase.from('projects').select('id, name').in('id', weekProjectIds)
+      : Promise.resolve({ data: [] as { id: string; name: string }[] }),
+    weekTaskIds.length > 0
+      ? supabase.from('tasks').select('id, title').in('id', weekTaskIds)
+      : Promise.resolve({ data: [] as { id: string; title: string }[] }),
+  ]);
+  const projectNames = Object.fromEntries((projectRows.data ?? []).map((p) => [p.id, p.name]));
+  const taskTitles = Object.fromEntries((taskRows.data ?? []).map((t) => [t.id, t.title]));
 
   // ── Roll the week up per member (pure helpers; server-side so the client
   //    gets plain rows) ──
@@ -140,6 +162,9 @@ export default async function TimesheetsPage({
         status: s.status,
         dayKey: dayFmt.format(new Date(s.clock_in)),
         paidHours: perSessionPaid[i],
+        // [S121 4-B] The week sheet shows every segment of every day.
+        segments: s.segments,
+        approverName: s.approver?.display_name ?? null,
       }));
 
       return {
@@ -221,6 +246,9 @@ export default async function TimesheetsPage({
         laborCost={laborCost}
         timeZone={timeZone}
         otThresholdHours={timeSettings.otThresholdHours}
+        projectNames={projectNames}
+        taskTitles={taskTitles}
+        activeProjects={activeProjects.map((p) => ({ id: p.id, name: p.name }))}
       />
     </div>
   );

@@ -11,7 +11,7 @@
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { approveMemberWeek } from '@/lib/services/time-tracking-client';
+import { approveMemberWeek, type TimeSegment } from '@/lib/services/time-tracking-client';
 import { canApproveByRank } from '@framefocus/shared/utils/time-tracking';
 import { ROLE_LABELS, type CompanyRole } from '@framefocus/shared';
 import { StatusBadge, fmtHours, fmtTime, monoValue } from '@/components/time/time-ui';
@@ -25,6 +25,7 @@ import {
   secondaryButtonStyle,
 } from '@/lib/theme';
 import { LiveBoard } from './live-board';
+import { WeekSheet } from './week-sheet';
 
 export interface QueueSessionRow {
   id: string;
@@ -33,6 +34,9 @@ export interface QueueSessionRow {
   status: 'pending' | 'approved' | null;
   dayKey: string; // YYYY-MM-DD in the company timezone
   paidHours: number;
+  /** [S121 4-B] Every live segment of the session, for the week sheet. */
+  segments: TimeSegment[];
+  approverName: string | null;
 }
 
 export interface MemberWeekRow {
@@ -68,6 +72,10 @@ interface TimesheetsClientProps {
   timeZone: string;
   /** companies.ot_threshold_hours [S86] — footer label only; OT math is server-side. */
   otThresholdHours: number;
+  /** [S121 4-B] For the week sheet. */
+  projectNames: Record<string, string>;
+  taskTitles: Record<string, string>;
+  activeProjects: { id: string; name: string }[];
 }
 
 const GRID = '36px 1.6fr 1fr 1fr 1fr 1fr 1.2fr';
@@ -123,10 +131,19 @@ export function TimesheetsClient({
   laborCost,
   timeZone,
   otThresholdHours,
+  projectNames,
+  taskTitles,
+  activeProjects,
 }: TimesheetsClientProps) {
   const router = useRouter();
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  // [S121 4-B] The member whose week sheet is open.
+  const [sheetMember, setSheetMember] = useState<string | null>(null);
+  const sheetRow = rows.find((r) => r.memberId === sheetMember) ?? null;
+  const isAdmin = viewerRole === 'owner' || viewerRole === 'admin';
+  // [S121 4-A] A click inside the row's own controls must stay that control's.
+  const stop = (e: React.SyntheticEvent) => e.stopPropagation();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -307,26 +324,37 @@ export function TimesheetsClient({
           const isExpanded = expanded.has(row.memberId);
           return (
             <div key={row.memberId} style={{ borderBottom: `1px solid ${color.rowDivider}` }}>
+              {/* [S121 4-A, RULED Josh] THE WHOLE ROW opens the day breakdown.
+                  SUPERSEDED [6A-2]: only the name strip (left edge to "Paid
+                  hrs") was clickable. The checkbox, "Approve week" and "Days"
+                  stop the click, so each stays itself. */}
               <div
+                data-testid={`ts-row-${row.memberId}`}
+                onClick={() => setExpanded((s) => toggle(s, row.memberId))}
                 style={{
                   display: 'grid',
                   gridTemplateColumns: GRID,
                   gap: '12px',
                   alignItems: 'center',
                   padding: '13px 20px',
+                  cursor: 'pointer',
                 }}
               >
-                <span>
+                <span onClick={stop}>
                   {canApprove && (
                     <input
                       type="checkbox"
+                      data-testid={`ts-select-${row.memberId}`}
                       checked={selected.has(row.memberId)}
                       onChange={() => setSelected((s) => toggle(s, row.memberId))}
                     />
                   )}
                 </span>
                 <button
-                  onClick={() => setExpanded((s) => toggle(s, row.memberId))}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setExpanded((s) => toggle(s, row.memberId));
+                  }}
                   style={{
                     border: 'none',
                     background: 'none',
@@ -422,9 +450,10 @@ export function TimesheetsClient({
                     <StatusBadge status="pending" />
                   )}
                 </span>
-                <span style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                <span style={{ display: 'flex', gap: '8px', alignItems: 'center' }} onClick={stop}>
                   {canApprove && (
                     <button
+                      data-testid={`ts-approve-week-${row.memberId}`}
                       style={{ ...secondaryButtonStyle, padding: '6px 12px', fontSize: '12px' }}
                       disabled={busy}
                       onClick={() => void approveMembers([row.memberId])}
@@ -432,6 +461,21 @@ export function TimesheetsClient({
                       Approve week
                     </button>
                   )}
+                  <button
+                    data-testid={`ts-details-${row.memberId}`}
+                    onClick={() => setSheetMember(row.memberId)}
+                    style={{
+                      border: 'none',
+                      background: 'none',
+                      color: color.primary,
+                      fontWeight: 600,
+                      fontSize: '12px',
+                      cursor: 'pointer',
+                      padding: '4px 0',
+                    }}
+                  >
+                    Details
+                  </button>
                   <button
                     onClick={() => setExpanded((s) => toggle(s, row.memberId))}
                     style={{
@@ -450,7 +494,7 @@ export function TimesheetsClient({
               </div>
 
               {isExpanded && (
-                <div style={{ backgroundColor: color.tableHeadBg, padding: '4px 20px 10px 68px' }}>
+                <div data-testid={`ts-days-${row.memberId}`} style={{ backgroundColor: color.tableHeadBg, padding: '4px 20px 10px 68px' }}>
                   {row.sessions.map((s) => (
                     <div
                       key={s.id}
@@ -476,12 +520,16 @@ export function TimesheetsClient({
                       <span style={{ flex: 1 }}>
                         <StatusBadge status={s.status} />
                       </span>
-                      <Link
-                        href={`/dashboard/timeclock/timesheets/${s.id}`}
-                        style={{ color: color.primary, fontWeight: 600, textDecoration: 'none' }}
+                      {/* [S121 4-B] Details opens the WEEK SHEET, not a page.
+                          SUPERSEDED: <Link href=".../timesheets/{session}">Detail →</Link>. */}
+                      <button
+                        type="button"
+                        data-testid="ts-day-details"
+                        onClick={() => setSheetMember(row.memberId)}
+                        style={{ border: 'none', background: 'none', color: color.primary, fontWeight: 600, cursor: 'pointer', padding: 0 }}
                       >
-                        Detail →
-                      </Link>
+                        Details
+                      </button>
                     </div>
                   ))}
                 </div>
@@ -490,6 +538,22 @@ export function TimesheetsClient({
           );
         })}
       </div>
+
+      {sheetRow ? (
+        <WeekSheet
+          row={sheetRow}
+          open
+          onClose={() => setSheetMember(null)}
+          isAdmin={isAdmin}
+          canApprove={canApproveByRank(viewerRole, sheetRow.role, sheetRow.memberId === viewerMemberId)}
+          weekStartIso={weekStartIso}
+          weekEndIso={weekEndIso}
+          projectNames={projectNames}
+          taskTitles={taskTitles}
+          activeProjects={activeProjects}
+          timeZone={timeZone}
+        />
+      ) : null}
 
       <p style={{ fontSize: '12px', color: color.faint, margin: '12px 0 0' }}>
         OT is derived from weekly paid hours over the {otThresholdHours}h threshold, never
