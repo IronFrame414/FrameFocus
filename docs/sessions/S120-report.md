@@ -48,6 +48,8 @@ updated as the session goes.
 8. **[ASK-8] 4-A: who may add an estimate recipient?** Options: A) Owner/Admin only (the same
    authority as send); B) anyone who may edit the estimate. **Default: A**, the narrower one, as the
    spec's own unattended default.
+9. **[ASK-9] (added during Part 4)** Should an "Also send to" recipient get the **signing link**, or only a **copy** (the same email and PDF, no link)? Options: A) a copy only; B) the signing link too. **Default: A.** The estimate keeps its one signing link (`invalidateSessionsForEstimate` allows one live link "ever"), and the typed address in particular must get no read path. _Status: default taken and built; Josh has not answered._
+10. **[ASK-10] (added during Part 4)** Part 4 found that "Also send to" contacts were **never emailed** by any route, although they have been saved and shown since S103. The copies now go out. Nothing to decide unless you expected that list to behave differently.
 
 ---
 
@@ -850,6 +852,83 @@ files rows: 0.
 
 **Pre-CI:** `lint-job.sh` on the branch gave `TYPE_EXIT=0 LINT_EXIT=0 TEST_EXIT=0`, **149 files / 2028
 tests**.
+
+### PART 4 — FEATURES (branch `feature/s120-features`, cut from `7242e399`)
+
+⚠️ **The spec's premise was partly false, measured before building.** 4-A ("multiple send-to contacts,
+a join table or equivalent") **already had a store:** `estimates.also_send_to`, a jsonb list of
+`{contact_id, name, email}` snapshots, frozen on send, with a details-page field
+(`also-send-to-field.tsx`, S103 §1.4, "spouse, architect, lender"). **And no route ever sent to
+it.** `git grep also_send_to origin/main -- apps/web` finds it only in the details tab and the client
+service; neither `api/proposals/send` nor `resend` reads it. **Every recipient saved there was silently
+never emailed.** Production has 1 of 16 estimates with a recipient (EST-107 "Test", a **draft, never
+sent**, with its contact in its own company), so nobody has yet missed a proposal.
+
+**Decision: no new join table.** A second store for the same list is the divergence PARITY forbids.
+The existing list is kept as the 4-A store and completed:
+
+| requirement | built |
+| --- | --- |
+| recipients are the caller's company's contacts (`#177` shape) | trigger `enforce_estimate_recipients`: every `also_send_to` `contact_id` must be a live contact of the **estimate's** company. A foreign id and a ghost id get the **same** refusal (42501). |
+| who may add (ASK-8 default: **Owner/Admin**) | the same trigger: a change to `also_send_to` or `also_send_to_email` by any other role is 42501. The UI gates on the same rule: `AlsoSendToField` and the new box are editable for Owner/Admin only. |
+| sending mails every recipient | `lib/services/proposal-copies.ts`, **one helper used by both** `send` and `resend` |
+| one record of the send listing every address | the `estimate_events` `kind='send'` row now carries `payload.recipients = [{email, kind: signer/contact/typed, status}]`. Resend logs each attempt in `email_logs` (there is no `resend` event kind). |
+| 4-B "Also send to" typed address, **ONE** (ASK-2 default) | the new column `estimates.also_send_to_email text`: nullable, **no CHECK** (stop rule 2 does not apply). The trigger normalises it (trim, lower-case, blank → null) and **refuses** anything but one well-formed address (22023). It is never silently dropped, and the UI keeps the value in the box with the error under it. |
+| typed address gets **no read path** | ⚠️ **unattended decision, ASK-9:** every extra recipient, contact or typed, gets a **COPY**: the same email and PDF, **no signing link**. The `{{signing_link}}` variable reads "the signing link, which was sent to <signer>". The estimate keeps its one signing link, held by its contact. |
+| frozen on send | yes: `enforce_estimate_immutability` is an **allowlist**, so the new column is frozen with no change to it (read from the live body, md5 `c05e96b0…`, identical on both projects) |
+
+**Migration** `20262116000000_s120_estimate_recipients.sql`, on rebuild-test: the dry run listed
+exactly that file, the push exited 0, the function md5 is `10c2da16b14b3ca1201cc173ef3c574e`, the
+trigger is `23:O`, and the column is `text`, nullable. Before writing the trigger I checked which live
+functions insert estimates (`clone_estimate`, `create_site_visit`). Neither copies these columns, so the
+trigger breaks neither.
+
+**Live proof** `test/s120-estimate-recipients.live.ts`. It runs the **real send route in-process**, with
+only `sendEmail` and the OpenAI language check mocked. `sendEmail` **renders** each email to HTML, and
+"has a signing link" is read off that HTML. Every write is made without returning rows and judged by the
+service role.
+- **AFTER: 7/7.**
+  - The Owner sets one contact and `"  Josh+S120R-Typed@Example.com "`, which is stored as
+    `josh+s120r-typed@example.com`.
+  - A foreign contact and a ghost id both get 42501 with the same message, and the list is unchanged.
+  - A PM who **can** edit this draft (control: `internal_notes` saved) is refused 42501 on both
+    fields.
+  - `not-an-email`, `a@example.com, b@example.com`, `a@b` and `a b@example.com` are all refused with
+    22023.
+  - The send returns 200, with the signer's email **with** the link, the contact copy **without** it,
+    and the typed copy **without** it. There are 3 `email_logs` rows and **one** send event:
+    `contact:…:sent, signer:…:sent, typed:…:sent`.
+  - For the typed address: signing sessions 0, contacts 0, profiles 0, invitations 0. The copy body is
+    fully substituted and contains no `/sign/`.
+  - After the send, a change to the typed address is refused.
+- **BEFORE: 7/7 red.** This is the pre-fix state, reconstructed: `main`'s routes (the same test run
+  from the main tree at `7242e399`) with the new trigger **disabled** (read back `D`, then re-enabled
+  and read back `O`). A foreign contact was **accepted**, a PM **emptied the list and set its own
+  address**, and **the send emailed only the signer**, which is the defect itself.
+- ⚠️ **Two test bugs caught before trusting a green.** (1) `react.props.signingUrl` read the `<Html>`
+  root's props, which are always undefined, so the email is now rendered. (2) The body used `{var}`
+  where the templates use `{{var}}`, so the "no /sign/ link" check passed on an unsubstituted body. It
+  now also asserts that substitution happened.
+- ⚠️ **Ordering, stated:** the migration was applied to rebuild-test **before** the BEFORE run, so the
+  BEFORE state was rebuilt deliberately (main code + trigger off) instead of being observed first.
+
+**UI e2e** `e2e/desktop-also-send-to-s120.spec.ts`: **2/2** (with `desktop-estimate-send` and
+`desktop-payload`, **13/13**).
+- **Owner:** `not-an-email` shows "…one valid email address", the box keeps the value, and the record
+  is null. `  Lender@Example.COM ` is saved as `lender@example.com` (service role).
+- **PM on its own draft:** the address is shown read-only, and there is no input.
+
+**Sabotage:**
+- **Trigger disabled** → the Owner test went red, because the malformed value was accepted. Restored:
+  `O`.
+- **UI gate** changed to `canEdit` only → the PM test went red, because the PM got the box. ⚠️ A
+  **first attempt did not compile** (TypeScript rejected an impossible comparison) and its red came
+  from whatever build was left behind, so it is **void**. It was redone with a sabotage that compiles
+  (build exit 0), and that run was red for the stated reason. Restored `cmp`-identical, rebuilt, and
+  the re-run was green.
+
+**Fingerprint** (rebuild-test, ledger `20262116000000`): policies 491, triggers **309** (+1),
+functions **352** (+1), constraints 1077. **Pre-CI** `lint-job`: 0/0/0, 149 / 2026.
 
 ### PART 3 — SPEED: work done while Part 1's CI ran (not yet on a branch; lands on `feature/s120-speed`)
 
