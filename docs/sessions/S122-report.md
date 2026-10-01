@@ -1804,3 +1804,17 @@ outright: 6-A's "only if the box was ticked"**. The live test ran only with the 
 - **Base:** `git fetch --prune` exit 0; `origin/main` = `a955dac5` and is an ancestor of HEAD (exit 0). `main`'s run after the Part 5 merge,
   **`36909234235`**: **completed, success**. 0 runs in progress or queued, so this branch run has rebuild-test to itself.
 - **CI requested** by this commit (no `[skip ci]`).
+
+### R2.10 — Part 7 constraint, received 2026-10-01 during Part 6's CI (before any Part 7 work)
+
+Context: `client_schedule(p_project_id)` (`20261019000000_m9_client_read_arms.sql:231-260`, SECURITY DEFINER SQL) **already** returns task-level
+`id, project_id, phase_name, title, start_date, due_date, status` to a linked client on **any** project, Critical Path on or off.
+
+- **Extending it is suspect:** any field added to its shape reaches every client on every project the moment it lands, including projects
+  where Critical Path is OFF. That is stop rule 8's failure arriving through the back door, and a test that looks only at a Critical Path
+  project would not see it.
+- ⚠️ **REQUIRED CONTROL, written BEFORE touching any client read path:** a linked client on a project with Critical Path **OFF** sees exactly
+  what they see today. The test must state the same shape and the same fields, with nothing added. It is a regression test with its own sabotage
+  (a field added to the CP-off shape → red).
+- **Decision rule:** if extending `client_schedule` cannot satisfy that control cleanly, Part 7 uses a **separate narrowed read path**
+  (plan row 10's `client_critical_path(project)`), not an extension.
