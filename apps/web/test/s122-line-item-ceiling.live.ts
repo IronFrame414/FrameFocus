@@ -45,6 +45,7 @@ const estimate: Record<'fixed' | 'cp', string> = { fixed: '', cp: '' };
 const line: Record<'big' | 'small' | 'cp', string> = { big: '', small: '', cp: '' };
 const invoiceIds: string[] = [];
 let pm: SupabaseClient;
+let pmUserId = '';
 let owner: SupabaseClient;
 
 const must = (label: string, error: { message: string } | null) => {
@@ -110,15 +111,23 @@ async function bill(
   ).error;
 }
 
-/** Live lines on a line item, counted with the service role. */
+/** Live lines on a line item, counted with the service role. Two plain reads
+ *  that THROW on error — an ignored error must never read as "0 lines". */
 async function billedOn(which: 'big' | 'small' | 'cp') {
-  const { data } = await admin
+  const { data: lines, error } = await admin
     .from('invoice_lines')
-    .select('billed_amount, invoices!inner(is_deleted, status)')
-    .eq('source_estimate_line_item_id', line[which])
-    .eq('invoices.is_deleted', false)
-    .neq('invoices.status', 'voided');
-  const rows = (data ?? []) as { billed_amount: number }[];
+    .select('billed_amount, invoice_id')
+    .eq('source_estimate_line_item_id', line[which]);
+  if (error) throw new Error(`billedOn lines: ${error.message}`);
+  const ids = [...new Set((lines ?? []).map((l) => l.invoice_id as string))];
+  const { data: invs, error: iErr } = ids.length
+    ? await admin.from('invoices').select('id, is_deleted, status').in('id', ids)
+    : { data: [], error: null };
+  if (iErr) throw new Error(`billedOn invoices: ${iErr.message}`);
+  const live = new Set(
+    (invs ?? []).filter((i) => !i.is_deleted && i.status !== 'voided').map((i) => i.id as string)
+  );
+  const rows = (lines ?? []).filter((l) => live.has(l.invoice_id as string));
   return {
     n: rows.length,
     total: Math.round(rows.reduce((s, r) => s + Number(r.billed_amount), 0) * 100) / 100,
@@ -141,13 +150,26 @@ async function seedEstimate(
       estimate_number: `EST-${String(seq).padStart(4, '0')}`,
       status: 'accepted',
       contract_type: contract,
-      created_by_role: 'owner',
+      created_by_role: which === 'fixed' ? 'project_manager' : 'owner',
+      ...(which === 'fixed' ? { created_by: pmUserId } : {}),
       discount_total: 0,
     })
     .select('id')
     .single();
   must(`estimate ${which}`, error);
   estimate[which] = e!.id as string;
+  // A line item's category must belong to its own estimate (as s97ct builds it).
+  const { data: cat, error: catErr } = await admin
+    .from('estimate_categories')
+    .insert({
+      company_id: companyId,
+      estimate_id: estimate[which],
+      name: `${MARKER} ${which}`,
+      sort_order: 0,
+    })
+    .select('id')
+    .single();
+  must(`category ${which}`, catErr);
   let order = 0;
   for (const [key, price] of items) {
     const { data: li, error: liErr } = await admin
@@ -156,6 +178,7 @@ async function seedEstimate(
         company_id: companyId,
         estimate_id: estimate[which],
         name: `${MARKER} ${key}`,
+        category_id: cat!.id,
         total_price: price,
         sort_order: order++,
       })
@@ -202,6 +225,14 @@ beforeAll(async () => {
   companyId = prof!.company_id as string;
   ownerMember = await memberOf(OWNER);
   pmMember = await memberOf(PM);
+  owner = await sessionFor(OWNER);
+  pm = await sessionFor(PM);
+  // The realistic Q7 case: the PM WROTE the estimate (estimates_select_authenticated
+  // admits a PM on estimates they created), so the PM's picker shows its lines —
+  // but not the invoices other people authored on it. Set at insert: an
+  // accepted estimate is immutable afterwards.
+  const { data: pmUser } = await pm.auth.getUser();
+  pmUserId = pmUser.user!.id;
   const contact = await upsertContact({
     company_id: companyId,
     contact_type: 'client',
@@ -235,18 +266,14 @@ beforeAll(async () => {
   must(
     'pm assignment',
     (
-      await admin
-        .from('project_assignments')
-        .insert({
-          company_id: companyId,
-          project_id: project.fixed,
-          member_id: pmMember,
-          role_on_project: 'project_manager',
-        })
+      await admin.from('project_assignments').insert({
+        company_id: companyId,
+        project_id: project.fixed,
+        member_id: pmMember,
+        role_on_project: 'project_manager',
+      })
     ).error
   );
-  owner = await sessionFor(OWNER);
-  pm = await sessionFor(PM);
 }, 240_000);
 
 afterAll(async () => {
@@ -257,6 +284,7 @@ afterAll(async () => {
     await admin.from('project_financials').delete().eq('project_id', project[which]);
     await deleteProjects(admin, [project[which]]);
     await admin.from('estimate_line_items').delete().eq('estimate_id', estimate[which]);
+    await admin.from('estimate_categories').delete().eq('estimate_id', estimate[which]);
     await admin.from('estimates').delete().eq('id', estimate[which]);
   }
   const { count } = await admin
