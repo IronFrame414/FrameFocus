@@ -20,6 +20,7 @@
 import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ModalSheet } from '@/components/sheet/modal-sheet';
+import { HoursChangedNotice } from '@/components/time/hours-changed-notice';
 import {
   addSegment,
   approveMemberWeek,
@@ -526,36 +527,19 @@ export function WeekSheet({
           </div>
         ) : null}
 
-        {/* ASK-11 — the hours changed on an approved day: say so, and offer Approve. */}
+        {/* ASK-11 — the hours changed on an approved day: say so, and offer Approve.
+            [S122 0-B-4] The notice is a shared component so the day page's
+            clock correction shows the same one. SUPERSEDED: this block's inline
+            alertdialog markup (moved verbatim to components/time/hours-changed-notice). */}
         {reopened ? (
-          <div
-            role="alertdialog"
-            aria-labelledby="ts-reopened-title"
-            data-testid="ts-reopened"
-            style={{
-              position: 'sticky',
-              bottom: 0,
-              marginTop: '10px',
-              border: '1px solid #f3c77e',
-              backgroundColor: '#fff8eb',
-              borderRadius: '10px',
-              padding: '12px',
-            }}
-          >
-            <p id="ts-reopened-title" style={{ margin: '0 0 8px', fontSize: '14px', fontWeight: 700, color: '#8a5a12' }}>
-              Hours changed — {dayLabel(reopened.dayKey)} is back to pending and must be approved again.
-            </p>
-            <div style={{ display: 'flex', gap: '8px' }}>
-              {canApprove ? (
-                <button type="button" data-testid="ts-reopened-approve" style={primaryButtonStyle} disabled={busy} onClick={() => void approveDay(reopened.id)}>
-                  Approve
-                </button>
-              ) : null}
-              <button type="button" data-testid="ts-reopened-close" style={secondaryButtonStyle} onClick={() => setReopened(null)}>
-                {canApprove ? 'Later' : 'OK'}
-              </button>
-            </div>
-          </div>
+          <HoursChangedNotice
+            dayText={dayLabel(reopened.dayKey)}
+            canApprove={canApprove}
+            busy={busy}
+            onApprove={() => void approveDay(reopened.id)}
+            onClose={() => setReopened(null)}
+            style={{ position: 'sticky', bottom: 0, marginTop: '10px' }}
+          />
         ) : null}
       </div>
     </ModalSheet>
