@@ -4,6 +4,7 @@ import type { Task, TaskDependency } from '@/lib/services/tasks-shared';
 import type { PhaseRollup } from '@/lib/services/tasks-shared';
 import type { CalendarEvent } from '@/lib/services/schedule';
 import { assigneeColor } from './member-color';
+import { pinLabel } from './critical-path-fields';
 
 // [S121 5-B, RULED Josh ASK-2] ONE BAR PER TASK; the people are ON the bar.
 // The Gantt now takes GROUPS of ITEMS so the project panel (phases +
@@ -20,6 +21,8 @@ export interface GanttItem {
   /** Every person on the task, comma-joined. */
   names: string;
   done: boolean;
+  /** [S122 Q19] A start anchor's label ("Pinned · not before Tue 6 Oct"), or null. */
+  pinned?: string | null;
 }
 
 export interface GanttGroup {
@@ -48,6 +51,10 @@ function itemFromTask(task: Task): GanttItem {
     color: assigneeColor(task.assignees[0]),
     names: task.assignees.map((a) => a.display_name).join(', '),
     done: task.status === 'complete',
+    pinned:
+      task.start_constraint && task.constraint_date
+        ? pinLabel(task.start_constraint as 'fixed' | 'not_before', task.constraint_date)
+        : null,
   };
 }
 
@@ -331,7 +338,7 @@ export function Gantt({ groups, dependencies = [], onSelect }: GanttProps) {
                   key={task.id}
                   onClick={() => onSelect?.(task.id)}
                   data-testid="gantt-bar"
-                  title={`${task.title}${names ? ` — ${names}` : ''}`}
+                  title={`${task.title}${names ? ` — ${names}` : ''}${task.pinned ? ` — ${task.pinned}` : ''}`}
                   style={{
                     position: 'absolute',
                     top: i * ROW_HEIGHT + 6,
@@ -352,6 +359,24 @@ export function Gantt({ groups, dependencies = [], onSelect }: GanttProps) {
                   }}
                 >
                   {done ? '✓ ' : ''}
+                  {/* [S122 Q19] A pin is marked ON the bar, not only in the sheet. */}
+                  {task.pinned && (
+                    <span
+                      data-testid={`gantt-pinned-${task.id}`}
+                      style={{
+                        marginRight: 4,
+                        padding: '0 3px',
+                        borderRadius: 2,
+                        backgroundColor: '#fff',
+                        color: '#2563eb',
+                        fontSize: '9px',
+                        fontWeight: 700,
+                        textTransform: 'uppercase',
+                      }}
+                    >
+                      pinned
+                    </span>
+                  )}
                   {task.title}
                   {names ? ` · ${names}` : ''}
                 </button>

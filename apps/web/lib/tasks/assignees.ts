@@ -13,16 +13,19 @@ export interface TaskAssignee {
   member_type: string | null;
   /** subcontractors.trade_type for a sub/vendor (null for crew, or unreadable). */
   trade: string | null;
+  /** [S122 ruling 11, Q13-A] Notify this person when this task's schedule changes. Off by default. */
+  notify_changes: boolean;
 }
 
 /** The embed every task read uses (PostgREST select fragment). */
 export const TASK_ASSIGNEES_EMBED =
-  'assignees:task_assignees(member_id, is_deleted, created_at, member:company_members(id, display_name, schedule_color, member_type, sub:subcontractors!subcontractors_member_id_fkey(trade_type)))';
+  'assignees:task_assignees(member_id, is_deleted, created_at, notify_changes, member:company_members(id, display_name, schedule_color, member_type, sub:subcontractors!subcontractors_member_id_fkey(trade_type)))';
 
 type RawAssignee = {
   member_id: string;
   is_deleted: boolean;
   created_at: string;
+  notify_changes?: boolean | null;
   member: {
     id: string;
     display_name: string;
@@ -46,6 +49,7 @@ export function liveAssignees(raw: unknown): TaskAssignee[] {
         schedule_color: r.member!.schedule_color,
         member_type: r.member!.member_type,
         trade: sub?.trade_type ?? null,
+        notify_changes: r.notify_changes === true,
       };
     });
 }

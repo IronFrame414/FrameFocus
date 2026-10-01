@@ -7313,6 +7313,8 @@ export type Database = {
           notify_client: boolean
           project_id: string
           projected_finish: string | null
+          recompute_cause_kind: string | null
+          recompute_cause_task_id: string | null
           updated_at: string
           updated_by: string | null
         }
@@ -7331,6 +7333,8 @@ export type Database = {
           notify_client?: boolean
           project_id: string
           projected_finish?: string | null
+          recompute_cause_kind?: string | null
+          recompute_cause_task_id?: string | null
           updated_at?: string
           updated_by?: string | null
         }
@@ -7349,6 +7353,8 @@ export type Database = {
           notify_client?: boolean
           project_id?: string
           projected_finish?: string | null
+          recompute_cause_kind?: string | null
+          recompute_cause_task_id?: string | null
           updated_at?: string
           updated_by?: string | null
         }
@@ -7365,6 +7371,13 @@ export type Database = {
             columns: ["project_id"]
             isOneToOne: false
             referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_schedule_settings_recompute_cause_task_id_fkey"
+            columns: ["recompute_cause_task_id"]
+            isOneToOne: false
+            referencedRelation: "tasks"
             referencedColumns: ["id"]
           },
         ]
@@ -10512,6 +10525,7 @@ export type Database = {
           id: string
           is_deleted: boolean
           member_id: string
+          notify_changes: boolean
           task_id: string
           updated_at: string
           updated_by: string | null
@@ -10524,6 +10538,7 @@ export type Database = {
           id?: string
           is_deleted?: boolean
           member_id: string
+          notify_changes?: boolean
           task_id: string
           updated_at?: string
           updated_by?: string | null
@@ -10536,6 +10551,7 @@ export type Database = {
           id?: string
           is_deleted?: boolean
           member_id?: string
+          notify_changes?: boolean
           task_id?: string
           updated_at?: string
           updated_by?: string | null
@@ -11621,7 +11637,11 @@ export type Database = {
         Returns: undefined
       }
       mark_schedule_dirty: {
-        Args: { p_project_id: string }
+        Args: {
+          p_cause_kind: string
+          p_cause_task_id: string
+          p_project_id: string
+        }
         Returns: undefined
       }
       material_signout_caller_name: { Args: never; Returns: string }

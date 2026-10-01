@@ -1304,3 +1304,157 @@ end **changes the task's duration**. "This moves the finish by N days" alone is 
 two each drag performed.
 
 `task_schedule_edits` moving from Part 3 to Part 5: **accepted.**
+
+### R.12 — Part 3 (the line sheet), build log — branch `feature/s122-p3-line-sheet`, stacked on Part 2
+
+**Scope split with Part 4, stated:** Part 3 makes the line sheet (the existing `task-form.tsx`, one form) Critical-Path-aware,
+and adds the save route, the recompute with write-through and history, the read-check, the cron, and migration `…27`. The
+**drag translations of Q19** (calendar drag, schedule-sheet dates → `not_before` / duration) ship in **Part 4**, with the Gantt
+drag-end and the **switch that turns Critical Path on**. No user can turn CP on before Part 4, so no production drag can
+snap back in between.
+
+- **Migration `20262127000000_s122_cp_notify_cause`** (written; **not yet applied anywhere**, because rebuild-test is held by
+  CI, see 1.7):
+  - `task_assignees.notify_changes boolean NOT NULL DEFAULT false` (Q13-A; created in the same migration, so Q8-A applies).
+  - **The mark carries its cause**: `project_schedule_settings.recompute_cause_kind` + `recompute_cause_task_id`. The guard
+    lets a user's transaction write them **only** when it is the one that sets the mark; the engine clears them.
+    `mark_schedule_dirty(uuid)` is **dropped** and replaced by `(uuid, text, uuid)`, not overloaded (the S180 trap).
+    ⚠️ **First cause wins** while a project stays marked: the history row names the change that **first** moved it since the
+    last computation.
+  - `projects_mark_schedule_dirty`: AFTER UPDATE OF `start_date`, only when it changes (**Q9 item 10**).
+  - `project_finish_history_cause_check` is widened with `project_start` and `inspection` (**0 rows** on production, R.7).
+- **Pure**: `packages/shared/utils/critical-path-writes.ts` holds `planWriteThrough` (what is written: scheduled → both
+  dates; in progress → due only; fixed span, complete, needs-duration → nothing; **a cycle → nothing at all**),
+  `previewEdit` (the engine run before and after), `describeEdit` and `editSentence` (**name the edit**: DURATION, START
+  ANCHOR / release, DAYS LEFT, status, LINK, NEW TASK), and `consequenceSentence`.
+- **Server**: `lib/critical-path/load.ts` is one loader for the recompute (service role) and the page (the caller); any read
+  error refuses the load, because a partial graph gives wrong dates. `lib/critical-path/recompute.ts`
+  **clears the mark FIRST**, then reads, computes and writes. A change landing mid-run re-marks the project; on any failure
+  the mark is put back. `ensureScheduleFresh` is the read-check.
+- **Route** `POST /api/projects/[id]/critical-path/tasks/[taskId]`: Zod (`validation/critical-path.ts`; `days_left_as_of`
+  is never accepted from the client, the server stamps the company's today). It writes **as the caller** (RLS + the Q12
+  guard decide), and recomputes only after an applied write. 42501 → 403 with the database's sentence; every error logs its
+  cause.
+- **Cron** `/api/cron/critical-path-recompute`, **hourly** (`20 * * * *`), not daily: "today" turns over at a different UTC
+  hour in each company's time zone. A fresh project costs one settings read.
+- **Page**: the read-check runs **before** the dates are read, only after the project is confirmed visible **as the caller**.
+  The engine input goes to staff only (crew and subs see a subset of tasks under RLS, and a preview on part of the graph would
+  state wrong dates).
+- **UI** (`components/schedule/critical-path-fields.tsx` + `task-form.tsx`): duration, anchor ("After its links only" /
+  "not before…" / "On a fixed date…"), days left with its as-of stamp and the percent **beside it, "shown for reference, not
+  used for dates"** (never pre-filled), a per-assignee **"notify of changes"** box (a sibling of the person's label, never
+  nested in it), and the preview naming each edit and then the consequence. **A pin is marked in three places, in Part
+  0-C's words:** the sheet (`cp-pinned`, with **"Release — let the schedule move it freely"**, one action that saves at once),
+  the task list row (`task-pinned-*`), and **the Gantt bar** (`gantt-pinned-*`). `task-form.tsx` is not Prettier-formatted on
+  `main`, so it was edited by hand with no formatter.
+- **Unit `s122-cp-writes.test.ts`: 18/18.** Sabotages:
+  - (g) the write-through also writes an in-progress task's start → ⚠️ **first GREEN, so the test was vacuous**: a weekday
+    actual start equals the engine's early start, so the wrong write changed nothing. The test now starts the task on a
+    **Saturday** (early start maps to Mon05, asserted, "the trap is armed"). Re-run → **1 ✘**.
+  - (h) `describeEdit` drops the anchor part → **3 ✘** (anchor, release, two-edits).
+  - Each restored, `cmp` 0, 18/18.
+
+#### Part 2 CI requested; `main` run after Part 1's merge
+
+- **`main`'s run `36858654211`** on `d45a2131` (Part 1's merge): **green**, e2e **679 passed, 24 skipped, 1 flaky**, unit
+  **162 / 2,208**.
+- Then **0** in progress and **0** queued, so **Part 2 CI `36862938907`** was requested on `e4537e93` (an empty commit; base `d45a2131` =
+  `origin/main`). `feature/s122-p3-line-sheet` is rebased onto it. **Migration `…27` is NOT applied to rebuild-test while that run holds
+  it** (1.7).
+
+### R.13 — Part 2 MERGED → `main` `6c91b9c1`
+
+- CI **`36862938907`** on `e4537e93`: **green**, e2e **680 passed, 24 skipped, 0 flaky, 0 failed** (37.4 m); unit **163 files / 2,237 tests**,
+  with the engine file in the log.
+- S180: (1) the tested head **is** the merged head (`e4537e93`), base `d45a2131` = `origin/main` re-fetched; (2) the numbers above,
+  29/29, and sabotages (a)–(c), (e) and (f); (3) **no migration**: `git diff --name-only origin/main e4537e93` →
+  `apps/web/test/s122-critical-path-engine.test.ts`, `docs/sessions/S122-report.md`, `packages/shared/utils/critical-path.ts`.
+- Merge commit `6c91b9c1`; `HEAD^{tree}` `29927c50…` = `e4537e93^{tree}`. Pushed. **Part 2 is on `main` and needs no production
+  section** (pure TypeScript, no migration).
+- `main`'s merge run follows; `feature/s122-p3-line-sheet` is rebased onto `6c91b9c1`. Migration `…27` waits until that run finishes.
+
+#### Part 3 on rebuild-test — migration `…27`, live proofs, DB sabotages
+
+- `main`'s run **`36867822219`** on `6c91b9c1` (Part 2's merge): **green**, e2e **680 passed**, unit 163 / 2,237. Then **0** in progress or queued.
+- **rebuild-test:** the dry run listed **exactly** `20262127000000_s122_cp_notify_cause.sql`; applied. Types regenerated: **+21 / −1**, exactly
+  `recompute_cause_kind`/`_task_id` (+FK), `task_assignees.notify_changes`, and `mark_schedule_dirty`'s new 3-argument signature. Type-check
+  **0** (0/5 cached).
+- **Live `s122-cp-recompute.live.ts`: 21/21**, then 21/21 again after the sabotages:
+  - WRITE-THROUGH: A Mon05–Tue06, B Wed07–Fri09, finish Fri09, **2** tasks written, **1** history row (`enabled`). A second run writes **0**
+    and logs nothing. The duration-less tasks keep their typed dates and a NULL duration (stop rule 10).
+  - CAUSE: task (naming the task), dependency (naming its successor), weather, inspection, **project_start** (control: a rename **landed**
+    and marked nothing), holiday, calendar, enabled (control: the notify-client switch marks nothing). **First cause wins.** A user can
+    neither overwrite the cause nor clear the mark (the same UPDATE flips `notify_client`, proving it landed). The service role marks
+    nothing.
+  - HISTORY on Q, every date hand-worked: weather Tue06 → finish 09 → **12** (`weather`); project start → Mon12 → **16** (`project_start`);
+    the same day again → `fresh`; read a week later → **23** (`time`); history = `enabled, weather, project_start, time` (**4** rows).
+  - NOTIFY: a new assignee row reads **false**; a crew member's write leaves it false (service-role read); the Owner's lands.
+- **Part 1's live file re-run after `…27`** (S157: its guard and mark functions were replaced): **40/40**.
+- **Fixture faults found and fixed (not code):** the CAUSE control's rename logs a `project_name_history` row, which pins the project, so
+  the first run's teardown failed (**after** 21/21). The second run then went **21 skipped**, because a crashed run's dependencies pinned
+  its tasks; I'm not counting that run. **One `purge()` now deletes children first, in setup and teardown alike.**
+- **DB sabotages** (each restored, read back):
+
+  | # | sabotage | ✘ | read back |
+  | --- | --- | --- | --- |
+  | (i) | `projects_mark_schedule_dirty` disabled | **4**: item 10, the project_start history step, and the two after it that depend on it | `O` |
+  | (ii) | `project_schedule_settings_guard` disabled | **3**: the enabled cause, first-cause-wins (a knock-on: CP left off), cannot-overwrite-or-clear | `O` |
+  | (iii) | `notify_changes` DEFAULT `true` | **1**: NOTIFY | `false` |
+
+  Clean re-run after all three: **21/21**.
+
+#### Part 3 — UI proofs (production build, rebuild-test) and pre-CI
+
+- `next build` exit **0** each time; `next start` the sole listener on :3000 (PID read with `ss`, stopped by PID, never `pkill`).
+- **e2e `desktop-critical-path-sheet-s122.spec.ts`**, with A(2) → B(3) from Mon 4 Jan 2027:
+  1. **Read-check:** the tasks were seeded undated, and the page showed `2027-01-06 → 2027-01-08` for B, as the DB had it.
+  2. A **duration** edit is named *"Changes the DURATION: 3 working days → 5 working days."* with *"This moves the projected finish from Fri
+     8 Jan to Tue 12 Jan (2 working days later)."* Nothing was written while editing (duration still 3); Save gave due 12 Jan.
+  3. A **pin** is named *"Sets a START ANCHOR: pinned: not before Mon 11 Jan."* (12 → 15 Jan, 3 later). Saved, it shows on the list row
+     (`Pinned · not before Mon 11 Jan`; A shows none) **and on the Gantt bar** (B yes, A no).
+  4. **Release**: one click; B goes back to Jan 6–12 and the list marker is gone.
+  5. History = enabled → 8, task → 12, task → 15, task → 12 (**4** rows, each naming B).
+- ⚠️ **A real defect the e2e caught, fixed in the product, not the test.** Reopening a task right after a save previewed against the
+  **click-time** copy of the task: the preview read *"Tue 12 Jan → Wed 13 Jan (1 working day later)"* for a change that moves it to
+  Fri 15 Jan, because B's old 3-day duration was still in the sheet's state. **Fix attempt 1, keying the sheet on `updated_at`, was REJECTED
+  by the next run:** the refresh landed mid-edit, the sheet remounted, and the anchor the user had typed was wiped. **Fix kept:** the save's
+  refresh runs in a transition, and **the task rows are disabled until it lands**; the sheet always reads the task from the current props.
+- A **test race** fixed (not product): the route writes the pin, then recomputes, and the poll on `start_constraint` read before the
+  recompute. It now polls the **recomputed date**.
+- **Final: 1 passed, 0 retries.** **UI sabotage:** the Gantt pin marker removed → rebuilt → **✘** (`gantt-pinned-<B>` not found, with
+  retry); restored, `cmp` 0, rebuilt. **Regression:** this spec + `desktop-schedule-s121` + `m-schedule-s121` → **12 passed**, 0 flaky.
+- **S157:** `test/email-warming.test.ts` pins the cron count. It went red at **15 → 16** on the new cron, so it was updated **in place**
+  (superseded title and `toHaveLength(15)` quoted), and the new cron gets its own pin (path + `20 * * * *`).
+- **Pre-CI:** type-check exit **0** (0/5 cached); lint exit **0** (warnings only, none in Part 3's files); unit exit **0**, **164 files / 2,256
+  tests** (2,237 + 18 + 1), 0 cached.
+
+#### Part 3 CI and PRODUCTION section 4: `20262127000000_s122_cp_notify_cause`
+
+- **CI `36876398232`** on `168ce164` (base `6c91b9c1` = `origin/main`; 0 runs in progress or queued at request): **green**, e2e **681 passed,
+  24 skipped, 0 flaky, 0 failed** (35.3 m), with `desktop-critical-path-sheet-s122` in the log; unit **164 / 2,256**.
+- **Expected values** (rebuild-test, captured before; the three function bodies proven equal to the file's, python between dollar
+  quotes: guard `4a1e6e10…`, `mark_schedule_dirty` `65936b7e…`, `_from_row` `5ec45279…`).
+- **One-file workdir** `wd4` (all **290**; m27 the last; `cmp` 0), linked to production; checkout read back `nmyphyhmfttxkdoposvf` throughout;
+  `wd4` deleted after.
+- **Pre-check, PRODUCTION:** ledger `20262126000000`; `notify_changes` **0**; cause columns **0**; `task_assignees` **6** (all live). These
+  receive the new column's default; the column is created in this migration (Q8-A). `project_finish_history` **0** rows (the widened
+  CHECK); `project_schedule_settings` **0** rows; projects trigger **0**; `mark_schedule_dirty(p_project_id uuid)` (the old signature).
+- **Dry run:** *"• 20262127000000_s122_cp_notify_cause.sql"*, **exactly one file**. **Push:** exit 0.
+- **Verification:** the same read-only file run on both, then `diff`. **The only differing line is live `task_assignees`: rebuild-test 5,
+  PRODUCTION 6, and 6 is production's own pre-check value.**
+
+| object | expected | PRODUCTION | verdict |
+| --- | --- | --- | --- |
+| ledger ≥ 2126 | `2126, 2127` | identical | MATCH |
+| `task_assignees.notify_changes` | `boolean : NOT NULL : default false` | identical | MATCH |
+| cause columns | `recompute_cause_kind text`, `recompute_cause_task_id uuid`, nullable | identical | MATCH |
+| cause CHECK + FK md5 | `abd986db…` | identical | MATCH |
+| history cause CHECK | `… 'enabled', 'project_start', 'inspection'` | identical | MATCH |
+| guard / `mark_schedule_dirty(uuid,text,uuid)` / `_from_row` md5, secdef, EXECUTE | `4a1e6e10` f/auth t; `65936b7e` t/auth f; `5ec45279` t/auth f; anon f on all | identical | MATCH ×3 |
+| `mark_schedule_dirty` overloads | **1** (the old `(uuid)` is gone) | 1 | MATCH |
+| `projects_mark_schedule_dirty` | `O`, def md5 `ca24bc92…` | identical | MATCH |
+| notify true among live assignees | 0 (of 6) | 0 of 6 | MATCH |
+| settings / history rows | 0 / 0 | 0 / 0 | MATCH |
+
+**Section 4: MATCH ×12.** No production project has Critical Path on, so the sheet's CP mode and the recompute reach nobody until Part 4's
+switch exists.
