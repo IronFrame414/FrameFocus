@@ -50,5 +50,6 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
     parsed.data.note ?? null
   );
   if (!r.ok) return json(r.status, r.error, r.cause);
-  return NextResponse.json({ ok: true });
+  // `untold` [S122 Part 6]: an approval applies the change, so the approver is shown who could not be told.
+  return NextResponse.json({ ok: true, untold: r.untold });
 }

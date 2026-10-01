@@ -21,8 +21,14 @@ import { companyToday } from '@framefocus/shared/utils/dates';
 import { applyHeldChanges, editSentence, previewEdit } from '@framefocus/shared/utils/critical-path-writes';
 import { recomputeProject, type CpCause, type RecomputeOutcome } from './recompute';
 import { loadCriticalPathData } from './load';
+import { untoldFrom, type Untold } from './notify-text';
 
 export type CpSaveError = { ok: false; status: number; error: string; cause: string };
+
+/** [S122 Part 6] Who chose to be told and could not be: every route that applies a change returns it. */
+export function untoldOf(recompute: RecomputeOutcome | null): Untold {
+  return untoldFrom(recompute?.status === 'computed' ? recompute.notified : null);
+}
 
 /** The task and its project's switch, as the CALLER sees them. */
 export async function readCriticalPathTask(

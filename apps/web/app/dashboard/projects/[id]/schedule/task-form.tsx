@@ -20,6 +20,7 @@ import {
   type CriticalPathFieldValues,
 } from '@/components/schedule/critical-path-fields';
 import { saveCriticalPathTask } from '@/lib/critical-path/save-client';
+import { anyUntold, untoldNotice } from '@/lib/critical-path/notify-text';
 
 interface TaskFormProps {
   projectId: string;
@@ -161,6 +162,8 @@ export function TaskForm({
     setBusy(true);
     setError(null);
     const r = await saveCriticalPathTask(projectId, editing.id, { start_constraint: null, constraint_date: null });
+    // [S122 Part 6] A release recomputes and notifies like any save: the saver is told who could not be.
+    if (r.ok && anyUntold(r.untold)) await alert(untoldNotice(r.untold));
     if (r.ok) onDone();
     else {
       setError(r.error);
@@ -299,13 +302,10 @@ export function TaskForm({
         ? { assignees: assigneeIds.map((id) => ({ member_id: id, notify_changes: notify[id] ?? false })) }
         : {}),
     });
-    if (result.ok && result.unreachable.length > 0) {
+    if (result.ok && anyUntold(result.untold)) {
       // [S122 Part 6, ruling 11] Never silently dropped: said to the saver now
-      // (and left in their notifications).
-      await alert({
-        title: 'Saved — but not everyone could be told',
-        message: `No login and no email on file: ${result.unreachable.join(', ')}.`,
-      });
+      // (and left in their notifications). The same notice every apply path shows.
+      await alert(untoldNotice(result.untold));
     }
     if (result.ok) onDone();
     else {

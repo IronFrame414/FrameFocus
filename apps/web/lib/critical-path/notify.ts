@@ -10,6 +10,8 @@ import {
   assigneeTitle,
   clientFinishEmail,
   unreachableReport,
+  untoldFrom,
+  untoldList,
   type ChangedTaskLine,
 } from './notify-text';
 
@@ -210,7 +212,7 @@ export async function notifyScheduleChange(
   }
 
   // ── The saver is told who could not be reached (never silently dropped) ──
-  const missing = [...out.unreachable, ...(out.clientUnreachable ? ['the client (no email on file)'] : [])];
+  const missing = untoldList(untoldFrom(out));
   if (missing.length > 0 && p.savedByMemberId) {
     const saver = await resolveMemberReachability(admin, p.savedByMemberId);
     if (saver.state === 'profile') {
