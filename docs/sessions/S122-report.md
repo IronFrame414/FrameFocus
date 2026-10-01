@@ -1630,3 +1630,39 @@ switch exists.
 - **Stop rule 9 is held by both the database and the code:** the m26 Q12 guard refuses the write, and the save path holds it instead. That is
   proven by the load-bearing live test and sabotage (l).
 - `main`'s merge run follows. **Part 6 starts on `feature/s122-p6-notify` from `a955dac5`.**
+
+## RESUME 2 — 2026-10-01, after the second Codespace restart (~17:25 ET; prompt `docs/sessions/S122-resume-prompt.md` at `998a4a39`)
+
+### R2.1 — First action
+
+- `ListAgents`: **no other Claude Code session is live** on this machine. Stop rule 12 does not fire.
+
+### R2.2 — Refs, by `git fetch --prune` (exit 0)
+
+- `origin/main` = **`a955dac5`**, *"[S122] Merge feature/s122-p5-approvals: Part 5 (held schedule changes) …"*. `a955dac5` is an
+  ancestor of `origin/main` (exit 0), so stop rule 7 does not fire.
+- On `feature/s122-p6-notify` at **`998a4a39`** (the resume prompt), on top of `cfc4adb6` (the five-line live-test fix), `e342a60b`,
+  `3b97459b`. `origin/feature/s122-p6-notify` is the same. Working tree clean: **the fix the restart left uncommitted is committed and pushed.**
+- **Report:** one file, `docs/sessions/S122-report.md`, already on this branch (last touched by `cb5d342b`). Nothing to bring forward.
+  It had **no Part 6 entry** before this one.
+
+### R2.3 — Is migration 29 on PRODUCTION? **NO.** Verified by object
+
+Method: one read-only `select` (`scratchpad/m29-state.sql`), run with `npx supabase db query --linked -f`. **First on rebuild-test as the
+positive control** (the checkout, `nmyphyhmfttxkdoposvf`), then on production through a **scratch workdir** linked to `jwkcknyuyvcwcdeskrmz`
+(`WD REF` read back), so the checkout never left rebuild-test (read back `nmyphyhmfttxkdoposvf` before and after). The workdir was deleted after.
+
+| probe | rebuild-test (control) | **PRODUCTION** `jwkcknyuyvcwcdeskrmz` |
+| --- | --- | --- |
+| ledger ≥ `20262128000000` | `…2128, …2129` | **`…2128` only** |
+| control: `task_schedule_edits` (m28) exists | 1 | 1 |
+| m29: `notifications_type_check` contains `schedule_changed` | 1 | **0** |
+| m29: `email_types` rows `schedule_change`, `schedule_change_client` (of 2) | 2 | **0** |
+| `notifications` rows outside the NEW check list (stop rule 2 pre-check) | 0 | **0** |
+
+**`20262129000000_s122_cp_notify_types.sql` is NOT applied to production. The ledger and the objects agree.** Stop rule 13 does not fire:
+migration 29 is on rebuild-test only. (A first run of the probe errored on my own quoting, a `", "` that Postgres read as an identifier; exit 1,
+no result, not counted. Fixed and re-run as above.)
+
+The stop rule 2 pre-check already holds on production today: **0** rows would fail the superset CHECK. It is re-read immediately before
+the push in the Part 6 production section.
