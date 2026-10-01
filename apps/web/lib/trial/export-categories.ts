@@ -56,7 +56,13 @@ export const EXPORT_CATEGORIES: ExportCategory[] = [
   {
     key: 'projects',
     label: 'Projects & schedule',
-    tables: ['projects', 'project_assignments', 'tasks', 'task_assignees', 'project_name_history'], // [S118 item 14] + [S121 5-C]
+    tables: [
+      'projects', 'project_assignments', 'tasks', 'task_assignees', 'project_name_history', // [S118 item 14] + [S121 5-C]
+      // [S122 Part 1] Critical Path: settings, weather days, the finish-date
+      // history, and the company's working calendar + holidays.
+      'project_schedule_settings', 'project_lost_days', 'project_finish_history',
+      'company_work_calendars', 'company_holidays',
+    ],
     referencesFiles: true,
   },
   {
