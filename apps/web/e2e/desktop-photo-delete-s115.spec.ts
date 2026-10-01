@@ -35,7 +35,10 @@ let peAssignmentId = '';
 
 async function seedPhoto(
   name: string,
-  where?: { companyId: string; projectId: string }
+  where?: { companyId: string; projectId: string },
+  // [S122 0-B-5] 'other' puts an image on the FILES tab (photos left it at
+  // 831879b4), so the Files entry link can be clicked for real.
+  category: 'photos' | 'other' = 'photos'
 ): Promise<{ id: string; path: string }> {
   const company = where?.companyId ?? COMPANY_A;
   const project = where?.projectId ?? projectId;
@@ -47,7 +50,7 @@ async function seedPhoto(
     .insert({
       company_id: company,
       project_id: project,
-      category: 'photos',
+      category,
       file_name: `${RUN}-${name}.png`,
       file_path: path,
       file_size: PNG.length,
@@ -98,8 +101,13 @@ test.afterAll(async () => {
   await admin.storage.from(BUCKET).remove(seeded.map((s) => s.path));
 });
 
-const photoPage = (fileId: string, project = projectId) =>
-  `/dashboard/projects/${project}/files/${fileId}/markup`;
+// [S122 0-B-5] The markup screen now returns to where the user came from, by
+// a `?from=` token (lib/markup/return-to.ts). These C-11 tests open it the way
+// the Photos grid does, so "lands on the Photos grid" keeps its meaning.
+// SUPERSEDED: `/dashboard/projects/${project}/files/${fileId}/markup` with no
+// token — delete then always went to Photos, whatever the user came from.
+const photoPage = (fileId: string, project = projectId, from: string = 'photos') =>
+  `/dashboard/projects/${project}/files/${fileId}/markup?from=${from}`;
 
 // Confirm, land on the Photos grid, then COUNT with the service role.
 async function confirmDeleteAndCount(page: Page, id: string, project: string) {
@@ -253,5 +261,80 @@ test.describe('C-11 · deleting a project photo on desktop', () => {
     });
     expect(look).toEqual({ opacity: '0.45', cursor: 'not-allowed' });
     await expect(shapeDelete).toHaveAttribute('title', /Select a shape/);
+  });
+});
+
+// ── S122 0-B-5 — "Go back to where you came from." [Josh, 2026-09-30] ────────
+// Entered through the REAL links on each tab (so the token is proven to be on
+// the link, not just accepted by the page), then the back link and delete are
+// read off the rendered page. A heading check precedes every "absent"/href
+// assertion so an unrendered page cannot pass.
+test.describe('S122 0-B-5 · the markup screen returns to where the user came from', () => {
+  test.setTimeout(120_000);
+
+  test('from the Photos grid: back link says Photos and goes to Photos', async ({ page }) => {
+    const photo = await seedPhoto('from-photos');
+    await signInAs(page, OWNER);
+    await page.goto(`/dashboard/projects/${projectId}/photos`);
+    await page.locator(`a[href*="/files/${photo.id}/markup"]`).first().click();
+    await page.waitForURL(new RegExp(`/files/${photo.id}/markup\\?from=photos$`), {
+      timeout: 30_000,
+    });
+    await expect(
+      page.getByRole('heading', { name: new RegExp(`${RUN}-from-photos`) })
+    ).toBeVisible();
+    const back = page.getByTestId('markup-back');
+    await expect(back).toHaveText('← Back to photos');
+    await expect(back).toHaveAttribute('href', `/dashboard/projects/${projectId}/photos`);
+    await back.click();
+    await page.waitForURL(new RegExp(`/dashboard/projects/${projectId}/photos$`), {
+      timeout: 30_000,
+    });
+  });
+
+  test('from the Files tab: back link says Files and goes to Files; delete lands on Files', async ({
+    page,
+  }) => {
+    const img = await seedPhoto('from-files', undefined, 'other');
+    await signInAs(page, OWNER);
+    await page.goto(`/dashboard/projects/${projectId}/files`);
+    await page.locator(`a[href*="/files/${img.id}/markup"]`).first().click();
+    await page.waitForURL(new RegExp(`/files/${img.id}/markup\\?from=files$`), { timeout: 30_000 });
+    await expect(
+      page.getByRole('heading', { name: new RegExp(`${RUN}-from-files`) })
+    ).toBeVisible();
+    const back = page.getByTestId('markup-back');
+    await expect(back).toHaveText('← Back to files');
+    await expect(back).toHaveAttribute('href', `/dashboard/projects/${projectId}/files`);
+
+    // Delete from here returns to Files too — counted with the service role.
+    await page.getByTestId('photo-delete').click();
+    await page.getByTestId('confirm-accept').click();
+    await page.waitForURL(new RegExp(`/dashboard/projects/${projectId}/files$`), {
+      timeout: 30_000,
+    });
+    await expect.poll(() => isDeleted(img.id), { timeout: 30_000 }).toBe(true);
+  });
+
+  test("a hostile or unknown token falls back to this project's Files — never elsewhere", async ({
+    page,
+  }) => {
+    const photo = await seedPhoto('from-junk');
+    await signInAs(page, OWNER);
+    for (const junk of [
+      'https%3A%2F%2Fevil.example',
+      '%2F%2Fevil.example',
+      '%2Fdashboard',
+      'Photos',
+    ]) {
+      await page.goto(photoPage(photo.id, projectId, junk));
+      await expect(
+        page.getByRole('heading', { name: new RegExp(`${RUN}-from-junk`) })
+      ).toBeVisible();
+      await expect(page.getByTestId('markup-back')).toHaveAttribute(
+        'href',
+        `/dashboard/projects/${projectId}/files`
+      );
+    }
   });
 });

@@ -727,13 +727,18 @@ test.describe('M-30 · Settings', () => {
     expect(await content.locator('input, select, textarea, button, [role="button"]').count()).toBe(0);
   });
 
-  test('A-48b · renders name, role, member_type, company and timezone in mono', async ({
+  // [S122 0-B-6, Josh Q2-A] member_type is no longer on Settings ("Owner crew"
+  // read as a demotion). Inverted in place — SUPERSEDED title: "A-48b · renders
+  // name, role, member_type, company and timezone in mono"; SUPERSEDED
+  // assertion: expect(getByTestId('m-settings-member-type')).not.toHaveText('—').
+  test('A-48b · renders name, role, company and timezone in mono — and NOT member_type', async ({
     page,
   }) => {
     await page.goto('/m/settings');
     await expect(page.getByTestId('m-settings-name')).not.toHaveText('—');
     await expect(page.getByTestId('m-settings-role')).not.toHaveText('—');
-    await expect(page.getByTestId('m-settings-member-type')).not.toHaveText('—');
+    // The block rendered (name + role above), so this absence is a decision.
+    await expect(page.getByTestId('m-settings-member-type')).toHaveCount(0);
     await expect(page.getByTestId('m-settings-company-name')).not.toHaveText('—');
 
     const tz = page.getByTestId('m-settings-timezone');

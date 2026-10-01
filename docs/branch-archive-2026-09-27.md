@@ -242,3 +242,33 @@ for `#181` (was `#1-s121lo`); `origin/feature/s112-staletimes-hold` (`9b90115a`)
 (S121 §1.7); `feature/s118-catalog-import` (local `f9dbfb5c`, origin `cbd2c2c1`) — landed by cherry-pick,
 deletable once Part 6 is on main.
 
+
+## S122 (2026-09-30) — deleted, with proof
+
+Measured on `origin/main` `4785835c`, re-proved immediately before deletion. **Method:** for each file
+the branch changed since its merge-base, every line the branch ADDED was checked against main's copy
+with `grep -qxF`. Control: a sentinel line not on main → counted absent **1** (the check can fire).
+Local copies equal their origin copies (same tip), so nothing exists only locally.
+
+| Branch | Tip SHA | Basis for deletion |
+| --- | --- | --- |
+| `origin/feature/s110-site-visit-access` | `9df22efe` | content on main: `docs/sessions/S110-report.md` +255 lines, **0 absent** (blob identical) |
+| `feature/s116-report` (local + origin) | `ac270b42` | content on main: `docs/sessions/S116-report.md` +65, **0 absent** (blob identical) |
+| `feature/s180-branch-archive` (local + origin) | `25fa2001` | content on main: `docs/branch-archive-2026-09-27.md` +229, **0 absent** (main's copy has since grown) |
+| `feature/s180-unattended` (local + origin) | `8f560601` | content on main: `S180-report.md` +516, `S180-unattended-plan.md` +52, `TECH_DEBT.md` +25, **0 absent** each |
+| `origin/feature/s112-staletimes-hold` | `9b90115a` (change `3b603c07`) | **Deleted by RULING [Josh, 2026-09-30], reversing "keep it parked." NOT content-on-main** (19 added lines absent, by design). See below. |
+
+### ⚠️ Why staletimes was deleted — so nobody re-proposes it
+
+The branch sets `experimental.staleTimes.dynamic: 0` in `apps/web/next.config.js`, which **switches off
+Next's client router cache**, so every navigation to a dynamic page refetches its payload. Re-measured
+at S121 (production build, rebuild-test, crew identity, 402×874, 3 runs, median; harness
+`docs/sessions/S121-evidence/nav-cost.mjs`): **49 → 301 ms unthrottled, 47 → 798 ms Fast 3G, 49 → 2,308 ms
+Slow 3G.** Crew are on LTE at jobsites. **The symptom it addressed is already solved better:** the app
+refreshes after mutations (`global-clock-button.tsx`, and its comment says so). **Deleting the branch
+closes the solution, not the symptom. If stale data after a back-navigation is ever reported, the fix
+is a `router.refresh()` on that path, never disabling the cache globally.** Recoverable from
+`9b90115a` while it stays reachable (see the reachability caveat above).
+
+**Kept:** `feature/s114-c5-multi-upload` (`6409738e`), a STOP (S121 §1.6), reference for `#181`, which
+stays filed.
