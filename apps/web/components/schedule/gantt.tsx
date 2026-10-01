@@ -1,5 +1,6 @@
 'use client';
 
+import { useRef, useState } from 'react';
 import type { Task, TaskDependency } from '@/lib/services/tasks-shared';
 import type { PhaseRollup } from '@/lib/services/tasks-shared';
 import type { CalendarEvent } from '@/lib/services/schedule';
@@ -23,6 +24,21 @@ export interface GanttItem {
   done: boolean;
   /** [S122 Q19] A start anchor's label ("Pinned · not before Tue 6 Oct"), or null. */
   pinned?: string | null;
+  /** [S122 Part 4] Critical Path colouring: critical in red, float in blue. */
+  tone?: 'critical' | 'float' | null;
+  /** [S122 Part 4] The latest this task can finish without moving the
+   *  projected finish — drawn as a dashed ghost after the bar. */
+  slackEnd?: string | null;
+  /** [S122 Part 4] The bar's END can be dragged to extend it (ruling 13). */
+  extendable?: boolean;
+}
+
+/** [S122 Part 4, ruling 9] A lost (weather) day range, with its icon, ON the schedule. */
+export interface GanttMarker {
+  start: string;
+  end: string;
+  icon: string;
+  label: string;
 }
 
 export interface GanttGroup {
@@ -39,6 +55,18 @@ interface GanttProps {
   groups: GanttGroup[];
   dependencies?: Pick<TaskDependency, 'id' | 'predecessor_id' | 'successor_id'>[];
   onSelect?: (id: string) => void;
+  /** [S122 Part 4] Weather days drawn across the chart, icon in the header. */
+  markers?: GanttMarker[];
+  /** [S122 Part 4] Called when an extendable bar's end is dragged to a new date. */
+  onExtend?: (id: string, newEnd: string) => void;
+}
+
+const TONE_COLOR = { critical: '#dc2626', float: '#2563eb' } as const;
+
+function plusDays(ymd: string, n: number): string {
+  const d = new Date(`${ymd}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
 }
 
 function itemFromTask(task: Task): GanttItem {
@@ -136,7 +164,12 @@ interface GanttRow {
  * on an SVG overlay. Undated (backlog) tasks are listed separately by the
  * parent panel — they never render here.
  */
-export function Gantt({ groups, dependencies = [], onSelect }: GanttProps) {
+export function Gantt({ groups, dependencies = [], onSelect, markers = [], onExtend }: GanttProps) {
+  // [S122 Part 4, ruling 13 second path] Dragging a bar's END extends it. The
+  // 8px handle is the ONLY `touch-action: none` element (the S121 handle
+  // pattern), so a finger on the bar or the page still scrolls it.
+  const [stretch, setStretch] = useState<{ id: string; delta: number } | null>(null);
+  const drag = useRef<{ id: string; x0: number; end: string } | null>(null);
   // Rows: group header + its items
   const rows: GanttRow[] = [];
   for (const group of groups) {
@@ -155,7 +188,11 @@ export function Gantt({ groups, dependencies = [], onSelect }: GanttProps) {
 
   // Timeline range with 2-day padding each side
   const starts = datedTasks.map((t) => t.start).sort();
-  const ends = datedTasks.map((t) => t.end).sort();
+  const ends = [
+    ...datedTasks.map((t) => t.end),
+    ...datedTasks.map((t) => t.slackEnd).filter((d): d is string => !!d),
+    ...markers.map((m) => m.end),
+  ].sort();
   const rangeStart = parseDate(starts[0]);
   rangeStart.setDate(rangeStart.getDate() - 2);
   const rangeEnd = parseDate(ends[ends.length - 1]);
@@ -252,6 +289,16 @@ export function Gantt({ groups, dependencies = [], onSelect }: GanttProps) {
                 {mark.label}
               </span>
             ))}
+            {markers.map((m) => (
+              <span
+                key={`mk-${m.start}-${m.end}-${m.label}`}
+                data-testid={`gantt-weather-${m.start}`}
+                title={m.label}
+                style={{ position: 'absolute', left: xFor(m.start) + 2, top: 4, fontSize: '14px', lineHeight: 1 }}
+              >
+                {m.icon}
+              </span>
+            ))}
           </div>
 
           <div style={{ position: 'relative', height: chartHeight }}>
@@ -266,6 +313,22 @@ export function Gantt({ groups, dependencies = [], onSelect }: GanttProps) {
                   bottom: 0,
                   width: 1,
                   backgroundColor: '#f1f3f7',
+                }}
+              />
+            ))}
+
+            {/* [S122 Part 4, ruling 9] Weather days: a band across every row. */}
+            {markers.map((m) => (
+              <div
+                key={`band-${m.start}-${m.end}-${m.label}`}
+                title={m.label}
+                style={{
+                  position: 'absolute',
+                  left: xFor(m.start),
+                  width: (daysBetween(parseDate(m.start), parseDate(m.end)) + 1) * DAY_WIDTH,
+                  top: 0,
+                  bottom: 0,
+                  backgroundColor: 'rgba(100,116,139,0.12)',
                 }}
               />
             ))}
@@ -326,18 +389,42 @@ export function Gantt({ groups, dependencies = [], onSelect }: GanttProps) {
             {rows.map((row, i) => {
               if (row.kind !== 'task' || !row.item) return null;
               const task = row.item;
-              const bar = barFor(task);
+              const live = stretch && stretch.id === task.id ? { ...task, end: plusDays(task.end, stretch.delta) < task.start ? task.start : plusDays(task.end, stretch.delta) } : task;
+              const bar = barFor(live);
               if (!bar) return null;
               // [S121 5-C / ASK-2] ONE bar per task; its colour is the first
-              // assignee's, and every name is on it.
-              const color = task.color;
+              // assignee's, and every name is on it. [S122 Part 4] On the
+              // Critical Path tab the tone wins: critical red, float blue.
+              const color = task.tone ? TONE_COLOR[task.tone] : task.color;
               const names = task.names;
               const done = task.done;
+              const ghost =
+                task.slackEnd && task.slackEnd > task.end
+                  ? { x: xFor(plusDays(task.end, 1)), width: daysBetween(parseDate(task.end), parseDate(task.slackEnd)) * DAY_WIDTH }
+                  : null;
               return (
+                <div key={task.id}>
+                {ghost && (
+                  <div
+                    data-testid={`gantt-slack-${task.id}`}
+                    title={`Can slide to ${task.slackEnd} without moving the finish`}
+                    style={{
+                      position: 'absolute',
+                      top: i * ROW_HEIGHT + 6,
+                      left: ghost.x,
+                      width: ghost.width,
+                      height: ROW_HEIGHT - 12,
+                      border: `1.5px dashed ${TONE_COLOR.float}`,
+                      borderRadius: 4,
+                      pointerEvents: 'none',
+                    }}
+                  />
+                )}
                 <button
-                  key={task.id}
                   onClick={() => onSelect?.(task.id)}
                   data-testid="gantt-bar"
+                  data-task-id={task.id}
+                  data-tone={task.tone ?? undefined}
                   title={`${task.title}${names ? ` — ${names}` : ''}${task.pinned ? ` — ${task.pinned}` : ''}`}
                   style={{
                     position: 'absolute',
@@ -380,6 +467,48 @@ export function Gantt({ groups, dependencies = [], onSelect }: GanttProps) {
                   {task.title}
                   {names ? ` · ${names}` : ''}
                 </button>
+                {task.extendable && onExtend && (
+                  <div
+                    data-testid={`gantt-extend-${task.id}`}
+                    title="Drag to extend"
+                    onPointerDown={(p) => {
+                      p.preventDefault();
+                      (p.currentTarget as HTMLElement).setPointerCapture?.(p.pointerId);
+                      drag.current = { id: task.id, x0: p.clientX, end: task.end };
+                      setStretch({ id: task.id, delta: 0 });
+                    }}
+                    onPointerMove={(p) => {
+                      const d = drag.current;
+                      if (!d) return;
+                      setStretch({ id: d.id, delta: Math.round((p.clientX - d.x0) / DAY_WIDTH) });
+                    }}
+                    onPointerUp={() => {
+                      const d = drag.current;
+                      drag.current = null;
+                      const delta = stretch?.delta ?? 0;
+                      setStretch(null);
+                      if (!d || delta === 0) return;
+                      const next = plusDays(d.end, delta);
+                      onExtend(d.id, next < task.start ? task.start : next);
+                    }}
+                    onPointerCancel={() => {
+                      drag.current = null;
+                      setStretch(null);
+                    }}
+                    style={{
+                      position: 'absolute',
+                      top: i * ROW_HEIGHT + 6,
+                      left: bar.x + bar.width - 8,
+                      width: 8,
+                      height: ROW_HEIGHT - 12,
+                      cursor: 'ew-resize',
+                      touchAction: 'none',
+                      backgroundColor: 'rgba(255,255,255,0.55)',
+                      borderRadius: '0 4px 4px 0',
+                    }}
+                  />
+                )}
+                </div>
               );
             })}
 

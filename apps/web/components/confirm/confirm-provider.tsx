@@ -34,6 +34,7 @@ import {
   useState,
 } from 'react';
 import { cardStyle, color, font, primaryButtonStyle, secondaryButtonStyle } from '@/lib/theme';
+import { useT } from '@/components/i18n/language-provider';
 
 export interface ConfirmOptions {
   message: string;
@@ -120,6 +121,7 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
 }
 
 function DialogOverlay({ pending, onSettle }: { pending: Pending; onSettle: (accept: boolean) => void }) {
+  const t = useT();
   const isConfirm = pending.kind === 'confirm';
   const opts = pending.opts;
   const danger = pending.kind === 'confirm' && pending.opts.tone === 'danger';
@@ -199,7 +201,7 @@ function DialogOverlay({ pending, onSettle }: { pending: Pending; onSettle: (acc
               onClick={() => onSettle(false)}
               style={{ ...secondaryButtonStyle }}
             >
-              {(pending.kind === 'confirm' && pending.opts.cancelLabel) || 'Cancel'}
+              {(pending.kind === 'confirm' && pending.opts.cancelLabel) || t('confirm.cancel')}
             </button>
           )}
           <button
@@ -213,8 +215,8 @@ function DialogOverlay({ pending, onSettle }: { pending: Pending; onSettle: (acc
             }}
           >
             {isConfirm
-              ? (pending.kind === 'confirm' && pending.opts.confirmLabel) || 'Confirm'
-              : (pending.kind === 'alert' && pending.opts.okLabel) || 'OK'}
+              ? (pending.kind === 'confirm' && pending.opts.confirmLabel) || t('confirm.confirm')
+              : (pending.kind === 'alert' && pending.opts.okLabel) || t('confirm.ok')}
           </button>
         </div>
       </div>

@@ -5,6 +5,7 @@ import { SettingsForm } from './settings-form';
 import { EstimatingSettingsForm } from './estimating-settings-form';
 import { ProposalSettingsForm } from './proposal-settings-form';
 import { TimeTrackingSettingsForm } from './time-tracking-settings-form';
+import { WorkCalendarSettings, type HolidayRow, type WorkCalendarRow } from './work-calendar-settings';
 import { GLMappingSettingsForm } from './gl-mapping-settings-form';
 import { AccountingPanel } from '@/components/quickbooks/accounting-panel';
 import { AccountSettings } from '@/components/quickbooks/account-settings';
@@ -206,6 +207,17 @@ export default async function SettingsPage({
     getMemberDefaults(),
   ]);
 
+  // [S122 Part 4] The working calendar and holidays (ruling 2; Q16-A). Read as
+  // the caller — RLS scopes both to this company.
+  const [workCalendar, holidays] = await Promise.all([
+    supabase.from('company_work_calendars').select('id, work_days').eq('is_deleted', false).maybeSingle(),
+    supabase
+      .from('company_holidays')
+      .select('id, holiday_date, name')
+      .eq('is_deleted', false)
+      .order('holiday_date', { ascending: true }),
+  ]);
+
   // §8.11.1 — the seven tabs. The Documents tab hosts the categories manager
   // (Entry 20's deferral) plus BOTH template forms; Notifications hosts the
   // quiet-hours/push form (the routing grid is a schema change, unbuilt).
@@ -225,6 +237,17 @@ export default async function SettingsPage({
       key: 'time',
       label: 'Time Tracking',
       content: <TimeTrackingSettingsForm settings={timeTrackingSettings} />,
+    },
+    // [S122 Part 4] Critical Path's working days and holidays (ruling 2).
+    {
+      key: 'schedule',
+      label: 'Working Calendar',
+      content: (
+        <WorkCalendarSettings
+          calendar={(workCalendar.data as WorkCalendarRow | null) ?? null}
+          holidays={(holidays.data ?? []) as HolidayRow[]}
+        />
+      ),
     },
     {
       key: 'accounting',

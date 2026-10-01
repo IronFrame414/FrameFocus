@@ -7,6 +7,7 @@ import { getUnreadCount } from '@/lib/services/notifications';
 import { MobileShell } from './mobile-shell';
 import { RegisterSw } from './register-sw';
 import { FileSheetProvider } from '@/components/files/file-sheet';
+import { ConfirmProvider } from '@/components/confirm/confirm-provider';
 
 // M6M §1 — the mobile shell layout. Hosts §3.1's app bar, §3.2's tab bar,
 // §3.3's sheet and §4.4's app-wide offline strip. Nothing under app/dashboard/**
@@ -134,7 +135,10 @@ export default async function MobileLayout({ children }: { children: React.React
           myProfileId={profile.id}
           role={profile.role}
         >
-          {children}
+          {/* [S122 Part 4] The same confirm overlay as the dashboard: a date drag on
+              a Critical Path project names its edit and asks before saving, on
+              both surfaces (PARITY). */}
+          <ConfirmProvider>{children}</ConfirmProvider>
         </MobileShell>
       </FileSheetProvider>
     </LanguageProvider>

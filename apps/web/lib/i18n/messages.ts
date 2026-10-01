@@ -60,6 +60,11 @@ const core = {
   'sendcheck.doc.proposal': 'proposal',
   'sendcheck.doc.changeOrder': 'change order',
   'sendcheck.doc.invoice': 'invoice',
+  // [S122 Part 4] The shared confirm overlay's default buttons — mounted on /m
+  // too now, so they follow the reader's language.
+  'confirm.cancel': 'Cancel',
+  'confirm.confirm': 'Confirm',
+  'confirm.ok': 'OK',
 } as const;
 
 // Each /m area keeps its own table (lib/i18n/areas/*), so screens can be
@@ -114,6 +119,9 @@ const coreEs: Record<keyof typeof core, string> = {
   'sendcheck.doc.proposal': 'la propuesta',
   'sendcheck.doc.changeOrder': 'la orden de cambio',
   'sendcheck.doc.invoice': 'la factura',
+  'confirm.cancel': 'Cancelar',
+  'confirm.confirm': 'Confirmar',
+  'confirm.ok': 'Aceptar',
 };
 
 export const es: Record<MsgKey, string> = {

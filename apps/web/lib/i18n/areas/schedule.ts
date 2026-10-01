@@ -69,6 +69,9 @@ export const en = {
   'sched.day.moveEnd': 'End ▶',
   'sched.day.doneMoving': 'Done',
   'sched.day.clamped': 'A bar cannot end before it starts — it was kept to one day.',
+  // [S122 Part 4] A drag on a Critical Path project is confirmed before saving.
+  'sched.cp.title': 'Critical Path',
+  'sched.cp.save': 'Save this change',
   'sched.day.noTrade': 'no trade',
   'sched.colour.label': 'Schedule colour',
   'sched.colour.auto': 'Auto',
@@ -146,6 +149,8 @@ export const es: Record<keyof typeof en, string> = {
   'sched.day.moveEnd': 'Fin ▶',
   'sched.day.doneMoving': 'Listo',
   'sched.day.clamped': 'Una barra no puede terminar antes de empezar — se dejó en un día.',
+  'sched.cp.title': 'Ruta crítica',
+  'sched.cp.save': 'Guardar este cambio',
   'sched.day.noTrade': 'sin oficio',
   'sched.colour.label': 'Color en el calendario',
   'sched.colour.auto': 'Automático',

@@ -1458,3 +1458,67 @@ snap back in between.
 
 **Section 4: MATCH ×12.** No production project has Critical Path on, so the sheet's CP mode and the recompute reach nobody until Part 4's
 switch exists.
+
+### R.14 — Part 3 MERGED → `main` `a9fba7ac`
+
+- Merge commit `a9fba7ac`; `HEAD^{tree}` `05ff7a38…` = branch head `bc0f0a91^{tree}`. Pushed.
+- S180: (1) CI `36876398232` green on `168ce164`, base `6c91b9c1` = `origin/main` re-fetched. Tree-identity exemption: `git diff --name-only
+  168ce164 bc0f0a91` → `docs/sessions/S122-report.md` only; the same diff over `apps packages scripts supabase .github` returned `--quiet` exit
+  0. (2) The numbers in the merge message and above. (3) `…27` is on production, MATCH ×12, **applied before the merge**.
+- `main`'s merge run follows. **Part 4 starts on `feature/s122-p4-cp-tab` from `a9fba7ac`.**
+
+### R.15 — Part 4 (the Critical Path tab), build log — branch `feature/s122-p4-cp-tab` from `a9fba7ac`. **No migration.**
+
+- `main`'s run **`36881733622`** on `a9fba7ac` (Part 3's merge): **green**, e2e **680 passed, 1 flaky**, unit 164 / 2,256.
+- **Built:**
+  - `/dashboard/projects/[id]/critical-path`, in the spec's order:
+    - the headline (finish; how far it moved and **what caused it**, from the history row; a cycle is reported as "A → B → A"; conflicts)
+    - the **finish-date history** (never "baseline"; Q18-A — a foreman sees none)
+    - the critical chain with each task's people
+    - the network: the **same** `gantt.tsx`, critical red / float blue, a dashed slack ghost, **weather days drawn as bands with their icon** (ruling 9), and an **8px end handle** that is the only `touch-action: none` element
+    - the float table, least first, with the flags (pinned, needs a duration, duration not set, not linked, days left missing/stale…)
+    - the slip simulator (nothing saved)
+    - weather days (add/remove; reason required; five icons)
+    - when off, the **switch with the client-notification checkbox set at that moment** (ruling 12)
+    - the Q16-A default-calendar banner
+  - The pending strip is Part 5.
+  - **Who sees it:** `lib/critical-path/access.ts` is the one list (Owner, Admin, PE, PM, foreman), read by the tab strip **and** the page's
+    server-side gate. **Not crew:** under RLS they see only their tasks, and float from part of the graph would be wrong. **Never a client.**
+  - **Placement:** appended to **Work** (Schedule · Selections · Punch List · Deliveries · **Critical Path**). Josh named the tab, not its
+    place, and `desktop-selections.spec` encodes the ruled order by adjacency, so inserting it would be a ruling this build cannot make.
+  - **Company settings → Working Calendar** (Owner/Admin): working weekdays and holidays (ruling 2). A change marks every CP project.
+- **Q19, built:**
+  - `translateMove` (pure, shared): a **move** pins "not before" and keeps the length, **even across a weekend**; an **end resize**
+    changes the **duration**; a **start resize** pins **and** changes the duration; an in-progress end drag enters **days left** as of
+    today; its start cannot move; complete is refused; a duration-less task's typed dates move (stop rule 10).
+  - **One save path:** `lib/critical-path/save.ts`, used by the sheet's route and the new **gesture route** (`…/move`: `confirm:false` →
+    the preview, nothing written; `confirm:true` → the save). "from" is the **stored** dates, never the client's copy.
+  - **Every surface:** `moveCalendarEvent` routes a task on a CP project through it, so the desktop calendar, **`/m`'s day view** and
+    the Gantt end handle all name the edit in the shared confirm and save only on accept. A project not on CP answers `{cp:false}` and
+    keeps S121's direct write.
+  - The schedule sheet writes dates only to an **undated** task (no duration), which is a Q15-A fixed span the engine leaves where it is,
+    so nothing there snaps back.
+- **Defects found and fixed while building:**
+  1. **A dragged span counted weather days**, but the engine skips them on unstarted work, so a bar dropped on Wed came back ending Thu.
+     `translateMove` now takes the lost days (unit + sabotage (k)).
+  2. The move client treated a `refused` answer as a network failure (`'error' in …` matched the refusal's own `error`). The type-check
+     caught it; replaced with an explicit `{ok}` wrapper.
+  3. **The `/m` i18n guard** (`s110-m-i18n-guard`) went red: mounting the shared `ConfirmProvider` on `/m` brought its hard-coded
+     "Cancel" and "Confirm" into `/m`. Its buttons now go through `t()` (`confirm.*`, en/es), and `/m`'s CP confirm title and label are
+     translated (`sched.cp.*`). ⚠️ **The edit sentences themselves stay English** (built in the shared module, invisible to the guard):
+     **filed `#1-s122p4`** in `TECH_DEBT.md`, home Part 9.
+- **Unit:** `s122-cp-move.test.ts` **12/12**. Sabotages: (j) a move recomputes the duration → **2 ✘** (the one-day move and the
+  weekend case); (k) weather days counted in a dragged span → **1 ✘**. Each restored, `cmp` 0.
+- **e2e `desktop-critical-path-tab-s122.spec.ts`** (production build, rebuild-test, **after** `main`'s run finished): **2 passed, first
+  run**. Turned on with the client box ticked (DB: enabled, `notify_client` true, finish 13 Jan, history `enabled`). Chain A→B→D, C off
+  it; float C **2**, B **0**; tones and C's slack ghost. Simulator: C +3 → *"Wed 13 Jan → Thu 14 Jan (1 working day later)"*, C newly
+  critical, **C's duration still 3**. Weather Thu 7 Jan ⚡: listed and drawn; finish Thu 14 Jan; *"Moved 1 working day later … caused by a
+  weather day"*; history `weather`. **End handle +2 days:** the confirm reads *"Changes the DURATION: 3 working days → 5 working days."*
+  and *"The projected finish stays Thu 14 Jan."*, with **duration still 3 before the accept**; after it, 5, due 13 Jan, C critical.
+  Holiday Tue 12 Jan via Settings → finish Fri 15 Jan, *"caused by a company holiday"*, history `holiday`. **Foreman:** the tab renders,
+  with **0** end handles, no weather form and no history. **Crew:** sent to Schedule, no tab.
+  - **UI sabotage:** `moveCalendarEvent` saves without asking → rebuilt → **✘ ×2** (`confirm-dialog` not found); restored, `cmp` 0,
+    `git diff --quiet` 0, rebuilt.
+  - **Regression** (both CP specs + `desktop-schedule-s121` + `m-schedule-s121` + `desktop-selections` + `m-shell`): **81 passed**,
+    0 flaky.
+- **Pre-CI:** type-check **0** (0/5 cached); lint **0** (no warning in any Part 4 file); unit **165 files / 2,269 tests**, 0 cached.

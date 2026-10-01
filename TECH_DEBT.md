@@ -2454,6 +2454,18 @@ direct path today. Closing it = dropping/narrowing those UPDATE arms so the func
 (check every writer first: conversion, CO apply, the recompute triggers — S115 mapped 6). Policy change →
 needs Josh's word; not done unattended. Land after R10 is on production.
 
+## `#1-s122p4` — Critical Path preview sentences are English on `/m` (the S110 ruling says `/m` system text is translated)
+
+Found S122 Part 4. A date drag on a Critical Path project (`moveCalendarEvent` → the move route) shows a confirm
+that NAMES the edit ("Changes the DURATION: 3 working days → 5 working days.") and its consequence. Those
+sentences are built in `packages/shared/utils/critical-path-writes.ts` (`editSentence`, `consequenceSentence`),
+in English only, and the route returns them as text. On `/m` the dialog's title and buttons are translated
+(`sched.cp.title` / `sched.cp.save`, `confirm.*`), but **the sentences are not**, and `s110-m-i18n-guard` cannot
+see them (they are not JSX literals). Who meets it today: an Owner, Admin or PM whose language is Spanish,
+dragging a Critical Path task on `/m` (no production project has Critical Path on yet). Fix: give the sentence
+builders a `lang` and an `es` phrasebook (the shared module cannot import `lib/i18n`), and pass the reader's
+language to the move route. Natural home: Part 9 (mobile).
+
 ## Process notes
 
 When closing an item:
