@@ -29,7 +29,8 @@ const CHIP_TYPES: Record<Exclude<NotificationChip, 'all'>, readonly Notification
   money: ['selection_approved', 'selection_denied', 'discrepancy', 'low_stock'],
   // po_item_missing is FIELD by ruling (R-Q4): it names a specific run's gap,
   // not a stock posture — the low_stock-is-Money tiebreak cuts the other way.
-  field: ['incident', 'daily_log_missing', 'still_clocked_in', 'timesheet_ready', 'punch_assigned', 'po_item_missing', 'site_visit_recorded'],
+  // schedule_changed [S122 Part 6] is FIELD: it says when the work on site moves.
+  field: ['incident', 'daily_log_missing', 'still_clocked_in', 'timesheet_ready', 'punch_assigned', 'po_item_missing', 'site_visit_recorded', 'schedule_changed'],
   // qb_sync_blocked is ACCOUNT, not Money: it names a CONNECTION that needs
   // configuring, not a figure that needs approving. The QuickBooks connection is
   // already treated as billing-adjacent (CLAUDE.md owner-only #4), which is the

@@ -122,7 +122,11 @@ export type NotificationType =
   // S108 Spec A, ASK-A4 — a site visit was recorded; Owner, Admin and every
   // PM are told. CHECK value in the site-visit migration, same commit.
   // In-app + push only; not emailed, so `email_types` is untouched.
-  | 'site_visit_recorded';
+  | 'site_visit_recorded'
+  // S122 Part 6 — a Critical Path change moved a task an assignee chose to be
+  // told about (ruling 11); also the saver's "not everyone could be told".
+  // CHECK value in 20262129000000, SAME commit (both halves or neither).
+  | 'schedule_changed';
 
 export interface NotifyParams {
   admin: SupabaseClient<Database>;

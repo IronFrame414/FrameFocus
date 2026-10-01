@@ -9,7 +9,7 @@ export async function saveCriticalPathTask(
   projectId: string,
   taskId: string,
   body: CriticalPathTaskSave
-): Promise<{ ok: true; held: boolean } | { ok: false; error: string }> {
+): Promise<{ ok: true; held: boolean; unreachable: string[] } | { ok: false; error: string }> {
   let res: Response;
   try {
     res = await fetch(`/api/projects/${projectId}/critical-path/tasks/${taskId}`, {
@@ -22,8 +22,17 @@ export async function saveCriticalPathTask(
   }
   if (res.ok) {
     // `held` [S122 Part 5]: the change waits for approval and moved no date.
-    const j = (await res.json().catch(() => ({}))) as { held?: unknown };
-    return { ok: true, held: j.held === true };
+    const j = (await res.json().catch(() => ({}))) as {
+      held?: unknown;
+      recompute?: { notified?: { unreachable?: unknown; clientUnreachable?: unknown } } | null;
+    };
+    // [S122 Part 6] Who chose to be told and could not be reached — the saver is told.
+    const n = j.recompute?.notified;
+    const unreachable = [
+      ...(Array.isArray(n?.unreachable) ? (n!.unreachable as unknown[]).filter((x): x is string => typeof x === 'string') : []),
+      ...(n?.clientUnreachable === true ? ['the client (no email on file)'] : []),
+    ];
+    return { ok: true, held: j.held === true, unreachable };
   }
   let message = `The save failed (${res.status}).`;
   try {

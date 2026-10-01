@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { useConfirm } from '@/components/confirm/confirm-provider';
+import { useAlert, useConfirm } from '@/components/confirm/confirm-provider';
 import type { Phase, Task, TaskPriority, TaskStatus } from '@/lib/services/tasks-client';
 import {
   createTask,
@@ -70,6 +70,7 @@ export function TaskForm({
   onCancel,
 }: TaskFormProps) {
   const confirm = useConfirm();
+  const alert = useAlert();
   const [title, setTitle] = useState(editing?.title ?? '');
   const [description, setDescription] = useState(editing?.description ?? '');
   const [phaseId, setPhaseId] = useState(editing?.phase_id ?? '');
@@ -298,6 +299,14 @@ export function TaskForm({
         ? { assignees: assigneeIds.map((id) => ({ member_id: id, notify_changes: notify[id] ?? false })) }
         : {}),
     });
+    if (result.ok && result.unreachable.length > 0) {
+      // [S122 Part 6, ruling 11] Never silently dropped: said to the saver now
+      // (and left in their notifications).
+      await alert({
+        title: 'Saved — but not everyone could be told',
+        message: `No login and no email on file: ${result.unreachable.join(', ')}.`,
+      });
+    }
     if (result.ok) onDone();
     else {
       setError(result.error);
