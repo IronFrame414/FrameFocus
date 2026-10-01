@@ -326,7 +326,7 @@ export function DayDetailClient({
         </div>
         <div style={{ display: 'flex', gap: '10px' }}>
           {canEditHours && (
-            <button style={secondaryButtonStyle} onClick={() => setHoursModal(true)}>
+            <button style={secondaryButtonStyle} data-testid="day-edit-hours" onClick={() => setHoursModal(true)}>
               Edit hours
             </button>
           )}
@@ -510,6 +510,7 @@ export function DayDetailClient({
               <label style={fieldLabelStyle}>Clock in</label>
               <input
                 type="datetime-local"
+                data-testid="day-clock-in"
                 value={clockInInput}
                 onChange={(e) => setClockInInput(e.target.value)}
                 style={inputStyle}
@@ -519,6 +520,7 @@ export function DayDetailClient({
               <label style={fieldLabelStyle}>Clock out</label>
               <input
                 type="datetime-local"
+                data-testid="day-clock-out"
                 value={clockOutInput}
                 onChange={(e) => setClockOutInput(e.target.value)}
                 style={inputStyle}
@@ -538,6 +540,7 @@ export function DayDetailClient({
               <button
                 style={{ ...primaryButtonStyle, opacity: busy ? 0.6 : 1 }}
                 disabled={busy}
+                data-testid="day-hours-save"
                 onClick={() => void submitHours()}
               >
                 {busy ? 'Saving…' : 'Save'}

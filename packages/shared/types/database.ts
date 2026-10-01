@@ -11193,6 +11193,10 @@ export type Database = {
         }
         Returns: Json
       }
+      edit_time_session_clock: {
+        Args: { p_clock_in: string; p_clock_out?: string; p_session_id: string }
+        Returns: Json
+      }
       email_has_account: { Args: { p_email: string }; Returns: boolean }
       finish_site_visit: { Args: { p_estimate_id: string }; Returns: string }
       flag_po_item_missing: {
