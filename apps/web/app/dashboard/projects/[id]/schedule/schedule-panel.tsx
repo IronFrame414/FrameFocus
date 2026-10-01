@@ -22,6 +22,8 @@ import { SchedulingCalendar } from '@/components/schedule/scheduling-calendar';
 import { Gantt, ganttGroupsFromRollups } from '@/components/schedule/gantt';
 import { assigneeColor } from '@/components/schedule/member-color';
 import { TaskForm } from './task-form';
+import type { CpInput } from '@framefocus/shared/utils/critical-path';
+import { pinLabel } from '@/components/schedule/critical-path-fields';
 import { color, font } from '@/lib/theme';
 
 interface SchedulePanelProps {
@@ -41,6 +43,8 @@ interface SchedulePanelProps {
     schedule_color: string | null;
   }[];
   canManage: boolean;
+  /** [S122 Part 3] Set when this project's schedule runs on Critical Path. */
+  criticalPath?: { input: CpInput } | null;
   role: string;
 }
 
@@ -93,6 +97,7 @@ export function SchedulePanel({
   calendarEvents,
   members,
   canManage,
+  criticalPath = null,
   role,
 }: SchedulePanelProps) {
   const router = useRouter();
@@ -296,6 +301,7 @@ export function SchedulePanel({
           tasks={tasks}
           editing={editingTask}
           canManage={canManage || (editingTask?.status !== undefined && role === 'crew_member')}
+          criticalPath={criticalPath}
           onDone={() => {
             setTaskFormOpen(false);
             setEditingTask(null);
@@ -696,6 +702,25 @@ function TaskRows({ tasks, onSelect }: { tasks: Task[]; onSelect: (t: Task) => v
                 }}
               >
                 {t.priority}
+              </span>
+            )}
+            {/* [S122 Q19] A start anchor is a PIN: visibly marked where the task
+                is listed, not only inside its sheet (same words as a pinned
+                invoice line). Released in one action from the sheet. */}
+            {t.start_constraint && t.constraint_date && (
+              <span
+                data-testid={`task-pinned-${t.id}`}
+                style={{
+                  fontSize: '10px',
+                  fontWeight: 700,
+                  color: '#2563eb',
+                  textTransform: 'uppercase',
+                  border: '1px solid #bfdbfe',
+                  borderRadius: '0.25rem',
+                  padding: '1px 6px',
+                }}
+              >
+                {pinLabel(t.start_constraint as 'fixed' | 'not_before', t.constraint_date)}
               </span>
             )}
           </span>

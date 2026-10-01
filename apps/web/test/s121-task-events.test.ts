@@ -12,6 +12,7 @@ const person = (id: string, over: Partial<TaskAssignee> = {}): TaskAssignee => (
   schedule_color: null,
   member_type: 'crew',
   trade: null,
+  notify_changes: false, // [S122 Q13-A] off by default
   ...over,
 });
 const task = (id: string, assignees: TaskAssignee[]): DatedTask => ({

@@ -1304,3 +1304,52 @@ end **changes the task's duration**. "This moves the finish by N days" alone is 
 two each drag performed.
 
 `task_schedule_edits` moving from Part 3 to Part 5: **accepted.**
+
+### R.12 — Part 3 (the line sheet), build log — branch `feature/s122-p3-line-sheet`, stacked on Part 2
+
+**Scope split with Part 4, stated:** Part 3 makes the line sheet (the existing `task-form.tsx`, one form) Critical-Path-aware,
+and adds the save route, the recompute with write-through and history, the read-check, the cron, and migration `…27`. The
+**drag translations of Q19** (calendar drag, schedule-sheet dates → `not_before` / duration) ship in **Part 4**, with the Gantt
+drag-end and the **switch that turns Critical Path on**. No user can turn CP on before Part 4, so no production drag can
+snap back in between.
+
+- **Migration `20262127000000_s122_cp_notify_cause`** (written; **not yet applied anywhere**, because rebuild-test is held by
+  CI, see 1.7):
+  - `task_assignees.notify_changes boolean NOT NULL DEFAULT false` (Q13-A; created in the same migration, so Q8-A applies).
+  - **The mark carries its cause**: `project_schedule_settings.recompute_cause_kind` + `recompute_cause_task_id`. The guard
+    lets a user's transaction write them **only** when it is the one that sets the mark; the engine clears them.
+    `mark_schedule_dirty(uuid)` is **dropped** and replaced by `(uuid, text, uuid)`, not overloaded (the S180 trap).
+    ⚠️ **First cause wins** while a project stays marked: the history row names the change that **first** moved it since the
+    last computation.
+  - `projects_mark_schedule_dirty`: AFTER UPDATE OF `start_date`, only when it changes (**Q9 item 10**).
+  - `project_finish_history_cause_check` is widened with `project_start` and `inspection` (**0 rows** on production, R.7).
+- **Pure**: `packages/shared/utils/critical-path-writes.ts` holds `planWriteThrough` (what is written: scheduled → both
+  dates; in progress → due only; fixed span, complete, needs-duration → nothing; **a cycle → nothing at all**),
+  `previewEdit` (the engine run before and after), `describeEdit` and `editSentence` (**name the edit**: DURATION, START
+  ANCHOR / release, DAYS LEFT, status, LINK, NEW TASK), and `consequenceSentence`.
+- **Server**: `lib/critical-path/load.ts` is one loader for the recompute (service role) and the page (the caller); any read
+  error refuses the load, because a partial graph gives wrong dates. `lib/critical-path/recompute.ts`
+  **clears the mark FIRST**, then reads, computes and writes. A change landing mid-run re-marks the project; on any failure
+  the mark is put back. `ensureScheduleFresh` is the read-check.
+- **Route** `POST /api/projects/[id]/critical-path/tasks/[taskId]`: Zod (`validation/critical-path.ts`; `days_left_as_of`
+  is never accepted from the client, the server stamps the company's today). It writes **as the caller** (RLS + the Q12
+  guard decide), and recomputes only after an applied write. 42501 → 403 with the database's sentence; every error logs its
+  cause.
+- **Cron** `/api/cron/critical-path-recompute`, **hourly** (`20 * * * *`), not daily: "today" turns over at a different UTC
+  hour in each company's time zone. A fresh project costs one settings read.
+- **Page**: the read-check runs **before** the dates are read, only after the project is confirmed visible **as the caller**.
+  The engine input goes to staff only (crew and subs see a subset of tasks under RLS, and a preview on part of the graph would
+  state wrong dates).
+- **UI** (`components/schedule/critical-path-fields.tsx` + `task-form.tsx`): duration, anchor ("After its links only" /
+  "not before…" / "On a fixed date…"), days left with its as-of stamp and the percent **beside it, "shown for reference, not
+  used for dates"** (never pre-filled), a per-assignee **"notify of changes"** box (a sibling of the person's label, never
+  nested in it), and the preview naming each edit and then the consequence. **A pin is marked in three places, in Part
+  0-C's words:** the sheet (`cp-pinned`, with **"Release — let the schedule move it freely"**, one action that saves at once),
+  the task list row (`task-pinned-*`), and **the Gantt bar** (`gantt-pinned-*`). `task-form.tsx` is not Prettier-formatted on
+  `main`, so it was edited by hand with no formatter.
+- **Unit `s122-cp-writes.test.ts`: 18/18.** Sabotages:
+  - (g) the write-through also writes an in-progress task's start → ⚠️ **first GREEN, so the test was vacuous**: a weekday
+    actual start equals the engine's early start, so the wrong write changed nothing. The test now starts the task on a
+    **Saturday** (early start maps to Mon05, asserted, "the trap is armed"). Re-run → **1 ✘**.
+  - (h) `describeEdit` drops the anchor part → **3 ✘** (anchor, release, two-edits).
+  - Each restored, `cmp` 0, 18/18.

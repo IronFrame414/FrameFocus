@@ -6,6 +6,7 @@ import {
   addCalendarDays,
   computeCriticalPath,
   HORIZON_DAYS,
+  type CpDependency,
   type CpInput,
   type CpResult,
   type CpTask,
@@ -78,7 +79,9 @@ export type CpEditPart =
       to: { constraint: CpTask['startConstraint']; date: string | null };
     }
   | { kind: 'days_left'; from: number | null; to: number | null }
-  | { kind: 'status'; from: CpTask['status']; to: CpTask['status'] };
+  | { kind: 'status'; from: CpTask['status']; to: CpTask['status'] }
+  | { kind: 'link'; predecessorTitle: string }
+  | { kind: 'new_task' };
 
 export function describeEdit(before: CpTask, after: CpTask): CpEditPart[] {
   const parts: CpEditPart[] = [];
@@ -126,6 +129,10 @@ export function editSentence(p: CpEditPart): string {
       return `Changes the working days LEFT: ${p.from === null ? 'not entered' : p.from} → ${p.to === null ? 'not entered' : p.to}.`;
     case 'status':
       return `Changes the status: ${p.from.replace('_', ' ')} → ${p.to.replace('_', ' ')}.`;
+    case 'link':
+      return `Adds a LINK: this task starts after "${p.predecessorTitle}" finishes.`;
+    case 'new_task':
+      return 'Adds a NEW TASK to the schedule.';
   }
 }
 
@@ -141,12 +148,36 @@ export interface EditPreview {
   breaks: CpResult['error'];
 }
 
-/** Run the engine before and after replacing one task, and say what moves. */
-export function previewEdit(input: CpInput, after: CpTask): EditPreview {
+/**
+ * Run the engine before and after the edit, and say what moves. `after`
+ * replaces the task with its id, or — when no task has that id — is ADDED (a
+ * new task). `addDependencies` are links the same save will create.
+ */
+export function previewEdit(
+  input: CpInput,
+  after: CpTask,
+  addDependencies: readonly CpDependency[] = []
+): EditPreview {
   const before = input.tasks.find((t) => t.id === after.id);
-  const parts = before ? describeEdit(before, after) : [];
+  const parts: CpEditPart[] = before
+    ? describeEdit(before, after)
+    : [
+        { kind: 'new_task' },
+        ...describeEdit(
+          { ...after, durationDays: null, startConstraint: null, constraintDate: null, daysLeft: null, daysLeftAsOf: null },
+          after
+        ),
+      ];
+  for (const d of addDependencies) {
+    const pred = input.tasks.find((t) => t.id === d.predecessorId);
+    parts.push({ kind: 'link', predecessorTitle: pred?.title ?? 'another task' });
+  }
   const a = computeCriticalPath(input);
-  const b = computeCriticalPath({ ...input, tasks: input.tasks.map((t) => (t.id === after.id ? after : t)) });
+  const b = computeCriticalPath({
+    ...input,
+    tasks: before ? input.tasks.map((t) => (t.id === after.id ? after : t)) : [...input.tasks, after],
+    dependencies: [...input.dependencies, ...addDependencies],
+  });
   const shift =
     a.projectedFinish && b.projectedFinish
       ? workingDaysBetween(a.projectedFinish, b.projectedFinish, input.calendar)
