@@ -31,6 +31,9 @@ export interface GanttItem {
   slackEnd?: string | null;
   /** [S122 Part 4] The bar's END can be dragged to extend it (ruling 13). */
   extendable?: boolean;
+  /** [S122 Part 5] A held schedule change's summary: the bar is drawn GRAYED with a
+   *  "pending" tag, at its CURRENT dates — a pending change moves nothing. */
+  pending?: string | null;
 }
 
 /** [S122 Part 4, ruling 9] A lost (weather) day range, with its icon, ON the schedule. */
@@ -425,7 +428,7 @@ export function Gantt({ groups, dependencies = [], onSelect, markers = [], onExt
                   data-testid="gantt-bar"
                   data-task-id={task.id}
                   data-tone={task.tone ?? undefined}
-                  title={`${task.title}${names ? ` — ${names}` : ''}${task.pinned ? ` — ${task.pinned}` : ''}`}
+                  title={`${task.title}${names ? ` — ${names}` : ''}${task.pinned ? ` — ${task.pinned}` : ''}${task.pending ? ` — Pending: ${task.pending}` : ''}`}
                   style={{
                     position: 'absolute',
                     top: i * ROW_HEIGHT + 6,
@@ -443,9 +446,27 @@ export function Gantt({ groups, dependencies = [], onSelect, markers = [], onExt
                     textOverflow: 'ellipsis',
                     textAlign: 'left',
                     padding: '0 4px',
+                    opacity: task.pending ? 0.45 : 1,
                   }}
                 >
                   {done ? '✓ ' : ''}
+                  {task.pending && (
+                    <span
+                      data-testid={`gantt-pending-${task.id}`}
+                      style={{
+                        marginRight: 4,
+                        padding: '0 3px',
+                        borderRadius: 2,
+                        backgroundColor: '#fff',
+                        color: '#92400e',
+                        fontSize: '9px',
+                        fontWeight: 700,
+                        textTransform: 'uppercase',
+                      }}
+                    >
+                      pending
+                    </span>
+                  )}
                   {/* [S122 Q19] A pin is marked ON the bar, not only in the sheet. */}
                   {task.pinned && (
                     <span

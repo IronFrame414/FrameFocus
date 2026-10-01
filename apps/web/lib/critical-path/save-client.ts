@@ -9,7 +9,7 @@ export async function saveCriticalPathTask(
   projectId: string,
   taskId: string,
   body: CriticalPathTaskSave
-): Promise<{ ok: true } | { ok: false; error: string }> {
+): Promise<{ ok: true; held: boolean } | { ok: false; error: string }> {
   let res: Response;
   try {
     res = await fetch(`/api/projects/${projectId}/critical-path/tasks/${taskId}`, {
@@ -20,7 +20,11 @@ export async function saveCriticalPathTask(
   } catch {
     return { ok: false, error: 'The save did not reach the server. Check the connection and try again.' };
   }
-  if (res.ok) return { ok: true };
+  if (res.ok) {
+    // `held` [S122 Part 5]: the change waits for approval and moved no date.
+    const j = (await res.json().catch(() => ({}))) as { held?: unknown };
+    return { ok: true, held: j.held === true };
+  }
   let message = `The save failed (${res.status}).`;
   try {
     const j = (await res.json()) as { error?: unknown };
