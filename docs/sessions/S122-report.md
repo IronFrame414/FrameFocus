@@ -1878,3 +1878,5 @@ made. Repeated 5× on the same build: **2 ✘** (:171 stale preview; :168 `selec
 - ⚠️ **For Josh (a product note, not a defect):** Part 6 put the notifications in the save's request path. A save now returns only after the
   in-app rows are written and the emails are attempted, one per assignee who chose it. With many email-only assignees, the sheet stays busy
   longer. It matches how the repo's other notify paths work, but it is a latency choice.
+
+- **CI requested again** on the commit after `4663b533` (pre-CI `4663b533`: type-check 0, lint 0, unit 166 / 2,278, 0 cached; base `origin/main` = `a955dac5`; 0 runs in progress or queued). This run is the merge evidence.
