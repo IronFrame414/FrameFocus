@@ -1246,3 +1246,9 @@ recompute when the mark is set **or** `computed_on` is before today (company tim
 - The company's time zone defines "today"; a change to it is covered by the `computed_on` check (9), not by a trigger.
 
 **Part 2 adds no migration.**
+
+#### Part 2 pre-CI — head `a0194804`
+
+Type-check exit **0** (`--force`, **0/5 cached**); lint exit **0** (0/1 cached); unit exit **0**, **163 files / 2,237 tests**
+(= 162 / 2,208 on `main` + this file's 29), 0 cached. `main`'s run `36858654211` on `d45a2131` is **in progress**, so
+Part 2's CI request waits for it (1.7).
