@@ -1605,6 +1605,53 @@ export type Database = {
         }
         Relationships: []
       }
+      company_holidays: {
+        Row: {
+          company_id: string
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          holiday_date: string
+          id: string
+          is_deleted: boolean
+          name: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          company_id?: string
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          holiday_date: string
+          id?: string
+          is_deleted?: boolean
+          name: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          holiday_date?: string
+          id?: string
+          is_deleted?: boolean
+          name?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "company_holidays_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       company_members: {
         Row: {
           company_id: string
@@ -1721,6 +1768,50 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "company_payment_accounts_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      company_work_calendars: {
+        Row: {
+          company_id: string
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          id: string
+          is_deleted: boolean
+          updated_at: string
+          updated_by: string | null
+          work_days: number[]
+        }
+        Insert: {
+          company_id?: string
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          is_deleted?: boolean
+          updated_at?: string
+          updated_by?: string | null
+          work_days?: number[]
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          is_deleted?: boolean
+          updated_at?: string
+          updated_by?: string | null
+          work_days?: number[]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "company_work_calendars_company_id_fkey"
             columns: ["company_id"]
             isOneToOne: false
             referencedRelation: "companies"
@@ -6979,6 +7070,134 @@ export type Database = {
           },
         ]
       }
+      project_finish_history: {
+        Row: {
+          cause_kind: string
+          cause_task_id: string | null
+          company_id: string
+          created_at: string
+          id: string
+          new_finish: string | null
+          previous_finish: string | null
+          project_id: string
+          saved_by_member_id: string | null
+        }
+        Insert: {
+          cause_kind: string
+          cause_task_id?: string | null
+          company_id: string
+          created_at?: string
+          id?: string
+          new_finish?: string | null
+          previous_finish?: string | null
+          project_id: string
+          saved_by_member_id?: string | null
+        }
+        Update: {
+          cause_kind?: string
+          cause_task_id?: string | null
+          company_id?: string
+          created_at?: string
+          id?: string
+          new_finish?: string | null
+          previous_finish?: string | null
+          project_id?: string
+          saved_by_member_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_finish_history_cause_task_id_fkey"
+            columns: ["cause_task_id"]
+            isOneToOne: false
+            referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_finish_history_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_finish_history_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_finish_history_saved_by_member_id_fkey"
+            columns: ["saved_by_member_id"]
+            isOneToOne: false
+            referencedRelation: "company_members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      project_lost_days: {
+        Row: {
+          company_id: string
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          end_date: string
+          icon: string
+          id: string
+          is_deleted: boolean
+          project_id: string
+          reason: string
+          start_date: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          company_id?: string
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          end_date: string
+          icon: string
+          id?: string
+          is_deleted?: boolean
+          project_id: string
+          reason: string
+          start_date: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          end_date?: string
+          icon?: string
+          id?: string
+          is_deleted?: boolean
+          project_id?: string
+          reason?: string
+          start_date?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_lost_days_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_lost_days_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       project_name_history: {
         Row: {
           company_id: string
@@ -7071,6 +7290,78 @@ export type Database = {
           },
           {
             foreignKeyName: "project_qb_exclusions_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      project_schedule_settings: {
+        Row: {
+          company_id: string
+          computed_on: string | null
+          created_at: string
+          created_by: string | null
+          critical_path_enabled: boolean
+          deleted_at: string | null
+          enabled_at: string | null
+          enabled_by: string | null
+          id: string
+          is_deleted: boolean
+          needs_recompute: boolean
+          notify_client: boolean
+          project_id: string
+          projected_finish: string | null
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          company_id?: string
+          computed_on?: string | null
+          created_at?: string
+          created_by?: string | null
+          critical_path_enabled?: boolean
+          deleted_at?: string | null
+          enabled_at?: string | null
+          enabled_by?: string | null
+          id?: string
+          is_deleted?: boolean
+          needs_recompute?: boolean
+          notify_client?: boolean
+          project_id: string
+          projected_finish?: string | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          company_id?: string
+          computed_on?: string | null
+          created_at?: string
+          created_by?: string | null
+          critical_path_enabled?: boolean
+          deleted_at?: string | null
+          enabled_at?: string | null
+          enabled_by?: string | null
+          id?: string
+          is_deleted?: boolean
+          needs_recompute?: boolean
+          notify_client?: boolean
+          project_id?: string
+          projected_finish?: string | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_schedule_settings_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_schedule_settings_project_id_fkey"
             columns: ["project_id"]
             isOneToOne: false
             referencedRelation: "projects"
@@ -10343,18 +10634,24 @@ export type Database = {
           change_order_id: string | null
           company_id: string
           completed_at: string | null
+          constraint_date: string | null
           created_at: string | null
           created_by: string | null
+          days_left: number | null
+          days_left_as_of: string | null
           deleted_at: string | null
           description: string | null
           due_date: string | null
+          duration_days: number | null
           id: string
+          inspection_id: string | null
           is_deleted: boolean | null
           is_scheduled: boolean | null
           percent_complete: number | null
           phase_id: string | null
           priority: string | null
           project_id: string
+          start_constraint: string | null
           start_date: string | null
           status: string
           title: string
@@ -10366,18 +10663,24 @@ export type Database = {
           change_order_id?: string | null
           company_id?: string
           completed_at?: string | null
+          constraint_date?: string | null
           created_at?: string | null
           created_by?: string | null
+          days_left?: number | null
+          days_left_as_of?: string | null
           deleted_at?: string | null
           description?: string | null
           due_date?: string | null
+          duration_days?: number | null
           id?: string
+          inspection_id?: string | null
           is_deleted?: boolean | null
           is_scheduled?: boolean | null
           percent_complete?: number | null
           phase_id?: string | null
           priority?: string | null
           project_id: string
+          start_constraint?: string | null
           start_date?: string | null
           status?: string
           title: string
@@ -10389,18 +10692,24 @@ export type Database = {
           change_order_id?: string | null
           company_id?: string
           completed_at?: string | null
+          constraint_date?: string | null
           created_at?: string | null
           created_by?: string | null
+          days_left?: number | null
+          days_left_as_of?: string | null
           deleted_at?: string | null
           description?: string | null
           due_date?: string | null
+          duration_days?: number | null
           id?: string
+          inspection_id?: string | null
           is_deleted?: boolean | null
           is_scheduled?: boolean | null
           percent_complete?: number | null
           phase_id?: string | null
           priority?: string | null
           project_id?: string
+          start_constraint?: string | null
           start_date?: string | null
           status?: string
           title?: string
@@ -10427,6 +10736,13 @@ export type Database = {
             columns: ["company_id"]
             isOneToOne: false
             referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tasks_inspection_id_fkey"
+            columns: ["inspection_id"]
+            isOneToOne: false
+            referencedRelation: "inspections"
             referencedColumns: ["id"]
           },
           {
@@ -11163,6 +11479,14 @@ export type Database = {
         }
         Returns: string
       }
+      critical_path_enabled: {
+        Args: { p_project_id: string }
+        Returns: boolean
+      }
+      critical_path_schedule_editor: {
+        Args: { p_project_id: string }
+        Returns: boolean
+      }
       delete_site_visit_measurement: {
         Args: { p_measurement_id: string }
         Returns: undefined
@@ -11294,6 +11618,10 @@ export type Database = {
       }
       mark_po_lines_purchased: {
         Args: { p_item_ids: string[]; p_po_id: string }
+        Returns: undefined
+      }
+      mark_schedule_dirty: {
+        Args: { p_project_id: string }
         Returns: undefined
       }
       material_signout_caller_name: { Args: never; Returns: string }

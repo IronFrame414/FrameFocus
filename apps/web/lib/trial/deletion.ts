@@ -357,6 +357,12 @@ export const COMPANY_TABLES: string[] = [
   'punch_list_items', 'punch_lists',
   // [S121 5-C] task_assignees references tasks (CASCADE) and company_members
   // (NO ACTION), so it is walked before both.
+  // [S122 Part 1] project_finish_history references tasks (SET NULL),
+  // company_members (SET NULL) and projects (NO ACTION); the settings and lost
+  // days reference projects; the calendar and holidays are company-scoped. All
+  // walked before tasks / projects / company_members.
+  'project_finish_history', 'project_schedule_settings', 'project_lost_days',
+  'company_holidays', 'company_work_calendars',
   'task_assignees', 'task_dependencies', 'tasks', 'phases', 'inspections', 'schedule_entries',
   'time_session_rate_snapshots', 'time_edit_logs', 'time_segments', 'time_clock_sessions',
   // Estimates redesign children (S103): estimate_events (cascades with estimates),
