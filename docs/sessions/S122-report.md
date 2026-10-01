@@ -1833,3 +1833,12 @@ Context: `client_schedule(p_project_id)` (`20261019000000_m9_client_read_arms.sq
    exists → **0 rows** from `client_critical_path`. Only the link check stands between the data and a stranger, and per S164 the control half is
    the fragile one. Its own sabotage: the link check removed from the function → red. The linked client on the same project gets rows (the
    positive half), so the 0 is not vacuous.
+
+**R2.10, second addendum: the import check is TRANSITIVE.** A route file is thin: it imports a component, the component imports the service, and
+the engine can arrive two hops down. ⚠️ **Walk the import graph from `app/portal/[projectId]/**`, server and client files both.** It must reach
+none of `packages/shared/utils/critical-path.ts`, `lib/critical-path/load.ts`, `lib/critical-path/recompute.ts`.
+- The built CLIENT bundle alone is insufficient: the #136 leak is a Server Component computing float and serializing it into the RSC payload, and
+  that code never ships as client JS.
+- Reuse the existing walker (`mReachableFiles()`, `test/support/m-i18n-scan.ts`), generalized to a root; do not write a second one.
+- **Control:** the same walk from the desktop Critical Path tab DOES reach the engine.
+- **Sabotage:** the portal page imports `computeCriticalPath` → red.
