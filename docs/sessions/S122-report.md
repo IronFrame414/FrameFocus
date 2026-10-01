@@ -1151,3 +1151,20 @@ live tasks at the time of the push** to have every new field null, with the coun
 | live tasks | 8 (pre-check) | 8 | MATCH |
 
 **Section 3: MATCH ×24. All three Part 1 migrations are on PRODUCTION, each in its own section with a one-file dry run.**
+
+### R.8 — Part 1 MERGED → `main` `d45a2131`
+
+- Merge commit `d45a2131` (`--no-ff`), pushed. **`HEAD^{tree}` = `65a1d3f6…` = branch head `582cbd3f^{tree}`;
+  `git diff --name-only 582cbd3f d45a2131` → 0 paths.**
+- S180 conditions, stated in the merge message:
+  1. CI `36812550233` green on `9f1c2382` (base `d84cfe8b` = `origin/main`, re-fetched at merge time). Tree-identity
+     exemption: `git diff --name-only 9f1c2382 582cbd3f` → `docs/sessions/S122-prompt-v2.md`, `docs/sessions/S122-report.md`,
+     `docs/sessions/S122-resume-prompt.md`, `docs/specs/S122-SPEC.md`, and nothing else. The same diff over
+     `apps packages scripts supabase .github` returned `--quiet` exit 0.
+  2. CI: e2e **678 passed, 24 skipped, 2 flaky, 0 failed** (47.6 m). The flaky ones were `desktop-photos-thumbnails-s111:60`
+     and `s116-c5-desktop-incident:228`, both **Storage** specs (the first red's family) and both passed on retry.
+     Unit **162 files / 2,208 tests**. Live 40/40 twice, sabotages (a)–(d).
+  3. All three migrations on production, by object (R.5–R.7).
+- Before the merge: `gh run list` **0** in progress, **0** queued. **`main`'s own run on `d45a2131` follows; no branch run
+  is requested until it finishes** (1.7).
+- `feature/s122-p2-engine` rebased onto `d45a2131` (`4afd9fd7`). **The report continues on that branch.**
