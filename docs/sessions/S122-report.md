@@ -1542,3 +1542,63 @@ switch exists.
   (3) **no migration** (0 files under `supabase/migrations` in the diff, of 24). Merge commit `2ae40542`; `HEAD^{tree}` `b3591c96…` = `bd8005d5^{tree}`.
 - **Part 4 needs no production section.** It is visible now: the tab exists. On production no project has CP on, so the tab shows the switch.
 - `feature/s122-p5-approvals` rebased onto `2ae40542`; `…28` waits for `main`'s merge run.
+
+### R.17 — Part 5 (held schedule changes), build log — branch `feature/s122-p5-approvals` (rebased onto `2ae40542`)
+
+- `main`'s run **`36895813091`** on `2ae40542` (Part 4's merge): **green**, e2e **683 passed**, 0 flaky.
+- **Migration `20262128000000_s122_cp_schedule_edits`**, applied to rebuild-test (dry run: exactly that file) **after** that run:
+  - `task_schedule_edits`: who submitted, the held `changes` (schedule columns only), a `summary` naming the edit, and the decision. One live
+    pending change per task.
+  - The guard: the task decides the project and company; only pending rows change; approve/reject only by
+    `critical_path_schedule_editor` and **never the submitter**; withdraw only by the submitter; the decider is stamped by the database.
+  - RLS: read by anyone who can see the project's tasks, **not a client**; submit by a foreman on the project or a **crew** assignee.
+    (I narrowed the assignee arm from "any assignee" to `crew_member` while writing it: Part 5's table says a subcontractor does not edit.)
+  - Types regenerated (+99). The deletion census was **red until `task_schedule_edits` was registered** (`deletion.ts`, `export-categories.ts`):
+    the guard working.
+- **Code:**
+  - `applyCriticalPathSave`: for a caller who is not a schedule editor, the **changed** schedule fields are held (unchanged values are not
+    changes, so a status-only save holds nothing), and **no schedule column is written**. Other fields save directly (Q12-A).
+  - `decideScheduleEdit` (`lib/critical-path/held.ts`): every check the database would make comes **first**, then the apply through the one
+    save path as the approver (cause `approval`; a held `days_left` keeps the submitter's as-of day), then the mark.
+  - Routes: `…/edits/[editId]` (approve, reject, withdraw). The save and move routes return `held`, and **the drag confirm says "This
+    change will be HELD for approval…" first, with the button reading "Submit for approval"** (translated on `/m`: `sched.cp.submit`).
+- **Visible, as ruled:**
+  - `lib/critical-path/pending.ts` is one loader and one stated consequence (*"If approved: …"*). A failed load **says so**
+    (`pending-load-error` / `cp-pending-error`) and is never shown as "nothing pending".
+  - The schedule list row stays at its dates, **grayed**, with *"PENDING Who: <the named edit> If approved: …"*.
+  - The **Gantt bar** is grayed with a `pending` tag. The **sheet** opens with the pending note.
+  - The **pending strip inside the Critical Path tab** [Josh] has Approve/Reject for a schedule editor who is not the submitter, and
+    Withdraw for the submitter.
+- **Live `s122-cp-held.live.ts`: 25/25** (rebuild-test; writes return no rows; outcomes by service role):
+  - ⚠️ **LOAD-BEARING:** a foreman's duration change → `held: true`; the task row (all 8 schedule/status columns), `projected_finish`
+    and the history count are **identical before and after**; exactly **1** held row, `{duration_days: 5}`, summary *"Changes the DURATION:
+    3 working days → 5 working days."*.
+  - A crew assignee's status **lands** and their duration is **held**. A save that changes nothing holds nothing.
+  - **SUBMIT total map:** foreman and crew yes; owner, admin, PE, PM, sub (all assigned and on the task) and client no.
+  - **DECIDE total map:** owner, admin, PE, PM yes (decider stamped); foreman, crew, sub, client no.
+  - Nobody approves their own. Withdraw is the submitter's only. Visible to owner, PM, foreman and crew; **client 0**.
+  - **APPROVE** → T Mon04–**Fri08**, finish 6 → **8 Jan**, history `approval` naming T, decided by the owner; deciding again → **409**.
+    **REJECT** → the task unchanged.
+- **Sabotages** (each restored and read back):
+
+  | # | sabotage | ✘ |
+  | --- | --- | --- |
+  | (l) | the hold ALSO writes the change (apply on submit) | **4**, including the load-bearing one |
+  | (m) | `task_schedule_edits_guard` disabled | **7**, plus 1 more after a hardening, see below; `O` read back |
+  | (n) | a permissive `INSERT … WITH CHECK (true)` policy | **5**: owner, admin, PE, PM and sub could submit; dropped, **3** policies read back |
+
+  ⚠️ **"Nobody approves their own" first stayed GREEN under (m), so it was vacuous:** the decided-CHECK refused the PM's bare `status` update,
+  not the guard. Now the PM supplies `decided_at`/`decided_by` themselves, so only the guard can refuse it; re-run under (m) → **✘**. Clean:
+  **25/25**.
+- **e2e `desktop-critical-path-held-s122.spec.ts`** (production build): **2 passed, first run**.
+  - The foreman's sheet save → the row is grayed and pending, with the named edit and *"If approved: This moves the projected finish from Wed 6
+    Jan to Fri 8 Jan (2 working days later)."* The **DB dates are unchanged**: 3 days, Jan 4–6. The Gantt bar is marked pending. On the tab:
+    Withdraw yes, Approve **0**.
+  - The owner approves in the tab → Jan 4–8, finish *Fri 8 Jan 2027*, the strip is gone, status `approved`, history `approval`.
+  - **UI sabotage:** the row's pending notice hidden → rebuilt → **✘ ×2**; restored, `cmp` 0, `git diff --quiet` 0, rebuilt.
+- **Regression** (the three CP specs + `desktop-schedule-s121` + `m-schedule-s121`):
+  - Parallel workers: first **2 ✘**. Part 5's approval and Part 3's pin badge were each asserted on the page right after a refresh, with the
+    DB already right. **With one worker (as CI): 16 passed.** Those post-refresh assertions now get the same 20s their DB polls use.
+  - Re-run in parallel: ⚠️ one invalid run of mine (Playwright started from the **repo root**, without the app's config: 5 ✘ in 111 ms,
+    measuring nothing, not counted); then **16 passed** from `apps/web`.
+- **Pre-CI:** type-check **0** (0/5 cached); lint **0**; unit **165 files / 2,269 tests**, 0 cached.
