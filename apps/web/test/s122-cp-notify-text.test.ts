@@ -5,8 +5,15 @@ import {
   CLIENT_DISCLAIMER,
   clientFinishEmail,
   longDate,
+  NOBODY_UNTOLD,
+  anyUntold,
+  parseUntold,
+  UNTOLD_WORDS_EN,
   unreachableReport,
+  untoldFrom,
+  untoldNotice,
 } from '@/lib/critical-path/notify-text';
+import { en as schedEn, es as schedEs } from '@/lib/i18n/areas/schedule';
 
 // S122 Part 6 — what each audience is told. ⚠️ The CLIENT email carries the
 // finish and the disclaimer and NOTHING ELSE (ruling 8, 6-A): no cause, no
@@ -49,5 +56,42 @@ describe('the assignee message', () => {
       body: 'No login and no email on file: Dave (no login), the client (no email on file).',
     });
     expect(longDate('2027-01-08')).toBe('Fri 8 Jan 2027');
+  });
+});
+
+// [S122 Part 6, PARITY] Every path that APPLIES a change (sheet, release, drag on
+// the desktop tab / calendar / m day view, approval) returns `untold` and shows
+// THIS notice. One reader, one sentence; /m differs only in language.
+describe('who could not be told, shown to the saver at save time', () => {
+  const told = untoldFrom({ unreachable: ['Dave'], clientUnreachable: true });
+
+  it('the route shape: from the recompute outcome, and nobody when nothing recomputed', () => {
+    expect(told).toEqual({ names: ['Dave'], client: true });
+    expect(untoldFrom(null)).toEqual(NOBODY_UNTOLD);
+    expect(anyUntold(NOBODY_UNTOLD)).toBe(false);
+    expect(anyUntold({ names: [], client: true })).toBe(true);
+    expect(anyUntold({ names: ['Dave'], client: false })).toBe(true);
+  });
+
+  it('the client reads it defensively: junk is nobody, never a crash or a false alarm', () => {
+    expect(parseUntold(JSON.parse(JSON.stringify(told)))).toEqual(told);
+    for (const junk of [undefined, null, 'Dave', 7, [], { names: 'Dave' }, { client: 'yes' }]) {
+      expect(parseUntold(junk), JSON.stringify(junk)).toEqual(NOBODY_UNTOLD);
+    }
+    expect(parseUntold({ names: ['Dave', 3, null], client: true })).toEqual(told);
+  });
+
+  it('the notice names everyone, assignees first, then the client', () => {
+    expect(untoldNotice(told)).toEqual({
+      title: 'Saved — but not everyone could be told',
+      message: 'No login and no email on file: Dave, the client (no email on file).',
+    });
+  });
+
+  it('⚠️ PARITY: the /m English words ARE the desktop words; Spanish fills the same names', () => {
+    const mEn = { title: schedEn['sched.cp.untoldTitle'], body: schedEn['sched.cp.untoldBody'], client: schedEn['sched.cp.untoldClient'] };
+    expect(mEn).toEqual(UNTOLD_WORDS_EN);
+    const mEs = { title: schedEs['sched.cp.untoldTitle'], body: schedEs['sched.cp.untoldBody'], client: schedEs['sched.cp.untoldClient'] };
+    expect(untoldNotice(told, mEs).message).toBe('Sin cuenta y sin correo registrado: Dave, el cliente (sin correo registrado).');
   });
 });
