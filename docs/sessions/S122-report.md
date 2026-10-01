@@ -1522,3 +1522,14 @@ switch exists.
   - **Regression** (both CP specs + `desktop-schedule-s121` + `m-schedule-s121` + `desktop-selections` + `m-shell`): **81 passed**,
     0 flaky.
 - **Pre-CI:** type-check **0** (0/5 cached); lint **0** (no warning in any Part 4 file); unit **165 files / 2,269 tests**, 0 cached.
+
+#### Part 4 CI requested — and a slip of mine, recorded
+
+- **CI `36889647932`** requested on `bd8005d5` (base `a9fba7ac` = `origin/main`; 0 in progress or queued).
+- ⚠️ **While it ran I committed Part 5's migration (`…28`) onto the Part 4 branch and pushed it** (`c49287c7`, `[skip ci]`, so it started no
+  run). Part 4 must merge with **no** migration, and its CI tests `bd8005d5`, so I moved the work to **`feature/s122-p5-approvals`** (created
+  at `c49287c7`), reset Part 4 to **exactly `bd8005d5`**, and force-pushed it with a lease. ⚠️ **The force-push re-pushed `bd8005d5` as the
+  branch head, whose message has no `[skip ci]`, so it started a second run, `36889899852`, on the same SHA.** The workflow's per-branch
+  `cancel-in-progress` then cancels the first. Same SHA, same tree; the cost is one restarted run. **Lesson: never force-push a branch while
+  its CI runs; branch off and leave it alone.**
+- The report continues on **`feature/s122-p5-approvals`**.
