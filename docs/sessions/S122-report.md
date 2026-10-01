@@ -1113,3 +1113,41 @@ live tasks at the time of the push** to have every new field null, with the coun
 | rows in the 3 tables | 0 | 0 | MATCH |
 
 **Section 2: MATCH ×14.**
+
+### R.7 — Part 1 PRODUCTION, section 3 of 3: `20262126000000_s122_cp_settings_history`
+
+- **rebuild-test is the post-fix file, proven before using it as the expectation.** This migration was re-applied on
+  rebuild-test after the guard fix, so each of its 8 function bodies was hashed **from the file text** (python, between
+  the dollar-quote markers) and compared with rebuild-test's `md5(prosrc)`. In file order: `set_project_schedule_settings_updated_by`
+  `f8eaaeeb…`, `guard_project_schedule_settings` `e4cb04e9…`, `critical_path_enabled` `d6a8b51e…`,
+  `critical_path_schedule_editor` `5aed10ac…`, `guard_critical_path_task_schedule` `7333a330…`,
+  `guard_critical_path_dependency` `1abe40f8…`, `mark_schedule_dirty` `6cf267bb…`, `mark_schedule_dirty_from_row` `3d5019f8…`.
+  **8 of 8 identical.**
+- **One-file workdir** `scratchpad/wd3`: all **289** migrations (m26 is the last); `cmp` 0. Checkout read back
+  `nmyphyhmfttxkdoposvf`.
+- **Pre-check, PRODUCTION:** ledger latest `20262125000000`; m26 tables **0**; m26 functions **0**; `tasks` triggers
+  `tasks_guard_assignee_change, tasks_mirror_assignee_write, tasks_set_updated_by, tasks_updated_at` (4, all `O`); live
+  tasks **8**. New tables and triggers only: no constraint over existing rows.
+- **Dry run:** exit 0, *"• 20262126000000_s122_cp_settings_history.sql"*. **Exactly one file.**
+- **Push:** exit 0, *"Applying migration 20262126000000_s122_cp_settings_history.sql..."*.
+- **Verification:** the same 24-line read-only file run on both, then `diff` of the two outputs. **The only differing line is `live
+  tasks`: rebuild-test 7, PRODUCTION 8, and 8 is production's own pre-check value.**
+
+| object | expected | PRODUCTION after | verdict |
+| --- | --- | --- | --- |
+| ledger ≥ 2125 | `2125, 2126` | `2125, 2126` | MATCH |
+| tables present | 2 | 2 | MATCH |
+| columns md5 / count | `3d008a97…` / 25 | identical | MATCH ×2 |
+| constraints md5 / count | `f7dca823…` / 13 | identical | MATCH ×2 |
+| indexes md5 / count | `ed98f9b5…` / 8 | identical | MATCH ×2 |
+| RLS on | 2 of 2 | 2 of 2 | MATCH |
+| policies md5 | `f1541f5a…` | identical | MATCH |
+| policies | history: SELECT only (**no insert/update/delete for any user role**); settings: SELECT, INSERT, UPDATE | identical | MATCH |
+| 8 functions: md5 / SECURITY DEFINER / EXECUTE authenticated / anon | as listed above; `critical_path_enabled` and `critical_path_schedule_editor` auth=true; the guard, dirty and trigger functions auth=false; anon false on all 8 | identical | MATCH ×8 |
+| overloads for the 8 names | 8 | 8 | MATCH |
+| the 11 m26 triggers | settings guard / set_updated_by / updated_at; `tasks_guard_critical_path_schedule`; `task_dependencies_guard_critical_path`; 6 `*_mark_schedule_dirty` — all `O` | identical | MATCH |
+| all `tasks` triggers | the 4 before + `tasks_guard_critical_path_schedule`, `tasks_mark_schedule_dirty` (6, all `O`) | identical | MATCH |
+| rows in settings + history | 0 | 0 | MATCH (no project has Critical Path on, so every new guard is inert on production) |
+| live tasks | 8 (pre-check) | 8 | MATCH |
+
+**Section 3: MATCH ×24. All three Part 1 migrations are on PRODUCTION, each in its own section with a one-file dry run.**
