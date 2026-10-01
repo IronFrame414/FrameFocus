@@ -1764,3 +1764,22 @@ landed would fail.
 
   All of them call the same `untoldOf` / `parseUntold` / `anyUntold` / `untoldNotice` that the proven paths call, and the calendar shares the move
   route proven by (t). But no test drives these particular lines.
+
+### R2.7 — Part 6's NEGATIVES, each sabotaged (live `s122-cp-notify.live.ts`, rebuild-test, ref `595ad753`)
+
+The Part 6 commits recorded only the unit sabotage (p). None of the live test's negatives had been sabotaged. One negative was **missing
+outright: 6-A's "only if the box was ticked"**. The live test ran only with the box on, so nothing proved an unticked box sends nothing.
+
+- **Added:** box OFF; the Owner extends T 6 → 7; the finish **does** move; **0** client emails. Control: the crew member **is** told (1). The box is
+  then turned back ON and read back `true`, so the TIME test after it cannot pass for the box's sake. Live: **10/10**.
+- **Sabotages**, one at a time (`scratchpad/sab-notify.js`, each anchor matched exactly once; restored, `cmp` 0; `notify.ts` == HEAD after all five):
+
+  | # | sabotage in `lib/critical-path/notify.ts` | ✘ |
+  | --- | --- | --- |
+  | (w) | `.eq('notify_changes', true)` removed: everyone on the task is told | **2**: the PM control; the outcome counts |
+  | (x) | the saver is no longer skipped | **2**: the Owner control; the outcome counts |
+  | (y) | the `time` short-circuit removed | **1**: TIME passing tells nobody |
+  | (z) | no previous finish treated as a move (a made-up previous finish, used in the email too, so the red is a SEND, not a crash) | **1**: first computation, 0 client emails |
+  | (n) | the client box ignored | **1**: the new box-off test |
+
+  Each red is on the test that names that rule.
