@@ -1050,3 +1050,37 @@ not fire.** Part 1 proceeds to its three production sections.
 ⚠️ **A drift to carry into Part 1's production verification:** production now has **8** live tasks (Phase 1 measured
 **6** on `4785835c`'s day). Someone has added tasks since. Part 1's NULLS check on production must expect **all
 live tasks at the time of the push** to have every new field null, with the count re-read immediately before.
+
+### R.5 — Part 1 PRODUCTION, section 1 of 3: `20262124000000_s122_cp_task_fields`
+
+- **Tree identity before any push:** `git diff --name-only 9f1c2382 HEAD` → only `docs/` (the prompt, the report,
+  the resume prompt, the spec); `git diff --quiet 9f1c2382 HEAD -- apps packages scripts supabase .github` → **0**.
+  The migration files are byte-identical to CI-green `9f1c2382`.
+- **One-file workdir** (so the checkout itself stays linked to rebuild-test throughout): `scratchpad/wd1/supabase/migrations`
+  = every repo migration with version ≤ `20262124000000` (**287 of 289**; m25 and m26 absent); `cmp` against the repo
+  file 0. Workdir linked to production (`WD REF=jwkcknyuyvcwcdeskrmz`), checkout read back `nmyphyhmfttxkdoposvf`.
+- **Pre-check, PRODUCTION:** ledger latest `20262123000000`; live tasks **8**, with both dates **5** (these stay
+  NULL: stop rule 10); `task_dependencies` rows **0**; `inspections` rows **0**; new columns present **0**; old
+  `task_dependencies_pair_key` **1**. Stop rule 2: the CHECKs are on columns created in the same migration (Q8-A),
+  and the pair-key swap is strictly narrower over **0** rows.
+- **Dry run:** exit 0, *"Would push these migrations: • 20262124000000_s122_cp_task_fields.sql"*. **Exactly one file.**
+- **Push:** exit 0, *"Applying migration 20262124000000_s122_cp_task_fields.sql..."*.
+- **The function body in the file** hashes (python, the text between `$function$` markers) to `ee79e32a…`,
+  the same as rebuild-test's `prosrc`, so the expectation is the file's text, not a drifted copy.
+
+| object | expected (rebuild-test, captured before; counts from the production pre-check) | PRODUCTION after | verdict |
+| --- | --- | --- | --- |
+| ledger ≥ 2123 | `2123, 2124` | `2123, 2124` | MATCH |
+| 6 new `tasks` columns (name:type:nullable) | `constraint_date:date:YES, days_left:integer:YES, days_left_as_of:date:YES, duration_days:integer:YES, inspection_id:uuid:YES, start_constraint:text:YES` | identical | MATCH |
+| the 5 new CHECKs, md5 of name=def | `ed683413…` (count 5) | `ed683413…` (5) | MATCH ×2 |
+| `inspection_id` FK | `REFERENCES inspections(id) ON DELETE SET NULL` | identical | MATCH |
+| 3 indexes, md5 of name=def | `4b4ad6f4…` (count 3) | `4b4ad6f4…` (3) | MATCH ×2 |
+| old `task_dependencies_pair_key` | 0 | 0 | MATCH |
+| `enforce_task_dependency_graph` md5 / SECURITY DEFINER | `ee79e32a…` / true | `ee79e32a…` / true | MATCH |
+| EXECUTE authenticated / anon | false / false | false / false | MATCH |
+| `task_dependencies_graph_guard` tgenabled | O | O | MATCH |
+| live tasks | 8 (pre-check) | 8 | MATCH |
+| live tasks with any new field set | 0 | **0** | MATCH (nothing backfilled) |
+| `task_dependencies` rows | 0 (pre-check) | 0 | MATCH |
+
+**Section 1: MATCH ×14.** Checkout CLI never left rebuild-test (`nmyphyhmfttxkdoposvf`).
