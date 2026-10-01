@@ -397,6 +397,27 @@ export async function editSegmentFull(segmentId: string, f: SegmentFields): Prom
   return editOutcome(data, error);
 }
 
+// [S122 0-B-4] The day page's session clock correction. ONE database function
+// (edit_time_session_clock, SECURITY INVOKER): the caller's RLS and the
+// column-scope trigger decide who may do it — exactly who could before (Q5-A:
+// Owner/Admin, a supervisor on a subordinate, a member on their own open
+// session). An approved day returns to pending and the edit is audited; the
+// result reports `returnedToPending` so the page can show the same pop-up the
+// week sheet does.
+export async function editSessionClock(
+  sessionId: string,
+  clockIn: string,
+  clockOut: string | null
+): Promise<SegmentEditResult> {
+  const supabase = createClient();
+  const { data, error } = await supabase.rpc('edit_time_session_clock', {
+    p_session_id: sessionId,
+    p_clock_in: clockIn,
+    p_clock_out: clockOut ?? undefined,
+  });
+  return editOutcome(data, error);
+}
+
 export async function addSegment(
   sessionId: string,
   f: SegmentFields & { segment_end: string }
@@ -503,8 +524,11 @@ async function scopedUpdate(
 }
 
 // ── Editing hours (§8.1) — Owner/Admin path, enforced by RLS + the column-
-//    scope triggers. An edit does NOT clear approval (the timesheet stays
-//    approved). ──
+//    scope triggers. [S122 0-B-4] A change to HOURS on an approved day now
+//    returns it to pending, in the database, on every path (migration
+//    20262122000000). SUPERSEDED: "An edit does NOT clear approval (the
+//    timesheet stays approved)." The day page no longer writes clock times
+//    through updateSession — see editSessionClock below. ──
 
 export async function updateSession(
   id: string,

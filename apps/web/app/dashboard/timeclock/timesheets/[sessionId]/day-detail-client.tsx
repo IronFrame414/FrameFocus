@@ -10,11 +10,10 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
   approveSession,
+  editSegmentFull,
+  editSessionClock,
   listPickerTasks,
-  updateSegment,
-  updateSession,
   updateSubordinateSegment,
-  updateSubordinateSession,
   type Completion,
   type PickerTask,
   type SegmentType,
@@ -45,6 +44,7 @@ import {
   primaryButtonStyle,
   secondaryButtonStyle,
 } from '@/lib/theme';
+import { HoursChangedNotice } from '@/components/time/hours-changed-notice';
 
 interface DayDetailClientProps {
   session: {
@@ -145,6 +145,9 @@ export function DayDetailClient({
 
   // Edit-hours modal state.
   const [hoursModal, setHoursModal] = useState(false);
+  // [S122 0-B-4] The database returned an approved day to pending — the week
+  // sheet's notice, shared (components/time/hours-changed-notice).
+  const [reopened, setReopened] = useState(false);
   const [clockInInput, setClockInInput] = useState(() => isoToLocalInput(session.clock_in));
   const [clockOutInput, setClockOutInput] = useState(() => isoToLocalInput(session.clock_out));
 
@@ -195,19 +198,23 @@ export function DayDetailClient({
     }
     setBusy(true);
     setError(null);
-    const updates = {
-      clock_in: new Date(clockInInput).toISOString(),
-      clock_out: clockOutInput ? new Date(clockOutInput).toISOString() : null,
-    };
-    const res = isAdmin
-      ? await updateSession(session.id, updates)
-      : await updateSubordinateSession(session.id, updates);
+    // [S122 0-B-4] ONE write for every role: edit_time_session_clock (SECURITY
+    // INVOKER — RLS and the column scope decide who may, unchanged, Q5-A). An
+    // approved day returns to pending and the edit is audited, in the database.
+    // SUPERSEDED: isAdmin ? updateSession(...) : updateSubordinateSession(...) —
+    // plain client UPDATEs that left an approved day approved.
+    const res = await editSessionClock(
+      session.id,
+      new Date(clockInInput).toISOString(),
+      clockOutInput ? new Date(clockOutInput).toISOString() : null
+    );
     setBusy(false);
     if (!res.success) {
       setError(res.error ?? 'Failed to update hours.');
       return;
     }
     setHoursModal(false);
+    if (res.returnedToPending) setReopened(true);
     router.refresh();
   }
 
@@ -239,11 +246,16 @@ export function DayDetailClient({
       note: segType === 'break' ? note.trim() || null : note.trim() || null,
       completion: nextTask && isEnded ? (completion as Completion) : null,
     };
+    // [S122 0-B-4] Owner/Admin segment edits go through the week sheet's own
+    // edit_time_segment — its overlap check, completion gate, reopen and audit —
+    // not a second path. SUPERSEDED: updateSegment(...), a plain client UPDATE of
+    // segment_start/segment_end. Supervisors keep the attribution-only edit
+    // (hours unchanged, so nothing reopens).
     const res = isAdmin
-      ? await updateSegment(editSegment.id, {
+      ? await editSegmentFull(editSegment.id, {
           ...attribution,
           // Owner/Admin may also correct segment times (§8.1).
-          ...(startInput ? { segment_start: new Date(startInput).toISOString() } : {}),
+          segment_start: startInput ? new Date(startInput).toISOString() : editSegment.segment_start,
           segment_end: endInput ? new Date(endInput).toISOString() : null,
         })
       : await updateSubordinateSegment(editSegment.id, attribution);
@@ -253,6 +265,7 @@ export function DayDetailClient({
       return;
     }
     setEditSegment(null);
+    if ('returnedToPending' in res && res.returnedToPending) setReopened(true);
     router.refresh();
   }
 
@@ -313,7 +326,7 @@ export function DayDetailClient({
         </div>
         <div style={{ display: 'flex', gap: '10px' }}>
           {canEditHours && (
-            <button style={secondaryButtonStyle} onClick={() => setHoursModal(true)}>
+            <button style={secondaryButtonStyle} data-testid="day-edit-hours" onClick={() => setHoursModal(true)}>
               Edit hours
             </button>
           )}
@@ -328,6 +341,17 @@ export function DayDetailClient({
           )}
         </div>
       </div>
+
+      {reopened && (
+        <HoursChangedNotice
+          dayText={dayLabel}
+          canApprove={canApprove}
+          busy={busy}
+          onApprove={() => void handleApprove().then(() => setReopened(false))}
+          onClose={() => setReopened(false)}
+          style={{ marginBottom: '16px' }}
+        />
+      )}
 
       {error && (
         <div
@@ -486,6 +510,7 @@ export function DayDetailClient({
               <label style={fieldLabelStyle}>Clock in</label>
               <input
                 type="datetime-local"
+                data-testid="day-clock-in"
                 value={clockInInput}
                 onChange={(e) => setClockInInput(e.target.value)}
                 style={inputStyle}
@@ -495,6 +520,7 @@ export function DayDetailClient({
               <label style={fieldLabelStyle}>Clock out</label>
               <input
                 type="datetime-local"
+                data-testid="day-clock-out"
                 value={clockOutInput}
                 onChange={(e) => setClockOutInput(e.target.value)}
                 style={inputStyle}
@@ -514,6 +540,7 @@ export function DayDetailClient({
               <button
                 style={{ ...primaryButtonStyle, opacity: busy ? 0.6 : 1 }}
                 disabled={busy}
+                data-testid="day-hours-save"
                 onClick={() => void submitHours()}
               >
                 {busy ? 'Saving…' : 'Save'}

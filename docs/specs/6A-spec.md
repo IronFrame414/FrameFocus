@@ -193,6 +193,7 @@ People forget to clock in and out, so hours need an edit path — the spec previ
 - **Only Owner and Admin may edit hours** (sessions and segments). **Crew and Foreman cannot edit hours — including their own.**
 - **Consequence, stated explicitly:** a **Foreman may approve hours he cannot correct.** Approval and correction are distinct powers held by different roles.
 - **An edit does not clear approval.** When an Owner or Admin edits already-approved hours, the timesheet **stays approved** — editing does not re-open the approval. Tradeoff recorded as an open item (§12).
+  - ⚠️ **SUPERSEDED.** For segment edits by the week sheet: S121 ASK-11 (`20262119000000`). For the per-session clock correction and any direct write of a segment's hours: **S122 0-B-4** [Josh, Q4-A/Q5-A] (`20262122000000`). **A change to the hours of an approved day returns it to pending**, enforced in the database on every path, and is audited. Who may make the correction is unchanged.
 
 ---
 
