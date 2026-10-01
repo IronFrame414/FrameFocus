@@ -1372,3 +1372,33 @@ snap back in between.
 - Merge commit `6c91b9c1`; `HEAD^{tree}` `29927c50…` = `e4537e93^{tree}`. Pushed. **Part 2 is on `main` and needs no production
   section** (pure TypeScript, no migration).
 - `main`'s merge run follows; `feature/s122-p3-line-sheet` is rebased onto `6c91b9c1`. Migration `…27` waits until that run finishes.
+
+#### Part 3 on rebuild-test — migration `…27`, live proofs, DB sabotages
+
+- `main`'s run **`36867822219`** on `6c91b9c1` (Part 2's merge): **green**, e2e **680 passed**, unit 163 / 2,237. Then **0** in progress or queued.
+- **rebuild-test:** the dry run listed **exactly** `20262127000000_s122_cp_notify_cause.sql`; applied. Types regenerated: **+21 / −1**, exactly
+  `recompute_cause_kind`/`_task_id` (+FK), `task_assignees.notify_changes`, and `mark_schedule_dirty`'s new 3-argument signature. Type-check
+  **0** (0/5 cached).
+- **Live `s122-cp-recompute.live.ts`: 21/21**, then 21/21 again after the sabotages:
+  - WRITE-THROUGH: A Mon05–Tue06, B Wed07–Fri09, finish Fri09, **2** tasks written, **1** history row (`enabled`). A second run writes **0**
+    and logs nothing. The duration-less tasks keep their typed dates and a NULL duration (stop rule 10).
+  - CAUSE: task (naming the task), dependency (naming its successor), weather, inspection, **project_start** (control: a rename **landed**
+    and marked nothing), holiday, calendar, enabled (control: the notify-client switch marks nothing). **First cause wins.** A user can
+    neither overwrite the cause nor clear the mark (the same UPDATE flips `notify_client`, proving it landed). The service role marks
+    nothing.
+  - HISTORY on Q, every date hand-worked: weather Tue06 → finish 09 → **12** (`weather`); project start → Mon12 → **16** (`project_start`);
+    the same day again → `fresh`; read a week later → **23** (`time`); history = `enabled, weather, project_start, time` (**4** rows).
+  - NOTIFY: a new assignee row reads **false**; a crew member's write leaves it false (service-role read); the Owner's lands.
+- **Part 1's live file re-run after `…27`** (S157: its guard and mark functions were replaced): **40/40**.
+- **Fixture faults found and fixed (not code):** the CAUSE control's rename logs a `project_name_history` row, which pins the project, so
+  the first run's teardown failed (**after** 21/21). The second run then went **21 skipped**, because a crashed run's dependencies pinned
+  its tasks; I'm not counting that run. **One `purge()` now deletes children first, in setup and teardown alike.**
+- **DB sabotages** (each restored, read back):
+
+  | # | sabotage | ✘ | read back |
+  | --- | --- | --- | --- |
+  | (i) | `projects_mark_schedule_dirty` disabled | **4**: item 10, the project_start history step, and the two after it that depend on it | `O` |
+  | (ii) | `project_schedule_settings_guard` disabled | **3**: the enabled cause, first-cause-wins (a knock-on: CP left off), cannot-overwrite-or-clear | `O` |
+  | (iii) | `notify_changes` DEFAULT `true` | **1**: NOTIFY | `false` |
+
+  Clean re-run after all three: **21/21**.

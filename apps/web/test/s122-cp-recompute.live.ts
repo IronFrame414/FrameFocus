@@ -148,8 +148,31 @@ async function history(key: 'p' | 'q') {
   }[];
 }
 
+/** Everything this file creates on a project, children first. */
+async function purge(projectId: string) {
+  const { data: ts } = await admin.from('tasks').select('id').eq('project_id', projectId);
+  const ids = (ts ?? []).map((r) => r.id as string);
+  await admin.from('project_finish_history').delete().eq('project_id', projectId);
+  await admin.from('project_schedule_settings').delete().eq('project_id', projectId);
+  if (ids.length) {
+    await admin.from('task_dependencies').delete().in('predecessor_id', ids);
+    await admin.from('task_dependencies').delete().in('successor_id', ids);
+    await admin.from('task_assignees').delete().in('task_id', ids);
+    await admin.from('tasks').delete().in('id', ids);
+  }
+  await admin.from('inspections').delete().eq('project_id', projectId);
+  await admin.from('project_lost_days').delete().eq('project_id', projectId);
+  await admin.from('project_assignments').delete().eq('project_id', projectId);
+  // The CAUSE control renames P, which logs a project_name_history row.
+  await admin.from('project_name_history').delete().eq('project_id', projectId);
+  await deleteProjects(admin, [projectId]);
+}
+
 beforeAll(async () => {
   assertRebuildTest();
+  // Runnable from ANY starting state: a crashed run's projects are purged whole.
+  const { data: stale } = await admin.from('projects').select('id').like('name', `${MARKER}%`);
+  for (const r of stale ?? []) await purge(r.id as string);
   await sweepProjectsNamed(MARKER);
   const { data: prof } = await admin.from('profiles').select('company_id').eq('email', OWNER).single();
   companyId = prof!.company_id as string;
@@ -203,23 +226,7 @@ beforeAll(async () => {
 }, 300_000);
 
 afterAll(async () => {
-  for (const key of ['p', 'q'] as const) {
-    if (!project[key]) continue;
-    const { data: ts } = await admin.from('tasks').select('id').eq('project_id', project[key]);
-    const ids = (ts ?? []).map((r) => r.id as string);
-    await admin.from('project_finish_history').delete().eq('project_id', project[key]);
-    await admin.from('project_schedule_settings').delete().eq('project_id', project[key]);
-    if (ids.length) {
-      await admin.from('task_dependencies').delete().in('predecessor_id', ids);
-      await admin.from('task_dependencies').delete().in('successor_id', ids);
-      await admin.from('task_assignees').delete().in('task_id', ids);
-      await admin.from('tasks').delete().in('id', ids);
-    }
-    await admin.from('inspections').delete().eq('project_id', project[key]);
-    await admin.from('project_lost_days').delete().eq('project_id', project[key]);
-    await admin.from('project_assignments').delete().eq('project_id', project[key]);
-    await deleteProjects(admin, [project[key]]);
-  }
+  for (const key of ['p', 'q'] as const) if (project[key]) await purge(project[key]);
   await admin.from('company_holidays').delete().eq('company_id', companyId).like('name', `${MARKER}%`);
   if (createdCalendar) await admin.from('company_work_calendars').delete().eq('company_id', companyId);
   const { count } = await admin
