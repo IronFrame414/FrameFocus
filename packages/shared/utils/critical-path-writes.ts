@@ -10,6 +10,7 @@ import {
   type CpInput,
   type CpResult,
   type CpTask,
+  type LostDayRange,
   type WorkCalendar,
 } from './critical-path';
 
@@ -242,7 +243,11 @@ export function translateMove(
   from: { start: string; end: string },
   to: { start: string; end: string },
   calendar: WorkCalendar,
-  today: string
+  today: string,
+  /** The project's weather days. An UNSTARTED task's span skips them in the
+   *  engine, so the dragged span does too — or a bar dropped on Wed would
+   *  come back ending Thu. (Work in progress ignores them, as the engine does.) */
+  lostDays: readonly LostDayRange[] = []
 ): MoveTranslation {
   if (task.status === 'complete') {
     return { mode: 'refused', error: 'A complete task keeps its actual dates.' };
@@ -272,7 +277,15 @@ export function translateMove(
     after.constraintDate = to.start;
   }
   if (!isMove) {
-    const span = workingDaysInclusive(to.start, to.end, calendar);
+    const lost = new Set<string>();
+    for (const r of lostDays) {
+      for (let d = r.start, g = 0; d <= r.end && g <= HORIZON_DAYS; d = addCalendarDays(d, 1), g++) lost.add(d);
+    }
+    let lostInside = 0;
+    for (const d of lost) {
+      if (d >= to.start && d <= to.end && workingDaysInclusive(d, d, calendar) === 1) lostInside++;
+    }
+    const span = workingDaysInclusive(to.start, to.end, calendar) - lostInside;
     if (span < 1) return { mode: 'refused', error: 'That range has no working days in it.' };
     after.durationDays = span;
   }

@@ -76,7 +76,7 @@ export async function POST(
   }
   const from = { start: task.startDate, end: task.dueDate };
 
-  const tr = translateMove(task, from, to, input.calendar, input.today);
+  const tr = translateMove(task, from, to, input.calendar, input.today, input.lostDays);
   if (tr.mode === 'refused') return NextResponse.json({ cp: true, mode: 'refused', error: tr.error });
 
   const after: CpTask = tr.mode === 'typed' ? { ...task, startDate: tr.start, dueDate: tr.end } : tr.after;

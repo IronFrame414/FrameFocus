@@ -87,6 +87,12 @@ describe('a RESIZE changes the duration; a start resize also pins', () => {
     expect(describeEdit(task(), r.after).map((p) => p.kind)).toEqual(['duration', 'anchor']);
   });
 
+  it('⚠️ a WEATHER day inside an unstarted span is not counted: end → Tue13 with Thu08 lost is DURATION 4, so the engine ends it on Tue13', () => {
+    const lost = [{ start: '2026-10-08', end: '2026-10-08' }];
+    const r = translateMove(task(), FROM, { start: '2026-10-07', end: '2026-10-13' }, CAL, TODAY, lost);
+    expect(r).toEqual({ mode: 'cp', after: task({ durationDays: 4 }) });
+  });
+
   it('a range with no working day in it is refused, not saved as zero', () => {
     const t = task({ startDate: '2026-10-10', dueDate: '2026-10-10' });
     expect(translateMove(t, { start: '2026-10-10', end: '2026-10-10' }, { start: '2026-10-10', end: '2026-10-11' }, CAL, TODAY)).toEqual({
