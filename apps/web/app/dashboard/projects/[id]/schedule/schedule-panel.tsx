@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { useConfirm } from '@/components/confirm/confirm-provider';
 import type {
@@ -105,6 +105,15 @@ export function SchedulePanel({
   const [view, setView] = useState<ViewMode>('list');
   const [taskFormOpen, setTaskFormOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
+  // [S122 Part 3] After the sheet saves, its refresh runs in a transition and the
+  // task rows are DISABLED until it lands: a sheet reopened before the refreshed
+  // rows arrive would preview a Critical Path change against a duration that is
+  // no longer stored (measured: "Tue 12 Jan → Wed 13 Jan" for a change that moves
+  // it to Fri 15 Jan). Remounting the sheet when the refresh lands was tried and
+  // rejected — it wiped what the user had already typed.
+  const [refreshingSheet, startSheetRefresh] = useTransition();
+  // The task the sheet edits, read from the CURRENT props, never the click-time copy.
+  const liveEditing = editingTask ? (tasks.find((t) => t.id === editingTask.id) ?? editingTask) : null;
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -299,13 +308,13 @@ export function SchedulePanel({
           phases={phases}
           members={members}
           tasks={tasks}
-          editing={editingTask}
-          canManage={canManage || (editingTask?.status !== undefined && role === 'crew_member')}
+          editing={liveEditing}
+          canManage={canManage || (liveEditing?.status !== undefined && role === 'crew_member')}
           criticalPath={criticalPath}
           onDone={() => {
             setTaskFormOpen(false);
             setEditingTask(null);
-            router.refresh();
+            startSheetRefresh(() => router.refresh());
           }}
           onCancel={() => {
             setTaskFormOpen(false);
@@ -383,7 +392,7 @@ export function SchedulePanel({
                   </button>
                 )}
               </div>
-              <TaskRows tasks={rollup.tasks} onSelect={openEdit} />
+              <TaskRows tasks={rollup.tasks} onSelect={openEdit} disabled={refreshingSheet} />
             </div>
           ))}
 
@@ -391,7 +400,7 @@ export function SchedulePanel({
             <div style={titleStyle}>
               {rollups.length > 0 ? 'No Phase' : 'Tasks'} ({unphased.length})
             </div>
-            <TaskRows tasks={unphased} onSelect={openEdit} />
+            <TaskRows tasks={unphased} onSelect={openEdit} disabled={refreshingSheet} />
             {tasks.length === 0 && (
               <p style={{ fontSize: '0.875rem', color: '#6b7280' }}>
                 No tasks yet. Undated tasks are backlog — they appear here and on the Gantt, never
@@ -649,7 +658,16 @@ export function SchedulePanel({
   );
 }
 
-function TaskRows({ tasks, onSelect }: { tasks: Task[]; onSelect: (t: Task) => void }) {
+function TaskRows({
+  tasks,
+  onSelect,
+  disabled = false,
+}: {
+  tasks: Task[];
+  onSelect: (t: Task) => void;
+  /** [S122 Part 3] True while the sheet's save is refreshing the rows. */
+  disabled?: boolean;
+}) {
   if (tasks.length === 0) return null;
   return (
     <div>
@@ -657,6 +675,7 @@ function TaskRows({ tasks, onSelect }: { tasks: Task[]; onSelect: (t: Task) => v
         <button
           key={t.id}
           onClick={() => onSelect(t)}
+          disabled={disabled}
           style={{
             display: 'flex',
             width: '100%',

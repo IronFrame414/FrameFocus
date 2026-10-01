@@ -172,8 +172,10 @@ test.describe('S122 Part 3 · the Critical Path line sheet', () => {
       'This moves the projected finish from Tue 12 Jan to Fri 15 Jan (3 working days later).'
     );
     await page.getByRole('button', { name: 'Save Task' }).click();
-    await expect.poll(async () => (await row(task.B)).start_constraint, { timeout: 20_000 }).toBe('not_before');
+    // Poll the RECOMPUTED date: the route writes the pin first, then recomputes.
+    await expect.poll(async () => (await row(task.B)).due_date, { timeout: 20_000 }).toBe('2027-01-15');
     expect(await row(task.B)).toMatchObject({
+      start_constraint: 'not_before',
       constraint_date: '2027-01-11',
       start_date: '2027-01-11',
       due_date: '2027-01-15',
@@ -189,8 +191,8 @@ test.describe('S122 Part 3 · the Critical Path line sheet', () => {
     await openB(page);
     await expect(page.getByTestId('cp-pinned')).toHaveText('Pinned · not before Mon 11 Jan');
     await page.getByTestId('cp-release').click();
-    await expect.poll(async () => (await row(task.B)).start_constraint, { timeout: 20_000 }).toBeNull();
-    expect(await row(task.B)).toMatchObject({ constraint_date: null, start_date: '2027-01-06', due_date: '2027-01-12' });
+    await expect.poll(async () => (await row(task.B)).due_date, { timeout: 20_000 }).toBe('2027-01-12');
+    expect(await row(task.B)).toMatchObject({ start_constraint: null, constraint_date: null, start_date: '2027-01-06', due_date: '2027-01-12' });
     await expect(page.getByTestId(`task-pinned-${task.B}`)).toHaveCount(0);
 
     // The history: enabled (→ 8 Jan), duration (→ 12 Jan), pin (→ 15 Jan), release (→ 12 Jan).

@@ -75,15 +75,27 @@ describe('the firing schedule agrees with vercel.json', () => {
     );
   });
 
-  it('the other fourteen crons are still scheduled — the guard cuts both ways', () => {
+  it('⚠️ the CRITICAL-PATH recompute cron is scheduled, hourly at :20', () => {
+    // S122 Part 3 — the sixteenth entry: Q9 recompute trigger 9 (the passage of
+    // time). As invisible as the drift check when it stops — stored dates simply
+    // go stale — so it is pinned the same way. Hourly, because "today" turns over
+    // at a different UTC hour in each company's time zone.
+    const entry = vercel.crons.find((c) => c.path === '/api/cron/critical-path-recompute');
+    expect(entry, 'the critical-path recompute cron is not in vercel.json').toBeDefined();
+    expect(entry!.schedule).toBe('20 * * * *');
+  });
+
+  // SUPERSEDED title [S122 Part 3]: 'the other fourteen crons are still scheduled — …'
+  it('the other fifteen crons are still scheduled — the guard cuts both ways', () => {
     // Adding an entry is the one edit most likely to damage this file, and S103
     // records a malformed vercel.json failing a deploy with eleven migrations
     // already on production.
     //
     // ⚠️ THE LENGTH ASSERTION IS THE POINT, not pedantry. It is what turns
     // "somebody deleted a cron while adding one" from an invisible production
-    // change into a red test. Bumped 14 -> 15 by S108 C2.
-    expect(vercel.crons).toHaveLength(15);
+    // change into a red test. Bumped 14 -> 15 by S108 C2; 15 -> 16 by S122 Part 3
+    // (/api/cron/critical-path-recompute). SUPERSEDED: `toHaveLength(15)`.
+    expect(vercel.crons).toHaveLength(16);
     for (const c of vercel.crons) {
       expect(typeof c.path, `${JSON.stringify(c)} has no path`).toBe('string');
       expect(c.schedule.split(' '), `${c.path} has a malformed schedule`).toHaveLength(5);

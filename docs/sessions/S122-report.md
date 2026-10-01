@@ -1402,3 +1402,28 @@ snap back in between.
   | (iii) | `notify_changes` DEFAULT `true` | **1**: NOTIFY | `false` |
 
   Clean re-run after all three: **21/21**.
+
+#### Part 3 — UI proofs (production build, rebuild-test) and pre-CI
+
+- `next build` exit **0** each time; `next start` the sole listener on :3000 (PID read with `ss`, stopped by PID, never `pkill`).
+- **e2e `desktop-critical-path-sheet-s122.spec.ts`**, with A(2) → B(3) from Mon 4 Jan 2027:
+  1. **Read-check:** the tasks were seeded undated, and the page showed `2027-01-06 → 2027-01-08` for B, as the DB had it.
+  2. A **duration** edit is named *"Changes the DURATION: 3 working days → 5 working days."* with *"This moves the projected finish from Fri
+     8 Jan to Tue 12 Jan (2 working days later)."* Nothing was written while editing (duration still 3); Save gave due 12 Jan.
+  3. A **pin** is named *"Sets a START ANCHOR: pinned: not before Mon 11 Jan."* (12 → 15 Jan, 3 later). Saved, it shows on the list row
+     (`Pinned · not before Mon 11 Jan`; A shows none) **and on the Gantt bar** (B yes, A no).
+  4. **Release**: one click; B goes back to Jan 6–12 and the list marker is gone.
+  5. History = enabled → 8, task → 12, task → 15, task → 12 (**4** rows, each naming B).
+- ⚠️ **A real defect the e2e caught, fixed in the product, not the test.** Reopening a task right after a save previewed against the
+  **click-time** copy of the task: the preview read *"Tue 12 Jan → Wed 13 Jan (1 working day later)"* for a change that moves it to
+  Fri 15 Jan, because B's old 3-day duration was still in the sheet's state. **Fix attempt 1, keying the sheet on `updated_at`, was REJECTED
+  by the next run:** the refresh landed mid-edit, the sheet remounted, and the anchor the user had typed was wiped. **Fix kept:** the save's
+  refresh runs in a transition, and **the task rows are disabled until it lands**; the sheet always reads the task from the current props.
+- A **test race** fixed (not product): the route writes the pin, then recomputes, and the poll on `start_constraint` read before the
+  recompute. It now polls the **recomputed date**.
+- **Final: 1 passed, 0 retries.** **UI sabotage:** the Gantt pin marker removed → rebuilt → **✘** (`gantt-pinned-<B>` not found, with
+  retry); restored, `cmp` 0, rebuilt. **Regression:** this spec + `desktop-schedule-s121` + `m-schedule-s121` → **12 passed**, 0 flaky.
+- **S157:** `test/email-warming.test.ts` pins the cron count. It went red at **15 → 16** on the new cron, so it was updated **in place**
+  (superseded title and `toHaveLength(15)` quoted), and the new cron gets its own pin (path + `20 * * * *`).
+- **Pre-CI:** type-check exit **0** (0/5 cached); lint exit **0** (warnings only, none in Part 3's files); unit exit **0**, **164 files / 2,256
+  tests** (2,237 + 18 + 1), 0 cached.
