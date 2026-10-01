@@ -1,5 +1,5 @@
 import type { CriticalPathTaskSave } from '@framefocus/shared/validation/critical-path';
-import { parseUntold, type Untold } from './notify-text';
+import { parseUntold, type Untold } from './untold';
 
 // S122 Part 3 — the line sheet's one save path on a Critical Path project.
 // The route writes as the caller (RLS + the Q12 guard decide), then the engine

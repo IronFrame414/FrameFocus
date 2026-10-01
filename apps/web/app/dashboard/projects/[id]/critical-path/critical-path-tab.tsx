@@ -29,7 +29,8 @@ import { rollupPhases, type Phase, type Task } from '@/lib/services/tasks-shared
 import { moveCalendarEvent } from '@/lib/services/schedule-client';
 import type { CpSettings } from '@/lib/critical-path/load';
 import { pendingConsequence, type PendingEdit } from '@/lib/critical-path/pending';
-import { anyUntold, parseUntold, untoldNotice } from '@/lib/critical-path/notify-text';
+import { anyUntold, parseUntold, untoldNotice } from '@/lib/critical-path/untold';
+import { UNTOLD_WORDS_EN } from '@/lib/critical-path/notify-text';
 import { WEATHER_ICONS, WEATHER_ICON_KEYS, weatherGlyph, type WeatherIcon } from '@/lib/critical-path/weather';
 import { computeCriticalPath, type CpInput, type CpResult } from '@framefocus/shared/utils/critical-path';
 import {
@@ -190,7 +191,7 @@ export function CriticalPathTab({
     if (!r.success) setError(r.error ?? 'The change was not saved.');
     else {
       // [S122 Part 6] The same notice the sheet shows: who chose to be told and could not be.
-      if (r.untold && anyUntold(r.untold)) await alert(untoldNotice(r.untold));
+      if (r.untold && anyUntold(r.untold)) await alert(untoldNotice(r.untold, UNTOLD_WORDS_EN));
       router.refresh();
     }
   }
@@ -643,7 +644,7 @@ function PendingStrip({
     }
     setBusy(null);
     // [S122 Part 6] An approval applies the change: the approver sees who could not be told.
-    if (anyUntold(untold)) await alert(untoldNotice(untold));
+    if (anyUntold(untold)) await alert(untoldNotice(untold, UNTOLD_WORDS_EN));
     router.refresh();
   }
 

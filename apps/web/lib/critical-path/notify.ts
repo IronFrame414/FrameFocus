@@ -10,10 +10,10 @@ import {
   assigneeTitle,
   clientFinishEmail,
   unreachableReport,
-  untoldFrom,
-  untoldList,
+  UNTOLD_WORDS_EN,
   type ChangedTaskLine,
 } from './notify-text';
+import { untoldFrom, untoldList } from './untold';
 
 // S122 Part 6 — WHO IS TOLD WHEN A CRITICAL PATH CHANGE MOVES DATES.
 //
@@ -212,7 +212,7 @@ export async function notifyScheduleChange(
   }
 
   // ── The saver is told who could not be reached (never silently dropped) ──
-  const missing = untoldList(untoldFrom(out));
+  const missing = untoldList(untoldFrom(out), UNTOLD_WORDS_EN.client);
   if (missing.length > 0 && p.savedByMemberId) {
     const saver = await resolveMemberReachability(admin, p.savedByMemberId);
     if (saver.state === 'profile') {

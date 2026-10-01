@@ -1,6 +1,6 @@
 import { createClient } from '@/lib/supabase-browser';
 import { applied, DISCARDED } from '@/lib/services/mutation-result';
-import { parseUntold, type Untold } from '@/lib/critical-path/notify-text';
+import { parseUntold, type Untold } from '@/lib/critical-path/untold';
 import type {
   CalendarEvent,
   GeneralKind,

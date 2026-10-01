@@ -5,14 +5,10 @@ import {
   CLIENT_DISCLAIMER,
   clientFinishEmail,
   longDate,
-  NOBODY_UNTOLD,
-  anyUntold,
-  parseUntold,
   UNTOLD_WORDS_EN,
   unreachableReport,
-  untoldFrom,
-  untoldNotice,
 } from '@/lib/critical-path/notify-text';
+import { NOBODY_UNTOLD, anyUntold, parseUntold, untoldFrom, untoldNotice } from '@/lib/critical-path/untold';
 import { en as schedEn, es as schedEs } from '@/lib/i18n/areas/schedule';
 
 // S122 Part 6 — what each audience is told. ⚠️ The CLIENT email carries the
@@ -82,7 +78,7 @@ describe('who could not be told, shown to the saver at save time', () => {
   });
 
   it('the notice names everyone, assignees first, then the client', () => {
-    expect(untoldNotice(told)).toEqual({
+    expect(untoldNotice(told, UNTOLD_WORDS_EN)).toEqual({
       title: 'Saved — but not everyone could be told',
       message: 'No login and no email on file: Dave, the client (no email on file).',
     });

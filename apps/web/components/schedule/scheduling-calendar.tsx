@@ -11,7 +11,8 @@ import { Calendar } from './calendar';
 import { ScheduleSheet, type ScheduleMember } from './schedule-sheet';
 import { moveCalendarEvent, type CalendarEvent } from '@/lib/services/schedule-client';
 import { useAlert, useConfirm } from '@/components/confirm/confirm-provider';
-import { anyUntold, untoldNotice } from '@/lib/critical-path/notify-text';
+import { anyUntold, untoldNotice } from '@/lib/critical-path/untold';
+import { UNTOLD_WORDS_EN } from '@/lib/critical-path/notify-text';
 import { canAddToProjectFromSchedule, canSchedule } from '@/lib/schedule/authority';
 
 export function SchedulingCalendar({
@@ -52,7 +53,7 @@ export function SchedulingCalendar({
                 if (r.cancelled) return 'Not saved: the change was cancelled.';
                 if (!r.success) return r.error ?? 'The change was not saved.';
                 // [S122 Part 6] The same notice the sheet shows: who chose to be told and could not be.
-                if (r.untold && anyUntold(r.untold)) await alert(untoldNotice(r.untold));
+                if (r.untold && anyUntold(r.untold)) await alert(untoldNotice(r.untold, UNTOLD_WORDS_EN));
                 router.refresh();
                 return null;
               }

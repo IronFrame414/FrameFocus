@@ -17,7 +17,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@framefocus/shared/types/database';
 import { heldScheduleChangesSchema } from '@framefocus/shared/validation/critical-path';
-import { NOBODY_UNTOLD, type Untold } from './notify-text';
+import { NOBODY_UNTOLD, type Untold } from './untold';
 import { applyCriticalPathSave, untoldOf, type CpSaveError } from './save';
 
 export type HeldDecision = 'approve' | 'reject' | 'withdraw';

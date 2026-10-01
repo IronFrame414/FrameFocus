@@ -7,6 +7,7 @@
 // disclaimer is part of the sentence, not a footer that can be dropped.
 
 import { shortDate } from '@framefocus/shared/utils/critical-path-writes';
+import type { UntoldWords } from './untold';
 
 /** "Fri 8 Jan 2027" */
 export function longDate(d: string): string {
@@ -50,50 +51,11 @@ export function unreachableReport(names: readonly string[]): { title: string; bo
   };
 }
 
-// ── Who could not be told, said to the saver AT SAVE TIME ───────────────────
-// [S122 Part 6, PARITY] Every path that APPLIES a change — the sheet, a drag
-// (desktop tab, scheduling calendar, /m day view) and an approval — returns
-// `untold` from its route and shows the same notice. One shape, one reader, one
-// sentence; only the LANGUAGE differs by surface (/m passes its t() words).
-
-/** Who chose to be told and could not be reached. */
-export interface Untold {
-  names: string[];
-  client: boolean;
-}
-
-export const NOBODY_UNTOLD: Untold = { names: [], client: false };
-
-/** Server side: from the recompute's notify outcome (null when nothing recomputed). */
-export function untoldFrom(n: { unreachable: readonly string[]; clientUnreachable: boolean } | null | undefined): Untold {
-  return n ? { names: [...n.unreachable], client: n.clientUnreachable } : NOBODY_UNTOLD;
-}
-
-/** Client side: a route's `untold`, read defensively (a missing field is nobody). */
-export function parseUntold(v: unknown): Untold {
-  if (!v || typeof v !== 'object') return NOBODY_UNTOLD;
-  const o = v as { names?: unknown; client?: unknown };
-  return {
-    names: Array.isArray(o.names) ? o.names.filter((x): x is string => typeof x === 'string') : [],
-    client: o.client === true,
-  };
-}
-
-export function anyUntold(u: Untold): boolean {
-  return u.names.length > 0 || u.client;
-}
-
-export const UNTOLD_WORDS_EN = {
+// ── Who could not be told: the ENGLISH words (desktop and the server) ────────
+// The shape and the logic are in ./untold, which holds no words because /m
+// mounts it; /m passes its t() words (sched.cp.untold*), asserted equal to these.
+export const UNTOLD_WORDS_EN: UntoldWords = {
   title: 'Saved — but not everyone could be told',
   body: 'No login and no email on file: {names}.',
   client: 'the client (no email on file)',
 };
-
-/** The list the saver reads: assignees by name, then the client. */
-export function untoldList(u: Untold, clientWords: string = UNTOLD_WORDS_EN.client): string[] {
-  return [...u.names, ...(u.client ? [clientWords] : [])];
-}
-
-export function untoldNotice(u: Untold, words: typeof UNTOLD_WORDS_EN = UNTOLD_WORDS_EN): { title: string; message: string } {
-  return { title: words.title, message: words.body.replace('{names}', untoldList(u, words.client).join(', ')) };
-}

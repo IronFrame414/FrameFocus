@@ -21,7 +21,7 @@ import { companyToday } from '@framefocus/shared/utils/dates';
 import { applyHeldChanges, editSentence, previewEdit } from '@framefocus/shared/utils/critical-path-writes';
 import { recomputeProject, type CpCause, type RecomputeOutcome } from './recompute';
 import { loadCriticalPathData } from './load';
-import { untoldFrom, type Untold } from './notify-text';
+import { untoldFrom, type Untold } from './untold';
 
 export type CpSaveError = { ok: false; status: number; error: string; cause: string };
 
