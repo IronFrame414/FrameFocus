@@ -10,6 +10,7 @@ import { useRouter } from 'next/navigation';
 import { Calendar } from './calendar';
 import { ScheduleSheet, type ScheduleMember } from './schedule-sheet';
 import { moveCalendarEvent, type CalendarEvent } from '@/lib/services/schedule-client';
+import { useConfirm } from '@/components/confirm/confirm-provider';
 import { canAddToProjectFromSchedule, canSchedule } from '@/lib/schedule/authority';
 
 export function SchedulingCalendar({
@@ -29,6 +30,7 @@ export function SchedulingCalendar({
   onSelect?: (e: CalendarEvent) => void;
 }) {
   const router = useRouter();
+  const confirm = useConfirm();
   const may = canSchedule(role);
   const [sheetDay, setSheetDay] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
@@ -43,7 +45,9 @@ export function SchedulingCalendar({
         onMove={
           may
             ? async (e, start, end) => {
-                const r = await moveCalendarEvent(e, start, end);
+                // [S122 Part 4] A Critical Path task's move names its edit and asks first.
+                const r = await moveCalendarEvent(e, start, end, confirm);
+                if (r.cancelled) return 'Not saved: the change was cancelled.';
                 if (!r.success) return r.error ?? 'The change was not saved.';
                 router.refresh();
                 return null;

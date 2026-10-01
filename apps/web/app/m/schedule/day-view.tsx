@@ -35,6 +35,7 @@ import { useRouter } from 'next/navigation';
 import { useT } from '@/components/i18n/language-provider';
 import type { CalendarEvent } from '@/lib/services/schedule';
 import { moveCalendarEvent } from '@/lib/services/schedule-client';
+import { useConfirm } from '@/components/confirm/confirm-provider';
 import { addDays, applyDrag, type DragMode } from '@/lib/schedule/drag';
 import { canAddToProjectFromSchedule, canSchedule } from '@/lib/schedule/authority';
 import { ScheduleSheet, type ScheduleMember } from '@/components/schedule/schedule-sheet';
@@ -147,6 +148,7 @@ export function DayView({
     drag.current = { e, mode, x0: p.clientX };
     setPreview({ key: e.key, start: e.start_date, end: e.end_date, clamped: false });
   }
+  const confirm = useConfirm();
   function handleMove(p: React.PointerEvent) {
     const d = drag.current;
     if (!d) return;
@@ -162,8 +164,10 @@ export function DayView({
       setPreview(null);
       return;
     }
-    const r = await moveCalendarEvent(d.e, p.start, p.end);
-    if (!r.success) setNote(r.error ?? null);
+    // [S122 Part 4] A Critical Path task's move names its edit and asks first.
+    const r = await moveCalendarEvent(d.e, p.start, p.end, confirm);
+    if (r.cancelled) setNote(null);
+    else if (!r.success) setNote(r.error ?? null);
     else {
       setOverrides((o) => ({ ...o, [`${d.e.source}:${d.e.id}`]: { start: p.start, end: p.end } }));
       setNote(p.clamped ? t('sched.day.clamped') : null);

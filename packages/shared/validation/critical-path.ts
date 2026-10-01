@@ -45,3 +45,21 @@ export const criticalPathTaskSaveSchema = z
   );
 
 export type CriticalPathTaskSave = z.infer<typeof criticalPathTaskSaveSchema>;
+
+/**
+ * S122 Part 4 — a date GESTURE on a task (calendar drag, schedule sheet,
+ * Gantt end handle): the dates the user dragged to. The server reads the
+ * task's stored dates as "from" — never the client's copy — and translates
+ * the gesture (translateMove). `confirm: false` asks for the preview only;
+ * nothing is written until the user has seen which edit it is [Josh, Q19].
+ */
+export const criticalPathMoveSchema = z
+  .object({
+    to: z.object({ start: isoDate, end: isoDate }).refine((r) => r.end >= r.start, {
+      message: 'A bar cannot end before it starts.',
+    }),
+    confirm: z.boolean(),
+  })
+  .strict();
+
+export type CriticalPathMove = z.infer<typeof criticalPathMoveSchema>;

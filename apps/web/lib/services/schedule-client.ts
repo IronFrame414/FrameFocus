@@ -198,14 +198,79 @@ export async function updateTaskDates(
  * here inverted; this refuses one anyway, in words.
  */
 export async function moveCalendarEvent(
-  e: Pick<CalendarEvent, 'id' | 'source'>,
+  e: Pick<CalendarEvent, 'id' | 'source' | 'project_id'>,
   start: string,
-  end: string
-): Promise<{ success: boolean; error?: string }> {
+  end: string,
+  /** [S122 Part 4] Asks the user before a Critical Path move is saved. */
+  confirm?: (arg: { message: string; title?: string; confirmLabel?: string }) => Promise<boolean>
+): Promise<{ success: boolean; error?: string; cancelled?: boolean }> {
   if (end < start) return { success: false, error: 'A bar cannot end before it starts.' };
-  if (e.source === 'task') return updateTaskDates(e.id, start, end);
+  if (e.source === 'task') {
+    // [S122 Part 4, Q19] On a Critical Path project a drag is TRANSLATED (a move
+    // pins "not before", an end resize changes the duration) and the user is
+    // told WHICH edit it is before anything is saved. A project not on
+    // Critical Path answers { cp: false } and keeps S121's direct write.
+    if (e.project_id) {
+      const cp = await criticalPathMove(e.project_id, e.id, start, end, confirm);
+      if (cp !== 'not_cp') return cp;
+    }
+    return updateTaskDates(e.id, start, end);
+  }
   if (e.source === 'general') return updateScheduleEntryDates(e.id, start, end);
   return { success: false, error: 'This item cannot be moved.' };
+}
+
+type MoveAnswer =
+  | { cp: false }
+  | { cp: true; mode: 'refused'; error: string }
+  | { cp: true; mode: 'cp' | 'typed'; sentences: string[]; consequence: string; newlyCritical: string[] };
+
+async function postMove(
+  projectId: string,
+  taskId: string,
+  body: { to: { start: string; end: string }; confirm: boolean }
+): Promise<{ ok: true; answer: MoveAnswer } | { ok: false; error: string }> {
+  try {
+    const res = await fetch(`/api/projects/${projectId}/critical-path/tasks/${taskId}/move`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const j = (await res.json()) as unknown;
+    if (!res.ok) {
+      const e = (j as { error?: unknown }).error;
+      return { ok: false, error: typeof e === 'string' ? e : `The move failed (${res.status}).` };
+    }
+    return { ok: true, answer: j as MoveAnswer };
+  } catch {
+    return { ok: false, error: 'The move did not reach the server. Check the connection and try again.' };
+  }
+}
+
+/** [S122 Part 4] Preview → confirm → save, or 'not_cp' when the project is not on Critical Path. */
+async function criticalPathMove(
+  projectId: string,
+  taskId: string,
+  start: string,
+  end: string,
+  confirm?: (arg: { message: string; title?: string; confirmLabel?: string }) => Promise<boolean>
+): Promise<'not_cp' | { success: boolean; error?: string; cancelled?: boolean }> {
+  const got = await postMove(projectId, taskId, { to: { start, end }, confirm: false });
+  if (!got.ok) return { success: false, error: got.error };
+  const preview = got.answer;
+  if (!preview.cp) return 'not_cp';
+  if (preview.mode === 'refused') return { success: false, error: preview.error };
+  if (!confirm) return { success: false, error: 'This schedule runs on Critical Path: open the task to change it.' };
+  const message = [
+    ...preview.sentences,
+    preview.consequence,
+    ...(preview.newlyCritical.length ? [`Newly critical: ${preview.newlyCritical.join(', ')}.`] : []),
+  ].join('\n');
+  const ok = await confirm({ title: 'Critical Path', message, confirmLabel: 'Save this change' });
+  if (!ok) return { success: false, cancelled: true };
+  const saved = await postMove(projectId, taskId, { to: { start, end }, confirm: true });
+  if (!saved.ok) return { success: false, error: saved.error };
+  return { success: true };
 }
 
 /** [S121 5-D] Member ids assigned to a project (live rows). */
