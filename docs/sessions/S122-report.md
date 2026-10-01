@@ -1427,3 +1427,34 @@ snap back in between.
   (superseded title and `toHaveLength(15)` quoted), and the new cron gets its own pin (path + `20 * * * *`).
 - **Pre-CI:** type-check exit **0** (0/5 cached); lint exit **0** (warnings only, none in Part 3's files); unit exit **0**, **164 files / 2,256
   tests** (2,237 + 18 + 1), 0 cached.
+
+#### Part 3 CI and PRODUCTION section 4: `20262127000000_s122_cp_notify_cause`
+
+- **CI `36876398232`** on `168ce164` (base `6c91b9c1` = `origin/main`; 0 runs in progress or queued at request): **green**, e2e **681 passed,
+  24 skipped, 0 flaky, 0 failed** (35.3 m), with `desktop-critical-path-sheet-s122` in the log; unit **164 / 2,256**.
+- **Expected values** (rebuild-test, captured before; the three function bodies proven equal to the file's, python between dollar
+  quotes: guard `4a1e6e10…`, `mark_schedule_dirty` `65936b7e…`, `_from_row` `5ec45279…`).
+- **One-file workdir** `wd4` (all **290**; m27 the last; `cmp` 0), linked to production; checkout read back `nmyphyhmfttxkdoposvf` throughout;
+  `wd4` deleted after.
+- **Pre-check, PRODUCTION:** ledger `20262126000000`; `notify_changes` **0**; cause columns **0**; `task_assignees` **6** (all live). These
+  receive the new column's default; the column is created in this migration (Q8-A). `project_finish_history` **0** rows (the widened
+  CHECK); `project_schedule_settings` **0** rows; projects trigger **0**; `mark_schedule_dirty(p_project_id uuid)` (the old signature).
+- **Dry run:** *"• 20262127000000_s122_cp_notify_cause.sql"*, **exactly one file**. **Push:** exit 0.
+- **Verification:** the same read-only file run on both, then `diff`. **The only differing line is live `task_assignees`: rebuild-test 5,
+  PRODUCTION 6, and 6 is production's own pre-check value.**
+
+| object | expected | PRODUCTION | verdict |
+| --- | --- | --- | --- |
+| ledger ≥ 2126 | `2126, 2127` | identical | MATCH |
+| `task_assignees.notify_changes` | `boolean : NOT NULL : default false` | identical | MATCH |
+| cause columns | `recompute_cause_kind text`, `recompute_cause_task_id uuid`, nullable | identical | MATCH |
+| cause CHECK + FK md5 | `abd986db…` | identical | MATCH |
+| history cause CHECK | `… 'enabled', 'project_start', 'inspection'` | identical | MATCH |
+| guard / `mark_schedule_dirty(uuid,text,uuid)` / `_from_row` md5, secdef, EXECUTE | `4a1e6e10` f/auth t; `65936b7e` t/auth f; `5ec45279` t/auth f; anon f on all | identical | MATCH ×3 |
+| `mark_schedule_dirty` overloads | **1** (the old `(uuid)` is gone) | 1 | MATCH |
+| `projects_mark_schedule_dirty` | `O`, def md5 `ca24bc92…` | identical | MATCH |
+| notify true among live assignees | 0 (of 6) | 0 of 6 | MATCH |
+| settings / history rows | 0 / 0 | 0 / 0 | MATCH |
+
+**Section 4: MATCH ×12.** No production project has Critical Path on, so the sheet's CP mode and the recompute reach nobody until Part 4's
+switch exists.
