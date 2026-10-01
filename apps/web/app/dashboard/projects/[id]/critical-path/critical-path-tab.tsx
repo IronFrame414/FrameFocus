@@ -28,6 +28,7 @@ import { pinLabel } from '@/components/schedule/critical-path-fields';
 import { rollupPhases, type Phase, type Task } from '@/lib/services/tasks-shared';
 import { moveCalendarEvent } from '@/lib/services/schedule-client';
 import type { CpSettings } from '@/lib/critical-path/load';
+import { pendingConsequence, type PendingEdit } from '@/lib/critical-path/pending';
 import { WEATHER_ICONS, WEATHER_ICON_KEYS, weatherGlyph, type WeatherIcon } from '@/lib/critical-path/weather';
 import { computeCriticalPath, type CpInput, type CpResult } from '@framefocus/shared/utils/critical-path';
 import {
@@ -113,6 +114,9 @@ export function CriticalPathTab({
   history,
   historyVisible,
   lostDays,
+  pending = [],
+  pendingError = false,
+  myMemberId = null,
 }: {
   projectId: string;
   role: string;
@@ -125,6 +129,9 @@ export function CriticalPathTab({
   history: CpHistoryRow[];
   historyVisible: boolean;
   lostDays: CpLostDay[];
+  pending?: PendingEdit[];
+  pendingError?: boolean;
+  myMemberId?: string | null;
 }) {
   const router = useRouter();
   const confirm = useConfirm();
@@ -161,6 +168,8 @@ export function CriticalPathTab({
         slackEnd: r && r.totalFloat !== null && r.totalFloat > 0 ? r.lateFinish : null,
         // The END is draggable on work that has a length to change (ruling 13).
         extendable: canEdit && !!t && t.status !== 'complete' && (t.duration_days !== null || t.status === 'in_progress'),
+        // [S122 Part 5] Grayed and marked while a change to it is held.
+        pending: pending.find((p) => p.task_id === it.id)?.summary ?? null,
       };
     }),
   }));
@@ -253,6 +262,23 @@ export function CriticalPathTab({
             </ul>
           )}
         </div>
+      )}
+
+      {/* 3. The pending strip [Josh: the approval lives INSIDE this window] */}
+      {pendingError && (
+        <div data-testid="cp-pending-error" style={{ ...card, borderColor: '#fde68a', color: '#92400e', fontSize: '0.875rem' }}>
+          Pending schedule changes could not be loaded, so any waiting for approval are not shown. Reload the page.
+        </div>
+      )}
+      {pending.length > 0 && (
+        <PendingStrip
+          projectId={projectId}
+          pending={pending}
+          input={engineInput}
+          titleOf={title}
+          canDecide={canEdit}
+          myMemberId={myMemberId}
+        />
       )}
 
       {/* 4. The critical chain */}
@@ -561,6 +587,107 @@ function WeatherDays({
             Mark day lost
           </button>
           {error && <div data-testid="cp-weather-error" style={{ width: '100%', color: '#991b1b', fontSize: '0.8125rem' }}>{error}</div>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PendingStrip({
+  projectId,
+  pending,
+  input,
+  titleOf,
+  canDecide,
+  myMemberId,
+}: {
+  projectId: string;
+  pending: PendingEdit[];
+  input: CpInput;
+  titleOf: (id: string | null) => string | null;
+  canDecide: boolean;
+  myMemberId: string | null;
+}) {
+  const router = useRouter();
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function decide(editId: string, decision: 'approve' | 'reject' | 'withdraw') {
+    setBusy(editId);
+    setError(null);
+    try {
+      const res = await fetch(`/api/projects/${projectId}/critical-path/edits/${editId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ decision }),
+      });
+      if (!res.ok) {
+        const j = (await res.json().catch(() => ({}))) as { error?: unknown };
+        setError(typeof j.error === 'string' ? j.error : `That did not work (${res.status}).`);
+        setBusy(null);
+        return;
+      }
+    } catch {
+      setError('The decision did not reach the server.');
+      setBusy(null);
+      return;
+    }
+    setBusy(null);
+    router.refresh();
+  }
+
+  return (
+    <div style={{ ...card, borderColor: '#fde68a', backgroundColor: '#fffbeb' }} data-testid="cp-pending">
+      <h2 style={h2}>Waiting for approval</h2>
+      <p style={{ fontSize: '0.8125rem', color: '#92400e', margin: '0 0 0.5rem' }}>
+        These changes are shown grayed on the schedule and move no date until they are approved.
+      </p>
+      {pending.map((p) => {
+        const mine = !!myMemberId && p.submitted_by_member_id === myMemberId;
+        return (
+          <div key={p.id} data-testid={`cp-pending-${p.id}`} style={{ borderTop: '1px solid #fde68a', padding: '0.5rem 0', fontSize: '0.875rem' }}>
+            <div>
+              <strong>{titleOf(p.task_id) ?? 'A task'}</strong> · {p.submitter_name ?? 'someone'} · {p.submitted_at.slice(0, 10)}
+            </div>
+            <div data-testid={`cp-pending-summary-${p.id}`}>{p.summary}</div>
+            <div data-testid={`cp-pending-consequence-${p.id}`} style={{ fontWeight: 600 }}>
+              {pendingConsequence(input, p)}
+            </div>
+            <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.375rem' }}>
+              {canDecide && !mine && (
+                <>
+                  <button type="button" data-testid={`cp-approve-${p.id}`} disabled={busy === p.id} onClick={() => decide(p.id, 'approve')} style={button}>
+                    Approve
+                  </button>
+                  <button
+                    type="button"
+                    data-testid={`cp-reject-${p.id}`}
+                    disabled={busy === p.id}
+                    onClick={() => decide(p.id, 'reject')}
+                    style={{ ...button, backgroundColor: '#fff', color: '#991b1b', border: '1px solid #fecaca' }}
+                  >
+                    Reject
+                  </button>
+                </>
+              )}
+              {mine && (
+                <button
+                  type="button"
+                  data-testid={`cp-withdraw-${p.id}`}
+                  disabled={busy === p.id}
+                  onClick={() => decide(p.id, 'withdraw')}
+                  style={{ ...button, backgroundColor: '#fff', color: '#374151', border: '1px solid #d1d5db' }}
+                >
+                  Withdraw
+                </button>
+              )}
+            </div>
+          </div>
+        );
+      })}
+      {error && (
+        <div data-testid="cp-pending-decide-error" style={{ color: '#991b1b', fontSize: '0.8125rem' }}>
+          {error}
         </div>
       )}
     </div>

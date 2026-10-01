@@ -87,9 +87,13 @@ export async function POST(
           `Moves the dates typed on this task (it has no duration): ${shortDate(from.start)}–${shortDate(from.end)} → ${shortDate(tr.start)}–${shortDate(tr.end)}.`,
         ]
       : preview.parts.map(editSentence);
+  // [S122 Part 5] Someone who may not change the schedule directly is told,
+  // BEFORE confirming, that the change will be HELD for approval.
+  const editor = await supabase.rpc('critical_path_schedule_editor', { p_project_id: projectId });
   const answer = {
     cp: true,
     mode: tr.mode,
+    held: editor.data !== true,
     sentences,
     consequence: consequenceSentence(preview),
     newlyCritical: preview.newlyCritical.map((id) => input.tasks.find((x) => x.id === id)?.title ?? id),
@@ -117,5 +121,5 @@ export async function POST(
     body
   );
   if (!r.ok) return json(r.status, r.error, r.cause);
-  return NextResponse.json({ ...answer, saved: true });
+  return NextResponse.json({ ...answer, saved: true, held: r.held });
 }

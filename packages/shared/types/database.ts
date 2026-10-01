@@ -10644,6 +10644,105 @@ export type Database = {
           },
         ]
       }
+      task_schedule_edits: {
+        Row: {
+          changes: Json
+          company_id: string
+          created_at: string
+          created_by: string | null
+          decided_at: string | null
+          decided_by_member_id: string | null
+          decision_note: string | null
+          deleted_at: string | null
+          id: string
+          is_deleted: boolean
+          project_id: string
+          status: string
+          submitted_at: string
+          submitted_by_member_id: string
+          summary: string
+          task_id: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          changes: Json
+          company_id?: string
+          created_at?: string
+          created_by?: string | null
+          decided_at?: string | null
+          decided_by_member_id?: string | null
+          decision_note?: string | null
+          deleted_at?: string | null
+          id?: string
+          is_deleted?: boolean
+          project_id: string
+          status?: string
+          submitted_at?: string
+          submitted_by_member_id: string
+          summary: string
+          task_id: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          changes?: Json
+          company_id?: string
+          created_at?: string
+          created_by?: string | null
+          decided_at?: string | null
+          decided_by_member_id?: string | null
+          decision_note?: string | null
+          deleted_at?: string | null
+          id?: string
+          is_deleted?: boolean
+          project_id?: string
+          status?: string
+          submitted_at?: string
+          submitted_by_member_id?: string
+          summary?: string
+          task_id?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "task_schedule_edits_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "task_schedule_edits_decided_by_member_id_fkey"
+            columns: ["decided_by_member_id"]
+            isOneToOne: false
+            referencedRelation: "company_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "task_schedule_edits_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "task_schedule_edits_submitted_by_member_id_fkey"
+            columns: ["submitted_by_member_id"]
+            isOneToOne: false
+            referencedRelation: "company_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "task_schedule_edits_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tasks: {
         Row: {
           assignee_id: string | null

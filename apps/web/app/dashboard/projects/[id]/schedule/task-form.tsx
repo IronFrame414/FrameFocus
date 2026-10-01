@@ -37,6 +37,8 @@ interface TaskFormProps {
    *  Critical Path. Then the sheet asks for duration + anchor instead of two
    *  typed dates, previews every change, and saves through the CP route. */
   criticalPath?: { input: CpInput } | null;
+  /** [S122 Part 5] A held change on this task — said at the top of the sheet. */
+  pendingNote?: { summary: string; who: string | null; consequence: string | null } | null;
   onDone: () => void;
   onCancel: () => void;
 }
@@ -63,6 +65,7 @@ export function TaskForm({
   editing,
   canManage,
   criticalPath = null,
+  pendingNote = null,
   onDone,
   onCancel,
 }: TaskFormProps) {
@@ -461,6 +464,25 @@ export function TaskForm({
           </select>
         </div>
       </div>
+
+      {pendingNote && (
+        <div
+          data-testid="cp-pending-note"
+          style={{
+            padding: '0.5rem 0.75rem',
+            marginBottom: '0.75rem',
+            backgroundColor: '#fffbeb',
+            border: '1px solid #fde68a',
+            color: '#92400e',
+            borderRadius: '0.375rem',
+            fontSize: '0.8125rem',
+          }}
+        >
+          <strong>Pending approval</strong>
+          {pendingNote.who ? ` (${pendingNote.who})` : ''}: {pendingNote.summary}
+          {pendingNote.consequence ? ` ${pendingNote.consequence}` : ''} The dates shown are unchanged until it is approved.
+        </div>
+      )}
 
       {criticalPath && (
         <CriticalPathFields

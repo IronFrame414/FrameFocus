@@ -361,6 +361,9 @@ export const COMPANY_TABLES: string[] = [
   // company_members (SET NULL) and projects (NO ACTION); the settings and lost
   // days reference projects; the calendar and holidays are company-scoped. All
   // walked before tasks / projects / company_members.
+  // [S122 Part 5] task_schedule_edits references tasks, projects and
+  // company_members (NO ACTION): walked before all three.
+  'task_schedule_edits',
   'project_finish_history', 'project_schedule_settings', 'project_lost_days',
   'company_holidays', 'company_work_calendars',
   'task_assignees', 'task_dependencies', 'tasks', 'phases', 'inspections', 'schedule_entries',

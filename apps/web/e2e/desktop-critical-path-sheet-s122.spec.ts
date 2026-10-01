@@ -180,7 +180,9 @@ test.describe('S122 Part 3 · the Critical Path line sheet', () => {
       start_date: '2027-01-11',
       due_date: '2027-01-15',
     });
-    await expect(page.getByTestId(`task-pinned-${task.B}`)).toHaveText('Pinned · not before Mon 11 Jan');
+    // After the save's refresh lands (20s: measured red at the 5s default under
+    // local parallel load in S122 Part 5's regression run; green with one worker).
+    await expect(page.getByTestId(`task-pinned-${task.B}`)).toHaveText('Pinned · not before Mon 11 Jan', { timeout: 20_000 });
     await expect(page.getByTestId(`task-pinned-${task.A}`)).toHaveCount(0);
     await page.getByRole('button', { name: 'Gantt', exact: true }).click();
     await expect(page.getByTestId(`gantt-pinned-${task.B}`)).toBeVisible();

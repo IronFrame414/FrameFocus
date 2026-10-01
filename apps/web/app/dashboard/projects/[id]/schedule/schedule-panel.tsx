@@ -24,6 +24,7 @@ import { assigneeColor } from '@/components/schedule/member-color';
 import { TaskForm } from './task-form';
 import type { CpInput } from '@framefocus/shared/utils/critical-path';
 import { pinLabel } from '@/components/schedule/critical-path-fields';
+import { pendingConsequence, type PendingEdit } from '@/lib/critical-path/pending';
 import { color, font } from '@/lib/theme';
 
 interface SchedulePanelProps {
@@ -45,6 +46,10 @@ interface SchedulePanelProps {
   canManage: boolean;
   /** [S122 Part 3] Set when this project's schedule runs on Critical Path. */
   criticalPath?: { input: CpInput } | null;
+  /** [S122 Part 5] Held schedule changes, by task — shown to everyone. */
+  pending?: PendingEdit[];
+  /** [S122 Part 5] The pending changes could not be read: said, never hidden. */
+  pendingError?: boolean;
   role: string;
 }
 
@@ -98,6 +103,8 @@ export function SchedulePanel({
   members,
   canManage,
   criticalPath = null,
+  pending = [],
+  pendingError = false,
   role,
 }: SchedulePanelProps) {
   const router = useRouter();
@@ -114,6 +121,21 @@ export function SchedulePanel({
   const [refreshingSheet, startSheetRefresh] = useTransition();
   // The task the sheet edits, read from the CURRENT props, never the click-time copy.
   const liveEditing = editingTask ? (tasks.find((t) => t.id === editingTask.id) ?? editingTask) : null;
+  // [S122 Part 5] Each held change, with its consequence stated beside it.
+  const pendingByTask: Record<string, PendingRowNote> = useMemo(
+    () =>
+      Object.fromEntries(
+        pending.map((p) => [
+          p.task_id,
+          {
+            summary: p.summary,
+            who: p.submitter_name,
+            consequence: pendingConsequence(criticalPath?.input ?? null, p),
+          },
+        ])
+      ),
+    [pending, criticalPath]
+  );
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -302,6 +324,12 @@ export function SchedulePanel({
         </div>
       )}
 
+      {pendingError && (
+        <div data-testid="pending-load-error" style={{ ...cardStyle, borderColor: '#fde68a', color: '#92400e', fontSize: '0.875rem' }}>
+          Pending schedule changes could not be loaded, so any waiting for approval are not shown here. Reload the page.
+        </div>
+      )}
+
       {taskFormOpen && (
         <TaskForm
           projectId={projectId}
@@ -311,6 +339,7 @@ export function SchedulePanel({
           editing={liveEditing}
           canManage={canManage || (liveEditing?.status !== undefined && role === 'crew_member')}
           criticalPath={criticalPath}
+          pendingNote={liveEditing ? (pendingByTask[liveEditing.id] ?? null) : null}
           onDone={() => {
             setTaskFormOpen(false);
             setEditingTask(null);
@@ -392,7 +421,7 @@ export function SchedulePanel({
                   </button>
                 )}
               </div>
-              <TaskRows tasks={rollup.tasks} onSelect={openEdit} disabled={refreshingSheet} />
+              <TaskRows tasks={rollup.tasks} onSelect={openEdit} disabled={refreshingSheet} pending={pendingByTask} />
             </div>
           ))}
 
@@ -400,7 +429,7 @@ export function SchedulePanel({
             <div style={titleStyle}>
               {rollups.length > 0 ? 'No Phase' : 'Tasks'} ({unphased.length})
             </div>
-            <TaskRows tasks={unphased} onSelect={openEdit} disabled={refreshingSheet} />
+            <TaskRows tasks={unphased} onSelect={openEdit} disabled={refreshingSheet} pending={pendingByTask} />
             {tasks.length === 0 && (
               <p style={{ fontSize: '0.875rem', color: '#6b7280' }}>
                 No tasks yet. Undated tasks are backlog — they appear here and on the Gantt, never
@@ -430,7 +459,10 @@ export function SchedulePanel({
 
       {view === 'gantt' && (
         <Gantt
-          groups={ganttGroupsFromRollups(rollups, unphased)}
+          groups={ganttGroupsFromRollups(rollups, unphased).map((g) => ({
+            ...g,
+            items: g.items.map((it) => ({ ...it, pending: pendingByTask[it.id]?.summary ?? null })),
+          }))}
           dependencies={dependencies}
           onSelect={(id) => {
             const t = tasks.find((x) => x.id === id);
@@ -658,25 +690,36 @@ export function SchedulePanel({
   );
 }
 
+interface PendingRowNote {
+  summary: string;
+  who: string | null;
+  consequence: string | null;
+}
+
 function TaskRows({
   tasks,
   onSelect,
   disabled = false,
+  pending = {},
 }: {
   tasks: Task[];
   onSelect: (t: Task) => void;
   /** [S122 Part 3] True while the sheet's save is refreshing the rows. */
   disabled?: boolean;
+  /** [S122 Part 5] Held changes by task: the row stays, GRAYED, with a notice. */
+  pending?: Record<string, PendingRowNote>;
 }) {
   if (tasks.length === 0) return null;
   return (
     <div>
       {tasks.map((t) => (
+        <div key={t.id} data-testid={pending[t.id] ? `task-row-pending-${t.id}` : undefined}>
         <button
-          key={t.id}
           onClick={() => onSelect(t)}
           disabled={disabled}
           style={{
+            // [S122 Part 5] A held change grays the row; its dates stay put.
+            opacity: pending[t.id] ? 0.55 : 1,
             display: 'flex',
             width: '100%',
             justifyContent: 'space-between',
@@ -753,6 +796,18 @@ function TaskRows({
             {TASK_STATUS_LABELS[t.status]}
           </span>
         </button>
+        {pending[t.id] && (
+          <div
+            data-testid={`task-pending-${t.id}`}
+            style={{ fontSize: '0.75rem', color: '#92400e', padding: '0 0 0.5rem 1.25rem' }}
+          >
+            <span style={{ fontWeight: 700, textTransform: 'uppercase', marginRight: '0.375rem' }}>Pending</span>
+            {pending[t.id].who ? `${pending[t.id].who}: ` : ''}
+            {pending[t.id].summary}
+            {pending[t.id].consequence ? ` ${pending[t.id].consequence}` : ''}
+          </div>
+        )}
+        </div>
       ))}
     </div>
   );

@@ -11,6 +11,7 @@ import type { Database } from '@framefocus/shared/types/database';
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
 import { ensureScheduleFresh } from '@/lib/critical-path/recompute';
 import { loadCriticalPathData } from '@/lib/critical-path/load';
+import { loadPendingEdits, type PendingEdit } from '@/lib/critical-path/pending';
 import type { CpInput } from '@framefocus/shared/utils/critical-path';
 
 export default async function ProjectSchedulePage({ params }: { params: { id: string } }) {
@@ -59,6 +60,18 @@ export default async function ProjectSchedulePage({ params }: { params: { id: st
   // [S122 Part 3] The engine input for the line sheet's preview — staff only.
   // Crew and subs see a subset of the tasks under RLS, and a preview computed
   // on part of the graph would state wrong dates; they get no preview.
+  // [S122 Part 5] Held schedule changes — shown to EVERYONE who sees the
+  // tasks, grayed and marked pending [Josh, 2026-10-01]. A failed read is said.
+  let pending: PendingEdit[] = [];
+  let pendingError = false;
+  if (visible) {
+    const p = await loadPendingEdits(supabase as unknown as SupabaseClient<Database>, params.id);
+    if (p.ok) pending = p.edits;
+    else {
+      pendingError = true;
+      console.error(`[schedule page] pending ${params.id}: ${p.error}`);
+    }
+  }
   let criticalPath: { input: CpInput } | null = null;
   if (visible && !isCrew) {
     const cp = await loadCriticalPathData(supabase, params.id);
@@ -84,6 +97,8 @@ export default async function ProjectSchedulePage({ params }: { params: { id: st
       }))}
       canManage={canManage}
       criticalPath={criticalPath}
+      pending={pending}
+      pendingError={pendingError}
       role={profile.role}
     />
   );

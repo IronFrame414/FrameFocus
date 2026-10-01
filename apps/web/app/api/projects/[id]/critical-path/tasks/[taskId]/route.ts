@@ -52,5 +52,6 @@ export async function POST(
     parsed.data
   );
   if (!r.ok) return json(r.status, r.error, r.cause);
-  return NextResponse.json({ ok: true, recompute: r.recompute });
+  // `held`: the caller's schedule change is waiting for approval (Part 5).
+  return NextResponse.json({ ok: true, held: r.held, recompute: r.recompute });
 }

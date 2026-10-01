@@ -202,8 +202,8 @@ export async function moveCalendarEvent(
   start: string,
   end: string,
   /** [S122 Part 4] Asks the user before a Critical Path move is saved. */
-  confirm?: (arg: { message: string; title?: string; confirmLabel?: string }) => Promise<boolean>
-): Promise<{ success: boolean; error?: string; cancelled?: boolean }> {
+  confirm?: (arg: { message: string; title?: string; confirmLabel?: string; held?: boolean }) => Promise<boolean>
+): Promise<{ success: boolean; error?: string; cancelled?: boolean; held?: boolean }> {
   if (end < start) return { success: false, error: 'A bar cannot end before it starts.' };
   if (e.source === 'task') {
     // [S122 Part 4, Q19] On a Critical Path project a drag is TRANSLATED (a move
@@ -223,7 +223,7 @@ export async function moveCalendarEvent(
 type MoveAnswer =
   | { cp: false }
   | { cp: true; mode: 'refused'; error: string }
-  | { cp: true; mode: 'cp' | 'typed'; sentences: string[]; consequence: string; newlyCritical: string[] };
+  | { cp: true; mode: 'cp' | 'typed'; held: boolean; sentences: string[]; consequence: string; newlyCritical: string[] };
 
 async function postMove(
   projectId: string,
@@ -253,8 +253,8 @@ async function criticalPathMove(
   taskId: string,
   start: string,
   end: string,
-  confirm?: (arg: { message: string; title?: string; confirmLabel?: string }) => Promise<boolean>
-): Promise<'not_cp' | { success: boolean; error?: string; cancelled?: boolean }> {
+  confirm?: (arg: { message: string; title?: string; confirmLabel?: string; held?: boolean }) => Promise<boolean>
+): Promise<'not_cp' | { success: boolean; error?: string; cancelled?: boolean; held?: boolean }> {
   const got = await postMove(projectId, taskId, { to: { start, end }, confirm: false });
   if (!got.ok) return { success: false, error: got.error };
   const preview = got.answer;
@@ -262,15 +262,24 @@ async function criticalPathMove(
   if (preview.mode === 'refused') return { success: false, error: preview.error };
   if (!confirm) return { success: false, error: 'This schedule runs on Critical Path: open the task to change it.' };
   const message = [
+    // [S122 Part 5] Said FIRST, so nobody thinks they moved a date they did not.
+    ...(preview.held
+      ? ["This change will be HELD for approval: it shows as pending and moves no date until an Owner, Admin or the project's manager approves it."]
+      : []),
     ...preview.sentences,
     preview.consequence,
     ...(preview.newlyCritical.length ? [`Newly critical: ${preview.newlyCritical.join(', ')}.`] : []),
   ].join('\n');
-  const ok = await confirm({ title: 'Critical Path', message, confirmLabel: 'Save this change' });
+  const ok = await confirm({
+    title: 'Critical Path',
+    message,
+    confirmLabel: preview.held ? 'Submit for approval' : 'Save this change',
+    held: preview.held,
+  });
   if (!ok) return { success: false, cancelled: true };
   const saved = await postMove(projectId, taskId, { to: { start, end }, confirm: true });
   if (!saved.ok) return { success: false, error: saved.error };
-  return { success: true };
+  return { success: true, held: preview.held };
 }
 
 /** [S121 5-D] Member ids assigned to a project (live rows). */

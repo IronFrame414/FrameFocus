@@ -291,3 +291,34 @@ export function translateMove(
   }
   return { mode: 'cp', after };
 }
+
+// ── A HELD change (Part 5) ──────────────────────────────────────────────────
+// [Josh, 2026-10-01] A foreman's or a crew assignee's schedule change is held,
+// shown grayed with a "pending" notice, and does NOT move the computed dates;
+// its consequence is stated beside it. This is the task AS IF the held change
+// were approved — the input to that stated consequence, never to the stored
+// dates.
+export interface HeldChanges {
+  duration_days?: number | null;
+  days_left?: number | null;
+  days_left_as_of?: string | null;
+  start_constraint?: 'fixed' | 'not_before' | null;
+  constraint_date?: string | null;
+  typed?: { start_date: string; due_date: string };
+}
+
+export function applyHeldChanges(task: CpTask, c: HeldChanges): CpTask {
+  const t: CpTask = { ...task };
+  if (c.duration_days !== undefined) t.durationDays = c.duration_days;
+  if (c.days_left !== undefined) {
+    t.daysLeft = c.days_left;
+    t.daysLeftAsOf = c.days_left === null ? null : (c.days_left_as_of ?? task.daysLeftAsOf);
+  }
+  if (c.start_constraint !== undefined) t.startConstraint = c.start_constraint;
+  if (c.constraint_date !== undefined) t.constraintDate = c.constraint_date;
+  if (c.typed) {
+    t.startDate = c.typed.start_date;
+    t.dueDate = c.typed.due_date;
+  }
+  return t;
+}

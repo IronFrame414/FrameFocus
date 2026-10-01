@@ -62,6 +62,8 @@ export const EXPORT_CATEGORIES: ExportCategory[] = [
       // history, and the company's working calendar + holidays.
       'project_schedule_settings', 'project_lost_days', 'project_finish_history',
       'company_work_calendars', 'company_holidays',
+      // [S122 Part 5] held schedule changes (who asked for what, and the decision).
+      'task_schedule_edits',
     ],
     referencesFiles: true,
   },
