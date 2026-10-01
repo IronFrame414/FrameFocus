@@ -1264,3 +1264,25 @@ Part 2's CI request waits for it (1.7).
 
 The production-linked scratch workdirs (`wd1`–`wd3`) were deleted after this read. The checkout's CLI has stayed on rebuild-test
 (`nmyphyhmfttxkdoposvf`) all session.
+
+### R.11 — Open question for Josh (asked 2026-10-01), blocking Part 3's write-through
+
+**Q19. [ASK-19] On a Critical Path project, what does a direct date change by an Owner, Admin, PM or PE do?** The engine
+computes each task's dates from its duration, links and anchor, and writes them into `start_date`/`due_date` (Q9-A).
+Three existing controls write those dates directly: the S121 calendar/Gantt drag (`moveCalendarEvent` →
+`updateTaskDates`), the schedule sheet's dates (`components/schedule/schedule-sheet.tsx:200`), and the task form
+(`task-form.tsx`, `updateTask`). Left as they are, a dragged task that has a duration **snaps back** on the next recompute,
+silently.
+- A) Translate the gesture into the Critical Path model, through the same server route the line sheet uses. Moving the
+  start sets "starts after its links, but **no earlier than** <new date>" (`not_before`). Moving the end sets the
+  **duration** to the working days from its start to the new end. The finish consequence is previewed before save. A
+  foreman's or crew assignee's drag becomes a held, grayed "pending" submission under the same translation (Part 5).
+- B) Moving the start pins the task ("starts **on** <date>", `fixed`). It stays there even when a predecessor slips, and a
+  slip raises a conflict.
+- C) On a CP project those controls become read-only, pointing to the Critical Path sheet.
+- **Recommendation: A.** A drag means "not before here", a slipping predecessor still pushes the task (which is the point of
+  the feature), and it is one mechanism on every surface (PARITY).
+
+**Also stated, not asked:** `task_schedule_edits` moves from Part 3's migration to **Part 5's**, because its shape now follows the
+2026-10-01 ruling (a pending edit is visible and grayed, from a foreman **or a crew assignee**). Part 3's migration carries
+`task_assignees.notify_changes` (Q13-A) and the new `projects` start-date dirty trigger (Q9 item 10).
