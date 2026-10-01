@@ -1458,3 +1458,11 @@ snap back in between.
 
 **Section 4: MATCH ×12.** No production project has Critical Path on, so the sheet's CP mode and the recompute reach nobody until Part 4's
 switch exists.
+
+### R.14 — Part 3 MERGED → `main` `a9fba7ac`
+
+- Merge commit `a9fba7ac`; `HEAD^{tree}` `05ff7a38…` = branch head `bc0f0a91^{tree}`. Pushed.
+- S180: (1) CI `36876398232` green on `168ce164`, base `6c91b9c1` = `origin/main` re-fetched. Tree-identity exemption: `git diff --name-only
+  168ce164 bc0f0a91` → `docs/sessions/S122-report.md` only; the same diff over `apps packages scripts supabase .github` returned `--quiet` exit
+  0. (2) The numbers in the merge message and above. (3) `…27` is on production, MATCH ×12, **applied before the merge**.
+- `main`'s merge run follows. **Part 4 starts on `feature/s122-p4-cp-tab` from `a9fba7ac`.**
