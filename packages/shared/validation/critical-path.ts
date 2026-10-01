@@ -63,3 +63,24 @@ export const criticalPathMoveSchema = z
   .strict();
 
 export type CriticalPathMove = z.infer<typeof criticalPathMoveSchema>;
+
+/**
+ * S122 Part 5 — what a HELD schedule change carries (task_schedule_edits.changes):
+ * the schedule columns only, never title/status/people (those an assignee may
+ * still save directly, Q12-A). `days_left_as_of` IS stored here — it is the
+ * day the submitter entered the figure, and approving later must not restamp
+ * it (Q1-A: "an entry from last Tuesday silently means something different
+ * today"). Parsed again before it is applied: a jsonb column is not a type.
+ */
+export const heldScheduleChangesSchema = z
+  .object({
+    duration_days: z.number().int().min(1).max(3650).nullable().optional(),
+    days_left: z.number().int().min(0).max(3650).nullable().optional(),
+    days_left_as_of: isoDate.nullable().optional(),
+    start_constraint: z.enum(['fixed', 'not_before']).nullable().optional(),
+    constraint_date: isoDate.nullable().optional(),
+    typed: z.object({ start_date: isoDate, due_date: isoDate }).optional(),
+  })
+  .strict();
+
+export type HeldScheduleChanges = z.infer<typeof heldScheduleChangesSchema>;
