@@ -59,6 +59,13 @@ import {
   type SelectedSegment,
 } from '@framefocus/shared/utils/invoice-derivation';
 import {
+  centsToDollars,
+  pinLine,
+  planBilling,
+  releaseLine,
+  type Pins,
+} from '@framefocus/shared/utils/invoice-line-amounts';
+import {
   cardStyle,
   color,
   font,
@@ -924,24 +931,26 @@ function EstimateLinePanel({
     () => new Set(billing.lines.map((l) => l.lineItemId))
   );
   const [percent, setPercent] = useState('');
-
-  const pct = (() => {
-    if (percent.trim() === '') return 100;
-    const n = Number(percent);
-    return Number.isFinite(n) && n > 0 && n <= 100 ? n : 100;
-  })();
-
-  // §6.2a's rule, reused rather than restated: the LAST claim on a line bills
-  // the EXACT REMAINDER, so partials sum to the whole with nothing stranded.
-  const amountFor = (remaining: number) => partialClaimAmount(remaining, pct);
+  // [S122 0-C] Typing a dollar amount PINS that line; the percentage is a bulk
+  // setter for UNPINNED lines only, and never overwrites a pin. All the money
+  // logic — integer cents, the cap at remaining, the discount rule — is the
+  // pure planBilling() in packages/shared/utils/invoice-line-amounts.ts.
+  // SUPERSEDED: `pct` silently coerced a blank, non-numeric, <=0 or >100 entry
+  // to 100; every line billed partialClaimAmount(remaining, pct); and the
+  // discount came across whenever `pct >= 100 && every line selected`.
+  const [pins, setPins] = useState<Pins>({});
 
   const chosen = billing.lines.filter((l) => selected.has(l.lineItemId));
-  const total = chosen.reduce((s, l) => s + amountFor(l.remaining), 0);
+  const plan = planBilling(billing.lines, selected, pins, percent, billing.undiscounted);
+  const amountById = new Map(plan.amounts.map((a) => [a.lineItemId, a]));
+  const total = centsToDollars(plan.totalCents);
+  const percentError = plan.amounts.find((a) => !a.pinned && a.error)?.error ?? null;
+  const pct = percentError ? null : percent.trim() === '' ? 100 : Number(percent.trim().replace(/%$/, ''));
   // The whole-estimate discount goes across ONCE, with the first billing, so
-  // the invoice closes at the contract value rather than the subtotal.
-  const discount = billing.undiscounted > 0 && pct >= 100 && selected.size === billing.lines.length
-    ? billing.undiscounted
-    : 0;
+  // the invoice closes at the contract value rather than the subtotal — and
+  // only when every line bills its FULL remaining (a pin below remaining is a
+  // partial bill, never a reason to bring the discount across).
+  const discount = plan.discountApplies ? billing.undiscounted : 0;
 
   return (
     <div style={{ ...cardStyle, overflow: 'hidden' }}>
@@ -963,15 +972,25 @@ function EstimateLinePanel({
               disabled={busy}
               style={{ ...inputStyle, width: '64px', textAlign: 'right' }}
             />
-            % of each line
+            % of each unpinned line
           </label>
         </div>
-        {pct < 100 && (
-          <p style={{ fontSize: '11px', color: color.faint, margin: '6px 0 0' }}>
-            Each ticked line bills {pct}% of what is still unbilled on it; the rest stays available
-            for a later invoice.
+        {percentError && (
+          <p role="alert" data-testid="line-percent-error" style={{ fontSize: '11px', color: color.warning, margin: '6px 0 0' }}>
+            {percentError}
           </p>
         )}
+        {pct !== null && pct < 100 && (
+          <p style={{ fontSize: '11px', color: color.faint, margin: '6px 0 0' }}>
+            Each ticked line that is not pinned bills {pct}% of what is still unbilled on it; the
+            rest stays available for a later invoice.
+          </p>
+        )}
+        <p style={{ fontSize: '11px', color: color.faint, margin: '6px 0 0' }}>
+          Type an amount in THIS INVOICE to bill a set figure on that line; it is then pinned and
+          the percentage no longer changes it. Billing less than the unbilled amount is not a
+          discount: the rest stays available for a later invoice.
+        </p>
       </div>
 
       <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -1027,7 +1046,19 @@ function EstimateLinePanel({
                 )}
               </td>
               <td style={{ ...tdStyle, textAlign: 'right', fontFamily: font.mono, color: selected.has(l.lineItemId) ? color.body : color.faint }}>
-                {selected.has(l.lineItemId) ? money(amountFor(l.remaining)) : '—'}
+                {selected.has(l.lineItemId) ? (
+                  <LineAmountCell
+                    lineItemId={l.lineItemId}
+                    remaining={l.remaining}
+                    amount={amountById.get(l.lineItemId) ?? null}
+                    typed={pins[l.lineItemId]}
+                    disabled={busy}
+                    onType={(text) => setPins((p) => pinLine(p, l.lineItemId, text))}
+                    onRelease={() => setPins((p) => releaseLine(p, l.lineItemId))}
+                  />
+                ) : (
+                  '—'
+                )}
               </td>
             </tr>
           ))}
@@ -1037,7 +1068,8 @@ function EstimateLinePanel({
       <div style={{ padding: '10px 16px', borderTop: `1px solid ${color.cardBorder}`, display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
         <button
           type="button"
-          disabled={busy || chosen.length === 0}
+          disabled={busy || !plan.canSubmit}
+          data-testid="bill-selected-lines"
           style={primaryButtonStyle}
           onClick={() =>
             run(
@@ -1045,11 +1077,15 @@ function EstimateLinePanel({
                 billEstimateLines({
                   invoiceId,
                   sourceEstimateId,
+                  // Each line's cents from the plan — a pinned line's typed
+                  // figure, else the percentage of its remaining. canSubmit
+                  // guarantees none is null. Still written ONE AT A TIME, the
+                  // discount LAST (billEstimateLines; not reordered).
                   selections: chosen.map((l) => ({
                     lineItemId: l.lineItemId,
                     description: l.name,
                     category: l.category,
-                    amount: amountFor(l.remaining),
+                    amount: centsToDollars(amountById.get(l.lineItemId)?.cents ?? 0),
                   })),
                   discount,
                   discountLabel: 'Contract discount',
@@ -1075,6 +1111,61 @@ function EstimateLinePanel({
           the discount across and lands exactly on the contract value. Billing a subset now leaves
           the discount to be applied later — add it as a discount line (§8) when you do.
         </div>
+      )}
+    </div>
+  );
+}
+
+// [S122 0-C] THIS INVOICE on one contract line: shows what the line bills, and
+// takes a typed dollar amount, which PINS the line. A pinned line is marked
+// and can be released back to the percentage. An amount over the line's
+// remaining is refused here with the remaining named — before submission.
+function LineAmountCell({
+  lineItemId,
+  remaining,
+  amount,
+  typed,
+  disabled,
+  onType,
+  onRelease,
+}: {
+  lineItemId: string;
+  remaining: number;
+  amount: { cents: number | null; pinned: boolean; error: string | null } | null;
+  typed: string | undefined;
+  disabled: boolean;
+  onType: (text: string) => void;
+  onRelease: () => void;
+}) {
+  const pinned = typed !== undefined;
+  const shown = pinned ? typed : amount?.cents != null ? centsToDollars(amount.cents).toFixed(2) : '';
+  return (
+    <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'flex-end', gap: '3px' }}>
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+        {pinned && (
+          <span data-testid={`line-pinned-${lineItemId}`} style={{ fontSize: '10px', fontWeight: 700, color: color.primary, fontFamily: font.sans, textTransform: 'uppercase' }}>
+            pinned
+          </span>
+        )}
+        <input
+          data-testid={`line-amount-${lineItemId}`}
+          aria-label={`Amount to bill on this line (at most ${money(remaining)})`}
+          value={shown}
+          onChange={(e) => onType(e.target.value)}
+          inputMode="decimal"
+          disabled={disabled}
+          style={{ ...inputStyle, width: '120px', textAlign: 'right', fontFamily: font.mono, borderColor: amount?.error && pinned ? color.warning : undefined }}
+        />
+      </span>
+      {pinned && (
+        <button type="button" data-testid={`line-release-${lineItemId}`} onClick={onRelease} disabled={disabled} style={{ border: 'none', background: 'none', color: color.primary, fontSize: '11px', cursor: 'pointer', padding: 0 }}>
+          Release to the percentage
+        </button>
+      )}
+      {pinned && amount?.error && (
+        <span role="alert" data-testid={`line-amount-error-${lineItemId}`} style={{ fontSize: '11px', color: color.warning, fontFamily: font.sans, maxWidth: '220px', textAlign: 'right' }}>
+          {amount.error}
+        </span>
       )}
     </div>
   );
