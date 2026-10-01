@@ -145,8 +145,10 @@ test.describe('S122 Part 5 · a held change', () => {
     await page.getByTestId(`cp-approve-${pid}`).click();
     await expect.poll(async () => (await rowT()).due_date, { timeout: 20_000 }).toBe('2027-01-08');
     expect(await rowT()).toEqual({ duration_days: 5, start_date: '2027-01-04', due_date: '2027-01-08' });
-    await expect(page.getByTestId('cp-finish')).toHaveText('Fri 8 Jan 2027');
-    await expect(page.getByTestId(`cp-pending-${pid}`)).toHaveCount(0);
+    // After the refresh lands (20s, as the poll above: measured red at the 5s
+    // default under local parallel load, green with one worker).
+    await expect(page.getByTestId('cp-finish')).toHaveText('Fri 8 Jan 2027', { timeout: 20_000 });
+    await expect(page.getByTestId(`cp-pending-${pid}`)).toHaveCount(0, { timeout: 20_000 });
     expect((await pendingRows()).find((r) => r.id === pid)?.status).toBe('approved');
     const { data: h } = await admin
       .from('project_finish_history')
