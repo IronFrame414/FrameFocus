@@ -165,7 +165,9 @@ export function DayView({
       return;
     }
     // [S122 Part 4] A Critical Path task's move names its edit and asks first.
-    const r = await moveCalendarEvent(d.e, p.start, p.end, confirm);
+    const r = await moveCalendarEvent(d.e, p.start, p.end, (arg) =>
+      confirm({ ...arg, title: t('sched.cp.title'), confirmLabel: t('sched.cp.save') })
+    );
     if (r.cancelled) setNote(null);
     else if (!r.success) setNote(r.error ?? null);
     else {
