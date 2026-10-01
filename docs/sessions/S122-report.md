@@ -1620,3 +1620,13 @@ switch exists.
   - rows **0**
 
   **Section 5: MATCH ×14.**
+
+### R.18 — Part 5 MERGED → `main` `a955dac5`
+
+- Merge commit `a955dac5`; `HEAD^{tree}` `42776fb2…` = branch head `c30f80ae^{tree}`. Pushed.
+- S180: (1) CI `36904560184` green on `f8a5a918`, base `2ae40542` = `origin/main` re-fetched; tree-identity exemption: `git diff --name-only
+  f8a5a918 c30f80ae` → `docs/sessions/S122-report.md` only; the code-path diff `--quiet` exit 0. (2) The numbers above. (3) `…28` on production,
+  MATCH ×14, **applied before the merge**.
+- **Stop rule 9 is held by both the database and the code:** the m26 Q12 guard refuses the write, and the save path holds it instead. That is
+  proven by the load-bearing live test and sabotage (l).
+- `main`'s merge run follows. **Part 6 starts on `feature/s122-p6-notify` from `a955dac5`.**
