@@ -1783,3 +1783,24 @@ outright: 6-A's "only if the box was ticked"**. The live test ran only with the 
   | (n) | the client box ignored | **1**: the new box-off test |
 
   Each red is on the test that names that rule.
+
+### R2.8 — Part 6: the /m guard caught my first fix; split; every proof re-run on `2792d3a3`; pre-CI; CI requested
+
+- **The first full unit run was RED: 1 of 2,278** (`s110-m-i18n-guard`: *"lib/critical-path/notify-text.ts: 3 hard-coded strings, allowed 0"*).
+  My R2.5 fix made /m's day view import `notify-text.ts`, which put desktop's English words in /m's graph. /m system text is translated
+  [S110 H, RULED]. **Not fixed by adding a `PENDING` allowance.** Fixed by structure: the shape and logic moved to
+  **`lib/critical-path/untold.ts`, which holds no words** (`untoldNotice(u, words)` now REQUIRES its words). The English stays in
+  `notify-text.ts` (`UNTOLD_WORDS_EN`) for desktop and the server; /m passes `t()`.
+  - The guard's reach, measured with a throwaway probe (deleted; tree clean): `untold.ts` **YES**, `notify-text.ts` **no**, `day-view.tsx` YES.
+    So the guard now **scans** `untold.ts` and passes it at 0 strings. The pass is not vacuous.
+- **Re-run on `2792d3a3`** (all on rebuild-test; 0 CI runs in progress):
+  - live `s122-cp-notify` **10/10**; live `s122-cp-held` **25/25**.
+  - `next build` exit 0; `next start` sole listener (PID by `ss`, stopped by PID). e2e, one worker, `--retries=0`: `critical-path-untold-s122`
+    + the three S122 CP specs + `desktop-schedule-s121` + `m-schedule-s121` → **19 passed**, exit 0, 19 ✓ in the log (3 + 16).
+- **Pre-CI** (`2792d3a3`, each `cmd > log; echo $?`, `--force`):
+  - type-check **0** (5/5 tasks, **0 cached**)
+  - lint **0** (0 cached; 5 warnings, all pre-existing, none in a Part 6 file)
+  - unit **0**: **166 files / 2,278 tests passed**, 0 cached
+- **Base:** `git fetch --prune` exit 0; `origin/main` = `a955dac5` and is an ancestor of HEAD (exit 0). `main`'s run after the Part 5 merge,
+  **`36909234235`**: **completed, success**. 0 runs in progress or queued, so this branch run has rebuild-test to itself.
+- **CI requested** by this commit (no `[skip ci]`).
