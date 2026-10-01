@@ -1533,3 +1533,12 @@ switch exists.
   `cancel-in-progress` then cancels the first. Same SHA, same tree; the cost is one restarted run. **Lesson: never force-push a branch while
   its CI runs; branch off and leave it alone.**
 - The report continues on **`feature/s122-p5-approvals`**.
+
+### R.16 — Part 4 MERGED → `main` `2ae40542`
+
+- CI **`36889899852`** on `bd8005d5` (the restarted run): **green**, e2e **683 passed, 24 skipped, 0 flaky, 0 failed** (38.7 m), unit **165 / 2,269**;
+  the tab spec appears in the log.
+- S180: (1) the tested head **is** the merged head (`bd8005d5`), base `a9fba7ac` = `origin/main` re-fetched; (2) the numbers above and R.15's;
+  (3) **no migration** (0 files under `supabase/migrations` in the diff, of 24). Merge commit `2ae40542`; `HEAD^{tree}` `b3591c96…` = `bd8005d5^{tree}`.
+- **Part 4 needs no production section.** It is visible now: the tab exists. On production no project has CP on, so the tab shows the switch.
+- `feature/s122-p5-approvals` rebased onto `2ae40542`; `…28` waits for `main`'s merge run.
