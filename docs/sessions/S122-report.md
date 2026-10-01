@@ -1842,3 +1842,39 @@ none of `packages/shared/utils/critical-path.ts`, `lib/critical-path/load.ts`, `
 - Reuse the existing walker (`mReachableFiles()`, `test/support/m-i18n-scan.ts`), generalized to a root; do not write a second one.
 - **Control:** the same walk from the desktop Critical Path tab DOES reach the engine.
 - **Sabotage:** the portal page imports `computeCriticalPath` → red.
+
+### R2.9 — The SHEET's notice calls: coverage, sabotages, and a race Part 6 exposed
+
+**CI `36933641338`** on `e8e80e9b`: **green** (Lint & Type Check, E2E). That run predates the commits below, so it is **not** the merge's evidence:
+`apps/` changed after it, and the tree-identity exemption cannot apply.
+
+**Did an existing test cover the sheet's two notice calls (save, release)? NO.** `grep` for `alert-dialog`, `alert-ok`, *"not everyone could
+be told"*, *"No login and no email"*, `untold` across `e2e/` and `test/` → no hit outside Part 6's own files. `desktop-critical-path-sheet-s122`
+saves and releases, but its fixture has no assignee with notify on, and it never asserts a notice. **Either call could have been deleted with
+nothing going red.** And the sheet was the path the notice existed on before today, so it is the one a refactor would most plausibly drop.
+That was backwards from where the risk sits; corrected:
+
+- `critical-path-untold-s122.spec.ts` + 2 tests (`783651aa`): **sheet SAVE** (duration 4 → 5 → the notice; DB 5) and **sheet RELEASE** (the
+  not-before pin the /m drag left → the notice; DB constraint null, start = START). First run (production build of `cedf4d66`): **5 passed**.
+- **Sabotages**, one build each:
+
+  | # | sabotage in `task-form.tsx` | result |
+  | --- | --- | --- |
+  | (t2) | the SAVE's notice call removed | 1–3 ✓, **✘ test 4** at `waiting for getByTestId('alert-dialog')`; 5 did not run |
+  | (t3) | the RELEASE's notice call removed | 1–4 ✓, **✘ test 5** at the alert |
+
+  Each was restored, `cmp` 0; tree == HEAD.
+- **Remaining stated gaps** (as agreed): the save route's `untold` field, and the scheduling-calendar's notice call.
+
+**A race Part 6 exposed** (found in the clean regression run, not by the new tests). The first full set on the clean `cedf4d66` build: **20 passed,
+1 failed**: `desktop-critical-path-sheet-s122` at :171, the preview reading *"from **Fri 8 Jan**"*, i.e. the finish from BEFORE the save just
+made. Repeated 5× on the same build: **2 ✘** (:171 stale preview; :168 `selectOption` timeout).
+- **Mechanism:** the spec polls the DB for the saved date, then `openB` clicks the row and checks `cp-fields` is visible. Part 6 (`3b97459b`)
+  runs `notifyScheduleChange` inside the save request **after** the dates are written. So the DB has the date before the response returns,
+  and the visibility check was satisfied by the **still-open previous sheet**, which then closed under the test.
+- **Fix (test synchronization, no assertion loosened):** `openB` first waits for any open sheet to close (`cp-fields` count 0, 20 s), the
+  honest signal that the UI save returned. Same build, repeated **10×: 10 passed**.
+- Full set after the fix (spec-only change, so the same build is valid): **21 passed**, exit 0, 21 ✓ (5 untold + 16 regression).
+- ⚠️ **For Josh (a product note, not a defect):** Part 6 put the notifications in the save's request path. A save now returns only after the
+  in-app rows are written and the emails are attempted, one per assignee who chose it. With many email-only assignees, the sheet stays busy
+  longer. It matches how the repo's other notify paths work, but it is a latency choice.
