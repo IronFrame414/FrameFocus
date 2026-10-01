@@ -1361,3 +1361,14 @@ snap back in between.
 - Then **0** in progress and **0** queued, so **Part 2 CI `36862938907`** was requested on `e4537e93` (an empty commit; base `d45a2131` =
   `origin/main`). `feature/s122-p3-line-sheet` is rebased onto it. **Migration `…27` is NOT applied to rebuild-test while that run holds
   it** (1.7).
+
+### R.13 — Part 2 MERGED → `main` `6c91b9c1`
+
+- CI **`36862938907`** on `e4537e93`: **green**, e2e **680 passed, 24 skipped, 0 flaky, 0 failed** (37.4 m); unit **163 files / 2,237 tests**,
+  with the engine file in the log.
+- S180: (1) the tested head **is** the merged head (`e4537e93`), base `d45a2131` = `origin/main` re-fetched; (2) the numbers above,
+  29/29, and sabotages (a)–(c), (e) and (f); (3) **no migration**: `git diff --name-only origin/main e4537e93` →
+  `apps/web/test/s122-critical-path-engine.test.ts`, `docs/sessions/S122-report.md`, `packages/shared/utils/critical-path.ts`.
+- Merge commit `6c91b9c1`; `HEAD^{tree}` `29927c50…` = `e4537e93^{tree}`. Pushed. **Part 2 is on `main` and needs no production
+  section** (pure TypeScript, no migration).
+- `main`'s merge run follows; `feature/s122-p3-line-sheet` is rebased onto `6c91b9c1`. Migration `…27` waits until that run finishes.
