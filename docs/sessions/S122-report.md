@@ -1353,3 +1353,11 @@ snap back in between.
     **Saturday** (early start maps to Mon05, asserted, "the trap is armed"). Re-run → **1 ✘**.
   - (h) `describeEdit` drops the anchor part → **3 ✘** (anchor, release, two-edits).
   - Each restored, `cmp` 0, 18/18.
+
+#### Part 2 CI requested; `main` run after Part 1's merge
+
+- **`main`'s run `36858654211`** on `d45a2131` (Part 1's merge): **green**, e2e **679 passed, 24 skipped, 1 flaky**, unit
+  **162 / 2,208**.
+- Then **0** in progress and **0** queued, so **Part 2 CI `36862938907`** was requested on `e4537e93` (an empty commit; base `d45a2131` =
+  `origin/main`). `feature/s122-p3-line-sheet` is rebased onto it. **Migration `…27` is NOT applied to rebuild-test while that run holds
+  it** (1.7).
