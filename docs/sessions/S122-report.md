@@ -1168,3 +1168,81 @@ live tasks at the time of the push** to have every new field null, with the coun
 - Before the merge: `gh run list` **0** in progress, **0** queued. **`main`'s own run on `d45a2131` follows; no branch run
   is requested until it finishes** (1.7).
 - `feature/s122-p2-engine` rebased onto `d45a2131` (`4afd9fd7`). **The report continues on that branch.**
+
+### R.9 — Part 2 (the engine), re-verified on resume — branch `feature/s122-p2-engine` rebased onto `d45a2131`
+
+The dead session's WIP commit (`36f7b80c`, now `4afd9fd7`) is `packages/shared/utils/critical-path.ts` (606 lines) +
+`apps/web/test/s122-critical-path-engine.test.ts` (416 lines). **Read in full on resume**, not taken from the commit
+message.
+
+- **Unit on the rebased head: 29/29** (`vitest run`, exit 0).
+- **Every loop is bounded**, by reading the code: Kahn's queue (each id enqueued once); `CalendarIndex` (fixed
+  `HORIZON_DAYS` = 3,653); `addWorkingDays` (guard counter); `skipLost`, `endFrom` and `startBack` (each step calls
+  `cal.date()`, which throws `HorizonError` outside the index, caught to `error: 'horizon'`); and `findLoop`
+  (≤ |members| + 1 steps). There is no recursion anywhere.
+- **Two sabotages re-run on resume** (the dead session's three are recorded in Phase 3 above). Each was restored, `cmp` 0,
+  and `git diff --quiet` 0:
+
+  | # | sabotage | ✘ |
+  | --- | --- | --- |
+  | (e) | backward pass `Math.min(lf, bound)` → `Math.max` (re-run of the dead session's (b) on this head) | **4**: chain, diamond floats, diamond chain, case 5 |
+  | (f) | **new**: lost days applied to IN-PROGRESS work (`node.ef = endFrom(...)`) | **1**: §1-D, *Expected "2026-10-06", Received "2026-10-07"* — a lost day pushed work already under way |
+
+  Restored: **29/29**.
+
+#### The five edge cases, as the code behaves (read on `4afd9fd7`)
+
+1. **No duration** (`durationDays === null`, which is every existing row, never backfilled). With both typed dates, the
+   task is `fixed_span` + `duration_not_set`: ES/EF are its typed dates, successors move from its typed finish, and it
+   does not move. With one date or none, it is `needs_duration`: unresolved, out of the network, no dates, never
+   zero-length. Each successor skips that link and is flagged `waits_on_unscheduled`.
+2. **Cycle.** Kahn's sort; the nodes left with in-degree > 0 (in a loop **or downstream of one**) are `in_cycle`.
+   `findLoop` walks predecessors inside that set and returns one concrete loop rotated to its smallest id
+   (`[A, B, C, A]`). Then `ok: false`, `error: 'cycle'`, `projectedFinish: null`, and no backward pass, so every float is
+   null. Tested on a 2-cycle, a 3-cycle, a cycle beside an acyclic part with a task downstream of it, and a
+   500-node ring. **Reported, never looped on.** The database also refuses a loop now (m24, on production).
+3. **Disconnected** (no predecessor, no successor, no constraint). ES = max(project start, today), so with no project
+   start it is today. Flagged `disconnected`; its late finish is the project finish, so its float is measured
+   against that.
+4. **In progress.** ES = its actual `startDate`. EF = `daysLeftAsOf` + `daysLeft` working days on the **company** calendar
+   (lost days do **not** apply, which is what (f) proves), and never earlier than today: a passed finish becomes today,
+   flagged `days_left_stale`. With no days left entered, it falls back to the planned finish (start + duration, else the
+   typed due date), flagged `days_left_missing`. **`percent_complete` is not a field of `CpTask` at all**, so the
+   engine cannot read it. A complete task is fixed at its actuals and is never critical.
+5. **A fixed date earlier than a predecessor allows.** The task keeps its date (`es = cal.start(constraintDate)`), and
+   every predecessor whose bound exceeds it produces a `CpConflict {taskId, predecessorId, gapDays}`. In the backward
+   pass a fixed successor is an **anchor**: it bounds its predecessors by its actual dates, which gives them negative
+   float (critical). `not_before` is the soft form: the later of the two, and no conflict.
+
+**Hand-worked floats** (each is a unit test): **diamond** A2→B5→D1, A2→C3→D1 gives A 0, B 0, **C 2**, D 0, chain
+A→B→D, finish Wed 14 Oct. **Case 5**: A4 → B fixed Tue gives conflict gap **3**, A float **−3**. **Calendar**: Fri + 3 = Tue;
+a Wed holiday makes a 3-day task Mon–Thu; a Tue lost day moves an unstarted 2-day task to Mon–Wed while an
+in-progress task keeps Tue.
+
+#### Q9 — what triggers a recompute (the full list, with the mechanism for each)
+
+The engine is pure and runs only when called. **What makes it run** is the write-through route (Part 3) for changes made
+through the app, plus the m26 `needs_recompute` mark for changes made any other way. Every staff read and the daily cron
+recompute when the mark is set **or** `computed_on` is before today (company time zone).
+
+| # | what moves a computed date | how the recompute is guaranteed | where it lives | state |
+| --- | --- | --- | --- | --- |
+| 1 | a task's schedule fields, status, delete/restore | `tasks_mark_schedule_dirty` (AFTER INSERT OR UPDATE; deletes are soft, so they are UPDATEs) | m26, **on production** | wired |
+| 2 | adding, removing or retyping a dependency | `task_dependencies_mark_schedule_dirty` | m26, on production | wired |
+| 3 | **approving** a pending foreman edit (a pending edit moves nothing) | the approval applies through the write-through route, as an ordinary task UPDATE (1) | Part 5 | to build |
+| 4 | **the company working calendar** (weekdays) | `company_work_calendars_mark_schedule_dirty` marks **every CP project in the company** | m26, on production | wired |
+| 5 | **company holidays** added, moved or removed | `company_holidays_mark_schedule_dirty`, **every CP project in the company** | m26, on production | wired |
+| 6 | **weather (lost) days** on a project | `project_lost_days_mark_schedule_dirty`, that project | m26, on production | wired |
+| 7 | an inspection's date or result | `inspections_mark_schedule_dirty` | m26, on production | wired |
+| 8 | turning Critical Path on; stamping a template | the settings guard sets `needs_recompute` when `critical_path_enabled` changes; a template stamp inserts tasks (1) | m26 / Part 8 | wired / to build |
+| 9 | **the passage of time** (an open task's finish is never before today; unstarted work never starts before today) | the daily cron plus the read-check on `computed_on < today` | Part 3 | to build |
+| **10** | ⚠️ **NEW on resume: the project's start date** (`projects.start_date`). The engine starts unlinked and disconnected work at `projectStart`, so changing it moves dates. | **Nothing marks it today. m26 has no trigger on `projects`.** A change would sit stale until the next day's cron. | **Part 3's migration adds `projects_mark_schedule_dirty`** (only when `start_date` changes), with a live test and a sabotage | **GAP, to fix in Part 3** |
+
+- **Service-role writes are deliberately not marked** (`auth.uid() IS NULL` is the engine's own write-through). Checked
+  on resume: of the **102** files under `apps/web/app` + `lib` that use `getSupabaseAdmin`, **0** write `tasks`,
+  `task_dependencies`, `inspections`, `project_lost_days`, `company_holidays` or `company_work_calendars` (control:
+  **47** of them touch `profiles`, so the grep fires). There is no `supabase/functions` directory. **Residual:** a file
+  that hands the admin client to a helper in another file is not caught by a same-file grep.
+- The company's time zone defines "today"; a change to it is covered by the `computed_on` check (9), not by a trigger.
+
+**Part 2 adds no migration.**
