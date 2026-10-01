@@ -1818,3 +1818,18 @@ Context: `client_schedule(p_project_id)` (`20261019000000_m9_client_read_arms.sq
   (a field added to the CP-off shape → red).
 - **Decision rule:** if extending `client_schedule` cannot satisfy that control cleanly, Part 7 uses a **separate narrowed read path**
   (plan row 10's `client_critical_path(project)`), not an extension.
+
+**R2.10 addendum: two more required proofs for Part 7** (received the same evening):
+
+1. **A clean function is not a clean payload.** `client_critical_path` can return exactly what it declares while the portal page still ships
+   float, if the page also calls the engine or another service and the result is serialized. That is the `#136` class exactly: one read path
+   gated, the leak arriving through another. ⚠️ **The PAYLOAD proof is a separate, required test.** Read what the linked client's page actually
+   serializes (`page.content()` / `self.__next_f`, as `e2e/desktop-payload.spec.ts` does), not what the function returns.
+   - It finds 0 float values, 0 critical flags, 0 assignee names, 0 durations, 0 finish-history dates.
+   - A positive control in the same payload: the projected finish and a phase name ARE present, so the test cannot pass on an empty page.
+   - Its own sabotage: the page passes one engine field (e.g. `totalFloat`) to its component → red.
+2. **Both halves on a Critical-Path-ON project.** Beyond the CP-off control for `client_schedule` and the CP-off 0-rows check for the new
+   function: the **unlinked** client (`josh+qa-client@worthprop.com`, same company A, `contact_id` NULL) on a **CP-ON** project where the data
+   exists → **0 rows** from `client_critical_path`. Only the link check stands between the data and a stranger, and per S164 the control half is
+   the fragile one. Its own sabotage: the link check removed from the function → red. The linked client on the same project gets rows (the
+   positive half), so the 0 is not vacuous.
