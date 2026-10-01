@@ -301,6 +301,31 @@ describe('an APPROVAL applies the change, so the APPROVER is told who could not 
   }, 120_000);
 });
 
+describe('the client box UNTICKED: the finish moves and the client is told nothing (6-A)', () => {
+  it('box off; the Owner extends T 6 → 7: the finish moves, 0 client emails — and the crew member IS told (control)', async () => {
+    must('box off', (await admin.from('project_schedule_settings').update({ notify_client: false }).eq('project_id', projectId)).error);
+    const { data: before } = await admin.from('project_schedule_settings').select('projected_finish, notify_client').eq('project_id', projectId).single();
+    expect(before!.notify_client).toBe(false);
+    await admin.from('notifications').delete().eq('project_id', projectId);
+    CHANGE_AT = new Date().toISOString();
+    const r = await applyCriticalPathSave(
+      owner as SupabaseClient<Database>,
+      db,
+      { projectId, taskId: taskT, companyId, userId: '', savedByMemberId: m.owner },
+      { duration_days: 7 }
+    );
+    expect(r).toMatchObject({ ok: true, held: false });
+    const { data: after } = await admin.from('project_schedule_settings').select('projected_finish').eq('project_id', projectId).single();
+    expect(after!.projected_finish, 'the finish DID move').not.toBe(before!.projected_finish);
+    expect((await emailLogs('schedule_change_client', contactEmail)).length).toBe(0);
+    expect(await inApp(prof.crew, 'Schedule changed on %')).toBe(1);
+    // Back ON, so the TIME test below is not passing for the box's sake.
+    must('box on', (await admin.from('project_schedule_settings').update({ notify_client: true }).eq('project_id', projectId)).error);
+    const { data: on } = await admin.from('project_schedule_settings').select('notify_client').eq('project_id', projectId).single();
+    expect(on!.notify_client).toBe(true);
+  }, 120_000);
+});
+
 describe('TIME passing tells nobody', () => {
   it('read a week later (cause time): the dates move, no new in-app row, no new email', async () => {
     const before = {
