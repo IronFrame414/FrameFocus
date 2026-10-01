@@ -334,7 +334,13 @@ describe('DECIDE — who may approve someone else\'s held change (total map)', (
   it('NOBODY approves their own: a PM-submitted change, the PM approving → still pending', async () => {
     await clearPending();
     const id = await seedPending(t.M, member.project_manager!);
-    await session.project_manager.from('task_schedule_edits').update({ status: 'approved' }).eq('id', id);
+    // The PM supplies decided_at / decided_by themselves, so the decided-CHECK
+    // cannot be what refuses it — only the guard's self-approval rule. (Without
+    // them this test stayed GREEN with the guard disabled: sabotage (m).)
+    await session.project_manager
+      .from('task_schedule_edits')
+      .update({ status: 'approved', decided_at: new Date().toISOString(), decided_by_member_id: member.project_manager })
+      .eq('id', id);
     expect((await statusOf(id)).status).toBe('pending');
   });
 
