@@ -1602,3 +1602,21 @@ switch exists.
   - Re-run in parallel: ⚠️ one invalid run of mine (Playwright started from the **repo root**, without the app's config: 5 ✘ in 111 ms,
     measuring nothing, not counted); then **16 passed** from `apps/web`.
 - **Pre-CI:** type-check **0** (0/5 cached); lint **0**; unit **165 files / 2,269 tests**, 0 cached.
+
+#### Part 5 CI and PRODUCTION section 5: `20262128000000_s122_cp_schedule_edits`
+
+- **CI `36904560184`** on `f8a5a918` (base `2ae40542` = `origin/main`; 0 in progress or queued): **green**, e2e **685 passed, 24 skipped, 0 flaky,
+  0 failed** (32.3 m), with the held spec in the log; unit **165 / 2,269**.
+- **Expected** (rebuild-test, captured during CI, read-only). Both function bodies equal the file's: guard `b303fd3a…`, `set_…_updated_by` `f8eaaeeb…`.
+- Workdir `wd5`: all **291** migrations, `…28` last; linked to production; checkout read back `nmyphyhmfttxkdoposvf`; deleted after.
+- **Pre-check, PRODUCTION:** ledger `20262127000000`; table **0**; guard function **0**. A new table only.
+- **Dry run:** *"• 20262128000000_s122_cp_schedule_edits.sql"*, exactly one. **Push:** exit 0.
+- **Verification:** the same 14-line read-only file on both, then `diff` → **exit 0, every line identical**:
+  - ledger `2127, 2128`
+  - columns md5 `e1b957aa…` (18); constraints `c53f5dbf…` (12); indexes `ccbaadb2…` (5)
+  - RLS on; policies md5 `1358d774…`: insert_submitter, select_visible, update_decider_or_submitter
+  - triggers guard / set_updated_by / updated_at, all `O`
+  - guard `b303fd3a…` secdef, EXECUTE auth **false**, anon **false**; `set_…_updated_by` `f8eaaeeb…`
+  - rows **0**
+
+  **Section 5: MATCH ×14.**
