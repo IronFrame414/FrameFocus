@@ -1666,3 +1666,27 @@ no result, not counted. Fixed and re-run as above.)
 
 The stop rule 2 pre-check already holds on production today: **0** rows would fail the superset CHECK. It is re-read immediately before
 the push in the Part 6 production section.
+
+### R2.4 — Part 6 live test `s122-cp-notify.live.ts`, FIRST RUN: **8/8 GREEN** (ref `632ea05d`, rebuild-test)
+
+- Before the run: **0** CI runs in progress or queued (`gh run list`, exit 0, 0 lines), so nothing else was writing rebuild-test.
+- ⚠️ **Clock skew, measured, because the email-log counts filter on a timestamp taken from the Codespace clock** while `created_at` is the
+  database's. `select now()` on rebuild-test returned `21:34:06.788Z`, inside the local bracket `21:34:04.498Z` → `21:34:07.160Z`. So the database
+  clock is at most **~0.37 s behind** the Codespace (and at most ~2.3 s ahead). Every timestamp the test takes is followed by seconds of setup or
+  save work before the rows it counts are written, so the filter cannot drop a row this change wrote. The negative counts are not passing
+  through a window that excludes them.
+- `npm run test:live -- test/s122-cp-notify.live.ts` → **exit 0; Test Files 1 passed; Tests 8 passed (8)**; 15.7 s. Independent tally: the
+  file has 8 `it` blocks (lines 204, 224, 230, 241, 249, 256, 261, 269). `assertRebuildTest()` guards the target; `afterAll` asserts **0**
+  leftover `S122CPN` projects and passed.
+- What the 8 assert (the Owner extends T 3 → 5 working days; finish Wed 6 → **Fri 8 Jan 2027**):
+  - first computation (`enabled`): finish 6 Jan; **0** client emails (there was no previous finish).
+  - the change lands, `held: false`; T = Jan 4–8.
+  - crew (a login, notify on): **1** in-app row, body `S122CPN T: Mon 4 Jan – Fri 8 Jan 2027`.
+  - email-only member (a sub, no login): **1** `schedule_change` email row, `failed` by the forced send gate (the attempt is proven;
+    no real mailbox reached), `member_id` = that member.
+  - unreachable member: **named** in the outcome; the saver gets **1** "Not everyone could be told" row; `inApp 1, emailed 0`.
+  - CONTROL: PM (notify off) **0**; the Owner (the saver) **0** about their own change.
+  - client: **1** `schedule_change_client` email, subject `S122CPN notify: projected finish Fri 8 Jan 2027`.
+  - TIME (`ensureScheduleFresh` a week later): the dates **do** move (T start → Jan 11), and in-app, sub email and client email counts are
+    **unchanged**.
+- Part 6's "who is told" behaviour is now **proven green on rebuild-test.** Its sabotages are not run yet; they come next, before CI.
