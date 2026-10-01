@@ -67,10 +67,17 @@ RETURNS trigger
 LANGUAGE plpgsql
 AS $function$
 BEGIN
-  -- "First turned on" is stamped for ANY writer, the service role included.
+  -- "First turned on" is stamped for ANY writer, the service role included —
+  -- and it owes the first computation, cause 'enabled', whoever turned it on
+  -- (a project already marked keeps the cause it has).
   IF NEW.critical_path_enabled AND (TG_OP = 'INSERT' OR NOT OLD.critical_path_enabled) THEN
     NEW.enabled_at := now();
     NEW.enabled_by := auth.uid();
+    IF TG_OP = 'INSERT' OR NOT OLD.needs_recompute THEN
+      NEW.needs_recompute := true;
+      NEW.recompute_cause_kind := 'enabled';
+      NEW.recompute_cause_task_id := NULL;
+    END IF;
   ELSIF TG_OP = 'UPDATE' THEN
     NEW.enabled_at := OLD.enabled_at;
     NEW.enabled_by := OLD.enabled_by;
