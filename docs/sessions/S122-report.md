@@ -1286,3 +1286,21 @@ silently.
 **Also stated, not asked:** `task_schedule_edits` moves from Part 3's migration to **Part 5's**, because its shape now follows the
 2026-10-01 ruling (a pending edit is visible and grayed, from a foreman **or a crew assignee**). Part 3's migration carries
 `task_assignees.notify_changes` (Q13-A) and the new `projects` start-date dirty trigger (Q9 item 10).
+
+#### Q19 — Josh's answer (2026-10-01): **A**, with a load-bearing addition
+
+Josh's reason, quoted: *"A drag means 'not before here.' … a hard pin stops a predecessor slip from pushing its successors,
+which is the one thing Critical Path exists to do. Schedules in P6 and MS Project die this way — they fill up with forgotten
+hard constraints until the finish date stops being a prediction and nobody notices."*
+
+**Addition [Josh, RULED]: a constraint a drag creates must be visible and removable in one action.**
+1. A task carrying a drag-created constraint is **visibly marked on the Gantt AND on the sheet**, not only in a detail panel.
+2. It can be **released in one action**, and releasing it lets the engine recompute that task freely.
+3. Same rule, same language and same mental model as Part 0-C's **pinned invoice lines**: a deliberate act is visibly marked
+   and always reversible.
+
+**Also ruled: the preview names WHICH edit a drag performs, before saving.** Moving the start **sets a constraint**; moving the
+end **changes the task's duration**. "This moves the finish by N days" alone is not enough. The report states which of the
+two each drag performed.
+
+`task_schedule_edits` moving from Part 3 to Part 5: **accepted.**
