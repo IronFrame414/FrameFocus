@@ -1084,3 +1084,32 @@ live tasks at the time of the push** to have every new field null, with the coun
 | `task_dependencies` rows | 0 (pre-check) | 0 | MATCH |
 
 **Section 1: MATCH ×14.** Checkout CLI never left rebuild-test (`nmyphyhmfttxkdoposvf`).
+
+### R.6 — Part 1 PRODUCTION, section 2 of 3: `20262125000000_s122_cp_calendar_weather`
+
+- **One-file workdir** `scratchpad/wd2`: every migration ≤ `20262125000000` (**288 of 289**); `cmp` 0. Workdir linked to
+  production; checkout read back `nmyphyhmfttxkdoposvf`.
+- **Pre-check, PRODUCTION:** ledger latest `20262124000000`; the 3 tables **0**; the 3 `set_*_updated_by` functions **0**.
+  (A first pre-check with the verify file exited 1, `42P01`, because it reads the tables that do not exist yet. That was
+  expected, and the pre-check was re-run without them.) New tables only: no constraint over existing rows.
+- **Dry run:** exit 0, *"• 20262125000000_s122_cp_calendar_weather.sql"*. **Exactly one file.**
+- **Push:** exit 0, *"Applying migration 20262125000000_s122_cp_calendar_weather.sql..."*.
+- **Expected values:** taken from rebuild-test **before** the push (m25 was never re-applied there, so it is the file's text).
+  Two expectations differ from rebuild-test **by design**, because m26 is not on production yet: the ledger, and the
+  triggers. The 3 `*_mark_schedule_dirty` triggers on these tables are **created by m26**, so production expects **6**,
+  not rebuild-test's 9.
+
+| object | expected | PRODUCTION after | verdict |
+| --- | --- | --- | --- |
+| ledger ≥ 2124 | `2124, 2125` | `2124, 2125` | MATCH |
+| tables present | 3 | 3 | MATCH |
+| columns md5 (table.col:type:nullable:default) / count | `931d70eb…` / 32 | `931d70eb…` / 32 | MATCH ×2 |
+| constraints md5 / count | `6c67687a…` / 18 | `6c67687a…` / 18 | MATCH ×2 |
+| indexes md5 / count | `6168654a…` / 9 | `6168654a…` / 9 | MATCH ×2 |
+| RLS on | 3 of 3 | 3 of 3 | MATCH |
+| policies md5 (name, cmd, roles, USING, WITH CHECK) / count | `a01913c8…` / 9 | `a01913c8…` / 9 | MATCH ×2 |
+| triggers | `{company_holidays,company_work_calendars,project_lost_days}_{set_updated_by,updated_at}`, all `O` (6) | identical, all `O` | MATCH |
+| `set_*_updated_by` functions md5 (body + secdef) | `180bf8fe…` | `180bf8fe…` | MATCH |
+| rows in the 3 tables | 0 | 0 | MATCH |
+
+**Section 2: MATCH ×14.**
