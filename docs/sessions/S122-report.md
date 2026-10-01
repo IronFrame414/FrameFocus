@@ -1252,3 +1252,15 @@ recompute when the mark is set **or** `computed_on` is before today (company tim
 Type-check exit **0** (`--force`, **0/5 cached**); lint exit **0** (0/1 cached); unit exit **0**, **163 files / 2,237 tests**
 (= 162 / 2,208 on `main` + this file's 29), 0 cached. `main`'s run `36858654211` on `d45a2131` is **in progress**, so
 Part 2's CI request waits for it (1.7).
+
+### R.10 — The four Phase 1 findings: disposition, each verified by object
+
+| # | finding | disposition | record and evidence |
+| --- | --- | --- | --- |
+| 1 | A foreman or crew assignee can write task dates directly, bypassing Part 5's approval | **Database half FIXED and on production; the held-submission half is Part 5.** On a Critical Path project, `tasks_guard_critical_path_schedule` (m26, on production, R.7) refuses a foreman's or crew assignee's write to the schedule columns with `42501`; projects without CP keep S121's rules. **RULED [Josh, 2026-10-01]: the write is held, shown grayed and marked "pending", never hidden, and never moves the computed dates.** Part 5 turns today's refusal into that held submission. Until then no production project has CP on (settings rows **0**, R.7), so the refusal reaches nobody. | Live Q12 total map 40/40 and sabotage (b) (Phase 3, Part 1); production object R.7 |
+| 2 | The invoice percentage box turned 150 into 100 silently | **FIXED by Part 0-C** (in `d84cfe8b`). | Read on `origin/main`: `parsePercent` (`packages/shared/utils/invoice-line-amounts.ts:73`) returns `ok: false` for `n > 100`, and the builder imports `planBilling`, which calls it and sets `canSubmit: false`. The 0-C e2e showed "`150`% is refused with Bill disabled" (Phase 3, 0-C). |
+| 3 | Delete-then-re-add of the same dependency fails "already exists" | **FIXED in Part 1 m24, on production.** | Production R.5: the old `task_dependencies_pair_key` **0**, `task_dependencies_live_pair` (partial, `WHERE is_deleted = false`) **1**. Live DEPS "delete-then-re-add works", and sabotage (d) (the old key restored) → **3 ✘**. |
+| 4 | A PM or foreman changing an approved day's hours (it stayed approved) | **FIXED by Part 0-B-4** (`1c7684b9`). **Verified by object on resume, not taken from the merge message.** | PRODUCTION (read-only, a workdir linked to production): `time_clock_sessions_z_reopen_on_clock_change` **O** → `reopen_session_on_clock_change`; `time_segments_z_reopen_on_hours_change` **O** → `reopen_session_on_segment_hours`. `md5(prosrc)`: `edit_time_session_clock` `d21e1dc1`, `reopen_session_on_clock_change` `08f7507b`, `reopen_session_on_segment_hours` `03913379`. **These equal rebuild-test's and the migration file's bodies** (python, between dollar quotes). ⚠️ They differ from the report's `abe081f4 / 79b1f25d / 27f18f28` **only because those are `md5(pg_get_functiondef)`**: re-run on rebuild-test, `pg_get_functiondef` gives exactly `abe081f4, 79b1f25d, 27f18f28`. Behaviour: the 20/20 total map and sabotages (i)–(iv) (Phase 3, 0-B-4). |
+
+The production-linked scratch workdirs (`wd1`–`wd3`) were deleted after this read. The checkout's CLI has stayed on rebuild-test
+(`nmyphyhmfttxkdoposvf`) all session.
