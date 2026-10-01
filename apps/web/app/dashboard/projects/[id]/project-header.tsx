@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 import type { ProjectWithContact } from '@/lib/services/projects';
 import { PROJECT_STATUS_LABELS } from '@/lib/services/projects-client';
 import { LIEN_RELEASE_ROLES } from '@/lib/services/lien-releases-shared';
+import { CRITICAL_PATH_TAB_ROLES } from '@/lib/critical-path/access';
 import { badgeStyle, color, font, h2Style, primaryButtonStyle } from '@/lib/theme';
 import { canRenameProject } from '@/lib/projects/rename-access';
 import { RenameProject } from './rename-project';
@@ -27,6 +28,10 @@ interface ProjectHeaderProps {
 const TABS: { slug: string; label: string; roles?: string[] }[] = [
   { slug: '', label: 'Overview' },
   { slug: 'schedule', label: 'Schedule' },
+  // [S122 Part 4] Projects → Work → Critical Path [Josh, 2026-09-30]. Staff
+  // supervisors only — lib/critical-path/access.ts is the one list, and the page
+  // repeats the gate server-side. Never a client (ruling 8: no float, ever).
+  { slug: 'critical-path', label: 'Critical Path', roles: [...CRITICAL_PATH_TAB_ROLES] },
   {
     slug: 'budget',
     label: 'Budget & Cost',
@@ -125,7 +130,11 @@ const TABS: { slug: string; label: string; roles?: string[] }[] = [
 // Sub-tab order within a section is §1's table, not TABS declaration order.
 const SECTIONS: { label: string; slugs: string[] }[] = [
   { label: 'Overview', slugs: [''] },
-  { label: 'Work', slugs: ['schedule', 'selections', 'punch', 'deliveries'] },
+  // [S122 Part 4] Critical Path is APPENDED to Work: Josh named the tab, not its
+  // place, and Schedule · Selections · Punch List · Deliveries is a ruled order
+  // (desktop-selections.spec encodes it) — inserting would be a decision this
+  // build has no authority to make. SUPERSEDED: ['schedule', 'selections', 'punch', 'deliveries'].
+  { label: 'Work', slugs: ['schedule', 'selections', 'punch', 'deliveries', 'critical-path'] },
   {
     label: 'Money',
     slugs: ['budget', 'changes', 'invoices', 'payments', 'profitability'],
