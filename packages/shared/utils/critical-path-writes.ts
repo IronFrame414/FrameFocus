@@ -199,3 +199,82 @@ export function consequenceSentence(p: EditPreview): string {
   const dir = p.shift > 0 ? 'later' : 'earlier';
   return `This moves the projected finish from ${shortDate(p.before)} to ${shortDate(p.after)} (${days(Math.abs(p.shift))} ${dir}).`;
 }
+
+// ── A date MOVE on a Critical Path project [Josh, Q19, 2026-10-01] ──────────
+// The calendar drag, the schedule sheet's dates and the Gantt's end handle all
+// change a task's dates by gesture. On a Critical Path project the stored
+// dates are the engine's answer, so a gesture is TRANSLATED into what the
+// engine reads, never written as dates (which would snap back):
+//
+//   move (both ends shift by the same days)  → a PIN, "not before <new start>";
+//                                              the duration is kept (a move
+//                                              never changes length, even
+//                                              across a weekend)
+//   resize the END                           → the DURATION changes (working
+//                                              days from start to the new end)
+//   resize the START                         → a PIN at the new start AND the
+//                                              duration to the unchanged end
+//   in progress                              → the start is its ACTUAL start and
+//                                              cannot move; an end drag enters
+//                                              the working days LEFT, as of today
+//   complete                                 → refused: actuals do not move
+//   no duration (Q15-A, typed dates)         → the typed dates move; nothing is
+//                                              derived from them (stop rule 10)
+// A "fixed" pin stays fixed (at the new date); anything else becomes
+// "not before" — the soft form, so a slipping predecessor still pushes it.
+
+export type MoveTranslation =
+  | { mode: 'cp'; after: CpTask }
+  | { mode: 'typed'; start: string; end: string }
+  | { mode: 'refused'; error: string };
+
+/** Working days from `a` to `b` INCLUSIVE (both ends counted when working). */
+export function workingDaysInclusive(a: string, b: string, calendar: WorkCalendar): number {
+  if (b < a) return 0;
+  const work = new Set(calendar.workDays);
+  const hol = new Set(calendar.holidays);
+  const first = work.has(new Date(`${a}T00:00:00Z`).getUTCDay()) && !hol.has(a) ? 1 : 0;
+  return first + workingDaysBetween(a, b, calendar);
+}
+
+export function translateMove(
+  task: CpTask,
+  from: { start: string; end: string },
+  to: { start: string; end: string },
+  calendar: WorkCalendar,
+  today: string
+): MoveTranslation {
+  if (task.status === 'complete') {
+    return { mode: 'refused', error: 'A complete task keeps its actual dates.' };
+  }
+  const startMoved = to.start !== from.start;
+  const endMoved = to.end !== from.end;
+  if (!startMoved && !endMoved) return { mode: 'cp', after: task };
+
+  if (task.status === 'in_progress') {
+    if (startMoved) {
+      return {
+        mode: 'refused',
+        error: 'Work in progress keeps its actual start. Drag its end, or change its days left in the sheet.',
+      };
+    }
+    const left = to.end < today ? 0 : workingDaysInclusive(today, to.end, calendar);
+    return { mode: 'cp', after: { ...task, daysLeft: left, daysLeftAsOf: today } };
+  }
+
+  if (task.durationDays === null) return { mode: 'typed', start: to.start, end: to.end };
+
+  const shift = (a: string, b: string) => Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 86_400_000);
+  const isMove = startMoved && endMoved && shift(from.start, to.start) === shift(from.end, to.end);
+  const after: CpTask = { ...task };
+  if (startMoved) {
+    after.startConstraint = task.startConstraint === 'fixed' ? 'fixed' : 'not_before';
+    after.constraintDate = to.start;
+  }
+  if (!isMove) {
+    const span = workingDaysInclusive(to.start, to.end, calendar);
+    if (span < 1) return { mode: 'refused', error: 'That range has no working days in it.' };
+    after.durationDays = span;
+  }
+  return { mode: 'cp', after };
+}
