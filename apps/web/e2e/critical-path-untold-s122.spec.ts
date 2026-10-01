@@ -222,4 +222,33 @@ test.describe('S122 Part 6 · who could not be told is shown at save time, on ev
     const { data: st } = await admin.from('task_schedule_edits').select('status').eq('id', editId).single();
     expect((st as { status: string }).status).toBe('approved');
   });
+
+  // The SHEET is where the notice began, so it is the path a refactor would most
+  // likely drop with nothing going red. Both of its calls: SAVE and RELEASE.
+  async function openT(page: Page) {
+    await page.goto(`/dashboard/projects/${projectId}/schedule`);
+    await page.getByRole('button', { name: new RegExp(`${MARKER} T`) }).first().click();
+    await expect(page.getByTestId('cp-fields')).toBeVisible();
+  }
+
+  test('desktop: a SHEET SAVE shows the notice', async ({ page }) => {
+    expect((await rowT()).duration_days, 'after the approval').toBe(4);
+    await signInAs(page, OWNER);
+    await openT(page);
+    await page.getByTestId('cp-duration').fill('5');
+    await expect(page.getByTestId('cp-edit-duration')).toHaveText('Changes the DURATION: 4 working days → 5 working days.');
+    await page.getByRole('button', { name: 'Save Task' }).click();
+    await expectUntoldNotice(page);
+    expect((await rowT()).duration_days).toBe(5);
+  });
+
+  test('desktop: a SHEET RELEASE (one action) shows the notice', async ({ page }) => {
+    expect((await rowT()).constraint_date, 'the /m drag left a not-before pin').toBe(addDays(START, 2));
+    await signInAs(page, OWNER);
+    await openT(page);
+    await expect(page.getByTestId('cp-pinned')).toBeVisible();
+    await page.getByTestId('cp-release').click();
+    await expectUntoldNotice(page);
+    expect(await rowT()).toMatchObject({ constraint_date: null, start_date: START });
+  });
 });
