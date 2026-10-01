@@ -1690,3 +1690,42 @@ the push in the Part 6 production section.
   - TIME (`ensureScheduleFresh` a week later): the dates **do** move (T start → Jan 11), and in-app, sub email and client email counts are
     **unchanged**.
 - Part 6's "who is told" behaviour is now **proven green on rebuild-test.** Its sabotages are not run yet; they come next, before CI.
+
+### R2.5 — Part 6 FINDING: "shown to the saver" held on ONE of four apply paths. Fixed (`02842c40`)
+
+Plan row 9 says an unreachable assignee is **"returned to the saver and shown"**. Read on `c573fee6`, every path that APPLIES a Critical
+Path change, by its call sites (`grep` for `saveCriticalPathTask`, `moveCalendarEvent`, `/critical-path/edits/`, `applyCriticalPathSave`):
+
+| path | surface | route | told at save time, before |
+| --- | --- | --- | --- |
+| the line sheet's save | desktop | `…/tasks/[taskId]` | **yes** (it read `recompute.notified` client-side) |
+| the sheet's one-action **release** (Q19) | desktop | `…/tasks/[taskId]` | **no**: `handleRelease` ignored it |
+| a **drag** | desktop CP tab, scheduling calendar, **/m day view** | `…/tasks/[taskId]/move` | **no**: the confirm response was `{ ...answer, saved, held }` |
+| an **approval** | desktop CP tab | `…/edits/[editId]` | **no**: `decideScheduleEdit` returned `{ ok: true }` |
+
+The in-app "Not everyone could be told" row was written on every path (the notify layer does it), so nobody was **silently dropped**. But
+the immediate notice depended on the gesture, and **/m's only Critical Path edit is a drag**, so a mobile saver never saw it. That breaks
+PARITY [S122]: one feature, both surfaces, the same behaviour.
+
+**Fix: one shape, one reader, one sentence** (`lib/critical-path/notify-text.ts`). `Untold = { names, client }`; `untoldFrom` / `untoldOf`
+(server, `save.ts`) → every route returns `untold`; `parseUntold` (client, defensive); `untoldNotice(u, words)`. All three routes, all
+five UI call sites (sheet, release, CP-tab drag, calendar drag, /m drag) and the approve button use them. /m passes its `t()` words
+(`sched.cp.untold*`, en + es); the English words are asserted equal to desktop's. `notify.ts`'s report row uses the same list
+(`untoldList`), so the duplicated `'the client (no email on file)'` string is gone. `tsc` **0**.
+
+**Existing tests overturned (S157 sweep):** `grep` for `decideScheduleEdit`, `saveCriticalPathTask`, `moveCalendarEvent`, the route paths and
+`toEqual({ ok: true })` across `test/` and `e2e/` → two hits, both `s122-cp-held.live.ts` (approve :385, reject :421). The superseded
+`expect(d).toEqual({ ok: true });` is quoted in place. The new assertion states the whole shape, `{ ok: true, untold: { names: [], client: false } }`
+(nobody there chose to be told), not a loosened partial match. No hit in e2e.
+
+**Proofs** (rebuild-test; ref = the commit carrying them):
+- Unit `s122-cp-notify-text.test.ts`: **8/8** (4 before + 4 new: shape, defensive read of 7 junk inputs, the notice, /m parity).
+  - Sabotage **(q)** /m's English title drifts from desktop → **1 ✘** (the parity test). Restored, `cmp` 0.
+  - Sabotage **(r)** `parseUntold` trusts a non-array / truthy junk → **1 ✘** (the defensive read). Restored, `cmp` 0; both files == HEAD.
+- Live `s122-cp-notify.live.ts`: **9/9** (8 + 1). The Owner's change → `untoldOf` = `{ names: [<the unreachable member>], client: false }`.
+  NEW: crew holds T 5 → 6, the Owner approves → `{ ok: true, untold: { names: [<them>], client: false } }`; T = 6 days, due **Mon 11 Jan**;
+  the Owner (the approver) gets **1** report row.
+  - Sabotage **(s)** the approval drops `untold` → **1 ✘**, exactly the approval test. Restored, `cmp` 0, `held.ts` == HEAD.
+- Live `s122-cp-held.live.ts` (Part 5) with the stated shape: **25/25**.
+- ⚠️ **Not yet proven: the routes' JSON and the dialog itself.** The live tests call the service layer, so a sabotaged route line would stay green.
+  An e2e is next.

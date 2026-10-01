@@ -23,7 +23,8 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@framefocus/shared/types/database';
 import { ensureScheduleFresh, recomputeProject } from '@/lib/critical-path/recompute';
-import { applyCriticalPathSave } from '@/lib/critical-path/save';
+import { applyCriticalPathSave, untoldOf } from '@/lib/critical-path/save';
+import { decideScheduleEdit } from '@/lib/critical-path/held';
 import { admin, assertRebuildTest, deleteProjects, sessionFor, sweepProjectsNamed, upsertContact } from './live-session';
 
 process.env.EMAIL_SEND_ENABLED = 'false';
@@ -63,6 +64,7 @@ async function purge(id: string) {
   const { data: ts } = await admin.from('tasks').select('id').eq('project_id', id);
   const ids = (ts ?? []).map((r) => r.id as string);
   await admin.from('notifications').delete().eq('project_id', id);
+  await admin.from('task_schedule_edits').delete().eq('project_id', id);
   await admin.from('project_finish_history').delete().eq('project_id', id);
   await admin.from('project_schedule_settings').delete().eq('project_id', id);
   if (ids.length) {
@@ -251,6 +253,8 @@ describe('an applied change: the Owner extends T 3 → 5 (T Mon04–Fri08, finis
     expect(outcome.recompute.notified.unreachable).toEqual([unreachableName]);
     expect(outcome.recompute.notified).toMatchObject({ inApp: 1, emailed: 0, clientEmailed: false, clientUnreachable: false });
     expect(await inApp(prof.owner, 'Not everyone could be told%')).toBe(1);
+    // [PARITY] What every route returns for the saver to be SHOWN at save time.
+    expect(untoldOf(outcome.recompute)).toEqual({ names: [unreachableName], client: false });
   });
 
   it('CONTROL: the PM (notify OFF) gets nothing; the Owner gets nothing about their own change', async () => {
@@ -263,6 +267,38 @@ describe('an applied change: the Owner extends T 3 → 5 (T Mon04–Fri08, finis
     expect(rows.length).toBe(1);
     expect(rows[0].subject).toBe(`${MARKER} notify: projected finish Fri 8 Jan 2027`);
   });
+});
+
+describe('an APPROVAL applies the change, so the APPROVER is told who could not be', () => {
+  it('crew holds T 5 → 6; the Owner approves: untold names the unreachable member; the Owner gets the report row', async () => {
+    const crew = await sessionFor(CREW);
+    const held = await applyCriticalPathSave(
+      crew as SupabaseClient<Database>,
+      db,
+      { projectId, taskId: taskT, companyId, userId: '', savedByMemberId: m.crew },
+      { duration_days: 6 }
+    );
+    expect(held).toMatchObject({ ok: true, held: true });
+    const { data: edits } = await admin
+      .from('task_schedule_edits')
+      .select('id')
+      .eq('task_id', taskT)
+      .eq('status', 'pending')
+      .eq('submitted_by_member_id', m.crew);
+    expect(edits?.length ?? 0, 'exactly one pending edit, the crew member').toBe(1);
+    await admin.from('notifications').delete().eq('project_id', projectId).eq('recipient_profile_id', prof.owner);
+    const d = await decideScheduleEdit(
+      owner as SupabaseClient<Database>,
+      db,
+      { projectId, editId: edits![0].id as string, userId: '', myMemberId: m.owner },
+      'approve',
+      null
+    );
+    expect(d).toEqual({ ok: true, untold: { names: [unreachableName], client: false } });
+    const { data: t } = await admin.from('tasks').select('duration_days, due_date').eq('id', taskT).single();
+    expect(t).toEqual({ duration_days: 6, due_date: '2027-01-11' });
+    expect(await inApp(prof.owner, 'Not everyone could be told%')).toBe(1);
+  }, 120_000);
 });
 
 describe('TIME passing tells nobody', () => {

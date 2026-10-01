@@ -382,7 +382,10 @@ describe('APPROVE applies it; REJECT moves nothing', () => {
       'approve',
       null
     );
-    expect(d).toEqual({ ok: true });
+    // [S122 Part 6] superseded: `expect(d).toEqual({ ok: true });` — a decision now also
+    // returns who could not be told. Nobody here chose to be (notify_changes and
+    // notify_client are off), so it is stated as NOBODY, not loosened to a partial match.
+    expect(d).toEqual({ ok: true, untold: { names: [], client: false } });
     expect(await scheduleOf(t.T)).toMatchObject({ duration_days: 5, start_date: '2027-01-04', due_date: '2027-01-08' });
     expect(await finish()).toBe('2027-01-08');
     expect(await historyCount()).toBe(historyBefore + 1);
@@ -418,7 +421,9 @@ describe('APPROVE applies it; REJECT moves nothing', () => {
       'reject',
       'not yet'
     );
-    expect(d).toEqual({ ok: true });
+    // [S122 Part 6] superseded: `expect(d).toEqual({ ok: true });` — a rejection applies
+    // nothing, so nobody is untold.
+    expect(d).toEqual({ ok: true, untold: { names: [], client: false } });
     expect(await scheduleOf(t.T)).toEqual(before);
     expect((await statusOf(id)).status).toBe('rejected');
   });
