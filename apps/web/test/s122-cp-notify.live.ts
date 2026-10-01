@@ -33,6 +33,9 @@ const OWNER = 'josh+test50@worthprop.com';
 const CREW = 'josh+crew@worthprop.com';
 const PM = 'josh+pm@worthprop.com';
 const START = new Date().toISOString();
+/** Taken just before the Owner's change: counts below are THAT change's. (The
+ *  first computation also tells opted-in assignees — it writes their dates.) */
+let CHANGE_AT = START;
 
 const db = admin as unknown as SupabaseClient<Database>;
 let owner: SupabaseClient;
@@ -86,7 +89,7 @@ async function emailLogs(type: 'schedule_change' | 'schedule_change_client', to:
     .select('status, subject, metadata')
     .eq('email_type', type)
     .eq('recipient_email', to)
-    .gte('created_at', START);
+    .gte('created_at', CHANGE_AT);
   return (data ?? []) as { status: string; subject: string; metadata: Record<string, unknown> }[];
 }
 
@@ -209,6 +212,7 @@ describe('an applied change: the Owner extends T 3 → 5 (T Mon04–Fri08, finis
   beforeAll(async () => {
     // Clear the first computation's assignee traffic so every count below is this change's.
     await admin.from('notifications').delete().eq('project_id', projectId);
+    CHANGE_AT = new Date().toISOString();
     outcome = await applyCriticalPathSave(
       owner as SupabaseClient<Database>,
       db,
