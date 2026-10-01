@@ -169,6 +169,12 @@ beforeAll(async () => {
     .eq('email', IDENTITY.owner)
     .single();
   companyId = prof!.company_id as string;
+  // Runnable from ANY starting state: an interrupted run leaves its holiday.
+  await admin
+    .from('company_holidays')
+    .delete()
+    .eq('company_id', companyId)
+    .like('name', `${MARKER}%`);
   for (const role of Object.keys(IDENTITY) as CompanyRole[])
     member[role] = await memberOf(IDENTITY[role]);
   contactId = (
@@ -199,19 +205,17 @@ beforeAll(async () => {
       must(
         `assign ${role}`,
         (
-          await admin
-            .from('project_assignments')
-            .insert({
-              company_id: companyId,
-              project_id: project[key],
-              member_id: m,
-              role_on_project:
-                role === 'project_executive'
-                  ? 'project_executive'
-                  : role === 'project_manager'
-                    ? 'project_manager'
-                    : null,
-            })
+          await admin.from('project_assignments').insert({
+            company_id: companyId,
+            project_id: project[key],
+            member_id: m,
+            role_on_project:
+              role === 'project_executive'
+                ? 'project_executive'
+                : role === 'project_manager'
+                  ? 'project_manager'
+                  : null,
+          })
         ).error
       );
     }
@@ -236,6 +240,9 @@ afterAll(async () => {
     if (ids.length) {
       await admin.from('project_finish_history').delete().in('cause_task_id', ids);
       await admin.from('task_dependencies').delete().in('predecessor_id', ids);
+      // By EITHER end: a link from another project's task (e.g. one a sabotaged
+      // run let through) would otherwise pin this project's task.
+      await admin.from('task_dependencies').delete().in('successor_id', ids);
       await admin.from('task_assignees').delete().in('task_id', ids);
       await admin.from('tasks').delete().in('id', ids);
     }
@@ -282,14 +289,12 @@ describe('CHECKS — on the new columns only (Q8-A)', () => {
     ['constraint without date', { start_constraint: 'fixed' }],
     ['unknown constraint', { start_constraint: 'whenever', constraint_date: '2026-10-05' }],
   ])('%s is refused', async (_l, extra) => {
-    const { error } = await admin
-      .from('tasks')
-      .insert({
-        company_id: companyId,
-        project_id: project.other,
-        title: `${MARKER} bad`,
-        ...extra,
-      });
+    const { error } = await admin.from('tasks').insert({
+      company_id: companyId,
+      project_id: project.other,
+      title: `${MARKER} bad`,
+      ...extra,
+    });
     expect(error?.code).toBe('23514');
   });
   it('a valid set lands', async () => {
@@ -447,22 +452,18 @@ describe('Q12-A — on a CRITICAL PATH project, who may move dates (TOTAL MAP)',
   });
 
   it('a foreman may still add an UNDATED task on a CP project; a dated one is refused', async () => {
-    const ok = await session.foreman
-      .from('tasks')
-      .insert({
-        company_id: companyId,
-        project_id: project.cp,
-        title: `${MARKER} foreman undated`,
-      });
+    const ok = await session.foreman.from('tasks').insert({
+      company_id: companyId,
+      project_id: project.cp,
+      title: `${MARKER} foreman undated`,
+    });
     expect(ok.error, ok.error?.message).toBeNull();
-    const bad = await session.foreman
-      .from('tasks')
-      .insert({
-        company_id: companyId,
-        project_id: project.cp,
-        title: `${MARKER} foreman dated`,
-        start_date: '2026-10-05',
-      });
+    const bad = await session.foreman.from('tasks').insert({
+      company_id: companyId,
+      project_id: project.cp,
+      title: `${MARKER} foreman dated`,
+      start_date: '2026-10-05',
+    });
     expect(bad.error?.message).toMatch(/runs on Critical Path/);
     const { count } = await admin
       .from('tasks')
@@ -486,15 +487,13 @@ describe('HISTORY — written by the engine only', () => {
     } as Record<CompanyRole, boolean>,
     (role) => {
       it(`${role} cannot write a finish-history row`, async () => {
-        const { error } = await session[role]
-          .from('project_finish_history')
-          .insert({
-            company_id: companyId,
-            project_id: project.cp,
-            previous_finish: '2026-10-01',
-            new_finish: '2026-10-02',
-            cause_kind: 'task',
-          });
+        const { error } = await session[role].from('project_finish_history').insert({
+          company_id: companyId,
+          project_id: project.cp,
+          previous_finish: '2026-10-01',
+          new_finish: '2026-10-02',
+          cause_kind: 'task',
+        });
         expect(error).not.toBeNull();
         const { count } = await admin
           .from('project_finish_history')
@@ -506,15 +505,13 @@ describe('HISTORY — written by the engine only', () => {
     }
   );
   it('the service role can (the engine)', async () => {
-    const { error } = await admin
-      .from('project_finish_history')
-      .insert({
-        company_id: companyId,
-        project_id: project.cp,
-        previous_finish: '2026-10-01',
-        new_finish: '2026-10-03',
-        cause_kind: 'time',
-      });
+    const { error } = await admin.from('project_finish_history').insert({
+      company_id: companyId,
+      project_id: project.cp,
+      previous_finish: '2026-10-01',
+      new_finish: '2026-10-03',
+      cause_kind: 'time',
+    });
     expect(error, error?.message).toBeNull();
   });
 });
@@ -584,15 +581,13 @@ describe('DIRTY — any change that can move a date marks the project (2.4 note 
     must(
       'lost day',
       (
-        await session.owner
-          .from('project_lost_days')
-          .insert({
-            project_id: project.cp,
-            start_date: '2026-10-06',
-            end_date: '2026-10-06',
-            reason: 'storm',
-            icon: 'lightning',
-          })
+        await session.owner.from('project_lost_days').insert({
+          project_id: project.cp,
+          start_date: '2026-10-06',
+          end_date: '2026-10-06',
+          reason: 'storm',
+          icon: 'lightning',
+        })
       ).error
     );
     expect((await settings('cp'))?.needs_recompute).toBe(true);
@@ -608,15 +603,13 @@ describe('WEATHER — reason required, one of five icons', () => {
       { reason: 'rain', icon: 'rain', start_date: '2026-10-07', end_date: '2026-10-06' },
     ],
   ])('%s is refused', async (_l, extra) => {
-    const { error } = await admin
-      .from('project_lost_days')
-      .insert({
-        company_id: companyId,
-        project_id: project.cp,
-        start_date: '2026-10-06',
-        end_date: '2026-10-06',
-        ...extra,
-      });
+    const { error } = await admin.from('project_lost_days').insert({
+      company_id: companyId,
+      project_id: project.cp,
+      start_date: '2026-10-06',
+      end_date: '2026-10-06',
+      ...extra,
+    });
     expect(error?.code).toBe('23514');
   });
 });

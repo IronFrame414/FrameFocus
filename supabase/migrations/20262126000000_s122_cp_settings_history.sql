@@ -72,9 +72,23 @@ RETURNS trigger
 LANGUAGE plpgsql
 AS $function$
 BEGIN
-  IF auth.uid() IS NULL THEN
-    RETURN NEW;  -- the service role: the engine
+  -- "First turned on" is stamped for ANY writer, the service role included.
+  IF NEW.critical_path_enabled AND (TG_OP = 'INSERT' OR NOT OLD.critical_path_enabled) THEN
+    NEW.enabled_at := now();
+    NEW.enabled_by := auth.uid();
+  ELSIF TG_OP = 'UPDATE' THEN
+    NEW.enabled_at := OLD.enabled_at;
+    NEW.enabled_by := OLD.enabled_by;
   END IF;
+
+  IF auth.uid() IS NULL THEN
+    RETURN NEW;  -- the service role: the engine may set its own columns
+  END IF;
+
+  -- A user (or a trigger running in a user's transaction, e.g.
+  -- mark_schedule_dirty after a crew member completes a task) may MARK the
+  -- schedule for recompute — forcing a recompute is harmless — but may never
+  -- CLEAR the mark or write the engine's results.
   IF TG_OP = 'INSERT' THEN
     NEW.computed_on := NULL;
     NEW.projected_finish := NULL;
@@ -82,14 +96,9 @@ BEGIN
   ELSE
     NEW.computed_on := OLD.computed_on;
     NEW.projected_finish := OLD.projected_finish;
-    NEW.needs_recompute := OLD.needs_recompute OR NEW.critical_path_enabled IS DISTINCT FROM OLD.critical_path_enabled;
-  END IF;
-  IF NEW.critical_path_enabled AND (TG_OP = 'INSERT' OR NOT OLD.critical_path_enabled) THEN
-    NEW.enabled_at := now();
-    NEW.enabled_by := auth.uid();
-  ELSIF TG_OP = 'UPDATE' THEN
-    NEW.enabled_at := OLD.enabled_at;
-    NEW.enabled_by := OLD.enabled_by;
+    NEW.needs_recompute := OLD.needs_recompute
+                           OR NEW.needs_recompute
+                           OR NEW.critical_path_enabled IS DISTINCT FROM OLD.critical_path_enabled;
   END IF;
   RETURN NEW;
 END;
