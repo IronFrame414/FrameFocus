@@ -1729,3 +1729,38 @@ five UI call sites (sheet, release, CP-tab drag, calendar drag, /m drag) and the
 - Live `s122-cp-held.live.ts` (Part 5) with the stated shape: **25/25**.
 - ⚠️ **Not yet proven: the routes' JSON and the dialog itself.** The live tests call the service layer, so a sabotaged route line would stay green.
   An e2e is next.
+
+### R2.6 — Part 6 UI proofs: the notice on every path, in a real browser (production build, rebuild-test, ref `b422c0cd`)
+
+Method, each run: `next build` exit **0** ("Compiled successfully" ×1); `next start` the **sole** listener on :3000 (PID read with `ss`, stopped by
+PID, never `pkill`); `--workers=1`; 0 CI runs in progress. Every save is read back with the service role, so a dialog over a save that never
+landed would fail.
+
+- **e2e `critical-path-untold-s122.spec.ts`** (NEW). The project starts on the first Monday ≥ 2 days out (UTC), so /m reaches it in a few steps.
+  T(3) has one assignee: an **unreachable** member of company A (no login, no live sub email; picked in a stable order) with notify on. The
+  client box is off.
+  1. **Desktop, Critical Path tab:** drag T's END → the confirm names *"Changes the DURATION: 3 working days → 5 working days."* → accept →
+     **`alert-dialog`** *"Saved — but not everyone could be told"* / *"No login and no email on file: <them>."* → OK; DB duration 5, due START+4.
+  2. **/m at 402px, touch:** step to START, hold, drag MOVE +2 days → confirm → accept → **the same notice**; DB start = constraint = START+2.
+  3. **Desktop, approval:** a pending edit (submitted by the foreman, `{duration_days: 4}`) → the Owner approves in the tab → **the same notice**;
+     DB duration 4, status `approved`.
+  - **First run: 3 passed** (42.9 s).
+- **Sabotages** (one build each, because the serial spec skips what follows a red; each restored, `cmp` 0, the file == HEAD):
+
+  | # | sabotage | result |
+  | --- | --- | --- |
+  | (t) | the MOVE route drops `untold` | **✘ test 1**, at `waiting for getByTestId('alert-dialog')` (and on the retry); 2, 3 skipped |
+  | (u) | /m's day view drops the notice | test 1 ✓, **✘ test 2** at the alert; 3 did not run |
+  | (v) | the APPROVE route drops `untold` | tests 1, 2 ✓, **✘ test 3** at the alert |
+
+  Each red is on exactly its own path. So the drag's route, /m's own UI line and the approval's route are each load-bearing.
+- **Clean rebuild after the three restores** (tree == HEAD `b422c0cd`, `git diff --quiet` 0): **3 passed**.
+- **Regression**, same build, one worker: `desktop-critical-path-held`, `-sheet`, `-tab` (S122), `desktop-schedule-s121`, `m-schedule-s121` →
+  **16 passed**, exit 0, 16 ✓ in the log (Part 5's figure was 16).
+- **Residual, stated (no sabotage covers these lines):**
+  - the **save route's** `untold` line (`…/tasks/[taskId]`; the live test calls the service layer, not the route);
+  - the sheet's two notice lines (**save** and **release**);
+  - the **scheduling-calendar** drag's notice line.
+
+  All of them call the same `untoldOf` / `parseUntold` / `anyUntold` / `untoldNotice` that the proven paths call, and the calendar shares the move
+  route proven by (t). But no test drives these particular lines.
