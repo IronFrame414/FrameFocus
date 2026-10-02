@@ -11,6 +11,8 @@ import { getMyProfile } from '@/lib/services/profiles';
 import { getMembers } from '@/lib/services/members';
 import { getProject } from '@/lib/services/projects';
 import { canSchedule } from '@/lib/schedule/authority';
+import { getMobileCriticalPath } from '@/lib/services/critical-path-mobile';
+import { CriticalPathCard } from './critical-path-card';
 
 // M6M §4.11.2 — M-12 · Schedule.
 //
@@ -64,9 +66,17 @@ export default async function ProjectSchedulePage({
   const role = profile?.role ?? null;
   const members = canSchedule(role) ? await getMembers() : [];
 
+  // [S122 Part 9] The phone board — for the roles that see the desktop
+  // Critical Path tab, on a Critical Path project. Read AS THE CALLER (as the
+  // desktop tab is), after the same freshness check (lib/services/critical-path-mobile).
+  const criticalPath = await getMobileCriticalPath(params.projectId, role);
+
   return (
     <div className="px-[18px] pb-[18px]">
       <SectionHeader projectId={params.projectId} title={t('project.tile.schedule')} />
+      {criticalPath && (
+        <CriticalPathCard projectId={params.projectId} input={criticalPath} locale={dateLocale(lang)} canExtend />
+      )}
       <DayView
         events={events}
         today={companyToday(timeSettings.timezone)}
