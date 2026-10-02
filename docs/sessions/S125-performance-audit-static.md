@@ -226,8 +226,13 @@ screen catches up.** No `useOptimistic` anywhere.
 
 **Every `router.refresh()` re-runs the whole `/m` layout plus the page**: middleware (`getClaims`, lock cookie), the
 layout's `getRequestUser` — an **Auth-server `getUser()` round trip** (`lib/supabase-server.ts:68-74`, deduped per
-request by `cache()` but never skipped) — `profiles` (`app/m/layout.tsx:96`, with `getMembers` and `getUnreadCount` already started in parallel at `:90-91`), then `companies` (`:112-113`) — **3 sequential steps before the page's own reads begin**. `getMembers`,
-`getUnreadCount` (`:90-91, 112-121`).
+request by `cache()` but never skipped) — then `profiles` (`app/m/layout.tsx:96`, with `getMembers` and
+`getUnreadCount` already started in parallel at `:90-91`), then `companies` (`:112-113`): **a 3-step sequential
+chain in the layout.** ⚠️ **UNVERIFIED: whether this chain runs before the page's reads or alongside them.** If Next
+starts the page's data work concurrently with the layout's, the cost is the longer of the two chains; if not, it is
+their sum. Context7 (Next 14 docs) did not settle it and no session has traced it. **The timing half answers it with a
+per-request Supabase call trace (S119 measured "depth" this way).** Either way it is the floor: no `/m` screen can paint
+sooner than this chain.
 
 Verified by reading on this ref (not taken on the agent's word): `timeclock-screen.tsx:270/283/285`,
 `nav-pending.tsx:29-31`, `supabase-server.ts:25,68-74`, `members.ts:82-90` (no `cache()`), `punch-form.tsx:200/252`.
