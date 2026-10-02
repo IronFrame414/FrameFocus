@@ -159,6 +159,13 @@ test.describe('S122 Part 7 · the client portal payload never carries float', ()
     await expect.poll(finishNow, { timeout: 20_000 }).toBe('2027-01-08');
     const u = await admin.from('tasks').update({ duration_days: 4 }).eq('id', task.B);
     if (u.error) throw new Error(u.error.message);
+    // The dirty trigger skips the service role by design (mark_schedule_dirty_from_row),
+    // so mark it as a user's edit would: the next read recomputes, cause task B.
+    const m = await admin
+      .from('project_schedule_settings')
+      .update({ needs_recompute: true, recompute_cause_kind: 'task', recompute_cause_task_id: task.B })
+      .eq('project_id', projectId);
+    if (m.error) throw new Error(m.error.message);
     await page.goto(`/dashboard/projects/${projectId}/critical-path`);
     await expect.poll(finishNow, { timeout: 20_000 }).toBe('2027-01-12');
     const { count } = await admin
