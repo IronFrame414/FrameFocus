@@ -8,8 +8,9 @@
  *   so the finish moves Fri 8 → Tue 12 Jan and a REAL history row exists.
  *
  *   LINKED on S122CPV   → EXACTLY two rows: phase name/sort/start/finish, task
- *                          title/sort, projected finish — the closed shape, the
- *                          exact values. No float column exists to leak.
+ *                          title/sort/start/finish [S123 D-1], projected finish —
+ *                          the closed shape, the exact values. No float column
+ *                          exists to leak.
  *   ⚠️ UNLINKED (same company, contact NULL) on S122CPV — CP ON, data present —
  *                        → 0 rows. Only the link check stands between them.
  *   LINKED on a CP-OFF project (S164's eaf0e25b) → 0 rows: not a second back door.
@@ -26,7 +27,10 @@ const LINKED = 'josh+qa-client-linked@worthprop.com';
 const CONTROL = 'josh+qa-client@worthprop.com';
 const CREW = 'josh+crew@worthprop.com';
 const CP_OFF_PROJECT = 'eaf0e25b-d60e-49c0-89b2-5612118d94b4';
-const KEYS = ['phase_finish', 'phase_name', 'phase_sort', 'phase_start', 'projected_finish', 'task_sort', 'task_title'];
+// ⚠️ SUPERSEDED [S123 D-1, Josh RULED: one schedule, each task with its dates]:
+//   const KEYS = ['phase_finish', 'phase_name', 'phase_sort', 'phase_start', 'projected_finish', 'task_sort', 'task_title'];
+// The shape is still CLOSED (equal, sorted) — it gained exactly task_start and task_finish, and nothing else.
+const KEYS = ['phase_finish', 'phase_name', 'phase_sort', 'phase_start', 'projected_finish', 'task_finish', 'task_sort', 'task_start', 'task_title'];
 
 const db = admin as unknown as SupabaseClient<Database>;
 let linked: SupabaseClient;
@@ -189,8 +193,9 @@ describe('client_critical_path — the linked client on a Critical Path project'
     expect(rows.length).toBe(2);
     for (const r of rows) expect(Object.keys(r).sort()).toEqual(KEYS);
     expect(rows).toEqual([
-      { phase_name: 'Framing', phase_sort: 1, phase_start: '2027-01-04', phase_finish: '2027-01-06', task_title: `${MARKER} A`, task_sort: 1, projected_finish: '2027-01-12' },
-      { phase_name: 'Finish', phase_sort: 2, phase_start: '2027-01-07', phase_finish: '2027-01-12', task_title: `${MARKER} B`, task_sort: 1, projected_finish: '2027-01-12' },
+      // SUPERSEDED [S123 D-1]: the same two rows WITHOUT task_start / task_finish.
+      { phase_name: 'Framing', phase_sort: 1, phase_start: '2027-01-04', phase_finish: '2027-01-06', task_title: `${MARKER} A`, task_sort: 1, task_start: '2027-01-04', task_finish: '2027-01-06', projected_finish: '2027-01-12' },
+      { phase_name: 'Finish', phase_sort: 2, phase_start: '2027-01-07', phase_finish: '2027-01-12', task_title: `${MARKER} B`, task_sort: 1, task_start: '2027-01-07', task_finish: '2027-01-12', projected_finish: '2027-01-12' },
     ]);
   });
 
