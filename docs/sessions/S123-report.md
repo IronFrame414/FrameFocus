@@ -500,3 +500,17 @@ above, with its numbers. (3) The migration on production BEFORE the merge, verif
 
 Each was restored by `git checkout` (diff vs HEAD empty, read back). SD2's e2e ran against a build made with the sabotage. The server was
 stopped by its PID.
+
+**D-2 CI `37015465916`** on `99c170d1` (base `30869f3c` = `origin/main`): **green**. Both jobs success. Unit **169 files / 2,290 tests** (the D-2 test is in
+it); e2e **701 passed, 24 skipped, 0 failed, 0 `✘`** (46.8 min, 13:48:34–14:39:11Z, nothing else running). D-2 is ready to merge; it waits so that
+`main` runs once for D-2 + D-3 + D-1 (below).
+
+**Merge sequencing, DECIDED (recorded):** CI runs strictly one at a time and never overlaps a `main` run: D-2 → D-3 → D-1 branch runs, then D-1's
+migration to production, then D-2, D-3, D-1 merged back-to-back **in order**. `ci.yml`'s `cancel-in-progress` on the `main` group leaves one `main`
+run for all three. **Rejected:** merging each as soon as it is green, because every merge starts a 45-minute `main` run that the next branch run
+would have to wait for or collide with (fixture collision, the CI's failure mode 1). Each merge still carries its own proof that the tree merged is
+the tree tested.
+
+**D-3 pre-CI** (on `b0cfe063`, stacked on D-2 `99c170d1` → `30869f3c` = `origin/main`): **`next build` exit 0**; type-check exit 0 (0 cached); lint exit
+0 (5 pre-existing warnings); unit **169 / 2,290**. No migration. The D-3 live tests (18/18 + 8/8 sabotage runs) and e2e (6/6 against a
+production build) ran above. 0 runs in progress. **CI requested by this commit.**
