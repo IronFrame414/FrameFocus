@@ -1942,3 +1942,13 @@ m29 is applied; checkout read back `nmyphyhmfttxkdoposvf`; 1 constraint row each
   | `notifications` rows outside the CHECK | 0 | 0 |
 
   Plus: the full production CHECK definition == rebuild-test's (byte-equal). Workdir `wd6` deleted; checkout read back `nmyphyhmfttxkdoposvf`.
+
+### R2.13 — Part 6 MERGED → `main` `bacf1bb8`
+
+- Merge commit `bacf1bb8` (parents `a955dac5`, `d25bf6b4`); `HEAD^{tree}` `66aa7325` = branch head `d25bf6b4^{tree}`. Pushed.
+  (A first attempt failed before merging: `git merge -F -` does not read stdin, exit 129, `origin/main` unchanged at `a955dac5`. Retried with
+  the message from a file.)
+- S180: (1) CI `36939682013` green on `6c8cf937`, base `a955dac5` = `origin/main` re-fetched. Tree-identity exemption: `git diff --name-only
+  6c8cf937 d25bf6b4` → `docs/sessions/S122-report.md` only; the code-path diff `--quiet` exit 0. (2) The numbers in R2.4–R2.9. (3) `…29` on
+  production, superset proven (R2.12), MATCH ×6, **applied before the merge**.
+- `main`'s merge run **`36944879271`** follows. **Part 7 starts on `feature/s122-p7-portal` from `bacf1bb8`.** No DB work until that run finishes.
