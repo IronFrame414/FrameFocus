@@ -1,0 +1,1 @@
+M9 R14 [S164]: the client-visible schedule. Projects ONLY title, dates, status and phase name — never description (detail) or assignee_id (assignments/crew). `tasks` itself has NO client policy: RLS is row-level and cannot hide a column, so a table grant would leak both through PostgREST whatever the UI renders.
