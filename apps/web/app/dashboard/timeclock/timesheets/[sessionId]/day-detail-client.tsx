@@ -57,6 +57,8 @@ interface DayDetailClientProps {
     hasGpsIn: boolean;
     hasGpsOut: boolean;
     approverName: string | null;
+    /** [S124 Q6] Set when the day changed after it was sent to QuickBooks. */
+    qbFlag: string | null;
   };
   segments: TimeSegment[];
   projectNames: Record<string, string>;
@@ -323,6 +325,15 @@ export function DayDetailClient({
               <ReadOnlyCaption>approved by {session.approverName}</ReadOnlyCaption>
             )}
           </p>
+          {session.qbFlag && (
+            <p
+              role="status"
+              data-testid="day-qb-flag"
+              style={{ margin: '8px 0 0', color: color.warning, fontSize: '0.875rem', fontWeight: 600 }}
+            >
+              {session.qbFlag}
+            </p>
+          )}
         </div>
         <div style={{ display: 'flex', gap: '10px' }}>
           {canEditHours && (

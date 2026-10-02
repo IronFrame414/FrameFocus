@@ -14,6 +14,7 @@ import {
   paidHoursPerSession,
   sessionDurationHours,
 } from '@framefocus/shared/utils/time-tracking';
+import { timeEntryFlag } from '@/lib/quickbooks/time-entry-flag';
 import { DayDetailClient } from './day-detail-client';
 
 /**
@@ -144,6 +145,9 @@ export default async function TimesheetDetailPage({
         hasGpsIn: hasCoordinates(detail.gps_in),
         hasGpsOut: hasCoordinates(detail.gps_out),
         approverName: detail.approver?.display_name ?? null,
+        // [S124, Josh RULED Q6 = B] Changed after it was sent to QuickBooks:
+        // flagged here AND in Settings → Accounting, from the one function.
+        qbFlag: timeEntryFlag(detail)?.message ?? null,
       }}
       segments={detail.segments}
       projectNames={projectNames}

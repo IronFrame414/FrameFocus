@@ -26,6 +26,11 @@ export const TIME_EXPORT_COPY = {
     'it off does not remove or undo them.',
   disconnect: 'Disconnecting QuickBooks turns this off. After reconnecting, turn it on again yourself.',
   ownerOnly: 'Only the Owner can turn this on or off.',
+  matching:
+    'Each person must be matched to an employee that already exists in QuickBooks. A person who ' +
+    'is not matched is held and never sent. This app never creates employees in QuickBooks. Each ' +
+    'entry carries a note like "EZCB session [FF:…]" so it can be found again; anyone reading the ' +
+    'books, including your accountant, will see it.',
   confirmOn:
     'Turn on sending approved timesheets to QuickBooks?\n\n' +
     'If you run QuickBooks Payroll and pay people from their time entries, QuickBooks may turn ' +

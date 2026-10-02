@@ -51,6 +51,12 @@ describe('S124 Part 2 — what the switch says where it is flipped', () => {
         'it off does not remove or undo them.',
       disconnect: 'Disconnecting QuickBooks turns this off. After reconnecting, turn it on again yourself.',
       ownerOnly: 'Only the Owner can turn this on or off.',
+      // [S124 Part 1] added with the employee matching [Josh, RULED Q2/Q9].
+      matching:
+        'Each person must be matched to an employee that already exists in QuickBooks. A person who ' +
+        'is not matched is held and never sent. This app never creates employees in QuickBooks. Each ' +
+        'entry carries a note like "EZCB session [FF:…]" so it can be found again; anyone reading the ' +
+        'books, including your accountant, will see it.',
       confirmOn:
         'Turn on sending approved timesheets to QuickBooks?\n\n' +
         'If you run QuickBooks Payroll and pay people from their time entries, QuickBooks may turn ' +
@@ -69,7 +75,7 @@ describe('S124 Part 2 — what the switch says where it is flipped', () => {
       'utf8'
     );
     const rendered = [...src.matchAll(/\{TIME_EXPORT_COPY\.(\w+)\}/g)].map((m) => m[1]).sort();
-    expect(rendered).toEqual(['disconnect', 'noBackfill', 'offIsNotUndo', 'ownerOnly', 'payroll', 'title', 'what']);
+    expect(rendered).toEqual(['disconnect', 'matching', 'noBackfill', 'offIsNotUndo', 'ownerOnly', 'payroll', 'title', 'what']);
   });
 });
 

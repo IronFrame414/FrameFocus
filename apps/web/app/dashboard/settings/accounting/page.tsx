@@ -7,6 +7,7 @@ import {
 import { AccountingPanel } from '@/components/quickbooks/accounting-panel';
 import { AccountSettings } from '@/components/quickbooks/account-settings';
 import { TimeExportSettings } from '@/components/quickbooks/time-export-settings';
+import { getEmployeeMatches, getTimeEntryFlags } from '@/lib/services/qb-time-export';
 import { getMemberDefaults, getPaymentAccounts } from '@/lib/services/qb-accounts';
 import { color, h2Style } from '@/lib/theme';
 import { brand } from '@/lib/brand';
@@ -79,6 +80,12 @@ export default async function AccountingSettingsPage({
     getPaymentAccounts(),
     getMemberDefaults(),
   ]);
+  // [S124] The time-export card's matching list and Q6 flags. Read as the
+  // caller; qb_employee_map is Owner/Admin by RLS.
+  const [qbTimeMembers, qbTimeFlags] = await Promise.all([
+    getEmployeeMatches(connection?.state === 'connected' ? connection.realmId : null),
+    getTimeEntryFlags(),
+  ]);
 
   let notice: { kind: 'ok' | 'error'; message: string } | null = null;
   if (searchParams?.qb_connected) {
@@ -114,6 +121,8 @@ export default async function AccountingSettingsPage({
         enabled={connection?.timeExportEnabled ?? false}
         enabledAt={connection?.timeExportEnabledAt ?? null}
         isOwner={profile.role === 'owner'}
+        members={qbTimeMembers}
+        flags={qbTimeFlags}
       />
       {/* PARITY [Josh, S122] — the SAME component the Settings tab mounts.
           Renders nothing while disconnected, by the S103 ruling. */}

@@ -10,6 +10,7 @@ import { GLMappingSettingsForm } from './gl-mapping-settings-form';
 import { AccountingPanel } from '@/components/quickbooks/accounting-panel';
 import { AccountSettings } from '@/components/quickbooks/account-settings';
 import { TimeExportSettings } from '@/components/quickbooks/time-export-settings';
+import { getEmployeeMatches, getTimeEntryFlags } from '@/lib/services/qb-time-export';
 import { getMemberDefaults, getPaymentAccounts } from '@/lib/services/qb-accounts';
 import {
   getQuickBooksConnection,
@@ -207,6 +208,12 @@ export default async function SettingsPage({
     getPaymentAccounts(),
     getMemberDefaults(),
   ]);
+  // [S124] The time-export card's matching list and Q6 flags. Read as the
+  // caller; qb_employee_map is Owner/Admin by RLS.
+  const [qbTimeMembers, qbTimeFlags] = await Promise.all([
+    getEmployeeMatches(qbConnection?.state === 'connected' ? qbConnection.realmId : null),
+    getTimeEntryFlags(),
+  ]);
 
   // [S122 Part 4] The working calendar and holidays (ruling 2; Q16-A). Read as
   // the caller — RLS scopes both to this company.
@@ -278,6 +285,8 @@ export default async function SettingsPage({
             enabled={qbConnection?.timeExportEnabled ?? false}
             enabledAt={qbConnection?.timeExportEnabledAt ?? null}
             isOwner={profile.role === 'owner'}
+            members={qbTimeMembers}
+            flags={qbTimeFlags}
           />
           {/* ⚠️ RENDERS NOTHING WHEN DISCONNECTED [RULED Josh, S103]: "the GL
               account fields are NOT VISIBLE AT ALL — hide the section, do not
