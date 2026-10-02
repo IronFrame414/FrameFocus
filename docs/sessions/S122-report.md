@@ -2071,3 +2071,28 @@ Built so far, **without touching the database** (`main`'s merge run `36944879271
 - **Verification:** the same read-only file on both, then `diff` → **exit 0, 10 lines identical**: ledger `…2129, …2130`; function count 1; definition md5
   `ac958d4f…`; result type; secdef/STABLE; comment md5 `b22502a4…`; EXECUTE `anon` **false**, `authenticated` true, `PUBLIC` **false**;
   `client_schedule` md5 `22d6e081…` (unchanged). Production ACL `postgres, authenticated, service_role, supabase_auth_admin`. Workdir deleted.
+
+### R3.5 — Part 7 MERGED → `main` `48f7cf01`
+
+- Merge commit `48f7cf01` (parents `bacf1bb8`, `1330a5c7`); `HEAD^{tree}` `1b8d5d57` = branch head `1330a5c7^{tree}`. Pushed.
+- S180: (1) CI `36949563622` green on `61dfc453`, base `bacf1bb8` = `origin/main` re-fetched. Tree-identity exemption: `git diff --name-only
+  61dfc453 1330a5c7` → `docs/sessions/S122-report.md` only; the code-path diff `--quiet` exit 0. (2) R3.2–R3.4. (3) `…30` on production,
+  MATCH ×10, **applied before the merge**.
+- `main`'s merge run `36952604763` follows. **Part 8 rebased onto `48f7cf01`** (5 commits, clean); its side report is folded in below.
+
+### R4.1 — Part 8 (templates), build log — branch `feature/s122-p8-templates` from `bacf1bb8`
+
+- Migration `20262131000000_s122_schedule_templates.sql` (plan row 11 named `…29_s122_schedule_templates`; the timestamp moved because 29 and 30
+  are taken). It creates the four tables plan row 11 names: `schedule_templates`, `schedule_template_phases`, `schedule_template_tasks`,
+  `schedule_template_dependencies`, each with the CLAUDE.md standard columns, defaults and `updated_at`/`set_…_updated_by` triggers (the four
+  `set_…_updated_by()` functions are the standard per-table trigger functions, not new behaviour).
+  **No date, assignee or percent column exists**, so none can be copied.
+  RLS: read = Owner/Admin/PM/PE of the company; insert/update = Owner/Admin; a child's template must be in the caller's company; no DELETE policy.
+
+#### DECIDED UNATTENDED — Part 8
+
+| # | decided | alternative rejected | why |
+| --- | --- | --- | --- |
+| D8-1 | Save and stamp are app code writing **as the caller** (RLS + the existing task/dependency guards decide), **no SQL function** | a SECURITY INVOKER/DEFINER plpgsql function doing it in one transaction | Josh's unattended rule: a function the spec does not name stops the item. Cost: no single-transaction atomicity; a failure mid-stamp is **compensated** (the rows it wrote are soft-deleted) and said so. |
+| D8-2 | Stamping requires Critical Path to be **on** already (the stamp lives in the CP tab's empty network) | turning CP on as part of the stamp | Narrower: the stamp never flips a project-level switch (or its client-notification checkbox) as a side effect. |
+| D8-3 | The refusal counts **live tasks** (Josh's ruling: "already has tasks", names how many). Existing phases with no tasks do not refuse | refusing on phases too | Follows the ruling's wording; phases alone carry no schedule. |
