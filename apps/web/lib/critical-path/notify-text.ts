@@ -14,8 +14,9 @@ export function longDate(d: string): string {
   return `${shortDate(d)} ${d.slice(0, 4)}`;
 }
 
-export const CLIENT_DISCLAIMER =
-  'The construction industry is fluid and dynamic; these dates are for planning purposes and cannot be guaranteed.';
+// The ONE sentence the client email and the portal share (Part 7 imports it from there).
+export { CLIENT_DISCLAIMER } from './client-disclaimer';
+import { CLIENT_DISCLAIMER } from './client-disclaimer';
 
 export function clientFinishEmail(projectName: string, previous: string, next: string): { subject: string; message: string } {
   return {

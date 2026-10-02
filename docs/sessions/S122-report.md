@@ -1942,3 +1942,132 @@ m29 is applied; checkout read back `nmyphyhmfttxkdoposvf`; 1 constraint row each
   | `notifications` rows outside the CHECK | 0 | 0 |
 
   Plus: the full production CHECK definition == rebuild-test's (byte-equal). Workdir `wd6` deleted; checkout read back `nmyphyhmfttxkdoposvf`.
+
+### R2.13 — Part 6 MERGED → `main` `bacf1bb8`
+
+- Merge commit `bacf1bb8` (parents `a955dac5`, `d25bf6b4`); `HEAD^{tree}` `66aa7325` = branch head `d25bf6b4^{tree}`. Pushed.
+  (A first attempt failed before merging: `git merge -F -` does not read stdin, exit 129, `origin/main` unchanged at `a955dac5`. Retried with
+  the message from a file.)
+- S180: (1) CI `36939682013` green on `6c8cf937`, base `a955dac5` = `origin/main` re-fetched. Tree-identity exemption: `git diff --name-only
+  6c8cf937 d25bf6b4` → `docs/sessions/S122-report.md` only; the code-path diff `--quiet` exit 0. (2) The numbers in R2.4–R2.9. (3) `…29` on
+  production, superset proven (R2.12), MATCH ×6, **applied before the merge**.
+- `main`'s merge run **`36944879271`** follows. **Part 7 starts on `feature/s122-p7-portal` from `bacf1bb8`.** No DB work until that run finishes.
+
+## UNATTENDED FROM 2026-10-01 20:21 ET (Josh's rules: `docs/sessions/S122-resume-prompt.md`, same heading)
+
+### R3.1 — Part 7 (client portal view), build log — branch `feature/s122-p7-portal` from `bacf1bb8`
+
+Built so far, **without touching the database** (`main`'s merge run `36944879271` holds rebuild-test):
+
+- **The CP-off regression control** (`test/s122-cp-client-schedule-regression.live.ts`, `83371ced`), written FIRST as required. It has not run yet.
+  `client_schedule`'s captured original + RESTORE script are committed **before** its sabotage (`46b35cbf`, `docs/sessions/S122-sabotage-originals/`;
+  file md5 = live md5 for both the definition and the comment).
+- **The import walker, generalized** (`00e10fb7`). The S110 walker could not have proven anything about the portal: it **skipped `lib/services/`**
+  and **never resolved `@framefocus/shared/…`**, so the engine was unreachable by construction. `reachableFrom(roots, {shared, dynamic, skip})`
+  now does both. The /m guard keeps its behaviour through options: its file set is **176 before = 176 after, `diff` exit 0**; the guard is 179/179.
+- **A finding the walk made real:** `notify-text.ts` → `critical-path-writes.ts` → `critical-path.ts` (`computeCriticalPath`). The disclaimer lived
+  in `notify-text`, so a portal importing it would have pulled the whole engine in, two hops down. **`CLIENT_DISCLAIMER` moved to
+  `lib/critical-path/client-disclaimer.ts`, which imports nothing.** `notify-text` re-exports it, so the email and the portal share one string.
+- **Migration `20262130000000_s122_cp_client_view.sql`**: `client_critical_path(p_project_id)`, the plan's planned function (plan row 10 named it
+  `…28_s122_cp_client_view`; the timestamp moved because 28 and 29 are taken). It is **new**; `client_schedule` is untouched. Return type: phase
+  name/sort/start/finish, task title/sort, projected finish. Gate (zero rows otherwise): CP on + `is_client_of_project` + `client_has_full_access`.
+  **Not applied anywhere yet.**
+- **Portal** (`lib/services/portal.ts` `getPortalCriticalPath`; `app/portal/[projectId]/page.tsx`): the shape is built field by field, never spread
+  from a row. On a CP project the card shows the projected finish, the disclaimer, and the phases with dates and task titles, and
+  **`client_schedule` is not called**, so task dates never enter that page.
+- **Transitive import check** (`test/s122-cp-portal-imports.test.ts`): everything reachable from every file under `app/portal/` (server and client,
+  `@framefocus/shared` and dynamic `import()` included) reaches no `packages/shared/utils/critical-path*` and no `lib/critical-path/*` except the
+  disclaimer. **3/3.** The walk reaches the page, `lib/services/portal.ts` and the disclaimer (not vacuous). **Control:** the desktop CP page DOES
+  reach the engine.
+  - Sabotage **(i1)** the portal page imports `computeCriticalPath` → **1 ✘**. Restored, `cmp` 0.
+  - Sabotage **(i2)** the page imports the disclaimer from `notify-text` → **1 ✘**, listing `critical-path-writes.ts`, `critical-path.ts`,
+    `notify-text.ts`: the two-hop chain, caught. Restored, `cmp` 0.
+- `tsc` is red **only** on `rpc('client_critical_path')` (3 lines, the function is not in the generated types yet); that clears once m30 is applied
+  to rebuild-test and types are regenerated.
+
+#### DECIDED UNATTENDED — Part 7
+
+| # | decided | alternative rejected | why |
+| --- | --- | --- | --- |
+| D7-1 | A **new** function `client_critical_path`; `client_schedule` left byte-for-byte | extending `client_schedule` | Josh's R2.10 reasoning: it serves every project, so an added field reaches CP-off clients too. A new return type cannot leak what it does not declare. |
+| D7-2 | On a CP project the page shows the CP view **instead of** the task-date list. **`client_schedule` itself is NOT narrowed** | changing `client_schedule` to return nothing on CP projects | Altering it is a function change the spec does not name (an unattended stop), and the CP-off control pins it. **⚠️ Residual for Josh:** a linked client calling the `client_schedule` RPC **directly** (not through the page) on a CP project still gets task start/due/status, as since S164. Start and due imply durations. **No float or critical flag** (they are never stored). |
+| D7-3 | The disclaimer is Part 6's email sentence exactly (*"…these dates are for planning purposes…"*) | the spec's §7 wording *"these dates **and figures**…"* | The resume prompt: "keep it identical in Part 7". The email is on production; one string beats two drifting ones. Josh can change the one constant. |
+| D7-4 | Task **status** is not in the CP view | including it, as `client_schedule` does | The spec: "task titles only". |
+| D7-5 | The client's projected finish is whatever was last computed (the engine never runs on a client request) | recomputing on the client's read | Running the engine on a client request is the thing stop rule 8 guards. Staff reads and the recompute cron (`/api/cron/critical-path-recompute`) refresh it. |
+
+### R3.2 — Part 7: the CP-off regression control, run and sabotaged (rebuild-test; `main` run `36944879271` on `bacf1bb8` green first: 690 passed, 0 flaky)
+
+- **Clean: 4/4.** Fixture `eaf0e25b` read back CP OFF; the linked client gets rows whose sorted keys EQUAL today's 7 and whose values EQUAL the
+  service role's own projection, in order; the unlinked client (same company, contact NULL) gets 0.
+- **Sabotage** (`client_schedule.sabotage.sql`, from the copy committed in `46b35cbf` BEFORE the drop): DROP + CREATE with one added column; read
+  back `result = TABLE(…, status text, duration_days integer)`. → **2 ✘**: the closed key set and the value equality, both naming
+  `duration_days`. (S164's ARM 8b, `not.toContain('description'/'assignee_id')`, would have stayed green.)
+- **Restore. ⚠️ A finding, fixed before calling it restored:** the first RESTORE matched the definition, comment, result type, secdef and
+  volatility, but **the ACL had 4 grantees, not 15**. A re-created function gets only the CURRENT default privileges, so 11 EXECUTE grants
+  (dashboard_user, supabase_admin, authenticator, pgbouncer, …) were gone. Nothing was extra. The RESTORE script was corrected **in the repo first**
+  (`2b3db2d3`, then `…` re-grant in baseline order), then re-applied: **all 6 baseline values byte-equal**, the ACL text included.
+  ⚠️ **Generalized:** any sabotage that DROPs a function must restore its full ACL, not just the definition. The committed RESTORE does.
+- After the restore: regression control **4/4**; `s164-m9-read-arms.live.ts` **35/35**.
+
+### R3.3 — Part 7: `client_critical_path` live, applied to rebuild-test, sabotaged
+
+- **m30 on rebuild-test:** dry run *"• 20262130000000_s122_cp_client_view.sql"*, exactly one; `npm run db:push` exit 0; types **+12** (the function only);
+  type-check 5/5. Live ACL: `postgres, authenticated, service_role, supabase_auth_admin`, with **no `anon`, no `PUBLIC`** (the REVOKE held).
+- **Live `s122-cp-client-view.live.ts`, first run 6/6.** Fixture S122CPV (linked via `projects.contact_id`): Framing A(3) → Finish B, crew on A, CP on,
+  computed by the engine; B 2 → 4 moves the finish 8 → 12 Jan, and a REAL history row holds `previous_finish 2027-01-08`. The linked client gets
+  **exactly 2 rows, the closed 7-key shape, the exact values**; nothing serialized contains the old finish or `duration|float|critical|assignee|status|days_left`;
+  the `tasks` table is 0 rows for them; the unlinked client gets 0; the linked client on CP-off `eaf0e25b` gets 0 (while `client_schedule` shows they
+  DO reach it); CP toggled off on S122CPV → 0, back on → 2.
+- Captured original + baseline + RESTORE + both sabotage scripts committed **before** any replacement (`1b396e5e`; file md5 = live).
+- ⚠️ **FINDING — sabotage (L) (the link check removed) first stayed GREEN, 6/6.** The unlinked control is ALSO refused by
+  `client_has_full_access()` (a client with no contact has access `none`), so it never isolated the link. A test that passes after a sabotage is
+  vacuous. **Added THE STRANGER:** the linked client (access `full`, read back) on a second CP-ON, computed fixture whose contact is someone else (and
+  no `project_contacts` row, read back). Only the link check can refuse that. The unlinked test is kept, with a note saying what it does and does not prove.
+- **Sabotages** (each via `CREATE OR REPLACE`, same return type; restored; **baseline 6/6 MATCH** after each):
+
+  | # | sabotage | ✘ |
+  | --- | --- | --- |
+  | (L) | `is_client_of_project` removed from the gate | **1**: THE STRANGER |
+  | (C) | `critical_path_enabled = true` removed | **1**: CP toggled off on the same project. (The CP-off `eaf0e25b` test stays green: that project has NO settings row, so the gate's join refuses it whatever the flag. The toggle isolates the flag.) |
+
+- Clean after both: **7/7**.
+
+### R3.4 — Part 7: the PAYLOAD proof (production build, rebuild-test)
+
+`e2e/portal-critical-path-s122.spec.ts`. It reads what the linked client's browser RECEIVED, two ways: `page.content()` (the document with its
+`self.__next_f` RSC scripts) and the flight payload a client-side navigation fetches (`RSC: 1`). Never a locator, never the function.
+- Fixture S122CPP: Framing A(3) → Finish B, crew on A, CP on. The owner's desktop read computes it (finish 8 Jan); B 2 → 4 plus a dirty mark → finish
+  12 Jan, and a REAL history row holds 8 Jan. (A first run failed in its own setup: the dirty trigger skips the service role by design, so the admin
+  edit never marked the schedule. The fixture now marks it as a user's edit would.)
+- In BOTH payloads, 0 of: float (`totalFloat`/`"float"`/`freeFloat`), critical (`isCritical`/`"critical"`/`criticalChain`), durations, the crew
+  member's name or `assignee`, the old finish (ISO and as the portal formats it), history keys, task statuses. **Positive control in the same
+  payloads:** the projected finish, both phase names, both task titles and the disclaimer ARE there. The unlinked client's page carries none of the
+  fixture. **3/3.**
+- **Sabotages** (one build each; restored, `cmp` 0, page == HEAD):
+
+  | # | sabotage in the portal page | result |
+  | --- | --- | --- |
+  | (P1) | serializes `{ ...criticalPath, totalFloat: 2 }` | **✘ in BOTH: document `float: 2`, flight `float: 1`** |
+  | (P2) | also calls `client_schedule` on a CP project (undoing D7-2) and renders statuses | **✘ in BOTH: document `status: 4`, flight `status: 2`** |
+
+  ⚠️ (P1) first showed only the document red: the loop's hard `expect` stopped at the document, so the flight's detector was never exercised. The
+  per-payload checks are now `expect.soft`; re-run under (P1): both red.
+- Clean rebuild after both: payload + `portal-pages` **6/6**. Regression (every `portal*`, `*client*` and `*critical-path*` spec), one worker:
+  **19 passed**.
+
+- **Pre-CI** (`f504b26d`): type-check 0 (0/5 cached); lint 0 (no new warning); unit **167 / 2,281** (0 cached). **CI requested** (base `bacf1bb8` = `origin/main`; 0 runs in progress or queued). m30 is on rebuild-test.
+
+#### Part 7 CI and PRODUCTION section 7: `20262130000000_s122_cp_client_view` — **MATCH ×10**
+
+- **CI `36949563622`** on `61dfc453` (base `bacf1bb8` = `origin/main`; 0 other runs): **green**. Unit **167 / 2,281**; e2e **693 passed, 24 skipped, 0 flaky,
+  0 failed** (33.2 m).
+- **Spec check (unattended rule):** m30 creates ONE function, `client_critical_path`, which plan row 10 names. No table, column or policy; no
+  constraint over existing rows (stop rule 2 does not apply).
+- Workdir `wd7`: all **293** migrations, `cmp` 0 each, m30 last; linked to production (`WD REF=jwkcknyuyvcwcdeskrmz`); checkout read back `nmyphyhmfttxkdoposvf`.
+- **Pre-check, PRODUCTION:** ledger from `…2129` = `20262129000000` only; `client_critical_path` count **0**; production `client_schedule` md5
+  `22d6e081…` = rebuild-test's (untouched). (The full verification query cannot run before the function exists, because
+  `has_function_privilege` errors on a missing function, so the pre-check is its absence-safe subset.)
+- **Dry run:** *"• 20262130000000_s122_cp_client_view.sql"*, exactly one. **Push:** exit 0.
+- **Verification:** the same read-only file on both, then `diff` → **exit 0, 10 lines identical**: ledger `…2129, …2130`; function count 1; definition md5
+  `ac958d4f…`; result type; secdef/STABLE; comment md5 `b22502a4…`; EXECUTE `anon` **false**, `authenticated` true, `PUBLIC` **false**;
+  `client_schedule` md5 `22d6e081…` (unchanged). Production ACL `postgres, authenticated, service_role, supabase_auth_admin`. Workdir deleted.

@@ -3,9 +3,13 @@ import { createClient } from '@/lib/supabase-server';
 import { color } from '@/lib/theme';
 import {
   getPortalIdentity,
+  getPortalCriticalPath,
   getPortalProjects,
   getPortalSchedule,
 } from '@/lib/services/portal';
+// ⚠️ [S122 Part 7] The disclaimer from its import-free module, NEVER from
+// lib/critical-path/notify-text (that reaches the engine; the portal must not).
+import { CLIENT_DISCLAIMER } from '@/lib/critical-path/client-disclaimer';
 import { Fact, PortalCard, PortalEmpty, PortalStatus, day, rowStyle } from '../portal-ui';
 
 /**
@@ -39,7 +43,11 @@ export default async function PortalDashboardPage({
   const project = projects.find((p) => p.id === params.projectId);
   if (!project) notFound();
 
-  const schedule = await getPortalSchedule(supabase, project.id);
+  // [S122 Part 7] On a Critical Path project the client sees phases, task titles
+  // and the projected finish INSTEAD of the task-date list: client_schedule is
+  // not called, so its task dates never enter this page.
+  const criticalPath = await getPortalCriticalPath(supabase, project.id);
+  const schedule = criticalPath ? [] : await getPortalSchedule(supabase, project.id);
   const limited = identity.accessLevel !== 'full';
   const notForYou = 'Not included in your current portal access.';
 
@@ -56,6 +64,31 @@ export default async function PortalDashboardPage({
         </div>
       </PortalCard>
 
+      {criticalPath ? (
+        <PortalCard title="Schedule" subtitle="The phases of your job and the projected finish.">
+          <div data-testid="portal-cp">
+            <Fact label="Projected finish" value={<span data-testid="portal-cp-finish">{day(criticalPath.projectedFinish)}</span>} />
+            <p data-testid="portal-cp-disclaimer" style={{ fontSize: '12.5px', color: color.muted, margin: '10px 0 6px' }}>
+              {CLIENT_DISCLAIMER}
+            </p>
+            {criticalPath.phases.map((p, i) => (
+              <div key={i} style={{ ...rowStyle, display: 'block' }} data-testid="portal-cp-phase">
+                <span style={{ display: 'flex', justifyContent: 'space-between', gap: '12px' }}>
+                  <span style={{ fontWeight: 600, color: color.navy }}>{p.name ?? 'Other work'}</span>
+                  <span style={{ fontSize: '12.5px', color: color.muted, whiteSpace: 'nowrap' }}>
+                    {day(p.start)} → {day(p.finish)}
+                  </span>
+                </span>
+                <ul style={{ margin: '4px 0 0', paddingLeft: '18px', fontSize: '13px', color: color.navy }}>
+                  {p.tasks.map((title, j) => (
+                    <li key={j}>{title}</li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
+        </PortalCard>
+      ) : (
       <PortalCard title="Schedule" subtitle="Upcoming and completed milestones on your job.">
         {schedule.length === 0 ? (
           <PortalEmpty>
@@ -79,6 +112,7 @@ export default async function PortalDashboardPage({
           ))
         )}
       </PortalCard>
+      )}
     </>
   );
 }
