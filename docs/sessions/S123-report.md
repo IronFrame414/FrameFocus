@@ -58,3 +58,30 @@ dates (write-through), so both functions already read engine dates; D-1 is about
 - **"and figures" appears NOWHERE in code** (0 hits). No client surface that shows money carries any disclaimer today.
 - ⇒ **D-2 is already true in code** ("these dates", everywhere it appears). D-2's build reduces to: the D-1 list AND Gantt views use the same
   constant; nothing is renamed; the "and figures" wording is not introduced anywhere (there is no money surface that has a disclaimer to keep).
+
+### 1.4b — The notification send path (code at `ddfc6781`)
+- **Where it runs: INSIDE the save request, before the response.** Every applying route awaits `applyCriticalPathSave`
+  (`lib/critical-path/save.ts:201`) → `recomputeProject` (`lib/critical-path/recompute.ts:59`), whose step 5 (`:146-162`) **awaits**
+  `notifyScheduleChange` (`lib/critical-path/notify.ts`). That function loops over the assignees who ticked "notify of changes" **one at a time**
+  (`for … await resolveMemberReachability` then `await notify()` or `await sendEmail()` + `await logEmail()`), then the client email, then the
+  saver's report. **So every email-only sub is one sequential Resend round-trip inside the save** — D-3's premise is confirmed by the code.
+- Routes that apply (and so wait): `api/projects/[id]/critical-path/tasks/[taskId]` (sheet save/release), `…/tasks/[taskId]/move` (drags:
+  desktop tab, scheduling calendar, /m day view), `…/edits/[editId]` via `lib/critical-path/held.ts:84` (approval), and the template stamp
+  (`lib/critical-path/templates.ts` calls `recomputeProject`, cause `template`). Page reads (`ensureScheduleFresh`, desktop schedule + CP tab
+  pages, /m via `lib/services/critical-path-mobile.ts`) and the hourly cron also call `recomputeProject`; a marked cause other than `time` would
+  notify from inside a **page render** too.
+- **Where the unreachable list is produced:** `notifyScheduleChange` → `out.unreachable` (assignee with neither login nor email, via
+  `resolveMemberReachability`) and `out.clientUnreachable` (client box ticked, contact has no email). **"Unreachable" = no login AND no email**;
+  an email-only sub is counted as `emailed`, not unreachable — Part 6's meaning, as D-3 requires.
+- **Where it is displayed — TWO deliveries already exist:**
+  1. **The popup (fast path):** routes return `untold` (`untoldOf`, `save.ts:29`); the client shows `alert(untoldNotice(…))` — desktop CP tab
+     (`critical-path-tab.tsx:200, :656`), desktop task form (`task-form.tsx:167, :306`), scheduling calendar (`scheduling-calendar.tsx:56`), /m day
+     view (`day-view.tsx:180`), /m phone board (`critical-path-card.tsx:81`). Title *"Saved — but not everyone could be told"*.
+  2. **A durable in-app notification to the saver** (`notify.ts`, end): `notify()` type `schedule_changed`, title *"Not everyone could be told about
+     your schedule change"*, body *"No login and no email on file: {names}."*, linked to the project, tag `schedule-unreachable-<project>`.
+     `notify()` writes the row unconditionally (no preference gate; notify-hours only suppress the push, `lib/notify/notify.ts:204,259`). It is read
+     at `/dashboard/notifications` and `/m/notifications` (the bell). **So D-3a's "somewhere findable" already exists**; what changes is that the popup
+     can no longer come from the save's response.
+- **Background primitive:** Next is **14.2.35** (`node_modules/next/package.json`); `after()`/`unstable_after` do **not** exist in it (0 hits in
+  `next/server.{js,d.ts}`, no `dist/server/after`). `@vercel/functions` is **not installed**. Context7 (Next docs) confirms `after()` is the
+  route-handler primitive in later versions and is built on `waitUntil`. → a design decision for Phase 2.
