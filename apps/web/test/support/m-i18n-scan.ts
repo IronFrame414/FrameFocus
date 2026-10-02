@@ -66,7 +66,7 @@ export const ALLOWED = new Set<string>([
   'in',
 ]);
 
-function walk(d: string, out: string[] = []): string[] {
+export function walk(d: string, out: string[] = []): string[] {
   for (const f of readdirSync(d)) {
     const p = join(d, f);
     if (statSync(p).isDirectory()) walk(p, out);
@@ -75,10 +75,14 @@ function walk(d: string, out: string[] = []): string[] {
   return out;
 }
 
-function resolveImport(from: string, spec: string): string | null {
+/** packages/shared, for `@framefocus/shared/…` (S122 Part 7: the engine lives there). */
+const SHARED_ROOT = join(WEB_ROOT, '../../packages/shared');
+
+function resolveImport(from: string, spec: string, shared: boolean): string | null {
   let base: string;
   if (spec.startsWith('@/')) base = join(WEB_ROOT, spec.slice(2));
   else if (spec.startsWith('.')) base = resolvePath(dirname(from), spec);
+  else if (shared && spec.startsWith('@framefocus/shared/')) base = join(SHARED_ROOT, spec.slice('@framefocus/shared/'.length));
   else return null;
   for (const ext of ['', '.tsx', '.ts', '/index.tsx', '/index.ts']) {
     const p = base + ext;
@@ -87,9 +91,19 @@ function resolveImport(from: string, spec: string): string | null {
   return null;
 }
 
-export function mReachableFiles(): string[] {
+/**
+ * [S122 Part 7] Every file reachable at RUNTIME from `roots` (type-only imports
+ * carry no values and are not followed). `shared` also resolves
+ * `@framefocus/shared/…`; `skip` drops a resolved file from the walk. The /m
+ * guard keeps its S110 behaviour through mReachableFiles(); the portal's
+ * import check (s122-cp-portal-imports) walks EVERYTHING, shared included.
+ */
+export function reachableFrom(
+  roots: string[],
+  opts: { shared?: boolean; dynamic?: boolean; skip?: (resolved: string) => boolean } = {}
+): string[] {
   const seen = new Set<string>();
-  const queue = walk(join(WEB_ROOT, 'app/m'));
+  const queue = [...roots];
   while (queue.length) {
     const f = queue.shift()!;
     if (seen.has(f)) continue;
@@ -102,6 +116,7 @@ export function mReachableFiles(): string[] {
       true,
       f.endsWith('x') ? ts.ScriptKind.TSX : ts.ScriptKind.TS
     );
+    const specs: string[] = [];
     for (const s of sf.statements) {
       if (
         (ts.isImportDeclaration(s) || ts.isExportDeclaration(s)) &&
@@ -109,13 +124,23 @@ export function mReachableFiles(): string[] {
         ts.isStringLiteral(s.moduleSpecifier)
       ) {
         if (ts.isImportDeclaration(s) && s.importClause?.isTypeOnly) continue;
-        const r = resolveImport(f, s.moduleSpecifier.text);
-        if (r && !r.includes('/lib/services/') && !/supabase/.test(r) && !r.includes('/lib/i18n/'))
-          queue.push(r);
+        if (ts.isExportDeclaration(s) && s.isTypeOnly) continue;
+        specs.push(s.moduleSpecifier.text);
       }
+    }
+    if (opts.dynamic) for (const m of src.matchAll(/\bimport\(\s*['"]([^'"]+)['"]\s*\)/g)) specs.push(m[1]);
+    for (const spec of specs) {
+      const r = resolveImport(f, spec, !!opts.shared);
+      if (r && !(opts.skip && opts.skip(r))) queue.push(r);
     }
   }
   return [...seen].map((f) => relative(WEB_ROOT, f).split('\\').join('/')).sort();
+}
+
+export function mReachableFiles(): string[] {
+  return reachableFrom(walk(join(WEB_ROOT, 'app/m')), {
+    skip: (r) => r.includes('/lib/services/') || /supabase/.test(r) || r.includes('/lib/i18n/'),
+  });
 }
 
 export interface Finding {
