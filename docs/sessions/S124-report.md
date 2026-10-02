@@ -659,3 +659,47 @@ no enqueue trigger and no handler. Its `time_activity:create` arm still answers 
    $128.39 purchase will **not** post while its project stays excluded.
 6. Merged branches safe to delete: `feature/s123-*` (5), `feature/s124-p0-email-pacing`,
    `feature/s124-p2-toggle`. `feature/s114-c5-multi-upload` was not touched.
+
+---
+
+# RESUMED (2026-10-02, after Josh's Q1 = A, Q2 = A)
+
+## The sandbox gate with the keys loaded: ⛔ THE SANDBOX CONNECTION IS DEAD. NO QuickBooks HOST ANSWERED.
+
+**Run:** `npx vitest run --config test/live.vitest.config.ts test/s124-qb-sandbox-gate.live.ts` on
+`feature/s124-p1-push` `9e08c3dc`, 23:52:32Z. Exit **1**; **1 failed, 2 passed** (3).
+
+- The keys are loaded. The earlier error ("QuickBooks is not configured (QBO_CLIENT_ID / QBO_CLIENT_SECRET)")
+  is gone. Checks 1 (`qboEnvironment() === 'sandbox'`) and 2 (Sabal Point's realm is exactly `9341457813274121`)
+  passed, because the gate throws on either before reaching the token step.
+- **Intuit's token endpoint refused the refresh with `invalid_grant`.** The log reads
+  `[qb-tokens] invalid_grant for company 03bb903f-… -> needs_reauth.` The stored refresh token is gone: expired,
+  revoked, or rotated past. Wrong keys would have come back as `invalid_client`, not this.
+- **So neither API host was called.** The `companyinfo` reads to the sandbox host and to the production host
+  (gate checks 3 and 4) never ran, because there was no access token to send. I cannot say "the sandbox host
+  answered", and I am not saying it. The only Intuit endpoint contacted was the OAuth token endpoint, which is
+  the same for both environments.
+- The two controls passed: environment = production → refused; unknown company → refused. Both refuse before
+  any network call.
+- **Side effect on rebuild-test, read back:** Sabal Point `qb_connection_state` went `connected` →
+  **`needs_reauth`**. The app's own token code does that on `invalid_grant`. Reconnecting resets it. Its realm
+  is unchanged, and `qb_time_export_enabled` is still `false`.
+- **Nothing was written to any QuickBooks company, sandbox or real.** Stop rule 3 is intact.
+
+**Per Josh: "If the sandbox connection turns out to be dead … say so in plain text and stop the item rather than
+working around it."** Parts 1 and 3 are **STOPPED** and unmerged on `feature/s124-p1-push` `9e08c3dc`.
+Production is untouched by `20262135`.
+
+**What unblocks it:** reconnect rebuild-test's Sabal Point to the sandbox company. This needs one OAuth click-through
+from a dev server running in this Codespace, against the rebuild-test database, logged in as Sabal Point's Owner.
+The Development app's redirect URI must match. After that, the five finishing steps under Parts 1+3 run
+unchanged, starting with this gate.
+
+## Josh's Q2 = A, plus the ADDITION: a switch that turns itself off must SAY SO. Not built yet; it needs a plan.
+
+Ruling (verbatim): *"a visible state on the Accounting screen naming the date and the reason ("turned off when
+QuickBooks was disconnected on <date>"), and a notification to the Owner."*
+
+⚠️ **This needs a migration that the plan did not list.** That makes it a plan change, so I am saying so here.
+Part 2's `20262134` is already on production, so the addition cannot ride in it. The proposed plan, and the
+questions on it, are in the final message.
