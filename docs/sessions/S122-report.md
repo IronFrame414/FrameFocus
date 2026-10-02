@@ -1880,3 +1880,22 @@ made. Repeated 5× on the same build: **2 ✘** (:171 stale preview; :168 `selec
   longer. It matches how the repo's other notify paths work, but it is a latency choice.
 
 - **CI requested again** on the commit after `4663b533` (pre-CI `4663b533`: type-check 0, lint 0, unit 166 / 2,278, 0 cached; base `origin/main` = `a955dac5`; 0 runs in progress or queued). This run is the merge evidence.
+
+### R2.11 — Part 6 CI green; production section 6 STOPPED at the pre-check (stop rule 2; migration absent from plan row 9)
+
+- **CI `36939682013`** on `6c8cf937` (base `a955dac5` = `origin/main`; 0 other runs): **green**. Unit **166 / 2,278**; e2e **689 passed, 24 skipped,
+  1 flaky, 0 failed** (44.2 m). The flaky one is `m-photos.spec.ts:539` (photo viewer, derivative fallback), passed on retry, outside every
+  Part 6 path. Recorded, not counted as a Part 6 red.
+- **Tree identity:** HEAD = `6c8cf937` = the CI-tested commit; tree clean. Workdir `wd6`: all **292** migrations, `cmp` 0 each, m29 last;
+  linked to production (`WD REF=jwkcknyuyvcwcdeskrmz`); checkout read back `nmyphyhmfttxkdoposvf`.
+- **Pre-check, PRODUCTION** (read-only): ledger from `…2128` = `20262128000000` only; m28 control 1; m29 CHECK 0; m29 email types 0 of 2;
+  `notifications` rows outside the NEW CHECK list **0**.
+- ⚠️ **STOPPED before the dry run. Nothing was pushed to production.**
+  1. **Stop rule 2, read literally:** m29 DROPs and re-ADDs `notifications_type_check`, which re-validates every existing production
+     `notifications` row. It is a strict superset (every old value + `schedule_changed`), and **0** production rows fall outside it, so it cannot
+     fail. But it IS a constraint added over existing production rows, and the rule leaves that call to Josh.
+  2. **Plan row 9 says Part 6 has NO migration.** m29 (`3b97459b`) came in during the build: the registry half the notifications need. Without
+     it, in-app rows fail the CHECK at runtime and email logs fail the `email_types` FK. No earlier report entry surfaces the plan↔build gap.
+- **Part 6 is NOT merged.** It is not mergeable until m29 is on production (S180 condition 3), and that waits on the ruling.
+- Expected values for the verification, already captured from rebuild-test: ledger `…2128, …2129`; CHECK count 1, md5 `bac8720e…`, contains
+  `schedule_changed`; email types `schedule_change, schedule_change_client`; rows outside 0.
