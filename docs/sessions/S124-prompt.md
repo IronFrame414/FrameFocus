@@ -31,6 +31,11 @@ All proving happens in a **sandbox** company.
 
 # PHASE 1 — ASSESS. BUILD NOTHING.
 
+**1.0 — Read `docs/specs/S124-spec.md`.** ⚠️ **Despite the filename it is the WHOLE open-work index,
+not a Build B spec.** Build B is one section of it, headed *"NEXT — BUILD B — Timesheets →
+QuickBooks"*. **Read that section; everything else in the file is other sessions' work and is out of
+scope here.** ⚠️ **It is a claim like this prompt — verify what it asserts.**
+
 **1.1** `git fetch --prune`. State `origin/main`'s SHA and subject. ⚠️ **Name the ref on every
 measurement in this session.**
 
@@ -194,10 +199,11 @@ fix it. The CI work is its own session.
 
 ## ⚠️ NOT in this build
 
-**The performance audit** (`claude/performance-audit-spec.md`) — its own session, and it fixes
+**The performance audit** (`docs/specs/performance-audit-spec.md`) — its own session, and it fixes
 nothing when it runs.
 **`feature/s114-c5-multi-upload`** — its own audit. ⚠️ **Do not touch, do not merge, do not delete.**
-**The daily log changes** (`claude/daily-log-changes.md`). **Build C — CI serialization.**
+**The daily log changes** — the floating `/m` bottom bar and the client-facing photo replacing box C.
+**Build C — CI serialization.**
 **Build F — the project overview job-details block.** **The working-calendar standard holidays.**
 ⚠️ **Nothing toward any of them.**
 
@@ -226,7 +232,8 @@ commit, push, **move on. Stop the ITEM, not the session.**
 
 ## Standing evidence rules
 
-- ⚠️ **Verify by object. A prior report is a claim** — including this prompt and `claude/next-builds.md`.
+- ⚠️ **Verify by object. A prior report is a claim** — including this prompt and
+  `docs/specs/S124-spec.md`.
 - ⚠️ **Write off-project negatives WITHOUT returning rows.** Count with the service role. An
   `.insert().select()` makes Postgres check the new row against the SELECT policy, so the test passes
   whether or not the write arm exists.
