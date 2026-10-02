@@ -620,3 +620,74 @@ supabase/migrations` (296 files, `cmp` 0), linked `jwkcknyuyvcwcdeskrmz` (read b
 | EXECUTE anon **false** / authenticated **true** | MATCH |
 | ACL `postgres, authenticated, service_role, supabase_auth_admin` (= the original's: the DROP lost no grant) | MATCH |
 | `client_schedule` md5 `22d6e0814a6bbdd8791f354dbbd0153f` (**untouched**, Q2) | MATCH |
+
+### ✅ D-2, D-3, D-1 MERGED back-to-back — `f28cf36c`, `69c02a7e`, `bec91ec4`; pushed in one push; `origin/main` read back `bec91ec4`
+- **D-2 `f28cf36c`** = `--no-ff` of `99c170d1` (its CI'd tip); merge tree == `99c170d1`'s tree.
+- **D-3 `69c02a7e`** = `--no-ff` of `298c6d9b` (its CI'd tip); merge tree == `298c6d9b`'s tree (its base, D-2's tip, had the same tree as `main` after D-2's merge).
+- **D-1 `bec91ec4`** = `--no-ff` of `65fec040`; merge tree == `65fec040`'s tree; the delta from the CI'd `52a14798` is `docs/sessions/S123-report.md` only.
+- Each merge message carries its three conditions with the numbers. D-1's migration was on production (MATCH ×9) before the merge.
+- **`main` CI `37033398928` on `bec91ec4`: green.** Unit **169 / 2,293**; e2e **705 passed**, 0 `✘` (16:21:41–17:12:02Z). One run for the three merges, as planned.
+- The `feature/s123-*` branches are all ancestors of `main` and were not deleted (not asked); `feature/s114-c5-multi-upload` is untouched.
+- Supabase CLI: the checkout is linked to **`nmyphyhmfttxkdoposvf`** (rebuild-test), read back; the production workdirs were scratch-only.
+
+
+---
+
+# FINAL REPORT — S123 (Critical Path close-out, D-1 to D-4)
+
+## 1. Phase 1 findings, with their refs
+- `origin/main` at start: **`b7e6b7fe`** (S122 Parts 1–9). No second session (`ListAgents`).
+- **The close-out decisions file** `docs/sessions/S122-closeout-decisions.md` was NOT on `main` (only on `feature/s122-p9-mobile`). Brought forward;
+  it reached `main` with D-4's merge.
+- **⚠️ `EMAIL_SEND_ENABLED`: production IS sending real email.** Measured by effect on production's `email_logs`: 0 kill-switch refusals;
+  `delivered` rows timed to the production crons (latest 2026-10-01 21:15Z). Whether the flag is unset or `'true'` cannot be read from here, and it
+  makes no difference. Josh ruled (Q6) no change: opt-in defaults bound who is emailed.
+- D-2 was already true in code (one constant, "these dates"). D-3's durable path already existed (the saver's in-app row). D-4 had a second defect:
+  **no lock**, so two simultaneous stamps could both pass the refusal.
+- Ordinary jobs do **not** display task status in the portal today (`client_schedule` returns it; the page never rendered it). See §6, Q-D1.
+
+## 2. Per item: merged, SHA, migration on production
+| item | what it is | merged | migration | on production |
+| --- | --- | --- | --- | --- |
+| **D-4** | the template stamp: one SQL function, one transaction, a per-project lock | **`30869f3c`** | `20262132000000_s123_stamp_schedule_template` | **yes**, MATCH ×8 |
+| **D-2** | the client disclaimer says "these dates", pinned, one copy | **`f28cf36c`** | none | n/a |
+| **D-3** | notifications sent after the response; the unreachable list in the save; time-limit evidence | **`69c02a7e`** | none (new dependency `@vercel/functions` 3.9.9) | n/a |
+| **D-1** | ONE client schedule, engine-fed, List ⇄ Gantt, the disclaimer on every schedule | **`bec91ec4`** | `20262133000000_s123_client_schedule_one_view` | **yes**, MATCH ×9 |
+
+Branches deleted with proof: the eight `feature/s122-p*` and `feature/s122-critical-path` (plus S122's clean report worktree), and
+`feature/s122-p9-mobile`. Kept: `feature/s114-c5-multi-upload` (unmerged code).
+
+## 3. The proofs the running order asked for
+- **D-1:** the payload proof re-run against the merged page in **both** views (document + flight): 0 float / critical / duration / assignee /
+  history; positives present. **The import graph** cannot reach the engine, `lib/critical-path` (but the disclaimer) or the staff Gantt, **transitively**.
+  **Part 7's CP-off control: green** (4/4), and its sabotage (a column added to `client_schedule`) went red, restored byte-identical.
+- **D-4:** a forced failure at the link step: **0 tasks, 0 phases, 0 links, 0 history rows**, live or soft-deleted, and the start date
+  unchanged. The retry on the same project with no cleanup succeeded. Two at once: exactly one wins.
+- **D-3:** save, leave the screen before the response, and the unreachable list is in Notifications (e2e, with a popup-only sabotage red).
+  The save returns while the email is still unsent, with the report row already written (live P1).
+
+## 4. Every production section against its expectation
+| section | migration | result |
+| --- | --- | --- |
+| D-4 | `20262132000000_s123_stamp_schedule_template` | **MATCH ×8** (ledger, count, md5 `a1875319…`, signature, invoker/volatile/plpgsql/search_path, comment, EXECUTE anon false / authenticated true, ACL) |
+| D-1 | `20262133000000_s123_client_schedule_one_view` | **MATCH ×9** (ledger, count, md5 `d37fce44…`, the return type with `task_start`/`task_finish`, DEFINER/STABLE/sql/search_path, comment, EXECUTE anon false / authenticated true, **ACL = the original's**, `client_schedule` md5 `22d6e081…` **unchanged**) |
+
+## 5. On production that Josh has not clicked
+1. **⚠️ LIVE-FACING NOW (Q1): every linked client on an ORDINARY job** sees, on the portal Dashboard's Schedule card, the disclaimer *"The
+   construction industry is fluid and dynamic; these dates are for planning purposes and cannot be guaranteed."* and a **List | Gantt** switch.
+   The list itself is unchanged. Suggested click: open the portal as the linked QA client on an ordinary project and try both views.
+2. **The template stamp** now runs as one database function (behaviour the same when it works; no wreckage when it doesn't).
+3. **Schedule notifications** send after the save returns. The "Saved — but not everyone could be told" popup is unchanged. Suggested click: on a test CP
+   project, tick "notify of changes" for a sub with no email, save, and click away at once, then open Notifications.
+4. **A Critical Path client's schedule** (nothing has CP on yet): task dates in the list, and a Gantt with bars only.
+
+## 6. What Josh has to decide before anything else is built
+- **Q-D1. Task status on ordinary jobs.** Your Q3 addition assumed ordinary jobs show task status today. They do not
+  (`page.tsx:101-109` on `b7e6b7fe`). D-1 kept exactly today's displayed fields, so no status is shown on either kind of job. Options: A) leave it
+  (nothing taken away, nothing added); B) show status on ordinary jobs (a one-line list change, live-facing). My recommendation: A unless clients
+  have asked for it.
+- **Q-D3. Resend's rate limit.** Sends are sequential and unpaced. Resend's default limit is 2 requests/second, so on a big job some sends could get a
+  429 and be logged `failed` (with evidence, but not sent). Options: A) leave it and watch for `failed` `schedule_change` rows on the first real job;
+  B) pace the background sends to ≤ 2/s (they run after the response now, so pacing costs the user nothing). My recommendation: B, as a
+  small follow-up.
+- **Not decided here, carried:** Build B (timesheets → QuickBooks) is next. Build C, Build F and the working-calendar holidays: not touched.
