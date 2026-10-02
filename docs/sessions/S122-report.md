@@ -2210,3 +2210,5 @@ Built so far, **without touching the database** (`main`'s merge run `36944879271
   | (M2) | the role gate removed: crew get the card | **✘ the crew test** (card count 1) |
 
 - **Regression**, clean build, one worker: **every `m-*` spec + every CP / portal spec + desktop-schedule (38 files) → 480 passed, 16 skipped, 0 failed.**
+
+- **Pre-CI** (`79e50c32`): type-check 0 (0/5 cached); lint 0 (no new warning); unit **168 / 2,287** (0 cached; +1 file, +6 tests: holding-up 4 + guard 2). **No migration.** **CI requested** (base `cb9873e6` = `origin/main`; 0 runs active).
