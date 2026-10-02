@@ -8,7 +8,7 @@
 **Ref every finding was taken on:** branch `feature/s125-perf-audit-static`, cut from `main` @ `91fa32e1`.
 The branch adds only `docs/sessions/` files, so **application code = `main` @ `91fa32e1`**.
 
-**Status: IN PROGRESS** — sections are filled as they complete; this line is removed when the report is final.
+**Status: COMPLETE (static half).** The ranked findings are at §"FINDINGS RANKED BY FIELD IMPACT"; what was not done is at §"Deferred".
 
 ---
 
@@ -17,6 +17,21 @@ The branch adds only `docs/sessions/` files, so **application code = `main` @ `9
 **Supabase production `us-east-1` (N. Virginia); Vercel functions `iad1` (Washington DC / N. Virginia).
 Same region. There is no cross-region toll.** The cost per screen is the **number** of round trips, not
 their distance — which is what Areas B and G are about.
+
+## In one screen
+
+1. **Region: fine.** Same region; no cross-region toll (A).
+2. **The biggest field problem is feedback, not speed.** No route has a loading state (0 `loading.tsx` / 169 pages),
+   and the crew's repeated actions (clock in/out, switch, punch) re-enable their button *before* the screen catches
+   up, then freeze the old screen with no signal (G). Small fixes.
+3. **Several tier-1 screens read unbounded history**: `/m/logs` (every log ever, 7 deep), the schedule screens (all-time
+   events, 4 sequential), the photo viewer (whole gallery per swipe), the photo grid (whole project, re-signed per
+   search tap, never browser-cached) (B, C-4, D).
+4. **The `/m` shell is 226 KB gz before any screen**; 88 KB of that is the browser Supabase client and a two-language
+   catalog (C-1a). Next's own build table under-reports `/m` routes by leaving out layout chunks.
+5. **Office side**: 79 pages make an uncached Auth-server call that stalls their own queries; the dashboard home runs a
+   full profitability report per project (B-1a, B-1b).
+6. **Nothing here is timed.** Every number is a count from code or a byte size from the build (deferred list at the end).
 
 ---
 
@@ -130,8 +145,9 @@ Shared per request by React `cache()` (a second call is free): `createClient`, `
 `getRequestUser()` exists for exactly this; S115 measured why it matters (`lib/supabase-server.ts:50-57`): *"6 calls
 to the Auth server for one render … They cannot overlap: auth-js runs every auth operation on a client through one
 queue, and every PostgREST query waits on that same queue for its session, so each getUser() in flight stalls every
-query behind it."* The S115 fix moved the layouts onto `getRequestUser()`; **the pages were not moved.** So every
-dashboard page pays **one extra Auth-server round trip that also stalls its own queries**. Portal pages ask the Auth
+query behind it."* The S115 fix moved the layouts onto `getRequestUser()`; **the pages were not moved.** So each of
+those pages (79 of the 98 `page.tsx` files under `app/dashboard` + `app/portal`) pays **one extra Auth-server round
+trip that also stalls its own queries**. Portal pages ask the Auth
 server up to **3×** per request (`app/portal/layout.tsx:73`, `lib/services/portal.ts:173` from both the project
 layout and the page). Fix: mechanical replacement with `getRequestUser()`; small per file, 79 files; risk low (same
 call, memoised) — the one trap is a page that deliberately needs a *fresh* user after a write in the same request
@@ -156,15 +172,15 @@ role-matrix tests as the original.
 - `lib/services/profitability.ts:209-211` — all `instrument_rates` (per project, inside B-1b).
 - `lib/services/payables.ts:238-243` — all compliance docs, on every calendar render (`getExpiringCompliance`).
 
-**B-1d. ✔ Lists that grow without bound and are only ever shown partly:**
-- `getCalendarEvents` (`lib/services/schedule.ts:129-265`) — **no date window, 4 sequential reads**
+**B-1d. Lists that grow without bound and are only ever shown partly** (✔ = re-verified by me; the rest agent-reported):
+- ✔ `getCalendarEvents` (`lib/services/schedule.ts:129-265`) — **no date window, 4 sequential reads**
   (tasks `:149` → entries `:172` → inspections `:205` → compliance `:239`), behind `/m/schedule`, the `/m` project hub,
   `/m/p/[projectId]/schedule`, `/dashboard`, `/dashboard/schedule`, dashboard project overview and schedule. The
   screens show a day / a week / "up next".
-- `getMobileDailyLogs` (`lib/services/daily-logs.ts:260-270`) — **every daily log in the company, all time, no
+- ✔ `getMobileDailyLogs` (`lib/services/daily-logs.ts:260-270`) — **every daily log in the company, all time, no
   limit** behind `/m/logs`; then `files.in('daily_log_id', <every id>)` just to count photos (`:289-293`) — that `IN`
   list grows with the log history; then `companies.timezone` (`:318`) and a count (`:322`) — 4 sequential.
-- `getProjects()` (`lib/services/projects.ts:39-49`) — `select('*', contact)`, no limit; `/m/projects` calls it with
+- ✔ `getProjects()` (`lib/services/projects.ts:39-49`) — `select('*', contact)`, no limit; `/m/projects` calls it with
   **no status filter** (archived included); `/m/timeclock` and `/m/capture` use it for a picker that needs id + name.
 - `getContacts` (`contacts.ts:22-26`), `getSubcontractors` (`subcontractors.ts:22-25`), `getExpenses`
   (`expenses.ts:45-50`, all company expenses on `/m/expenses`), `listSiteVisits` (`site-visits.ts:44-49`),
@@ -288,7 +304,7 @@ at ~8 (3 of them Auth)** — plus middleware's 1–2 batches on `/dashboard` (E)
 | /dashboard/timeclock | 8 | repeats the layout's open session / member / company |
 | /dashboard/timeclock/timesheets | 11 | `/dashboard/timesheets` redirects here — the layout runs **twice** across the two requests |
 | timeclock/timesheets/[sessionId] | ~10 | |
-| /dashboard/field-ops/** (25 pages) | 2–11 | mostly one independent pair run in sequence each; `daily-logs.ts:185-190` `.limit(1000)` ordered by non-unique `log_date` only |
+| /dashboard/field-ops/** (22 pages) | 2–11 | mostly one independent pair run in sequence each; `daily-logs.ts:185-190` `.limit(1000)` ordered by non-unique `log_date` only |
 | /dashboard/{catalog,contacts,subcontractors,team,expenses,settings,site-visits,notifications,billing,trial,account}/** | not read route-by-route | ⚠️ **residual — outside the read set** (see H) |
 | **/portal/[projectId]** | 6–7 page + 8 layout ≈ **14–15, 3 Auth** | identity and projects re-read on purpose (`:40-44` comment) — but uncached, so really re-queried |
 | /portal/[projectId]/files | ~16 | two separate signing calls; lists unbounded |
@@ -569,10 +585,269 @@ Verified by reading on this ref (not taken on the agent's word): `timeclock-scre
 
 ## H — Route inventory, ranked by field use
 
-_(in progress)_
+**Tiers are a judgement from role and workflow, not from analytics** (the repo has none; the timing half could add
+Vercel Analytics or log sampling to replace this with counts):
+
+| tier | who / how often | routes |
+| --- | --- | --- |
+| **1** | every crew member, every day (clock in/out twice, photos, the daily log) | `/m`, `/m/timeclock`, `/m/timeclock/switch`, `/m/logs`, `/m/logs/new`, `/m/capture`, `/m/p/[projectId]/photos`, `/m/p/[projectId]` (where clock-in lands), `/m/projects` |
+| **2** | field, several times a day or week | the rest of `/m` project work: schedule, overview, punch, photo viewer, log detail, field, notifications, deliveries, signouts, safety, files |
+| **3** | office daily, and occasional `/m` directory screens | `/dashboard`, `/dashboard/projects/**`, timesheets, estimates, `/dashboard/schedule`, field-ops; `/m` contacts/subs/team/site-visits/account/settings/changes/selections |
+| **4** | clients | `/portal/**` |
+| **5** | occasional / one-off | settings, catalog, team admin, billing, trial, contacts/subs admin, auth and public pages |
+
+**All 169 pages, one line each** (ref `918f8654` = app code `main@91fa32e1`). "JS KB gz" is the C-1 union figure.
+"Read depth: full" = read with every service it calls (row in B-2/B-3); "light" = the page file only, its own
+`await`s counted and services **not** followed — ⚠️ a light read can miss a sequential chain or an unbounded list
+inside a service. That residual is stated, not covered.
+
+| tier | route | JS KB gz | page `await`s / `Promise.all` | direct `auth.getUser()` | read depth | finding |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 | `/m` | 226 | 0 / 0 |  | full (B-2/B-3) | see B-2/B-3 row |
+| 1 | `/m/capture` | 231 | 1 / 0 |  | full (B-2/B-3) | see B-2/B-3 row |
+| 1 | `/m/logs` | 229 | 3 / 1 |  | full (B-2/B-3) | see B-2/B-3 row |
+| 1 | `/m/logs/new` | 234 | 1 / 1 |  | full (B-2/B-3) | see B-2/B-3 row |
+| 1 | `/m/p/[projectId]` | 238 | 3 / 2 |  | full (B-2/B-3) | see B-2/B-3 row |
+| 1 | `/m/p/[projectId]/photos` | 234 | 4 / 1 |  | full (B-2/B-3) | see B-2/B-3 row |
+| 1 | `/m/projects` | 227 | 2 / 1 |  | full (B-2/B-3) | see B-2/B-3 row |
+| 1 | `/m/timeclock` | 232 | 2 / 2 |  | full (B-2/B-3) | see B-2/B-3 row |
+| 1 | `/m/timeclock/switch` | 234 | 1 / 1 |  | full (B-2/B-3) | see B-2/B-3 row |
+| 2 | `/m/field` | 228 | 2 / 2 |  | full (B-2/B-3) | see B-2/B-3 row |
+| 2 | `/m/logs/[logId]` | 231 | 2 / 1 |  | full (B-2/B-3) | see B-2/B-3 row |
+| 2 | `/m/notifications` | 232 | 2 / 0 |  | full (B-2/B-3) | see B-2/B-3 row |
+| 2 | `/m/p/[projectId]/deliveries` | 229 | 2 / 1 |  | full (B-2/B-3) | see B-2/B-3 row |
+| 2 | `/m/p/[projectId]/deliveries/check-in` | 231 | 1 / 1 |  | full (B-2/B-3) | see B-2/B-3 row |
+| 2 | `/m/p/[projectId]/files` | 227 | 2 / 1 |  | full (B-2/B-3) | see B-2/B-3 row |
+| 2 | `/m/p/[projectId]/overview` | 226 | 1 / 1 |  | full (B-2/B-3) | see B-2/B-3 row |
+| 2 | `/m/p/[projectId]/photos/[fileId]` | 233 | 3 / 1 |  | full (B-2/B-3) | see B-2/B-3 row |
+| 2 | `/m/p/[projectId]/photos/[fileId]/markup` | 232 | 1 / 0 |  | full (B-2/B-3) | see B-2/B-3 row |
+| 2 | `/m/p/[projectId]/punch` | 226 | 2 / 1 |  | full (B-2/B-3) | see B-2/B-3 row |
+| 2 | `/m/p/[projectId]/punch/[itemId]` | 232 | 2 / 1 |  | full (B-2/B-3) | see B-2/B-3 row |
+| 2 | `/m/p/[projectId]/punch/lists/new` | 230 | 1 / 1 |  | full (B-2/B-3) | see B-2/B-3 row |
+| 2 | `/m/p/[projectId]/punch/new` | 231 | 1 / 1 |  | full (B-2/B-3) | see B-2/B-3 row |
+| 2 | `/m/p/[projectId]/safety` | 226 | 1 / 1 |  | full (B-2/B-3) | see B-2/B-3 row |
+| 2 | `/m/p/[projectId]/safety/new` | 231 | 2 / 1 |  | full (B-2/B-3) | see B-2/B-3 row |
+| 2 | `/m/p/[projectId]/schedule` | 245 | 3 / 1 |  | full (B-2/B-3) | see B-2/B-3 row |
+| 2 | `/m/p/[projectId]/signouts` | 228 | 1 / 1 |  | full (B-2/B-3) | see B-2/B-3 row |
+| 2 | `/m/p/[projectId]/signouts/[signoutId]` | 244 | 1 / 1 |  | full (B-2/B-3) | see B-2/B-3 row |
+| 2 | `/m/p/[projectId]/signouts/new` | 238 | 1 / 1 |  | full (B-2/B-3) | see B-2/B-3 row |
+| 2 | `/m/schedule` | 238 | 2 / 2 |  | full (B-2/B-3) | see B-2/B-3 row |
+| 2 | `/m/site-visits/[id]/photos/[fileId]/markup` | 232 | 2 / 0 |  | full (B-2/B-3) | see B-2/B-3 row |
+| 3 | `/dashboard` | 248 | 5 / 1 | **yes** | full (B-2/B-3) | see B-2/B-3 row |
+| 3 | `/dashboard/estimates` | 261 | 5 / 0 | **yes** | full (B-2/B-3) | see B-2/B-3 row |
+| 3 | `/dashboard/estimates/[id]` | 324 | 10 / 0 | **yes** | full (B-2/B-3) | see B-2/B-3 row |
+| 3 | `/dashboard/estimates/[id]/proposal` | 245 | 5 / 0 | **yes** | full (B-2/B-3) | see B-2/B-3 row |
+| 3 | `/dashboard/estimates/new` | 257 | 3 / 0 | **yes** | full (B-2/B-3) | see B-2/B-3 row |
+| 3 | `/dashboard/estimates/site-visits/[id]` | 233 | 0 / 0 |  | full (B-2/B-3) | see B-2/B-3 row |
+| 3 | `/dashboard/field-ops` | 233 | 4 / 1 | **yes** | full (B-2/B-3) | see B-2/B-3 row |
+| 3 | `/dashboard/field-ops/[projectId]` | 233 | 0 / 0 |  | full (B-2/B-3) | see B-2/B-3 row |
+| 3 | `/dashboard/field-ops/[projectId]/daily-logs` | 236 | 4 / 1 | **yes** | full (B-2/B-3) | see B-2/B-3 row |
+| 3 | `/dashboard/field-ops/[projectId]/daily-logs/[logId]` | 241 | 7 / 2 | **yes** | full (B-2/B-3) | see B-2/B-3 row |
+| 3 | `/dashboard/field-ops/[projectId]/daily-logs/[logId]/edit` | 240 | 4 / 1 | **yes** | full (B-2/B-3) | see B-2/B-3 row |
+| 3 | `/dashboard/field-ops/[projectId]/daily-logs/new` | 240 | 5 / 1 | **yes** | full (B-2/B-3) | see B-2/B-3 row |
+| 3 | `/dashboard/field-ops/[projectId]/deliveries` | 238 | 5 / 1 | **yes** | full (B-2/B-3) | see B-2/B-3 row |
+| 3 | `/dashboard/field-ops/[projectId]/deliveries/[poId]` | 245 | 6 / 2 | **yes** | full (B-2/B-3) | see B-2/B-3 row |
+| 3 | `/dashboard/field-ops/[projectId]/deliveries/[poId]/edit` | 236 | 4 / 1 | **yes** | full (B-2/B-3) | see B-2/B-3 row |
+| 3 | `/dashboard/field-ops/[projectId]/deliveries/check-in` | 238 | 4 / 1 | **yes** | full (B-2/B-3) | see B-2/B-3 row |
+| 3 | `/dashboard/field-ops/[projectId]/deliveries/d/[deliveryId]` | 238 | 7 / 2 | **yes** | full (B-2/B-3) | see B-2/B-3 row |
+| 3 | `/dashboard/field-ops/[projectId]/deliveries/d/[deliveryId]/edit` | 236 | 5 / 2 | **yes** | full (B-2/B-3) | see B-2/B-3 row |
+| 3 | `/dashboard/field-ops/[projectId]/deliveries/new` | 236 | 4 / 0 | **yes** | full (B-2/B-3) | see B-2/B-3 row |
+| 3 | `/dashboard/field-ops/[projectId]/safety` | 233 | 4 / 0 | **yes** | full (B-2/B-3) | see B-2/B-3 row |
+| 3 | `/dashboard/field-ops/[projectId]/safety/new` | 252 | 4 / 1 | **yes** | full (B-2/B-3) | see B-2/B-3 row |
+| 3 | `/dashboard/field-ops/[projectId]/signouts` | 234 | 4 / 1 | **yes** | full (B-2/B-3) | see B-2/B-3 row |
+| 3 | `/dashboard/field-ops/[projectId]/signouts/[signoutId]` | 248 | 3 / 1 | **yes** | full (B-2/B-3) | see B-2/B-3 row |
+| 3 | `/dashboard/field-ops/[projectId]/signouts/new` | 244 | 3 / 0 | **yes** | full (B-2/B-3) | see B-2/B-3 row |
+| 3 | `/dashboard/field-ops/safety` | 233 | 3 / 0 | **yes** | full (B-2/B-3) | see B-2/B-3 row |
+| 3 | `/dashboard/field-ops/safety/[incidentId]` | 252 | 7 / 2 | **yes** | full (B-2/B-3) | see B-2/B-3 row |
+| 3 | `/dashboard/field-ops/safety/[incidentId]/edit` | 252 | 4 / 1 | **yes** | full (B-2/B-3) | see B-2/B-3 row |
+| 3 | `/dashboard/field-ops/safety/new` | 252 | 3 / 1 | **yes** | full (B-2/B-3) | see B-2/B-3 row |
+| 3 | `/dashboard/projects` | 239 | 10 / 3 | **yes** | full (B-2/B-3) | see B-2/B-3 row |
+| 3 | `/dashboard/projects/[id]` | 276 | 5 / 5 |  | full (B-2/B-3) | see B-2/B-3 row |
+| 3 | `/dashboard/projects/[id]/budget` | 248 | 5 / 3 |  | full (B-2/B-3) | see B-2/B-3 row |
+| 3 | `/dashboard/projects/[id]/changes` | 247 | 5 / 1 | **yes** | full (B-2/B-3) | see B-2/B-3 row |
+| 3 | `/dashboard/projects/[id]/changes/[coId]` | 267 | 7 / 1 | **yes** | full (B-2/B-3) | see B-2/B-3 row |
+| 3 | `/dashboard/projects/[id]/chat` | 242 | 3 / 0 | **yes** | full (B-2/B-3) | see B-2/B-3 row |
+| 3 | `/dashboard/projects/[id]/contacts` | 248 | 4 / 1 | **yes** | full (B-2/B-3) | see B-2/B-3 row |
+| 3 | `/dashboard/projects/[id]/contracts` | 257 | 4 / 1 | **yes** | full (B-2/B-3) | see B-2/B-3 row |
+| 3 | `/dashboard/projects/[id]/costs` | 239 | 0 / 0 |  | full (B-2/B-3) | see B-2/B-3 row |
+| 3 | `/dashboard/projects/[id]/critical-path` | 260 | 6 / 1 | **yes** | full (B-2/B-3) | see B-2/B-3 row |
+| 3 | `/dashboard/projects/[id]/deliveries` | 243 | 5 / 1 | **yes** | full (B-2/B-3) | see B-2/B-3 row |
+| 3 | `/dashboard/projects/[id]/files` | 248 | 5 / 1 | **yes** | full (B-2/B-3) | see B-2/B-3 row |
+| 3 | `/dashboard/projects/[id]/files/[fileId]/markup` | 247 | 5 / 0 |  | full (B-2/B-3) | see B-2/B-3 row |
+| 3 | `/dashboard/projects/[id]/files/trash` | 242 | 5 / 0 | **yes** | full (B-2/B-3) | see B-2/B-3 row |
+| 3 | `/dashboard/projects/[id]/files/upload` | 245 | 4 / 0 | **yes** | full (B-2/B-3) | see B-2/B-3 row |
+| 3 | `/dashboard/projects/[id]/invoices` | 248 | 7 / 1 | **yes** | full (B-2/B-3) | see B-2/B-3 row |
+| 3 | `/dashboard/projects/[id]/invoices/[invoiceId]` | 260 | 13 / 3 | **yes** | full (B-2/B-3) | see B-2/B-3 row |
+| 3 | `/dashboard/projects/[id]/lien-releases` | 245 | 7 / 1 | **yes** | full (B-2/B-3) | see B-2/B-3 row |
+| 3 | `/dashboard/projects/[id]/payments` | 255 | 8 / 1 | **yes** | full (B-2/B-3) | see B-2/B-3 row |
+| 3 | `/dashboard/projects/[id]/photos` | 244 | 1 / 1 |  | full (B-2/B-3) | see B-2/B-3 row |
+| 3 | `/dashboard/projects/[id]/profitability` | 240 | 6 / 1 | **yes** | full (B-2/B-3) | see B-2/B-3 row |
+| 3 | `/dashboard/projects/[id]/punch` | 246 | 4 / 1 | **yes** | full (B-2/B-3) | see B-2/B-3 row |
+| 3 | `/dashboard/projects/[id]/schedule` | 270 | 9 / 1 | **yes** | full (B-2/B-3) | see B-2/B-3 row |
+| 3 | `/dashboard/projects/[id]/selections` | 244 | 4 / 0 | **yes** | full (B-2/B-3) | see B-2/B-3 row |
+| 3 | `/dashboard/projects/[id]/selections/[selectionId]` | 267 | 5 / 1 | **yes** | full (B-2/B-3) | see B-2/B-3 row |
+| 3 | `/dashboard/projects/[id]/team` | 243 | 4 / 1 | **yes** | full (B-2/B-3) | see B-2/B-3 row |
+| 3 | `/dashboard/projects/new` | 236 | 4 / 0 | **yes** | full (B-2/B-3) | see B-2/B-3 row |
+| 3 | `/dashboard/schedule` | 257 | 5 / 1 | **yes** | full (B-2/B-3) | see B-2/B-3 row |
+| 3 | `/dashboard/timeclock` | 237 | 5 / 1 | **yes** | full (B-2/B-3) | see B-2/B-3 row |
+| 3 | `/dashboard/timeclock/timesheets` | 256 | 7 / 3 | **yes** | full (B-2/B-3) | see B-2/B-3 row |
+| 3 | `/dashboard/timeclock/timesheets/[sessionId]` | 238 | 7 / 2 | **yes** | full (B-2/B-3) | see B-2/B-3 row |
+| 3 | `/dashboard/timesheets` | 233 | 0 / 0 |  | full (B-2/B-3) | see B-2/B-3 row |
+| 3 | `/dashboard/timesheets/[sessionId]` | 233 | 0 / 0 |  | full (B-2/B-3) | see B-2/B-3 row |
+| 3 | `/m/[...missing]` | 226 | 0 / 0 |  | full (B-2/B-3) | see B-2/B-3 row |
+| 3 | `/m/account` | 229 | 1 / 1 |  | full (B-2/B-3) | see B-2/B-3 row |
+| 3 | `/m/contacts` | 226 | 1 / 1 |  | full (B-2/B-3) | see B-2/B-3 row |
+| 3 | `/m/contacts/[contactId]` | 226 | 3 / 1 |  | full (B-2/B-3) | see B-2/B-3 row |
+| 3 | `/m/contacts/[contactId]/edit` | 231 | 2 / 0 |  | full (B-2/B-3) | see B-2/B-3 row |
+| 3 | `/m/expenses` | 226 | 4 / 2 |  | full (B-2/B-3) | see B-2/B-3 row |
+| 3 | `/m/offline` | 229 | 0 / 0 |  | full (B-2/B-3) | see B-2/B-3 row |
+| 3 | `/m/p/[projectId]/changes` | 226 | 2 / 1 |  | full (B-2/B-3) | see B-2/B-3 row |
+| 3 | `/m/p/[projectId]/changes/[coId]` | 232 | 3 / 1 |  | full (B-2/B-3) | see B-2/B-3 row |
+| 3 | `/m/p/[projectId]/changes/new` | 248 | 3 / 0 |  | full (B-2/B-3) | see B-2/B-3 row |
+| 3 | `/m/p/[projectId]/contacts` | 226 | 1 / 1 |  | full (B-2/B-3) | see B-2/B-3 row |
+| 3 | `/m/p/[projectId]/selections` | 226 | 3 / 0 |  | full (B-2/B-3) | see B-2/B-3 row |
+| 3 | `/m/p/[projectId]/team` | 226 | 1 / 1 |  | full (B-2/B-3) | see B-2/B-3 row |
+| 3 | `/m/settings` | 226 | 2 / 1 |  | full (B-2/B-3) | see B-2/B-3 row |
+| 3 | `/m/site-visits` | 226 | 3 / 1 |  | full (B-2/B-3) | see B-2/B-3 row |
+| 3 | `/m/site-visits/[id]` | 237 | 4 / 1 | **yes** | full (B-2/B-3) | see B-2/B-3 row |
+| 3 | `/m/site-visits/new` | 230 | 3 / 0 |  | full (B-2/B-3) | see B-2/B-3 row |
+| 3 | `/m/subs` | 226 | 1 / 1 |  | full (B-2/B-3) | see B-2/B-3 row |
+| 3 | `/m/subs/[subId]` | 226 | 2 / 1 |  | full (B-2/B-3) | see B-2/B-3 row |
+| 3 | `/m/subs/[subId]/edit` | 229 | 2 / 0 |  | full (B-2/B-3) | see B-2/B-3 row |
+| 3 | `/m/team` | 226 | 1 / 1 |  | full (B-2/B-3) | see B-2/B-3 row |
+| 3 | `/m/team/[memberId]` | 226 | 3 / 1 |  | full (B-2/B-3) | see B-2/B-3 row |
+| 3 | `/m/team/[memberId]/edit` | 230 | 3 / 0 |  | full (B-2/B-3) | see B-2/B-3 row |
+| 4 | `/portal` | 136 | 4 / 0 |  | full (B-2/B-3) | see B-2/B-3 row |
+| 4 | `/portal/[projectId]` | 138 | 5 / 0 |  | full (B-2/B-3) | see B-2/B-3 row |
+| 4 | `/portal/[projectId]/files` | 213 | 5 / 1 |  | full (B-2/B-3) | see B-2/B-3 row |
+| 4 | `/portal/[projectId]/financials` | 149 | 4 / 1 |  | full (B-2/B-3) | see B-2/B-3 row |
+| 4 | `/portal/[projectId]/selections` | 153 | 4 / 0 |  | full (B-2/B-3) | see B-2/B-3 row |
+| 5 | `/` | 95 | 0 / 0 |  | light | nothing found in a light read |
+| 5 | `/bid/[token]` | 150 | 1 / 0 |  | light | nothing found in a light read |
+| 5 | `/contact` | 95 | 0 / 0 |  | light | nothing found in a light read |
+| 5 | `/dashboard/account` | 236 | 1 / 1 |  | light | nothing found in a light read |
+| 5 | `/dashboard/billing` | 233 | 0 / 0 |  | light | nothing found in a light read |
+| 5 | `/dashboard/billing/plans` | 234 | 4 / 0 | **yes** | light | B-1a; nothing else found in a light read |
+| 5 | `/dashboard/billing/success` | 233 | 3 / 0 | **yes** | light | B-1a; nothing else found in a light read |
+| 5 | `/dashboard/catalog` | 238 | 4 / 1 | **yes** | light | B-1a; nothing else found in a light read |
+| 5 | `/dashboard/catalog/[id]/edit` | 248 | 4 / 0 | **yes** | light | B-1a; nothing else found in a light read |
+| 5 | `/dashboard/catalog/new` | 248 | 4 / 0 | **yes** | light | B-1a; nothing else found in a light read |
+| 5 | `/dashboard/contacts` | 241 | 6 / 2 | **yes** | light | B-1a; nothing else found in a light read |
+| 5 | `/dashboard/contacts/[id]/edit` | 250 | 5 / 1 | **yes** | light | B-1a; nothing else found in a light read |
+| 5 | `/dashboard/contacts/new` | 250 | 3 / 0 | **yes** | light | B-1a; nothing else found in a light read |
+| 5 | `/dashboard/contacts/trash` | 237 | 4 / 0 | **yes** | light | B-1a; nothing else found in a light read |
+| 5 | `/dashboard/expenses` | 250 | 6 / 1 | **yes** | light | B-1a; nothing else found in a light read |
+| 5 | `/dashboard/expenses/new` | 233 | 4 / 1 | **yes** | light | B-1a; nothing else found in a light read |
+| 5 | `/dashboard/expenses/trash` | 235 | 4 / 1 | **yes** | light | B-1a; nothing else found in a light read |
+| 5 | `/dashboard/notifications` | 238 | 1 / 0 |  | light | nothing found in a light read |
+| 5 | `/dashboard/settings` | 286 | 12 / 5 | **yes** | light | B-1a; nothing else found in a light read |
+| 5 | `/dashboard/settings/accounting` | 239 | 4 / 1 | **yes** | light | B-1a; nothing else found in a light read |
+| 5 | `/dashboard/settings/tags` | 234 | 4 / 0 | **yes** | light | B-1a; nothing else found in a light read |
+| 5 | `/dashboard/site-visits` | 233 | 1 / 0 |  | light | nothing found in a light read |
+| 5 | `/dashboard/site-visits/[id]` | 246 | 5 / 0 | **yes** | light | B-1a; nothing else found in a light read |
+| 5 | `/dashboard/site-visits/[id]/photos/[fileId]/markup` | 238 | 1 / 0 |  | light | nothing found in a light read |
+| 5 | `/dashboard/subcontractors` | 239 | 6 / 2 | **yes** | light | B-1a; nothing else found in a light read |
+| 5 | `/dashboard/subcontractors/[id]` | 241 | 6 / 0 | **yes** | light | B-1a; nothing else found in a light read |
+| 5 | `/dashboard/subcontractors/[id]/edit` | 237 | 6 / 0 | **yes** | light | B-1a; nothing else found in a light read |
+| 5 | `/dashboard/subcontractors/new` | 237 | 3 / 0 | **yes** | light | B-1a; nothing else found in a light read |
+| 5 | `/dashboard/subcontractors/trash` | 236 | 4 / 0 | **yes** | light | B-1a; nothing else found in a light read |
+| 5 | `/dashboard/team` | 252 | 7 / 1 | **yes** | light | B-1a; nothing else found in a light read |
+| 5 | `/dashboard/team/[id]` | 254 | 7 / 1 | **yes** | light | B-1a; nothing else found in a light read |
+| 5 | `/dashboard/team/[id]/documents` | 235 | 6 / 0 | **yes** | light | B-1a; nothing else found in a light read |
+| 5 | `/dashboard/team/invite` | 249 | 4 / 0 | **yes** | light | B-1a; nothing else found in a light read |
+| 5 | `/dashboard/trial` | 233 | 5 / 0 | **yes** | light | B-1a; nothing else found in a light read |
+| 5 | `/dashboard/trial/export` | 235 | 4 / 0 | **yes** | light | B-1a; nothing else found in a light read |
+| 5 | `/forgot-password` | 156 | 1 / 0 |  | light | nothing found in a light read |
+| 5 | `/invite/accept` | 148 | 0 / 0 |  | light | nothing found in a light read |
+| 5 | `/locked` | 95 | 3 / 0 | **yes** | light | B-1a; nothing else found in a light read |
+| 5 | `/onboarding` | 88 | 5 / 0 | **yes** | light | B-1a; nothing else found in a light read |
+| 5 | `/pricing` | 95 | 0 / 0 |  | light | nothing found in a light read |
+| 5 | `/privacy` | 95 | 0 / 0 |  | light | nothing found in a light read |
+| 5 | `/reset-password` | 88 | 4 / 0 | **yes** | light | B-1a; nothing else found in a light read |
+| 5 | `/resubscribe` | 88 | 2 / 0 |  | light | nothing found in a light read |
+| 5 | `/resubscribe/success` | 95 | 0 / 0 |  | light | nothing found in a light read |
+| 5 | `/sign-co/[token]` | 95 | 6 / 0 |  | light | nothing found in a light read |
+| 5 | `/sign-in` | 156 | 0 / 0 |  | light | nothing found in a light read |
+| 5 | `/sign-up` | 156 | 1 / 0 |  | light | nothing found in a light read |
+| 5 | `/sign/[token]` | 111 | 6 / 0 | **yes** | light | B-1a; nothing else found in a light read |
+| 5 | `/terms` | 95 | 0 / 0 |  | light | nothing found in a light read |
+| 5 | `/trial-limit` | 95 | 4 / 0 | **yes** | light | B-1a; nothing else found in a light read |
+
+---
+
+## ⚠️ FINDINGS RANKED BY FIELD IMPACT
+
+No number here is a measurement. "Size" is the estimated size of the fix; "could break" is what a fix risks.
+
+| # | finding | tier hit | cause (where) | fix size | what could break |
+| --- | --- | --- | --- | --- | --- |
+| **1** | **Crews get no feedback, or a re-enabled button, after the actions they repeat all day.** Clock in, clock out, switch job/break, punch create/complete, log closeout: the button turns back on *before* the screen catches up, then the old screen sits frozen while the server re-renders; `router.push` from code shows no bar. A second tap on clock-in hits a raw DB error; on punch create it makes a duplicate | 1, 2 | G-3, G-4: `timeclock-screen.tsx:270→283-285`, `:534→542`; `switch-screen.tsx:150→155`; `punch-form.tsx:200→252`; `punch-actions.tsx:122/138→127/143`; `daily-log-closeout-view.tsx:45→47`; `nav-pending.tsx:29-31` | **small** — keep busy until the navigation/refresh settles (`useTransition` + `isPending` around `router.push`/`refresh`); teach `NavPending` programmatic navigation | double-submit guards relying on busy timing; tests asserting the button label after save |
+| **2** | **No route has a loading state.** 0 `loading.tsx`, no streaming Suspense; every navigation shows the old screen frozen (or nothing on first load) until the *whole* server render finishes. Dashboard and portal have no navigation feedback at all | all | G-1, G-2, G-3 | **small–medium** — `loading.tsx` skeletons for tier 1–2 `/m` routes first (the `/m` shell persists around them), then dashboard project tabs and portal | a `loading.tsx` placed at the wrong level flashes on searchParam-only changes (photo search, chips) or replaces the shell; e2e tests that wait on old-screen text. **The router cache (`staleTimes`) is NOT part of this — settled, not reopened** |
+| **3** | **The photo viewer re-loads and re-signs the whole gallery on every swipe**, and its filmstrip mounts every thumbnail at once | 2 | C-4a, D-3: `photos/[fileId]/page.tsx:52`, `viewer.tsx:161,636-660` | **medium** — pass the gallery once (client-side navigation between photos within one page) and lazy-load the strip | viewer deep links (`/photos/{id}` must still work cold); markup return path |
+| **4** | **Photo grid on iPhone downloads ~the whole project, every visit**: 12-screen look-ahead because Safari reports no connection info; signed URLs change every render so nothing is browser-cached; search/chip taps re-run all 7 queries and re-sign up to 1500 URLs | 1 | D-1, D-8, B-2 photos row: `thumbnail.ts:40-51`, `photos.ts:210-216`, `photo-search.tsx:53-62`, `public/sw.js:135` | **medium** — smaller iOS buffer (trivial); filter/search on the client; stable thumbnail URLs (needs a **security ruling** — see decisions) | URL lifetime vs. leakage of a photo link; a cached thumbnail outliving a delete/markup |
+| **5** | **`/m/logs` reads every daily log the company has ever written**, then an `IN` list of all their ids to count photos — 7 deep, and it grows forever | 1 | B-1d: `daily-logs.ts:260-270, 289-293, 318, 322` | **small–medium** — a window or page + an embedded count | the "this week" count (`:58` comment: it counts the unfiltered week); older logs need a "load more" |
+| **6** | **The `/m` shell ships 226 KB gz before any screen code**: 53 KB browser Supabase client (incl. Realtime) and 35 KB catalog in both languages | all `/m` | C-1a: `mobile-shell.tsx:24`, `offline-sync.tsx:12-13`, `lib/i18n/messages.ts:2-9,72,127` | catalog per language: **small**; deferring the Supabase client/offline sync: **medium** | a missing Spanish key rendering its id; offline queue replay starting later |
+| **7** | **Schedule screens read all-time events in 4 sequential reads**; the project schedule also loads Critical Path data for projects not on Critical Path | 2 | B-1d, B-2: `schedule.ts:129-265`; `lib/critical-path/load.ts:53,62,115` | **small–medium** — date window + `Promise.all` inside `getCalendarEvents`; skip CP load when off | "up next" needing future-dated events beyond the window; compliance expiries |
+| **8** | **Clock-in screen: N+1 segment reads and the profile read 3×** | 1 | B-1e, B-2: `timeclock/page.tsx:54`, `time-tracking.ts:45` | **small** | today's-segments list ordering |
+| **9** | **Photo upload: full resolution over LTE, 5 round trips per photo (3 repeated identity reads), one at a time; HEIC converted on the phone's main thread** | 1 | G-4, D-9: `files-client.ts:194-288`, `capture-screen.tsx:160-161`, `thumbnail.ts:28` | resolution: **a product decision**; repeated reads: **small** | evidence-grade photos (resolution is a ruling, not a tuning); storage-cap check accuracy |
+| **10** | **Repeated per-request reads and 79 uncached `getUser()` calls**: `profiles` read 3–5×, `companies` 2–3×, member/settings/open-session re-read by layout and page; every dashboard page pays an extra Auth-server call that stalls its own queries | 3 (and `/m` layout) | B-1a, F-1 | **small, mechanical** — `cache()` the helpers; `getRequestUser()` in pages | a page that needs a fresh read after a same-request write (Server Actions) |
+| **11** | **Dashboard home and projects list: a full profitability report per project** (~19–33 queries each), plus company-wide `instrument_rates` each time — the only place cost scales with company size | 3 (Owner/Admin) | B-1b | **medium–large** — set-based rollup | Financial-Floor money figures; needs the role-matrix tests |
+| **12** | **Company-wide reads with no filter** | 2–4 | B-1c: `selections.ts:124`, `invoices.ts:469-472`, `profitability.ts:209-211`, `payables.ts:238-243` | **small** each | the JS-side filtering that currently compensates |
+| **13** | **Portal: 3 Auth-server calls per page, identity and projects re-queried, full-size photos with no limit** | 4 | B-3, D-6 | **small–medium** | the deliberate re-check at `portal/[projectId]/page.tsx:40-44` (keep the check, cache the read) |
+| **14** | Middleware on `/dashboard`: 1–2 batches per request, multiplied by prefetches (S115: 19–32 runs per screen load) | 3 | E | report only — the trade is Josh's | — |
+| **15** | Low: signature pad loaded on `/portal/[projectId]/files` (C-2a); four useT-only client components (C-3); 4 server modules without `server-only` (C-2) | — | | small | — |
+
+**Rejected without evaluation, by ruling:** any proposal to disable or shorten the client router cache
+(`staleTimes`). Nothing in this report proposes it.
 
 ---
 
 ## Deferred, and why
 
-_(filled at the end)_
+| deferred | why | what it needs |
+| --- | --- | --- |
+| **Every timing number** (cold / navigation / mutation, all three throttle levels, real phone at 402 px) | S124 is running production migrations, CI and a 5-minute sync worker right now; any timing taken today measures S124 | a quiet window; the S121 throttle method |
+| `EXPLAIN` / `EXPLAIN ANALYZE`, and **index findings** | queries a database | production-shaped data; read-only role |
+| **Spec Area C — RLS policy cost** | needs query plans | same |
+| **Measured RSC payload sizes** | needs the app running | the `#136` payload tooling |
+| **Whether layout and page reads overlap** (G-4 note) | needs a trace | per-request Supabase call trace (S119 "depth") |
+| **Production PostgREST pool size / connection headroom** | dashboard setting; not in the repo | Supabase dashboard → Database → Connection pooling |
+| **Function region re-confirmation** | a live request; S120's reading (2026-09-30) stands | `x-vercel-id` header, or Vercel → Settings → Functions |
+| **Device-side costs**: JS parse/execute on a mid-range phone, HEIC conversion time, upload time over LTE | needs a device | a real phone, throttled |
+| **Prefetch fan-out** (one RSC prefetch per photo tile? per Link?) | needs a production server and a trace | `next build && next start` or production |
+| **~50 low-traffic pages read "light"** (tier 5 and `/dashboard` catalog/contacts/subs/team/expenses/settings/site-visits/billing/trial) | time; low field impact | a full read if any lands in the top of the timing results |
+| **Correctness notes found in passing** (B-2 footer; unordered `.limit()` table) | not performance; not this audit's to fix | tech-debt filing on Josh's word |
+
+**Nothing above was attempted.** No database was contacted (the local build pointed Supabase at `127.0.0.1:1`).
+
+---
+
+## What Josh has to decide
+
+1. **Order of attack.** Recommendation: findings **1 + 2 first** (feedback and loading states) — smallest, safest,
+   and they change how the app *feels* regardless of milliseconds; then **5, 7, 8, 10** (cheap query fixes on tier
+   1–2 routes); then **3, 4, 6**; **11** separately, with the money tests.
+2. **Thumbnail URL lifetime (finding 4).** Stable, browser-cacheable thumbnail URLs mean a URL that works for
+   longer (or a less-private bucket for 400 px thumbnails). That is a security/privacy trade, not a tuning one.
+3. **Upload resolution (finding 9).** Keep full resolution (today's explicit rule, `thumbnail.ts:28`) or downsize on
+   the phone before upload (faster on LTE; loses detail that may matter as evidence).
+4. **Cross-request caching (F-2).** Allowed at all? If yes, only with the service role plus an explicit company
+   filter, never relying on RLS inside a cache.
+5. **Whether the stale middleware comment** (`middleware.ts:389-390`) gets corrected in the first fix build (docs only).
+
+## What the timing half will need
+
+- A quiet window: S124 finished, no CI, the QB sync cron's 5-minute ticks accounted for (`vercel.json:40-41`).
+- **Production** (or `next build && next start` against rebuild-test with the regions noted): never dev mode (S179 ruling).
+- The S121 method: unthrottled, Fast 3G, Slow 3G; a real phone at 402 px for `/m`.
+- Per-request Supabase call traces for the tier-1 routes, to turn B-2's *counts* into *depth* and to settle the
+  layout/page overlap question.
+- Cold / navigation / mutation → refresh separately, per tier-1 route, especially **clock in → hub**.
+- `EXPLAIN ANALYZE` on: `getMobileDailyLogs`, `getCalendarEvents`, `getProjectPhotos`' `files` read, the
+  profitability report, and the RLS policies on `files`, `daily_logs`, `tasks`, `time_clock_sessions`.
+- The payload tool on `/m/p/[projectId]/photos` and `/photos/[fileId]` for a 200-photo project (C-4a/b, D-10).
+- A count of RSC prefetches fired by the `/m` photo grid and the dashboard project tabs.
+
+---
+
+**STOP.** Nothing merged, nothing fixed, the deferred half not started.
