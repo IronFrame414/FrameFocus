@@ -9,6 +9,7 @@ import { WorkCalendarSettings, type HolidayRow, type WorkCalendarRow } from './w
 import { GLMappingSettingsForm } from './gl-mapping-settings-form';
 import { AccountingPanel } from '@/components/quickbooks/accounting-panel';
 import { AccountSettings } from '@/components/quickbooks/account-settings';
+import { TimeExportSettings } from '@/components/quickbooks/time-export-settings';
 import { getMemberDefaults, getPaymentAccounts } from '@/lib/services/qb-accounts';
 import {
   getQuickBooksConnection,
@@ -268,6 +269,14 @@ export default async function SettingsPage({
           <AccountingPanel
             connection={qbConnection}
             queue={qbQueue}
+            isOwner={profile.role === 'owner'}
+          />
+          {/* [S124 Part 2] The time-export switch — the SAME component on both
+              surfaces (PARITY). Owner-only control; renders nothing when disconnected. */}
+          <TimeExportSettings
+            connected={qbConnection?.state === 'connected'}
+            enabled={qbConnection?.timeExportEnabled ?? false}
+            enabledAt={qbConnection?.timeExportEnabledAt ?? null}
             isOwner={profile.role === 'owner'}
           />
           {/* ⚠️ RENDERS NOTHING WHEN DISCONNECTED [RULED Josh, S103]: "the GL
