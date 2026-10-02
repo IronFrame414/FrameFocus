@@ -9,6 +9,8 @@
 The branch adds only `docs/sessions/` files, so **application code = `main` @ `91fa32e1`**.
 
 **Status: COMPLETE (static half).** The ranked findings are at §"FINDINGS RANKED BY FIELD IMPACT"; what was not done is at §"Deferred".
+**Josh ruled on ASK-1…4 on 2026-10-02**: see §"RULINGS (2026-10-02) and the assessments they asked for". That
+section also adds **finding 16** (the per-page Auth-server call, split out of finding 10 on Josh's word).
 
 ---
 
@@ -29,9 +31,11 @@ their distance — which is what Areas B and G are about.
    search tap, never browser-cached) (B, C-4, D).
 4. **The `/m` shell is 226 KB gz before any screen**; 88 KB of that is the browser Supabase client and a two-language
    catalog (C-1a). Next's own build table under-reports `/m` routes by leaving out layout chunks.
-5. **Office side**: 79 pages make an uncached Auth-server call that stalls their own queries; the dashboard home runs a
-   full profitability report per project (B-1a, B-1b).
-6. **Nothing here is timed.** Every number is a count from code or a byte size from the build (deferred list at the end).
+5. **79 dashboard/portal pages make their own Auth-server call** on top of the one their layout already made, and
+   the queries behind it wait for it (**finding 16**, B-1a). This is the shape once claimed for the middleware; it
+   is real, but in the pages.
+6. **The dashboard home runs a full profitability report per project** (B-1b, finding 11).
+7. **Nothing here is timed.** Every number is a count from code or a byte size from the build (deferred list at the end).
 
 ---
 
@@ -781,7 +785,7 @@ No number here is a measurement. "Size" is the estimated size of the fix; "could
 
 | # | finding | tier hit | cause (where) | fix size | what could break |
 | --- | --- | --- | --- | --- | --- |
-| **1** | **Crews get no feedback, or a re-enabled button, after the actions they repeat all day.** Clock in, clock out, switch job/break, punch create/complete, log closeout: the button turns back on *before* the screen catches up, then the old screen sits frozen while the server re-renders; `router.push` from code shows no bar. A second tap on clock-in hits a raw DB error; on punch create it makes a duplicate | 1, 2 | G-3, G-4: `timeclock-screen.tsx:270→283-285`, `:534→542`; `switch-screen.tsx:150→155`; `punch-form.tsx:200→252`; `punch-actions.tsx:122/138→127/143`; `daily-log-closeout-view.tsx:45→47`; `nav-pending.tsx:29-31` | **small** — keep busy until the navigation/refresh settles (`useTransition` + `isPending` around `router.push`/`refresh`); teach `NavPending` programmatic navigation | double-submit guards relying on busy timing; tests asserting the button label after save |
+| **1** | **⚠️ RULED A DEFECT (Josh, 2026-10-02) for its two double-tap outcomes; the rest is polish.** **Crews get no feedback, or a re-enabled button, after the actions they repeat all day.** Clock in, clock out, switch job/break, punch create/complete, log closeout: the button turns back on *before* the screen catches up, then the old screen sits frozen while the server re-renders; `router.push` from code shows no bar. A second tap on clock-in hits a raw DB error; on punch create it makes a duplicate | 1, 2 | G-3, G-4: `timeclock-screen.tsx:270→283-285`, `:534→542`; `switch-screen.tsx:150→155`; `punch-form.tsx:200→252`; `punch-actions.tsx:122/138→127/143`; `daily-log-closeout-view.tsx:45→47`; `nav-pending.tsx:29-31` | **small** — keep busy until the navigation/refresh settles (`useTransition` + `isPending` around `router.push`/`refresh`); teach `NavPending` programmatic navigation | double-submit guards relying on busy timing; tests asserting the button label after save |
 | **2** | **No route has a loading state.** 0 `loading.tsx`, no streaming Suspense; every navigation shows the old screen frozen (or nothing on first load) until the *whole* server render finishes. Dashboard and portal have no navigation feedback at all | all | G-1, G-2, G-3 | **small–medium** — `loading.tsx` skeletons for tier 1–2 `/m` routes first (the `/m` shell persists around them), then dashboard project tabs and portal | a `loading.tsx` placed at the wrong level flashes on searchParam-only changes (photo search, chips) or replaces the shell; e2e tests that wait on old-screen text. **The router cache (`staleTimes`) is NOT part of this — settled, not reopened** |
 | **3** | **The photo viewer re-loads and re-signs the whole gallery on every swipe**, and its filmstrip mounts every thumbnail at once | 2 | C-4a, D-3: `photos/[fileId]/page.tsx:52`, `viewer.tsx:161,636-660` | **medium** — pass the gallery once (client-side navigation between photos within one page) and lazy-load the strip | viewer deep links (`/photos/{id}` must still work cold); markup return path |
 | **4** | **Photo grid on iPhone downloads ~the whole project, every visit**: 12-screen look-ahead because Safari reports no connection info; signed URLs change every render so nothing is browser-cached; search/chip taps re-run all 7 queries and re-sign up to 1500 URLs | 1 | D-1, D-8, B-2 photos row: `thumbnail.ts:40-51`, `photos.ts:210-216`, `photo-search.tsx:53-62`, `public/sw.js:135` | **medium** — smaller iOS buffer (trivial); filter/search on the client; stable thumbnail URLs (needs a **security ruling** — see decisions) | URL lifetime vs. leakage of a photo link; a cached thumbnail outliving a delete/markup |
@@ -790,7 +794,8 @@ No number here is a measurement. "Size" is the estimated size of the fix; "could
 | **7** | **Schedule screens read all-time events in 4 sequential reads**; the project schedule also loads Critical Path data for projects not on Critical Path | 2 | B-1d, B-2: `schedule.ts:129-265`; `lib/critical-path/load.ts:53,62,115` | **small–medium** — date window + `Promise.all` inside `getCalendarEvents`; skip CP load when off | "up next" needing future-dated events beyond the window; compliance expiries |
 | **8** | **Clock-in screen: N+1 segment reads and the profile read 3×** | 1 | B-1e, B-2: `timeclock/page.tsx:54`, `time-tracking.ts:45` | **small** | today's-segments list ordering |
 | **9** | **Photo upload: full resolution over LTE, 5 round trips per photo (3 repeated identity reads), one at a time; HEIC converted on the phone's main thread** | 1 | G-4, D-9: `files-client.ts:194-288`, `capture-screen.tsx:160-161`, `thumbnail.ts:28` | resolution: **a product decision**; repeated reads: **small** | evidence-grade photos (resolution is a ruling, not a tuning); storage-cap check accuracy |
-| **10** | **Repeated per-request reads and 79 uncached `getUser()` calls**: `profiles` read 3–5×, `companies` 2–3×, member/settings/open-session re-read by layout and page; every dashboard page pays an extra Auth-server call that stalls its own queries | 3 (and `/m` layout) | B-1a, F-1 | **small, mechanical** — `cache()` the helpers; `getRequestUser()` in pages | a page that needs a fresh read after a same-request write (Server Actions) |
+| **10** | **Repeated per-request reads**: `profiles` read 3–5×, `companies` 2–3×, member/settings/open-session re-read by layout and page. _(The 79 page-level `getUser()` calls were in this row until 2026-10-02 and are now **finding 16**.)_ | 3 (and `/m` layout) | F-1 | **small, mechanical** — `cache()` the helpers | a page that needs a fresh read after a same-request write (Server Actions) |
+| **16** | **79 dashboard/portal pages make their own Auth-server `getUser()` call on top of the layout's**, and the page's queries wait behind it; portal project pages make **3** per render. _Numbered 16 so 1–15 keep their numbers; it ranks here, between 10 and 11._ | 3, 4 | B-1a; full write-up: §"Finding 16" below | **small** for the drop-in (`getRequestUser()`); the claims-only variant is a **ruling** | see §"Finding 16" |
 | **11** | **Dashboard home and projects list: a full profitability report per project** (~19–33 queries each), plus company-wide `instrument_rates` each time — the only place cost scales with company size | 3 (Owner/Admin) | B-1b | **medium–large** — set-based rollup | Financial-Floor money figures; needs the role-matrix tests |
 | **12** | **Company-wide reads with no filter** | 2–4 | B-1c: `selections.ts:124`, `invoices.ts:469-472`, `profitability.ts:209-211`, `payables.ts:238-243` | **small** each | the JS-side filtering that currently compensates |
 | **13** | **Portal: 3 Auth-server calls per page, identity and projects re-queried, full-size photos with no limit** | 4 | B-3, D-6 | **small–medium** | the deliberate re-check at `portal/[projectId]/page.tsx:40-44` (keep the check, cache the read) |
@@ -799,6 +804,329 @@ No number here is a measurement. "Size" is the estimated size of the fix; "could
 
 **Rejected without evaluation, by ruling:** any proposal to disable or shorten the client router cache
 (`staleTimes`). Nothing in this report proposes it.
+
+---
+
+## RULINGS (2026-10-02) and the assessments they asked for
+
+Josh ruled on ASK-1…4 in the session's follow-up message. This section records the rulings and the additions they
+carry, then gives the three assessments Josh asked for: Q2's proxy route, Q3's background upload, and finding 16.
+**It is still a static assessment.** Nothing below was timed, run or fixed. Every millisecond figure is quoted from
+an earlier session's measurement and is labelled with where and how it was taken.
+
+### R1 — Order of attack: A, then B; 11 separately. Two items in A are DEFECTS.
+
+**Ruling.** Findings 1 and 2 first, then the query fixes (5, 7, 8, 10 and now 16). **Finding 11 goes in its own
+change**, because it changes how money figures are calculated and needs the role-matrix tests (the #136 class).
+
+**⚠️ Two outcomes in finding 1 are defects, not slowness.** Josh's ruling: *if the fix build runs out of road, these
+two must have landed.*
+
+1. **A second tap on clock-in shows a raw database error.** The first tap re-enables the button
+   (`timeclock-screen.tsx:270`) before the navigation (`:283-285`). The second insert is then refused by
+   `idx_time_clock_sessions_one_open_per_member`, and its message reaches the crew member unchanged. This is the
+   single most-used action in the app.
+2. **A second tap on punch create makes a duplicate punch item.** `setBusy(false)` at `punch-form.tsx:200` runs
+   before the push at `:252`, and the title is not cleared.
+
+The loading screens and the progress bar on code-triggered moves come **after** these two.
+
+**Fix shape (not fixed here).** These are **notes for the fix build, not verified designs.**
+- **Keep the button busy until the navigation settles.** That closes the window.
+- **Clock-in:** also map the unique violation to an honest "already clocked in" answer. The index is the true
+  guard; it should not surface raw.
+- **Punch create:** also needs an idempotency guard, not just a timing one. The offline queue's pattern fits: a
+  client-generated id, so N submits land one row (`offline-sync.tsx:69-72`, §5.3).
+- **Each fix gets a test:** a double tap produces exactly one session or item, and no raw error text.
+
+**Why the unbounded reads come second and not third.** This is written down so nobody later reads "second" as
+"optional". The unbounded history reads are **time bombs**, not current pain: `/m/logs` reads every log ever
+written (finding 5), and the schedule reads every event ever scheduled (finding 7). On today's data they are fine;
+in a year they make those screens unusable. Their cost grows with company age, not with what the screen shows. They
+are in the second batch because they get worse on their own while nobody touches them.
+
+### R2 — Stable thumbnail URLs: A in principle, thumbnails only. FIRST compare the proxy route.
+
+**Ruling.** Option A (a longer-lived signed URL, thumbnails only) is acceptable in principle. Before choosing it,
+assess a third option: a stable application route that checks authorisation server-side and streams the bytes with
+cache headers, so that **no signed URL reaches the browser at all**. Josh's reason, from `lib/share-image.ts`:
+signed URLs are *"time-limited bearer credentials … for the life of the signature."* Lengthening the signature
+lengthens that exposure.
+
+**Assessment. Verdict: the proxy route is better, and A is more expensive than it looked.** The details follow.
+
+**(a) Option A, as framed, does not produce a stable URL.**
+- Every render calls `createSignedUrls` again (`files.ts:303-325`, via `photos.ts:216`), and each call mints a new
+  token.
+- **This is inference:** Storage signs a JWT carrying `iat`/`exp`, so a re-sign in a later second yields a
+  different string. Confirming it needs one signing call twice, which is deferred to the timing half, because it
+  touches Storage.
+- A longer TTL alone therefore changes nothing for the browser cache. The cache key would still change on every
+  visit.
+- To make A work, the minted URL would have to be **kept across requests**, either stored or cached. That is:
+  - the cross-request cache that R4 puts after Q1, with R4's tenant-key conditions;
+  - **and** a bearer credential stored somewhere longer-lived than one interaction, which is exactly what the S157
+    sweep in `lib/services/signed-url-ttl.ts` warns about (*"A signed URL that is EMBEDDED somewhere longer-lived
+    than its TTL…"*).
+- So A is not "one constant". It is **medium** work, and it creates a stored bearer credential.
+
+**(b) The proxy route is feasible and modest in size.** The pieces already exist on this ref:
+
+| piece | evidence | consequence |
+| --- | --- | --- |
+| **The authorisation gate already exists in Storage RLS.** | `app/api/files/signed-url/route.ts` signs with the **caller's** RLS-scoped client; the gate is `project_files_select_non_client`. | A route that calls `.download(thumbPath)` with the same user-scoped client is gated identically. **No new auth code**, and the same 403 anti-enumeration contract as that route. |
+| **Streaming bytes from a route is an established pattern.** | `app/api/invoices/[id]/pdf/route.ts:89-97` returns a `Uint8Array` with explicit `Cache-Control`. | A thumbnail route copies that shape. |
+| **The thumbnail name is already versioned.** | `thumbPathFor()` (`packages/shared/utils/markup.ts:113-117`) puts the markup fingerprint in the name. | A URL built from it changes when the markup changes, so `immutable` caching is safe against stale annotations. |
+| **The route would be same-origin.** | `public/sw.js:135` skips only cross-origin requests. | The browser HTTP cache (and the service worker, if wanted) can hold the thumbnail. |
+| **Middleware runs on it.** | The matcher includes `/api/:path*` (`middleware.ts:399-418`). | Each cache miss pays `getClaims` (local) plus the lock check (`ff_lock_ok` cookie, 30 s TTL, else one RPC). The session refresh and the trial lock both apply, which is correct. |
+
+**(c) What it costs, per thumbnail. Counts, not times.**
+- **Cache miss:** one function invocation, plus one Storage download with the user's JWT (Storage evaluates RLS).
+  That is **1 Supabase round trip** if the URL carries the storage path, or **2** if it carries the file id and
+  reads the `files` row first.
+- **Cache hit:** **zero requests.**
+- **Compared with today, on a 200-photo grid:**
+  - **First view:** 1 batch-sign call plus ~200 direct Storage fetches today, against ~200 function invocations,
+    each 1–2 round trips, through the proxy. The proxy is **more server work on first view**.
+  - **Every later view:** ~200 fetches **again** today (D-8), against **0** through the proxy.
+- **Byte path:** the thumbnail bytes (15–40 KB each, inference) pass through Vercel instead of going
+  Supabase → phone directly, which counts against Vercel function and transfer billing.
+- **The batch-sign call shrinks:** thumbnails leave the sign list (`photos.ts:214`).
+
+**(d) The risks the fix build must close.**
+1. **`Cache-Control` must be `private`, never `public` or `s-maxage`.**
+   - A shared-cache header on this route lets Vercel's CDN serve one user's thumbnail to another user: a
+     **cross-tenant leak**.
+   - The header must be asserted by a test, with a sabotage (change it to `public`) that must go red.
+2. **The authorisation negative test must not return rows or bytes to prove itself.**
+   - A thumbnail of another company's file must get **403 and zero bytes**.
+   - Its sabotage (swap the user client for the admin client) must go red.
+3. **The missing-thumbnail ruling must survive.** `photos.ts:241-247`, RULED: a missing thumbnail falls back to the
+   full display file, never an invisible tile.
+   - Today the page learns that a thumbnail is missing for free, from the per-row signing error. Through the proxy,
+     the route has to do the fallback itself: on a 4xx for the thumbnail, try the display file.
+   - **The 403 decision stays on the original**, as `app/api/files/signed-url/route.ts` already does for markup derivatives.
+4. **Revocation and delete.**
+   - A device that has already shown a thumbnail keeps it in its HTTP cache for `max-age`.
+   - That is the same *class* of exposure as a held signed URL, but narrower. It sits only on a device that was
+     legitimately shown the thumbnail, and it **cannot be forwarded**, because there is no credential in it.
+   - `max-age` is the knob.
+5. **Storage concurrency.** Today one sign call serves a page. The proxy makes ~200 Storage downloads per cold
+   grid, 6 at a time per phone (`use-lazy-src.ts:34-35`).
+   - Storage's 429 "SlowDown" has been seen on rebuild-test (`files.ts:311-318`).
+   - **This is the timing half's question**, not a reason to stop.
+
+**(e) ⚠️ This conflicts with an earlier ruling, and that ruling has to be narrowed explicitly.**
+`lib/services/signed-url-ttl.ts` (S157, ruled by Josh) says:
+
+> "Explicitly NOT a re-check of authorisation when the URL is used — that would be a round trip on every photo
+> thumbnail and every PDF open, a permanent efficiency cost paid to close a narrow risk."
+
+The proxy route **is** a re-check on use.
+- The browser cache changes the arithmetic. The re-check becomes a round trip **per cache miss, not per view**, and
+  on repeat views it is cheaper than today.
+- But it is still the thing that ruling declined. Building it without narrowing that ruling would leave the code
+  contradicting its own recorded rule.
+- Asked as **ASK-6** below.
+
+**Size.** The proxy is **small–medium**:
+- one route of about 100 lines, written to the error-contract conventions;
+- the `thumbUrl` change in `photos.ts`;
+- three tests: the authorisation negative, the `private` header, and the missing-thumbnail fallback.
+
+That is comparable to A once A's hidden cost (a cross-request URL cache) is counted. **It is not strictly better in
+every respect:** it costs more server work on a cold first view. **It is better overall:**
+- no bearer credential is lengthened, and none is handed to the browser;
+- repeat views cost nothing;
+- revocation is honoured on every cache miss.
+
+**Recommendation: the proxy route, thumbnails only, subject to ASK-6.**
+
+### R3 — Upload resolution: KEEP FULL RESOLUTION. Stop the crew WAITING instead.
+
+**Ruling.** Option A. `thumbnail.ts:28` ("Uploads keep full resolution") stands.
+- Construction photos are **evidence**: concealed conditions, water intrusion, a sub's defective work,
+  change-order justification.
+- Detail destroyed at capture cannot be recovered.
+
+The LTE problem is answered by **not making anyone wait on the upload**, not by shrinking the file.
+
+**Assessment: what "thumbnail on the device, full-resolution upload in the background, user moves on" would take.**
+
+**Most of the machinery already exists.** It is the offline path, and the online path does not use it:
+
+| exists today | where |
+| --- | --- |
+| A persistent upload queue in the `/m` **shell**, which lives across `/m` navigations | `OfflineSyncProvider` mounted at `app/m/mobile-shell.tsx:318-324` |
+| Photo entries carrying the full-resolution Blob, sent **through `uploadFile`** (HEIC conversion, cap check, server thumbnail generation included) | `buildPhotoEntry` (`lib/offline/capture.ts:139`); `uploadQueuedPhoto` (`app/m/offline-sync.tsx:51-79`) |
+| **Idempotent replay:** a client-generated file id, so N replays land one row | `offline-sync.tsx:69-72` |
+| Ordering between entries (`depends_on`), retry with backoff, and a resume-on-open | `log-form.tsx:147-180`; `offline-sync.tsx:195-199` |
+| Chromium Background Sync wake-ups | `offline-sync.tsx:157-171` |
+| On-device thumbnails, per-photo status, and a persisted held-shot tray in capture | `capture-store.tsx`, `capture-screen.tsx` (G-4: "the best path in the app") |
+
+**Where crews wait today (the online path awaits every upload inline):**
+
+| screen | the wait |
+| --- | --- |
+| **Daily log submit** | One "Submitting" state over **every photo, one at a time** (`app/m/logs/new/log-form.tsx:221-231`). The worst case: a log with 6 photos is 6 full-resolution uploads before "Submitted". |
+| Capture filing run | Serial awaited uploads (`capture-screen.tsx:131`). Rows show progress, but the run is tied to the screen. |
+| Punch complete with photo | `punch-actions.tsx:105` |
+| Delivery check-in photos | `check-in-form.tsx:143` |
+| Safety incident photos | `incident-form.tsx:113` |
+
+**The change, per screen:**
+- Save the record online as today. The "Submitted" answer needs the row.
+- **Enqueue** the photos with the record's id, the way the offline branch already does, instead of awaiting each
+  upload.
+- Release the screen.
+
+On top of that:
+- a shell-level "N photos uploading" indicator (the queue already counts entries for its offline badge);
+- local object-URL thumbnails for the uploader's own pending photos in the project grid and log detail, marked
+  "uploading". **This part is new**: the grid is a server-rendered list today, and the queued Blobs would have to be
+  merged into it on the client.
+
+**What it cannot do. State this to the crews honestly.**
+1. **iOS has no Background Sync.** The code says so at `offline-sync.tsx:163`, and iOS suspends a backgrounded PWA
+   (platform behaviour, inference).
+   - The upload proceeds **only while FrameFocus is open in the foreground**.
+   - "Move on" means move on **inside the app**: the next screen, the next task. It does not mean closing the app.
+   - A closed app resumes the queue on next open (`offline-sync.tsx:195-199`).
+   - The indicator has to say so ("3 photos still uploading — keep FrameFocus open").
+2. **Leaving `/m` for `/dashboard`** unmounts the shell and pauses the queue until `/m` is reopened.
+3. **HEIC conversion runs on the main thread** (`heic2any`, serial by ruling, `capture-screen.tsx` header).
+   - In the background it will stutter whatever screen the user moved to.
+   - Moving it into a Web Worker is the fix. **Whether `heic2any` can run in a worker is unverified.**
+4. **Full-resolution Blobs sit in IndexedDB until they land.** That is 2–5 MB each (inference), against the
+   held-shot cap of 25 and its TTL sweep.
+   - Safari's storage quota and eviction for an installed PWA is platform behaviour to confirm on a device in the
+     timing half.
+5. **Other users** see the photo only once it has landed and its server thumbnail exists. That is unchanged from
+   today.
+
+**Size:**
+- **Medium** overall.
+- Converting the five online paths to enqueue-and-release is **small–medium**, because the queue and its entry
+  types exist.
+- The "pending photos" overlay in grids is **medium**.
+- The worker move for HEIC is **unknown**.
+
+**Order:** after R1's fixes, because both touch `log-form.tsx`.
+
+**Tests:**
+- a log created online with queued photos ends with every photo bound to that log
+  (`daily_log_id`, set without `depends_on`);
+- the done-state never says "uploaded" while entries remain.
+
+### R4 — Cross-request caching: A, exactly as scoped. Its own reviewed change, after Q1.
+
+**Ruling.** Allowed, using the service role plus an explicit company filter and never relying on RLS inside a
+cache. Built as its own reviewed change, after the Q1 work.
+
+**⚠️ NON-NEGOTIABLE when it is built (Josh):**
+- **The cache key includes `company_id`.**
+- **A negative test proves one company's cached value can never be served to another.** The test:
+  - is written **without returning rows**, so it measures the cache rather than a read policy (CLAUDE.md, S181c);
+  - has **its own sabotage that must go red**, for example dropping `company_id` from the key.
+
+Josh's reason: *a cross-tenant cache leak is worse than any amount of slow.*
+
+### Finding 16 — 79 pages make their own Auth-server call on top of the layout's
+
+Numbered on Josh's word, so it does not get lost under "office side".
+
+**History.** In September the claim was that the **middleware** called `getUser()` on every request
+(`S125-prompt.md:65`). That was wrong: `getClaims()` has been in the middleware since S116 (`middleware.ts:45-68`).
+**The shape is real, but in the pages, not the middleware.**
+
+**What happens (verified on this ref):**
+- **Every one of the 79 calls is a page-file call.**
+  - `grep -rln "supabase.auth.getUser()" app/dashboard app/portal --include=page.tsx` → **79** files.
+  - Control: the same grep finds `getRequestUser` in only **2** `page.tsx` files across `app/`.
+- **The layouts already ask once per request.** `app/dashboard/layout.tsx:18`,
+  `app/dashboard/projects/[id]/layout.tsx:19` and `app/m/layout.tsx:79` call `getRequestUser()`, which is memoised
+  with `cache()` (`lib/supabase-server.ts:68-74`). The page's direct call is **not** memoised, so it is a second
+  Auth-server round trip in the same render.
+- **The portal is worse.**
+  - `app/portal/layout.tsx:73` calls `getUser()` directly.
+  - So does `getPortalIdentity()` (`lib/services/portal.ts:173`), which `app/portal/[projectId]/layout.tsx:46`
+    **and** each project page (`page.tsx:38`, `files:38`, `selections:60`, `financials:64`) call.
+  - That is **3 Auth-server calls per portal project render**.
+- **The page's queries wait for it, for two separate reasons.**
+  1. Every one of the 79 pages awaits `getUser()` before its first query, to get `user.id` or to redirect. The call
+     sits **on the page's own critical path**, whatever the answer to the open layout/page overlap question (G-4).
+  2. `createClient` is `cache()`d, so the layout and the page share **one** Supabase client, and auth-js
+     serialises on that client. Per `lib/supabase-server.ts:55-57` (S115), every PostgREST query waits on the same
+     queue while a `getUser()` is in flight. So the page's call also stalls the layout's queries that are queued
+     behind it.
+
+**What it costs per page load. A count, and a quoted earlier measurement; no timing was taken here.**
+- **Count:**
+  - **+1 Auth-server round trip** per dashboard page render (2 instead of 1);
+  - **+2** per portal project render (3 instead of 1);
+  - a `GET /auth/v1/user` each, plus the queue stall above.
+- **Quoted time:** S115 measured `getUser` at **53–74 ms** (medians, n=20; `S115-report.md:130`). Against the same
+  setup, `getClaims` measured **1 ms**.
+  - **This is NOT a production figure.** It was taken Codespace → rebuild-test, not Vercel `iad1` → production
+    `us-east-1`, and the in-region number is probably lower.
+  - Read it as "one Auth round trip, tens of milliseconds, serialised". **The timing half replaces it** with an
+    in-region trace.
+- **Multipliers are not counted here:** prefetches and `router.refresh()` re-renders. Every refresh of a dashboard
+  page pays it again.
+
+**What it would take. Two levels. The first needs no ruling.**
+
+**16a. Pages → `getRequestUser()`. No security change. Small. Recommended.**
+- **Every one of the 79 pages uses only `user.id` or a null check**, verified by grep on each file: 66 read
+  `user.id`, 2 read `user?.id`, and 11 only test `!user`.
+  - No page reads `email`, metadata or any field `getRequestUser()` would not also return. It returns the same
+    `User`, so it is a drop-in.
+- **Per page:** replace the three-line `supabase.auth.getUser()` destructure with
+  `const user = await getRequestUser();`.
+- **Portal:** `app/portal/layout.tsx:73` and `getPortalIdentity()` (`portal.ts:173`) move to `getRequestUser()`
+  too.
+- **Result:** exactly **1** Auth-server call per render on every dashboard and portal page. The verdict is the same
+  Auth-server answer, so the revocation behaviour is unchanged.
+- **Guard against regrowth:** a static test that no `page.tsx` under `app/dashboard`, `app/portal` or `app/m`
+  calls `supabase.auth.getUser()` directly. Its control: re-add one call, and the test must go red.
+- **Residual, not covered by the count of 79:** 12 `getUser()` call sites in 11 `lib/` files, excluding comments
+  and `getRequestUser` itself. They are `seats`, `billing`, `add-ons`, `quickbooks`, `qb-accounts`, `profile-self`
+  (2), `ai-tagging`, `site-visits/markup-page`, `change-my-password` and `reset-password`, plus `portal`, which is
+  covered above.
+  - They reach mostly settings, billing and Server Actions (tiers 4–5). They were not traced to their pages.
+  - **Server Actions that genuinely need a fresh verdict after a write** must keep their direct call. Check each
+    one; do not sweep them.
+
+**16b. The already-verified claims (`getClaims()`) instead of `getUser()`. Zero Auth-server calls per render.
+⚠️ This needs a ruling, because it reopens S116.**
+- **How:** a `cache()`d `getRequestClaims()` that calls `getClaims()`, which verifies locally against the cached
+  ES256 JWKS, as middleware already does.
+  - The middleware's own verification cannot be handed to the render safely without trusting a request header, so
+    the render re-verifies, at about 1 ms.
+  - Pages use `claims.sub` in place of `user.id`, and everything above shows that is all they need.
+- **What it gives up:**
+  - A session revoked server-side (signed out on another device, or killed by an admin) keeps rendering page shells
+    until its access token expires. That is **≤ 1 h**, per the middleware comment at `middleware.ts:51-57`.
+  - S116 accepted that gap for the middleware **because** "every layout still calls getUser()". 16b would remove
+    that backstop.
+  - The one path that must stay authoritative, the redirect away from `/sign-in` and `/sign-up`, keeps `getUser()`,
+    exactly as today.
+- **Why the gap is smaller than it sounds:**
+  - Supabase's docs (Context7, `guides/auth/server-side/advanced-guide.mdx` and `guides/auth/signout.mdx`): *"an
+    unexpired token stays valid even when the session behind it was revoked"*.
+  - PostgREST authorises on that same token, so **the data behind these pages is already reachable** by a
+    revoked-but-unexpired token today. The page-level `getUser()` protects the page's redirect, not its data.
+  - **Before ruling, check one thing:** how removing a company member is enforced. If removal takes effect through
+    RLS (membership rows), it bites immediately regardless of the token. If it relies on session revocation, 16b
+    widens it. **Not checked here.**
+- **Size:** small once 16a has landed (one helper; the 79 call sites change from `getRequestUser` to the claims
+  helper).
+- **What could break:** the revocation backstop above, and any page that later needs a user field that is not in
+  the JWT.
+
+**Recommendation:**
+- **16a in the B batch.** It removes the duplicate at no security cost.
+- **16b only on an explicit ruling** (ASK-7), after the member-removal check.
 
 ---
 
@@ -824,16 +1152,24 @@ No number here is a measurement. "Size" is the estimated size of the fix; "could
 
 ## What Josh has to decide
 
-1. **Order of attack.** Recommendation: findings **1 + 2 first** (feedback and loading states) — smallest, safest,
-   and they change how the app *feels* regardless of milliseconds; then **5, 7, 8, 10** (cheap query fixes on tier
-   1–2 routes); then **3, 4, 6**; **11** separately, with the money tests.
-2. **Thumbnail URL lifetime (finding 4).** Stable, browser-cacheable thumbnail URLs mean a URL that works for
-   longer (or a less-private bucket for 400 px thumbnails). That is a security/privacy trade, not a tuning one.
-3. **Upload resolution (finding 9).** Keep full resolution (today's explicit rule, `thumbnail.ts:28`) or downsize on
-   the phone before upload (faster on LTE; loses detail that may matter as evidence).
-4. **Cross-request caching (F-2).** Allowed at all? If yes, only with the service role plus an explicit company
-   filter, never relying on RLS inside a cache.
-5. **Whether the stale middleware comment** (`middleware.ts:389-390`) gets corrected in the first fix build (docs only).
+**Decided on 2026-10-02** (full text: §"RULINGS"):
+
+| ask | question | ruling |
+| --- | --- | --- |
+| ASK-1 | Order of attack | 1 + 2 first, and **the clock-in raw error and the punch-create duplicate are DEFECTS that must land even if nothing else does**; then 5, 7, 8, 10, 16 (unbounded reads are time bombs: second, not optional); 11 alone with the money tests |
+| ASK-2 | Thumbnail URL lifetime | A in principle, thumbnails only; **assess the proxy route first** (assessed: proxy recommended, pending ASK-6) |
+| ASK-3 | Upload resolution | **Keep full resolution** (evidence); remove the *wait* instead (assessed in R3) |
+| ASK-4 | Cross-request caching | Yes, service role + explicit company filter, own reviewed change after Q1; **`company_id` in the key and a no-rows negative test with a sabotage that goes red** |
+
+**Still open:**
+
+5. **(ASK-5)** Whether the stale middleware comment (`middleware.ts:389-390`, "Every API request now runs getUser()";
+   it runs `getClaims()` since S116) gets corrected in the first fix build. Docs only.
+6. **(ASK-6)** Narrowing the S157 ruling in `lib/services/signed-url-ttl.ts` ("Explicitly NOT a re-check of
+   authorisation when the URL is used") for **thumbnails served through the proxy route**, where the re-check runs
+   per browser-cache miss, not per view. Needed before the proxy is built.
+7. **(ASK-7)** Finding 16b: whether pages and layouts may use verified claims (`getClaims()`) instead of `getUser()`,
+   giving up the layout's revoked-session backstop (≤ 1 h) that S116 relied on. 16a needs no ruling.
 
 ## What the timing half will need
 
@@ -847,6 +1183,13 @@ No number here is a measurement. "Size" is the estimated size of the fix; "could
   profitability report, and the RLS policies on `files`, `daily_logs`, `tasks`, `time_clock_sessions`.
 - The payload tool on `/m/p/[projectId]/photos` and `/photos/[fileId]` for a 200-photo project (C-4a/b, D-10).
 - A count of RSC prefetches fired by the `/m` photo grid and the dashboard project tabs.
+- **[added 2026-10-02]** The in-region cost of one `getUser()` (Vercel `iad1` → production), to replace S115's
+  Codespace → rebuild-test 53–74 ms in finding 16.
+- **[added 2026-10-02]** Sign the same thumbnail path twice: confirm a re-sign yields a different URL (R2(a)).
+- **[added 2026-10-02]** Storage under the proxy's load shape: ~200 downloads per cold grid, 6 in flight per phone
+  (R2(d)5).
+- **[added 2026-10-02]** On a real iPhone: queued-upload behaviour when the PWA is backgrounded, and IndexedDB quota
+  for 25 full-resolution Blobs (R3).
 
 ---
 
