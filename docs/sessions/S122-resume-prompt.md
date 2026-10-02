@@ -218,3 +218,38 @@ when a picker appears, and the session sits idle until he happens to look.
   project start date.
 - Every production section's verification row against its expectation.
 - **What a person still has to click**, and **what Josh has to decide.**
+---
+
+## UNATTENDED FROM 2026-10-01 20:21 ET
+
+From this point the session is UNATTENDED. I will not be reading chat, and no question will be answered. Build S122 to completion — Parts 7, 8 and 9.
+
+FIRST: append this entire message to docs/sessions/S122-resume-prompt.md under a heading "UNATTENDED FROM 2026-10-01 20:21 ET", commit it path-scoped and push, before anything else. The Codespace has restarted twice today and a rule that exists only in chat does not survive one.
+
+HOW TO HANDLE A DECISION
+Do not post a question and wait. Take the narrower, safer, more reversible option; record it in the report under a DECIDED UNATTENDED heading with the alternative you rejected and why; proceed. A decision recorded and reversible is worth more than a session idling overnight.
+
+The one exception: a decision that cannot be undone and could reasonably go either way. Do the preparatory work, write the decision out, stop that ITEM, move to the next part.
+
+STOP RULES
+Rules 1-6, 8-11 and 13 stop the ITEM, not the session. Write the state, commit, push, move to the next part. Rules 7 and 12 still stop the session: main behind a955dac5, or a second Claude Code session in this checkout.
+
+MIGRATIONS, now that nobody is here to be told
+Production merge authorisation stands for Parts 7, 8 and 9 and the migrations the spec names. A migration that only widens a CHECK or adds lookup rows may proceed, recorded. A migration that creates or alters a table, column, policy or function the spec does NOT name: stop that ITEM, do not push it to production, write it up.
+
+PART 8 — RULED NOW so it does not block you
+Stamping a template onto a project that already has tasks REFUSES. It does not merge, append or replace. The UI says the project already has tasks and names how many. Merging is the destructive option and there is nobody here to undo it.
+
+WHEN PARTS 7, 8 AND 9 ARE DONE
+Stop. Do not start Build B (timesheets to QuickBooks), Build C (CI), Build F (project overview job details), or the working-calendar holidays work. Each is its own session.
+
+THE FINAL REPORT IS THE DELIVERABLE
+I am reading the report, not this chat. It must carry, in plain language: every part merged with its SHA and whether its migration is on production; every item stopped and exactly where; everything DECIDED UNATTENDED with its alternative; what is on production that I have not clicked; and what I have to decide before anything else is built.
+
+Commit and push after every finding, every proof, every sabotage with its read-back, every production section and every stop. An uncommitted file is one restart from gone.
+
+**Standing rules from this session, also carried here** (each also in the report): the CP-off regression control for `client_schedule` comes first, with its sabotage
+(R2.10); the Part 7 PAYLOAD proof is separate from the function proof; the unlinked client on a CP-ON project → 0 rows; the import check is TRANSITIVE
+(graph walk from the portal route); before any sabotage that drops or replaces a DB object, commit + push its captured original and RESTORE script
+first (`docs/sessions/S122-sabotage-originals/`); a widened CHECK is proven a strict superset from LIVE constraints; a migration a plan did not
+list is said plainly when added (unattended: in the report, at once).
