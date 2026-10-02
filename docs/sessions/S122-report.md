@@ -2142,3 +2142,17 @@ Built so far, **without touching the database** (`main`'s merge run `36944879271
 - Clean rebuild: Part 8 + every CP / portal-CP / schedule spec, one worker → **28 passed**.
 
 - **Pre-CI** (`80075c68`): type-check 0 (0/5 cached); lint 0 (no new warning); unit **167 / 2,281** (0 cached). **CI requested** (base `48f7cf01` = `origin/main`; 0 runs in progress or queued). m31 is on rebuild-test.
+
+#### Part 8 CI and PRODUCTION section 8: `20262131000000_s122_schedule_templates` — **MATCH ×13**
+
+- **CI `36957453386`** on `468230f9` (base `48f7cf01` = `origin/main`; 0 other runs): **green**. Unit **167 / 2,281**; e2e **697 passed, 24 skipped, 0 flaky,
+  0 failed** (35.6 m).
+- **Spec check (unattended rule):** m31 creates the four tables plan row 11 names. Their RLS policies and four `set_…_updated_by()` trigger
+  functions are the standard parts CLAUDE.md requires of every new per-tenant table, not new behaviour. New tables only, so no constraint over existing
+  rows (stop rule 2 does not apply).
+- Workdir `wd8`: all **294** migrations, `cmp` 0 each; linked to production; checkout read back `nmyphyhmfttxkdoposvf`.
+- **Pre-check, PRODUCTION:** ledger from `…2130` = `20262130000000` only; template tables **0**; trigger functions **0**.
+- **Dry run:** *"• 20262131000000_s122_schedule_templates.sql"*, exactly one. **Push:** exit 0.
+- **Verification:** the same read-only file on both, then `diff` → **exit 0, 13 lines identical**: ledger `…2130, …2131`; tables 4; columns 48 (md5
+  `3fff038c…`); constraints md5 `2f7c233f…`; indexes md5 `e5559934…`; RLS on for all four; policies 12 (md5 `bbbda19b…`); triggers (8, all `O`); trigger
+  functions md5 `97c7c9ee…`, EXECUTE by `authenticated` **false** for all four; rows **0**. Workdir deleted.
