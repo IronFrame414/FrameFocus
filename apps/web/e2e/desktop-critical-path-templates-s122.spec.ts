@@ -158,7 +158,16 @@ test.describe('S122 Part 8 · schedule templates', () => {
     await page.getByTestId('tpl-select').selectOption({ label: `${MARKER} house (2 tasks)` });
     await page.getByTestId('tpl-start').fill('2027-01-04');
     await page.getByTestId('tpl-stamp').click();
-    await expect.poll(async () => (await tasksOf(proj.empty)).length, { timeout: 20_000 }).toBe(2);
+    // Wait for the WHOLE stamp: tasks, then the link, then the recompute. "2 tasks
+    // exist" arrives first and is not "stamped" (measured: B still undated there,
+    // and once A dated by another read mid-stamp — the stamp's own recompute
+    // then writes every date, which is what is asserted).
+    await expect
+      .poll(async () => (await tasksOf(proj.empty)).filter((t) => t.due_date !== null).length, { timeout: 20_000 })
+      .toBe(2);
+    await expect
+      .poll(async () => (await admin.from('project_finish_history').select('cause_kind').eq('project_id', proj.empty).eq('cause_kind', 'template')).data?.length ?? 0, { timeout: 20_000 })
+      .toBe(1);
     expect(await tasksOf(proj.empty)).toEqual([
       { title: `${MARKER} A`, start_date: '2027-01-04', due_date: '2027-01-06' },
       { title: `${MARKER} B`, start_date: '2027-01-07', due_date: '2027-01-08' },
