@@ -319,3 +319,24 @@ for production too; my earlier "= production's, per S122" is now measured, not c
 ### ⚠️ END OF PHASE 1
 Supabase CLI: the checkout's link read back **`nmyphyhmfttxkdoposvf`** (rebuild-test) after every production read; the scratch workdirs were
 deleted. Nothing built; no migration; no deletion.
+
+---
+
+## PHASE 3 — BUILD
+
+### 3.0 — Branch cleanup (done; re-proven at deletion, `origin/main` `b7e6b7fe`)
+| branch | SHA (local = remote) | proof at deletion | local | remote |
+| --- | --- | --- | --- | --- |
+| `feature/s122-p1-schema` | `582cbd3f` | ancestor of `origin/main` | deleted (`-d`, 0) | deleted (0) |
+| `feature/s122-p2-engine` | `e4537e93` | ancestor | deleted | deleted |
+| `feature/s122-p3-line-sheet` | `bc0f0a91` | ancestor | deleted | deleted |
+| `feature/s122-p4-cp-tab` | `bd8005d5` | ancestor | deleted | deleted |
+| `feature/s122-p5-approvals` | `c30f80ae` | ancestor | deleted | deleted |
+| `feature/s122-p6-notify` | `d25bf6b4` | ancestor | deleted | deleted |
+| `feature/s122-p7-portal` | `1330a5c7` | ancestor | deleted | deleted |
+| `feature/s122-p8-templates` | `cf421938` | ancestor | deleted | deleted |
+| `feature/s122-critical-path` | `d8571e28` | docs only (2 files); `comm -23` missing lines vs main = 0 and 0 | deleted (`-D`) | deleted |
+
+`feature/s122-critical-path` was checked out in a second worktree, `/workspaces/FF-report` (S122's report worktree). It was **clean**
+(`git status --short` empty, no stash), so it was removed with `git worktree remove` (which refuses a dirty tree), then the branch was deleted.
+**Kept:** `feature/s114-c5-multi-upload` (unmerged code). `feature/s122-p9-mobile` is deleted after this session's first merge to `main`.
