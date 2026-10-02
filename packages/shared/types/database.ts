@@ -1414,6 +1414,9 @@ export type Database = {
           qb_reauth_required_after: string | null
           qb_refresh_lock_at: string | null
           qb_refresh_rotated_at: string | null
+          qb_time_export_enabled: boolean
+          qb_time_export_enabled_at: string | null
+          qb_time_export_enabled_by: string | null
           qb_token_secret_id: string | null
           signatory_name: string | null
           signatory_title: string | null
@@ -1500,6 +1503,9 @@ export type Database = {
           qb_reauth_required_after?: string | null
           qb_refresh_lock_at?: string | null
           qb_refresh_rotated_at?: string | null
+          qb_time_export_enabled?: boolean
+          qb_time_export_enabled_at?: string | null
+          qb_time_export_enabled_by?: string | null
           qb_token_secret_id?: string | null
           signatory_name?: string | null
           signatory_title?: string | null
@@ -1586,6 +1592,9 @@ export type Database = {
           qb_reauth_required_after?: string | null
           qb_refresh_lock_at?: string | null
           qb_refresh_rotated_at?: string | null
+          qb_time_export_enabled?: boolean
+          qb_time_export_enabled_at?: string | null
+          qb_time_export_enabled_by?: string | null
           qb_token_secret_id?: string | null
           signatory_name?: string | null
           signatory_title?: string | null

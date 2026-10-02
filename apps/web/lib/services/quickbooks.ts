@@ -37,6 +37,10 @@ export interface QuickBooksConnection {
     subcontractor: string | null;
     other: string | null;
   };
+  /** [S124 Part 2] The time-export switch. DEFAULT false — opt-in, Owner only. */
+  timeExportEnabled: boolean;
+  /** When it was last turned ON: only approvals after this are ever sent. */
+  timeExportEnabledAt: string | null;
 }
 
 export async function getQuickBooksConnection(): Promise<QuickBooksConnection | null> {
@@ -56,7 +60,7 @@ export async function getQuickBooksConnection(): Promise<QuickBooksConnection | 
   const { data } = await supabase
     .from('companies')
     .select(
-      'qb_connection_state, qb_realm_id, qb_connected_at, qb_last_refresh_at, qb_refresh_rotated_at, qb_reauth_required_after, qb_payments_enabled, qb_income_item_id, qb_income_item_name, gl_account_labor, gl_account_material, gl_account_subcontractor, gl_account_other, gl_account_labor_id, gl_account_material_id, gl_account_subcontractor_id, gl_account_other_id'
+      'qb_connection_state, qb_realm_id, qb_connected_at, qb_last_refresh_at, qb_refresh_rotated_at, qb_reauth_required_after, qb_payments_enabled, qb_income_item_id, qb_income_item_name, gl_account_labor, gl_account_material, gl_account_subcontractor, gl_account_other, gl_account_labor_id, gl_account_material_id, gl_account_subcontractor_id, gl_account_other_id, qb_time_export_enabled, qb_time_export_enabled_at'
     )
     .eq('id', profile.company_id)
     .single();
@@ -84,6 +88,8 @@ export async function getQuickBooksConnection(): Promise<QuickBooksConnection | 
       subcontractor: data.gl_account_subcontractor,
       other: data.gl_account_other,
     },
+    timeExportEnabled: data.qb_time_export_enabled === true,
+    timeExportEnabledAt: data.qb_time_export_enabled_at,
   };
 }
 

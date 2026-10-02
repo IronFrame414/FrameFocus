@@ -6,6 +6,7 @@ import {
 } from '@/lib/services/quickbooks';
 import { AccountingPanel } from '@/components/quickbooks/accounting-panel';
 import { AccountSettings } from '@/components/quickbooks/account-settings';
+import { TimeExportSettings } from '@/components/quickbooks/time-export-settings';
 import { getMemberDefaults, getPaymentAccounts } from '@/lib/services/qb-accounts';
 import { color, h2Style } from '@/lib/theme';
 import { brand } from '@/lib/brand';
@@ -105,6 +106,14 @@ export default async function AccountingSettingsPage({
         queue={queue}
         isOwner={profile.role === 'owner'}
         notice={notice}
+      />
+      {/* [S124 Part 2] The time-export switch — the SAME component on both
+          surfaces (PARITY). Owner-only control; renders nothing when disconnected. */}
+      <TimeExportSettings
+        connected={connection?.state === 'connected'}
+        enabled={connection?.timeExportEnabled ?? false}
+        enabledAt={connection?.timeExportEnabledAt ?? null}
+        isOwner={profile.role === 'owner'}
       />
       {/* PARITY [Josh, S122] — the SAME component the Settings tab mounts.
           Renders nothing while disconnected, by the S103 ruling. */}

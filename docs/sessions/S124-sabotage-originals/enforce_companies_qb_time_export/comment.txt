@@ -1,0 +1,1 @@
+S124 Part 2. Owner-only QuickBooks time-export switch; stamps the on-moment (no-backfill boundary); refuses on-while-disconnected; a disconnect turns it off. Service-role writes pass the role check.
