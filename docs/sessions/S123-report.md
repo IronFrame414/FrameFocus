@@ -85,3 +85,40 @@ dates (write-through), so both functions already read engine dates; D-1 is about
 - **Background primitive:** Next is **14.2.35** (`node_modules/next/package.json`); `after()`/`unstable_after` do **not** exist in it (0 hits in
   `next/server.{js,d.ts}`, no `dist/server/after`). `@vercel/functions` is **not installed**. Context7 (Next docs) confirms `after()` is the
   route-handler primitive in later versions and is built on `waitUntil`. → a design decision for Phase 2.
+
+### 1.4c — The template stamp (code at `ddfc6781`, `lib/critical-path/templates.ts:164-282`; route `api/projects/[id]/critical-path/stamp`)
+Reads and gates first, all as the caller: (1) `critical_path_schedule_editor` RPC → 403 if not an editor; (2) CP must be on → 409 [D8-2];
+(3) **refusal:** count of live tasks > 0 → 409 *"already has N tasks"* [Josh, RULED]; (4) read the template's phases/tasks/dependencies →
+404 if 0 tasks. **Then the writes, in order, each a separate PostgREST call (separate transactions), as the caller:**
+1. `prior` = the project's `start_date` (read);
+2. `UPDATE projects SET start_date = <input>` (0 rows → fail);
+3. one `INSERT phases` **per** template phase;
+4. one `INSERT tasks` **per** template task (separate statements on purpose: the engine orders by `created_at`);
+5. one `INSERT task_dependencies` **per** template link;
+6. **after** all of that, `recomputeProject(admin, …, cause 'template')` — the engine writes dates, the `project_finish_history` row, and (Part 6)
+   notifies. Not part of any transaction with 2–5.
+
+**On a failure in 2–5, `fail()` compensates with the SERVICE ROLE:** soft-deletes the dependencies, tasks and phases written so far
+(`is_deleted = true`), restores `start_date`, and returns *"… Nothing from the template was kept."* **Its own writes are not checked** (no `error`
+read on any of the four compensating calls). So if the compensation itself fails, live wreckage stays — and step (3)'s refusal counts live
+tasks, so **the retry is refused by the first attempt's leftovers** (D-4's premise, confirmed). Even when compensation succeeds, soft-deleted
+rows remain in the trash and the triggers have already marked the project for recompute. Also: there is **no lock** between the refusal count
+(3) and the inserts (4), so two concurrent stamps can both pass the refusal.
+
+### 1.5 — ⚠️ IS `EMAIL_SEND_ENABLED` ON IN PRODUCTION? **Sending is ON in production.**
+- **What the flag does** (`lib/services/email-service.ts:113-127`, the one send gate): `'false'` → nobody sends (kill switch);
+  `'true'` → sends; **unset → sends only on a Vercel production deploy (`VERCEL_ENV === 'production'`).** So production sends real mail
+  **unless someone has set `EMAIL_SEND_ENABLED=false` there.**
+- I cannot read Vercel's env (no Vercel CLI or token in this Codespace). **Measured instead, by effect, on PRODUCTION `jwkcknyuyvcwcdeskrmz`**
+  (`email_logs`, read-only, scratch workdir; checkout stayed on `nmyphyhmfttxkdoposvf`, read back):
+  - 115 rows total, 83 in the last 30 days. **`kill switch` refusals: 0. `send not authorized` refusals: 0.**
+  - Last 14 days, status **`delivered`** (Resend's webhook confirming delivery): `warming` 50 (last **2026-10-01 21:15:11Z**), `proposal` 6,
+    `reminder` 5 (last **2026-09-29 13:00:06Z**), `invite` 3, `signature_complete` 2, `auth_recovery` 2, `invoice` 1, `selection_released` 1,
+    `sub_bid_request` 1.
+  - The `reminder` timestamp is six seconds after the `estimate-reminders` cron (`0 13 * * *`), and the `warming` rows follow `email-warming`
+    (`*/15 13-22 * * 1-5`) in `apps/web/vercel.json`. **Crons run only on the production deployment**, and they got through the gate.
+  - `schedule_change` / `schedule_change_client` rows: **0** (no CP project has sent anything yet).
+- ⇒ **The production deployment is sending real email today.** Whether the flag is unset or `'true'` cannot be told from here, and it makes no
+  difference: **a schedule save on a Critical Path project in production WILL email every email-only assignee who ticked "notify of changes",
+  and the client if that box was ticked.** The off switch, if you want one before CP goes live, is `EMAIL_SEND_ENABLED=false` in Vercel — but
+  that stops **all** mail (invoices, proposals, invites), not only Critical Path's.
