@@ -385,3 +385,7 @@ rebuild-test by `db query --linked` (ref read back first). Every restore read ba
 | S2 | no advisory lock + `pg_sleep(1)` after the count (forces the overlap) | **✘ 1**: *"expected … to have a length of 1 but got 2"*: both stamps succeeded |
 | C2 (control) | the SAME `pg_sleep(1)` overlap, WITH the lock | **✓ 6/6**: the lock, not luck, makes it one winner |
 | S3 | `now()` instead of `clock_timestamp()` | **✘ 1**: the order test |
+
+**D-4 pre-CI** (on `feature/s123-d4-stamp`, base `b7e6b7fe` = `origin/main`): `turbo run type-check --force` exit 0 (5/5, **0 cached**); `next lint` exit 0,
+5 warnings, all pre-existing in files D-4 does not touch; unit (`vitest run`) exit 0: **168 files / 2,287 tests**. 0 runs in progress or queued
+(last: `main` `8cd52cec` **success**, 10:23–10:58Z). The migration is already on rebuild-test, so no CI-time apply is needed. **CI requested by this commit.**
