@@ -1,0 +1,1 @@
+S124 Part 1. Queues time_activity create/update on the transition into approved, ONLY while companies.qb_time_export_enabled is on and connected. Update when qb_time_activity_id is stored, never a create. No backfill path exists.
