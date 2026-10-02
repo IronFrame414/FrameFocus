@@ -1,7 +1,8 @@
 import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@framefocus/shared/types/database';
-import { notify } from '@/lib/notify/notify';
+import { getDeadline } from '@vercel/functions';
+import { notify, type NotifyRecipient } from '@/lib/notify/notify';
 import { resolveMemberReachability } from '@/lib/notify/assignment-notify';
 import { buildSenderAddress, logEmail, sendEmail } from '@/lib/services/email-service';
 import { NotificationEmail } from '@/lib/email/templates/notification-email';
@@ -35,28 +36,78 @@ import { untoldFrom, untoldList } from './untold';
 // anything, and an open task with stale "days left" would otherwise email the
 // same people every day it slides. Flagged to Josh (report, Part 6).
 //
-// Never throws into the save: a failed send is logged (email_logs records the
-// failure) and the change stays saved.
+// ── [S123 D-3, Josh RULED] THREE STEPS, SO THE SAVE NEVER WAITS FOR MAIL ──────
+// "push in background and add popup of anyone who cant be reached. 95% of subs
+// will be email only." ⚠️ SUPERSEDED: "keep notifications inside the save
+// request" — one Resend round-trip per email-only sub kept the sheet waiting.
+//   1. planScheduleNotify   — DB reads only: who chose it, how each one can be
+//                             reached, the client's email. WHO IS UNREACHABLE
+//                             (no login AND no email) is known HERE, before
+//                             anything is sent — it is a fact about the
+//                             people, not the result of a send.
+//   2. reportUnreachable    — the saver's in-app row naming them. Written INSIDE
+//                             the save, so it exists even if the saver has left
+//                             the screen before the response arrives (D-3a: the
+//                             popup is the fast path, NEVER the only path).
+//   3. deliverScheduleNotify — the in-app rows and the emails. Runs AFTER the
+//                             response (lib/critical-path/background.ts). Every
+//                             email recipient gets an email_logs row: sent,
+//                             failed, or NOT SENT because the function's time
+//                             limit was near — never nothing.
+// Never throws into the save: a failed send is logged and the change stays saved.
 
-export interface ScheduleNotifyOutcome {
-  inApp: number;
-  emailed: number;
+/** What a change WILL do: decided inside the save, before anything is sent. */
+export interface ScheduleNotifyPlan {
+  companyId: string;
+  projectId: string;
+  projectName: string;
+  savedByMemberId: string | null;
+  sender: string;
+  brand: string;
+  origin: string;
+  inApp: { memberId: string; recipient: NotifyRecipient; lines: string[] }[];
+  email: { memberId: string; email: string; lines: string[] }[];
+  /** The client, when the box is ticked, the finish moved, and an email is on file. */
+  client: { email: string; previousFinish: string; newFinish: string } | null;
   /** Assignees who chose to be told and cannot be reached: no login, no email. */
   unreachable: string[];
-  clientEmailed: boolean;
-  /** The client box is ticked but the client contact has no email. */
+  /** The client box is ticked, the finish moved, but the client contact has no email. */
   clientUnreachable: boolean;
 }
 
-export const NOTHING_SENT: ScheduleNotifyOutcome = {
-  inApp: 0,
-  emailed: 0,
-  unreachable: [],
-  clientEmailed: false,
-  clientUnreachable: false,
-};
+/** What the save can say at once (it rides on the recompute outcome). */
+export interface ScheduleNotifyPlanned {
+  inApp: number;
+  email: number;
+  client: boolean;
+  unreachable: string[];
+  clientUnreachable: boolean;
+}
 
-export async function notifyScheduleChange(
+/** What the background delivery did (counts of attempts that succeeded). */
+export interface ScheduleNotifyOutcome {
+  inApp: number;
+  emailed: number;
+  /** Not attempted because the function's time limit was near; each one has a 'failed' email_logs row saying so. */
+  notSent: number;
+  clientEmailed: boolean;
+}
+
+export const NOTHING_PLANNED: ScheduleNotifyPlanned = { inApp: 0, email: 0, client: false, unreachable: [], clientUnreachable: false };
+
+export function plannedOf(plan: ScheduleNotifyPlan | null): ScheduleNotifyPlanned {
+  if (!plan) return NOTHING_PLANNED;
+  return {
+    inApp: plan.inApp.length,
+    email: plan.email.length,
+    client: plan.client !== null,
+    unreachable: [...plan.unreachable],
+    clientUnreachable: plan.clientUnreachable,
+  };
+}
+
+/** Step 1 — DB reads only. Null when there is nothing to tell anyone. */
+export async function planScheduleNotify(
   admin: SupabaseClient<Database>,
   p: {
     companyId: string;
@@ -67,10 +118,8 @@ export async function notifyScheduleChange(
     newFinish: string | null;
     causeKind: string;
   }
-): Promise<ScheduleNotifyOutcome> {
-  if (p.causeKind === 'time') return NOTHING_SENT;
-  const out: ScheduleNotifyOutcome = { ...NOTHING_SENT, unreachable: [] };
-  const origin = process.env.NEXT_PUBLIC_APP_URL ?? '';
+): Promise<ScheduleNotifyPlan | null> {
+  if (p.causeKind === 'time') return null;
 
   const [project, company, settings] = await Promise.all([
     admin.from('projects').select('name, contact_id').eq('id', p.projectId).single(),
@@ -79,11 +128,22 @@ export async function notifyScheduleChange(
   ]);
   if (project.error || company.error) {
     console.error(`[cp notify] ${p.projectId}: ${project.error?.message ?? company.error?.message}`);
-    return out;
+    return null;
   }
-  const projectName = project.data.name as string;
-  const sender = buildSenderAddress(company.data);
-  const brand = company.data.brand_color || '#1a56db';
+  const plan: ScheduleNotifyPlan = {
+    companyId: p.companyId,
+    projectId: p.projectId,
+    projectName: project.data.name as string,
+    savedByMemberId: p.savedByMemberId,
+    sender: buildSenderAddress(company.data),
+    brand: company.data.brand_color || '#1a56db',
+    origin: process.env.NEXT_PUBLIC_APP_URL ?? '',
+    inApp: [],
+    email: [],
+    client: null,
+    unreachable: [],
+    clientUnreachable: false,
+  };
 
   // ── The assignees who chose to be told, on the tasks this change moved ──
   if (p.changedTaskIds.length > 0) {
@@ -103,65 +163,16 @@ export async function notifyScheduleChange(
       list.push({ title: t.title, start: t.start_date, due: t.due_date });
       byMember.set(r.member_id, list);
     }
-
-    for (const [memberId, tasks] of [...byMember.entries()].sort(([a], [b]) => a.localeCompare(b))) {
-      const reach = await resolveMemberReachability(admin, memberId);
+    // Resolved together (reads only), kept in member order so the names read the same every time.
+    const members = [...byMember.entries()].sort(([a], [b]) => a.localeCompare(b));
+    const reaches = await Promise.all(members.map(([memberId]) => resolveMemberReachability(admin, memberId)));
+    members.forEach(([memberId, tasks], i) => {
+      const reach = reaches[i];
       const lines = assigneeLines(tasks);
-      if (reach.state === 'profile') {
-        await notify({
-          admin,
-          companyId: p.companyId,
-          type: 'schedule_changed',
-          recipients: [reach.recipient],
-          render: () => ({ title: assigneeTitle(projectName), body: lines.join('\n') }),
-          linkKey: 'project',
-          linkParams: { projectId: p.projectId },
-          projectId: p.projectId,
-          source: { table: 'projects', id: p.projectId },
-          tag: `schedule-changed-${p.projectId}-${memberId}`,
-        });
-        out.inApp += 1;
-      } else if (reach.state === 'email-only') {
-        const subject = assigneeTitle(projectName);
-        let messageId: string | null = null;
-        let sendError: string | null = null;
-        try {
-          const r = await sendEmail({
-            from: sender,
-            to: reach.email,
-            subject,
-            replyToCompanyId: p.companyId,
-            react: NotificationEmail({
-              brandColor: brand,
-              heading: subject,
-              message: lines.join('\n'),
-              // A person with no login has no dashboard; /m is the surface a sub can open.
-              estimateUrl: `${origin}/m/p/${p.projectId}`,
-              ctaLabel: 'Open the job',
-            }),
-          });
-          messageId = r.messageId;
-          sendError = r.error;
-        } catch (err) {
-          sendError = err instanceof Error ? err.message : 'Email send failed';
-        }
-        await logEmail(admin, {
-          company_id: p.companyId,
-          estimate_id: null,
-          signing_session_id: null,
-          resend_message_id: messageId,
-          email_type: 'schedule_change',
-          recipient_email: reach.email,
-          sender_email: sender,
-          subject,
-          status: sendError ? 'failed' : 'sent',
-          metadata: { project_id: p.projectId, member_id: memberId, ...(sendError ? { error: sendError } : {}) },
-        });
-        if (!sendError) out.emailed += 1;
-      } else {
-        out.unreachable.push(reach.displayName);
-      }
-    }
+      if (reach.state === 'profile') plan.inApp.push({ memberId, recipient: reach.recipient, lines });
+      else if (reach.state === 'email-only') plan.email.push({ memberId, email: reach.email, lines });
+      else plan.unreachable.push(reach.displayName);
+    });
   }
 
   // ── The client (6-A) ──
@@ -170,67 +181,153 @@ export async function notifyScheduleChange(
       ? await admin.from('contacts').select('email').eq('id', project.data.contact_id).maybeSingle()
       : null;
     const email = contact?.data?.email ?? null;
-    if (!email) {
-      out.clientUnreachable = true;
+    if (!email) plan.clientUnreachable = true;
+    else plan.client = { email, previousFinish: p.previousFinish, newFinish: p.newFinish };
+  }
+
+  const anything = plan.inApp.length + plan.email.length + plan.unreachable.length > 0 || plan.client !== null || plan.clientUnreachable;
+  return anything ? plan : null;
+}
+
+/** Step 2 — INSIDE the save: the saver is told who could not be reached (never silently dropped). */
+export async function reportUnreachable(admin: SupabaseClient<Database>, plan: ScheduleNotifyPlan): Promise<void> {
+  const missing = untoldList(untoldFrom(plan), UNTOLD_WORDS_EN.client);
+  if (missing.length === 0) return;
+  console.warn(`[cp notify] ${plan.projectId} unreachable: ${missing.join(', ')}`);
+  if (!plan.savedByMemberId) return;
+  const saver = await resolveMemberReachability(admin, plan.savedByMemberId);
+  if (saver.state !== 'profile') return;
+  const r = unreachableReport(missing);
+  await notify({
+    admin,
+    companyId: plan.companyId,
+    type: 'schedule_changed',
+    recipients: [saver.recipient],
+    render: () => r,
+    linkKey: 'project',
+    linkParams: { projectId: plan.projectId },
+    projectId: plan.projectId,
+    source: { table: 'projects', id: plan.projectId },
+    tag: `schedule-unreachable-${plan.projectId}`,
+  });
+}
+
+/** Stop starting sends this close to the function's time limit. */
+export const DEADLINE_MARGIN_MS = 5_000;
+
+/**
+ * Step 3 — AFTER the response. The in-app rows first (fast, DB only), then the
+ * emails one at a time. ⚠️ THE TIME LIMIT: before each email, if the invocation's
+ * deadline is within DEADLINE_MARGIN_MS, the email is NOT started and a 'failed'
+ * email_logs row says why; a started send that has not answered by 2 s before
+ * the deadline is logged 'failed' too (it may still have gone). So no recipient
+ * is ever left without a row. `deadline` is injectable for tests; on Vercel it
+ * is the invocation's real deadline, off Vercel there is none.
+ */
+export async function deliverScheduleNotify(
+  admin: SupabaseClient<Database>,
+  plan: ScheduleNotifyPlan,
+  opts: { deadline?: () => Date | undefined } = {}
+): Promise<ScheduleNotifyOutcome> {
+  const deadlineOf = opts.deadline ?? getDeadline;
+  const out: ScheduleNotifyOutcome = { inApp: 0, emailed: 0, notSent: 0, clientEmailed: false };
+
+  for (const a of plan.inApp) {
+    await notify({
+      admin,
+      companyId: plan.companyId,
+      type: 'schedule_changed',
+      recipients: [a.recipient],
+      render: () => ({ title: assigneeTitle(plan.projectName), body: a.lines.join('\n') }),
+      linkKey: 'project',
+      linkParams: { projectId: plan.projectId },
+      projectId: plan.projectId,
+      source: { table: 'projects', id: plan.projectId },
+      tag: `schedule-changed-${plan.projectId}-${a.memberId}`,
+    });
+    out.inApp += 1;
+  }
+
+  const send = async (
+    to: string,
+    subject: string,
+    message: string,
+    cta: { url: string; label: string },
+    log: { email_type: 'schedule_change' | 'schedule_change_client'; metadata: Record<string, unknown> }
+  ): Promise<'sent' | 'failed' | 'not_sent'> => {
+    const deadline = deadlineOf();
+    const left = deadline ? deadline.getTime() - Date.now() : Infinity;
+    let messageId: string | null = null;
+    let sendError: string | null = null;
+    let outcome: 'sent' | 'failed' | 'not_sent';
+    if (left < DEADLINE_MARGIN_MS) {
+      sendError = `not sent: the function time limit was ${Math.max(0, Math.round(left / 1000))}s away`;
+      outcome = 'not_sent';
     } else {
-      const { subject, message } = clientFinishEmail(projectName, p.previousFinish, p.newFinish);
-      let messageId: string | null = null;
-      let sendError: string | null = null;
       try {
-        const r = await sendEmail({
-          from: sender,
-          to: email,
+        const attempt = sendEmail({
+          from: plan.sender,
+          to,
           subject,
-          replyToCompanyId: p.companyId,
-          react: NotificationEmail({
-            brandColor: brand,
-            heading: subject,
-            message,
-            estimateUrl: `${origin}/portal`,
-            ctaLabel: 'View your project',
-          }),
+          replyToCompanyId: plan.companyId,
+          react: NotificationEmail({ brandColor: plan.brand, heading: subject, message, estimateUrl: cta.url, ctaLabel: cta.label }),
         });
-        messageId = r.messageId;
-        sendError = r.error;
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        const r = Number.isFinite(left)
+          ? await Promise.race([
+              attempt,
+              new Promise<'timeout'>((res) => {
+                timer = setTimeout(() => res('timeout'), Math.max(0, left - 2_000));
+              }),
+            ]).finally(() => clearTimeout(timer))
+          : await attempt;
+        if (r === 'timeout') {
+          sendError = 'no answer from the mail service before the function time limit; it may still have been sent';
+        } else {
+          messageId = r.messageId;
+          sendError = r.error;
+        }
       } catch (err) {
         sendError = err instanceof Error ? err.message : 'Email send failed';
       }
-      await logEmail(admin, {
-        company_id: p.companyId,
-        estimate_id: null,
-        signing_session_id: null,
-        resend_message_id: messageId,
-        email_type: 'schedule_change_client',
-        recipient_email: email,
-        sender_email: sender,
-        subject,
-        status: sendError ? 'failed' : 'sent',
-        metadata: { project_id: p.projectId, ...(sendError ? { error: sendError } : {}) },
-      });
-      out.clientEmailed = !sendError;
+      outcome = sendError ? 'failed' : 'sent';
     }
+    await logEmail(admin, {
+      company_id: plan.companyId,
+      estimate_id: null,
+      signing_session_id: null,
+      resend_message_id: messageId,
+      email_type: log.email_type,
+      recipient_email: to,
+      sender_email: plan.sender,
+      subject,
+      status: sendError ? 'failed' : 'sent',
+      metadata: { project_id: plan.projectId, ...log.metadata, ...(sendError ? { error: sendError } : {}) },
+    });
+    return outcome;
+  };
+
+  for (const e of plan.email) {
+    const subject = assigneeTitle(plan.projectName);
+    // A person with no login has no dashboard; /m is the surface a sub can open.
+    const r = await send(e.email, subject, e.lines.join('\n'), { url: `${plan.origin}/m/p/${plan.projectId}`, label: 'Open the job' }, {
+      email_type: 'schedule_change',
+      metadata: { member_id: e.memberId },
+    });
+    if (r === 'sent') out.emailed += 1;
+    if (r === 'not_sent') out.notSent += 1;
   }
 
-  // ── The saver is told who could not be reached (never silently dropped) ──
-  const missing = untoldList(untoldFrom(out), UNTOLD_WORDS_EN.client);
-  if (missing.length > 0 && p.savedByMemberId) {
-    const saver = await resolveMemberReachability(admin, p.savedByMemberId);
-    if (saver.state === 'profile') {
-      const r = unreachableReport(missing);
-      await notify({
-        admin,
-        companyId: p.companyId,
-        type: 'schedule_changed',
-        recipients: [saver.recipient],
-        render: () => r,
-        linkKey: 'project',
-        linkParams: { projectId: p.projectId },
-        projectId: p.projectId,
-        source: { table: 'projects', id: p.projectId },
-        tag: `schedule-unreachable-${p.projectId}`,
-      });
-    }
+  if (plan.client) {
+    const { subject, message } = clientFinishEmail(plan.projectName, plan.client.previousFinish, plan.client.newFinish);
+    const r = await send(plan.client.email, subject, message, { url: `${plan.origin}/portal`, label: 'View your project' }, {
+      email_type: 'schedule_change_client',
+      metadata: {},
+    });
+    out.clientEmailed = r === 'sent';
+    if (r === 'not_sent') out.notSent += 1;
   }
-  if (missing.length > 0) console.warn(`[cp notify] ${p.projectId} unreachable: ${missing.join(', ')}`);
+
+  if (out.notSent > 0) console.error(`[cp notify] ${plan.projectId}: ${out.notSent} email(s) NOT SENT, the function time limit was near`);
   return out;
 }

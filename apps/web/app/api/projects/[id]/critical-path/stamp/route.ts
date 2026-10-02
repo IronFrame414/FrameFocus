@@ -7,6 +7,12 @@ import { stampScheduleTemplate } from '@/lib/critical-path/templates';
 import { createClient } from '@/lib/supabase-server';
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
 
+// [S123 D-3] The ceiling for this invocation INCLUDING the notifications sent
+// after the response (lib/critical-path/background.ts). Stated, not inherited
+// from a project default nobody can read from the code. Sends that would start
+// within 5 s of it are not started and are logged 'failed' with the reason.
+export const maxDuration = 60;
+
 // S122 Part 8 — STAMP A TEMPLATE ONTO A PROJECT WITH ONE START DATE, then
 // compute. ⚠️ A project that already has tasks is REFUSED (409) with the count
 // [Josh, RULED]. The mechanism is lib/critical-path/templates.ts.
