@@ -314,3 +314,45 @@ weaker. **My recommendation: A.**
 **Not a question, for your list:** production queue rows `78fdd275…` (customer "Mary Ellen", parked on a
 QuickBooks name conflict since 2026-10-01) and `18159383…` (a purchase waiting on it). Once you link or rename
 that customer in Settings → Accounting, **the purchase will post to your real books.**
+
+---
+
+## ✅ RULINGS [Josh, 2026-10-02], answering Phase 2. Plan approved subject to these.
+
+**⚠️ CORRECTION, recorded so the wrong figure stops spreading:** the S124 prompt and `claude/next-builds.md`
+both say invoicing rounds up to the **QUARTER** hour. **The code rounds up to the HALF hour**
+(`roundUpToHalfHour`, `packages/shared/utils/invoice-derivation.ts:186`; `7g1-spec.md:399`). Josh: *"Your
+reading wins."*
+
+- **Q1 → A. One QuickBooks time entry per person per day (per session).** The deciding argument: *pay must never
+  wait on a customer record*, and per-segment would have let a stuck customer like "Mary Ellen" hold a crew
+  member's hours. ⚠️ **JOB COSTING STAYS IN FRAMEFOCUS. QUICKBOOKS IS NOT THE JOB-COST SYSTEM HERE.** Do not
+  "improve" the push to per-segment for project attribution. That reintroduces exactly the coupling Q1 rejected.
+- **Q2 → A.** An explicit matching screen. Anyone unmatched is held and never sent. **The app never creates an
+  Employee.** *"A wrong name match in payroll pays the wrong person, and auto-creating payroll records is far
+  outside what this build is authorised to do."*
+- **Q3 → Josh checks it himself before the switch is ever turned on. Build as planned.** ADDITION: **the
+  toggle's own screen must say, in plain words, that turning it on sends hours into books where QuickBooks
+  Payroll may turn them into pay.** *"A toggle that could cause a paycheck must say so where it is flipped."*
+- **Q4 → A. Owner only**, for both the switch and the employee matching.
+- **Q5 → A. Approvals made after the switch goes on**, including a re-approval of an edited older day.
+  **Stranded hours:** the 10 pending days (Oct 1–2) need nothing; they flow once approved. The **9 approved
+  days (Sept 29–30, 51.65 raw hours, 3 people) will NOT flow, and NO BACKFILL IS BUILT.** If Josh wants them in
+  QuickBooks, he can **key them in by hand**, or **re-approve them after the switch is on** (the path Q5 = A
+  already gives). Nothing is built for this.
+- **Q6 → B. Leave QuickBooks alone and flag it**, on the timesheet AND in the Accounting queue. *"A notice with
+  only one transient place to appear is a notice that gets lost"* (S123 D-3).
+- **Q7 → A to both.** Order **0 → 2 → 1 → 3**. On the column, Josh's reasoning, quoted so the exception is
+  visible rather than assumed: *"a NEW NOT NULL boolean column with DEFAULT false does NOT trip stop rule 2,
+  and this is consistent with the ruling I gave in S122 — a constraint created alongside its own new column has
+  no existing rows to fail against; a check over a PRE-EXISTING column still stops. Every existing row takes the
+  default, nothing can fail, and nothing can turn on."*
+- **Q8 → A. Round to the nearest minute.** *"Truncation is a SYSTEMATIC bias against the worker — it loses up
+  to 59 seconds every single day, always in the same direction, roughly two hours a year per person. Rounding is
+  unbiased. On payroll, take the unbiased one."*
+- **Q9 → A. Add the `EZCB session <id>` note.** ⚠️ **It is visible to anyone reading the books, including an
+  accountant.** That is a deliberate choice, recorded here so it is not a surprise.
+
+**Two items before Phase 3 can finish:** (1) establish EARLY whether the rebuild-test sandbox connection still
+works, and say so in plain text if it does not; (2) write down what can be determined about whether Mary Ellen's
+stuck expense will post once the name clash is resolved. Change nothing there.
