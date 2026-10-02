@@ -11,9 +11,9 @@
 //
 // Both write AS THE CALLER, so RLS (owner/admin create templates; editors read
 // them) and the existing task/dependency guards (only a schedule editor writes
-// durations and links on a Critical Path project) decide. No SQL function
-// [DECIDED UNATTENDED D8-1]; so a failure part-way through is COMPENSATED — what
-// was written is soft-deleted and the start date put back — and said.
+// durations and links on a Critical Path project) decide.
+// SAVE is app code [D8-1]. STAMP is ONE SQL function, SECURITY INVOKER, so it is
+// all-or-nothing [S123 D-4, Josh RULED] — superseding D8-1's compensation.
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@framefocus/shared/types/database';
@@ -166,117 +166,49 @@ export async function stampScheduleTemplate(
   admin: Db,
   input: { projectId: string; templateId: string; startDate: string; savedByMemberId: string | null }
 ): Promise<{ ok: true; tasks: number; recompute: RecomputeOutcome } | TemplateError> {
-  // 1. Only a schedule editor (Owner, Admin, the project's PM or PE) — the
-  //    same function that decides who may write durations and links.
-  const editor = await supabase.rpc('critical_path_schedule_editor', { p_project_id: input.projectId });
-  if (editor.error) return { ok: false, status: 500, error: 'Could not check who may stamp.', cause: `editor rpc: ${editor.error.message}` };
-  if (editor.data !== true) {
-    return {
-      ok: false,
-      status: 403,
-      error: "Only an Owner, Admin, the project's manager or its executive may stamp a template.",
-      cause: `not a schedule editor of ${input.projectId}`,
-    };
-  }
-  // 2. Critical Path must already be on [D8-2].
-  const st = await supabase
-    .from('project_schedule_settings')
-    .select('critical_path_enabled')
-    .eq('project_id', input.projectId)
-    .eq('is_deleted', false)
-    .maybeSingle();
-  if (st.error) return { ok: false, status: 500, error: 'Could not read the project.', cause: `settings: ${st.error.message}` };
-  if (!st.data?.critical_path_enabled) {
-    return { ok: false, status: 409, error: 'Turn on Critical Path for this project first.', cause: `CP off on ${input.projectId}` };
-  }
-  // 3. ⚠️ REFUSE a project that already has tasks — and say how many [Josh, RULED].
-  const existing = await supabase
-    .from('tasks')
-    .select('id', { count: 'exact', head: true })
-    .eq('project_id', input.projectId)
-    .eq('is_deleted', false);
-  if (existing.error) return { ok: false, status: 500, error: 'Could not read the project.', cause: `count: ${existing.error.message}` };
-  if ((existing.count ?? 0) > 0) {
-    return { ok: false, status: 409, error: alreadyHasTasks(existing.count ?? 0), cause: `project ${input.projectId} has ${existing.count} live tasks` };
-  }
-  // 4. The template, as the caller may read it.
-  const [tp, tt, td] = await Promise.all([
-    supabase.from('schedule_template_phases').select('id, name, sort_order').eq('template_id', input.templateId).eq('is_deleted', false).order('sort_order'),
-    supabase
-      .from('schedule_template_tasks')
-      .select('id, phase_id, title, description, priority, duration_days, sort_order')
-      .eq('template_id', input.templateId)
-      .eq('is_deleted', false)
-      .order('sort_order'),
-    supabase
-      .from('schedule_template_dependencies')
-      .select('predecessor_id, successor_id, dependency_type')
-      .eq('template_id', input.templateId)
-      .eq('is_deleted', false),
-  ]);
-  if (tp.error || tt.error || td.error) {
-    return { ok: false, status: 500, error: 'The template could not be read.', cause: `template read: ${tp.error?.message ?? tt.error?.message ?? td.error?.message}` };
-  }
-  if (!tt.data || tt.data.length === 0) {
-    return { ok: false, status: 404, error: 'That template was not found, or it has no tasks.', cause: `template ${input.templateId}: 0 visible tasks` };
-  }
+  // [S123 D-4, Josh RULED] ONE call, ONE transaction: stamp_schedule_template
+  // (20262132000000) runs as the caller and does the editor check, the CP-on
+  // check, the per-project lock, Part 8's refusal and every write. Any error
+  // rolls ALL of it back — the project is left exactly as it was, so a retry is
+  // never refused by the leftovers of a failed attempt.
+  // ⚠️ SUPERSEDED [S122 Part 8, D8-1]: "a failure part-way through is
+  // COMPENSATED — what was written is soft-deleted and the start date put
+  // back". That cleanup ran at the worst moment and never checked its writes.
+  const r = await supabase.rpc('stamp_schedule_template', {
+    p_project_id: input.projectId,
+    p_template_id: input.templateId,
+    p_start_date: input.startDate,
+  });
+  if (r.error) return stampError(r.error);
 
-  // 5. Write, as the caller. Anything that fails from here is compensated.
-  const prior = await supabase.from('projects').select('start_date').eq('id', input.projectId).single();
-  if (prior.error) return { ok: false, status: 500, error: 'Could not read the project.', cause: `project: ${prior.error.message}` };
-  const written = { phases: [] as string[], tasks: [] as string[], deps: [] as string[] };
-  const fail = async (status: number, error: string, cause: string): Promise<TemplateError> => {
-    const now = new Date().toISOString();
-    if (written.deps.length) await admin.from('task_dependencies').update({ is_deleted: true, deleted_at: now }).in('id', written.deps);
-    if (written.tasks.length) await admin.from('tasks').update({ is_deleted: true, deleted_at: now }).in('id', written.tasks);
-    if (written.phases.length) await admin.from('phases').update({ is_deleted: true, deleted_at: now }).in('id', written.phases);
-    await admin.from('projects').update({ start_date: prior.data.start_date }).eq('id', input.projectId);
-    return { ok: false, status, error: `${error} Nothing from the template was kept.`, cause };
-  };
-
-  const sd = await supabase.from('projects').update({ start_date: input.startDate }).eq('id', input.projectId).select('id');
-  if (sd.error || !sd.data || sd.data.length === 0) {
-    return fail(sd.error?.code === '42501' || !sd.error ? 403 : 500, 'The start date could not be set.', `start date: ${sd.error?.message ?? '0 rows'}`);
-  }
-  const phaseMap = new Map<string, string>();
-  for (const p of tp.data ?? []) {
-    const r = await supabase.from('phases').insert({ project_id: input.projectId, name: p.name, sort_order: p.sort_order }).select('id').single();
-    if (r.error || !r.data) return fail(500, 'A phase could not be created.', `phase: ${r.error?.message}`);
-    phaseMap.set(p.id, r.data.id as string);
-    written.phases.push(r.data.id as string);
-  }
-  const taskMap = new Map<string, string>();
-  // One insert per task, in template order: tasks have no order column and the
-  // engine orders by created_at, so separate statements keep the order.
-  for (const t of tt.data) {
-    const r = await supabase
-      .from('tasks')
-      .insert({
-        project_id: input.projectId,
-        phase_id: t.phase_id ? (phaseMap.get(t.phase_id) ?? null) : null,
-        title: t.title,
-        description: t.description,
-        priority: t.priority,
-        duration_days: t.duration_days,
-      })
-      .select('id')
-      .single();
-    if (r.error || !r.data) return fail(r.error?.code === '42501' ? 403 : 500, 'A task could not be created.', `task: ${r.error?.message}`);
-    taskMap.set(t.id, r.data.id as string);
-    written.tasks.push(r.data.id as string);
-  }
-  for (const d of td.data ?? []) {
-    const r = await supabase
-      .from('task_dependencies')
-      .insert({ predecessor_id: taskMap.get(d.predecessor_id)!, successor_id: taskMap.get(d.successor_id)!, dependency_type: d.dependency_type })
-      .select('id')
-      .single();
-    if (r.error || !r.data) return fail(r.error?.code === '42501' ? 403 : 500, 'A link could not be created.', `dependency: ${r.error?.message}`);
-    written.deps.push(r.data.id as string);
-  }
-
-  // 6. The engine computes the dates, cause `template`.
+  // The engine computes the dates, cause `template` — AFTER the commit (it is
+  // TypeScript). The inserts marked the project, so if this fails the next read
+  // or the hourly cron recomputes it.
   const recompute = await recomputeProject(admin, input.projectId, { cause: { kind: 'template' }, savedByMemberId: input.savedByMemberId });
   if (recompute.status === 'failed') console.error(`[templates stamp] recompute ${input.projectId}: ${recompute.error}`);
-  return { ok: true, tasks: written.tasks.length, recompute };
+  return { ok: true, tasks: r.data as number, recompute };
+}
+
+/** Each refusal the function raises, answered truthfully (its SQLSTATE says which). */
+function stampError(e: { code?: string; message: string; details?: string | null }): TemplateError {
+  const cause = `stamp_schedule_template ${e.code ?? '?'}: ${e.message}`;
+  switch (e.code) {
+    case 'FFED1':
+      return { ok: false, status: 403, error: "Only an Owner, Admin, the project's manager or its executive may stamp a template.", cause };
+    case 'FFCP0':
+      return { ok: false, status: 409, error: 'Turn on Critical Path for this project first.', cause };
+    case 'FFHAS':
+      // ⚠️ [Josh, RULED 2026-10-01] Refused, and the count named.
+      return { ok: false, status: 409, error: alreadyHasTasks(Number(e.details ?? 0)), cause };
+    case 'FFTP0':
+      return { ok: false, status: 404, error: 'That template was not found, or it has no tasks.', cause };
+    case 'FFSD0':
+      return { ok: false, status: 403, error: 'The start date could not be set. Nothing from the template was written.', cause };
+    case 'FFTPL':
+      return { ok: false, status: 500, error: 'That template links a task it no longer has. Nothing from the template was written.', cause };
+    case '42501':
+      return { ok: false, status: 403, error: 'You cannot write this schedule. Nothing from the template was written.', cause };
+    default:
+      return { ok: false, status: 500, error: 'The template could not be stamped. Nothing from the template was written.', cause };
+  }
 }

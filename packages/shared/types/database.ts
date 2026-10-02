@@ -12350,6 +12350,14 @@ export type Database = {
         }
         Returns: Json
       }
+      stamp_schedule_template: {
+        Args: {
+          p_project_id: string
+          p_start_date: string
+          p_template_id: string
+        }
+        Returns: number
+      }
       strip_sql_line_comments: { Args: { p_src: string }; Returns: string }
       submit_delivery_check_in: {
         Args: { p_delivery_id: string }
