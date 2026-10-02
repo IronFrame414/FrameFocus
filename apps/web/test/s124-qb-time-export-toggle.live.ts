@@ -141,9 +141,14 @@ describe('S124 Part 2 — the switch on rebuild-test', () => {
     expect(before.qb_connection_state).toBe('disconnected');
     expect(before.qb_time_export_enabled).toBe(false);
 
-    const { error } = await ownerB.from('companies').update({ qb_time_export_enabled: true }).eq('id', companyB);
-    expect(error?.code).toBe('22023');
-    expect(error?.message).toBe('Connect QuickBooks before turning on time export.');
-    expect((await switchOf(companyB)).qb_time_export_enabled).toBe(false);
+    try {
+      const { error } = await ownerB.from('companies').update({ qb_time_export_enabled: true }).eq('id', companyB);
+      expect(error?.code).toBe('22023');
+      expect(error?.message).toBe('Connect QuickBooks before turning on time export.');
+      expect((await switchOf(companyB)).qb_time_export_enabled).toBe(false);
+    } finally {
+      // A sabotaged run can leave it ON; never let that poison the next run's precondition.
+      await forceOff(companyB);
+    }
   });
 });
