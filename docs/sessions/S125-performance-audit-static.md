@@ -129,11 +129,95 @@ is a performance problem; per the S165 rule they are correctness questions. Read
 
 ## C — What reaches the browser
 
-_(in progress — `next build` running)_
+### C-1. First Load JS per route (`next build`)
+
+_(build numbers: see C-1 table below once the build completes)_
+
+### C-2. Heavy libraries — mostly handled well
+
+`next.config.js` has no `images` key and no `optimizePackageImports`. No chart library is installed; the Gantt
+(`components/schedule/gantt.tsx`, 573 lines) and calendar (`components/schedule/calendar.tsx`, 462 lines) are hand-drawn.
+
+| library | reaches the browser? | where it loads | verdict |
+| --- | --- | --- | --- |
+| `pdf-lib` | **no** | `lib/services/lien-release-pdf-service.ts:2`, `lib/services/proposal-service.ts:3` (both `server-only`) | fine |
+| `@react-pdf/renderer` | only `PDFViewer` in `app/dashboard/estimates/[id]/proposal/pdf-preview.tsx:3` | `next/dynamic`, `ssr:false`: `review-send-sheet.tsx:45` (only when review is open) and `proposal-preview-client.tsx:21` (the proposal page, where the PDF *is* the page). PDF generation is server-only (`app/api/pos/[id]/pdf/route.ts:2`, `lib/services/*-pdf-service.ts`) | fine |
+| `pdfjs-dist` | yes, lazily | `await import()` inside effects: `components/files/pdf-pages.tsx:55` (only when a PDF is opened), `components/box-map/pdf-page-raster.tsx:57` (settings forms) | fine; uses the **legacy** build (larger than modern) |
+| `heic2any` | yes, lazily | one site, `await import()` in `lib/services/files-client.ts:54`, only for HEIC/HEIF MIME (`:83-87`) | fine |
+| `react-signature-canvas` | yes, **statically** | `components/signature/signature-capture.tsx:4` → signout new/detail (`/m` + dashboard), portal financials/selections/**files**; `app/sign/[token]/signing-client.tsx:4`, `app/sign-co/[token]/co-signing-client.tsx:4` | **C-2a:** on every route the pad appears only after a state change; on **`/portal/[projectId]/files` it never appears** (the page uses only `ClientComposer`, `:127`, but imports the whole `portal-writes-ui.tsx:7-13`). Small library — **low impact**; `next/dynamic` fixes it |
+| `react-markdown`, `remark-gfm` | **no** | `components/public/markdown-doc.tsx:1-2` (server), `/terms`, `/privacy` | fine |
+| `fflate`, `openai`, `stripe`, `@react-email/*` | **no** | server/API only (every importer checked: none `'use client'`) | fine. Hardening gap, not perf: `lib/openai.ts`, `lib/stripe.ts`, `lib/services/ai-tagging.ts`, `lib/trial/export.ts` lack `import 'server-only'` |
+| `lucide-react` | yes | 20 files, all named per-icon imports (no namespace / dynamic-icon) | fine |
+| Markup editors | yes | each imported only by its own markup route | fine |
+| Gantt | yes | only `/dashboard/projects/[id]/schedule` and `/critical-path`; `/m` has none; portal `client-gantt.tsx` is server-rendered | fine |
+
+**C-2b.** `FileSheetProvider` is mounted in the `/m`, `/dashboard` and `/portal` layouts (`app/m/layout.tsx:9`,
+`app/dashboard/layout.tsx:13`, `app/portal/layout.tsx:6`), so `components/files/file-sheet.tsx` (384 lines) and
+`lib/markup/export-marked.ts` + `flatten-*` (~560 lines) ship on **every** page of those trees. `pdfjs` itself stays
+lazy. Small; measure in C-1.
+
+### C-3. Client components that could be server components
+
+Only minor cases. `'use client'` pages: `app/m/offline/page.tsx`, `app/sign-up/page.tsx`,
+`app/forgot-password/page.tsx`. Client components whose only hook is `useT`: `app/m/slice-placeholder.tsx`,
+`components/material-signouts/signout-list.tsx` (80 lines, rendered by `/m` and dashboard signouts pages),
+`components/material-signouts/signout-attention.tsx`. **Low impact.**
+
+### C-4. What server components pass down (code analysis; measured sizes deferred)
+
+| # | route | prop → client component | what is in it | needed at first paint? |
+| --- | --- | --- | --- | --- |
+| C-4a | **`/m/p/[projectId]/photos/[fileId]`** (viewer) | `photos={rows}` — the **entire gallery** (`page.tsx:51-103`, `getProjectPhotos` at `:52`) | up to 500 rows × 3 signed URLs + markup JSON + tags + uploader + source link | **no** — and **every swipe re-sends it**: next/prev is `router.push` to a new URL (`viewer.tsx:161`), filmstrip is `<Link>` (`:640`), so the server re-runs `getProjectPhotos` (up to 500 rows + one signing call for 400–600 paths) per photo viewed |
+| C-4b | **`/m/p/[projectId]/photos`** (grid) | `photos={rows}` → `PhotoGrid` (606 lines) `page.tsx:107-127,187` | per row `displayUrl`, `thumbUrl`, `originalUrl`, `filePath`, full `markup`; source `getProjectPhotos` (`lib/services/photos.ts:181-250`) → `getFiles` `select('*')` capped 500 (`files.ts:100,130-138`) | tile needs only `thumbUrl`; `originalUrl` + `markup` serve Share/Export only (`photo-grid.tsx:489-491`). Estimated ~350–450 KB uncompressed for 200 photos (**inference**, ~500-char URLs × 3) |
+| C-4c | **`/m/schedule`**, **`/m/p/[projectId]`**, **`/m/p/[projectId]/schedule`** | `events` → `DayView` (one day shown) | `getCalendarEvents` (`lib/services/schedule.ts:129-265`) has **no date window** — every scheduled task (one event per assignee), entry, inspection, compliance expiry, all time; and its reads are **sequential**: tasks `:149` → entries `:172` → inspections `:205` → compliance `:239` | no — one day (or "up next") is shown. Also used by `app/dashboard/page.tsx:47`, `dashboard/schedule/page.tsx:36`, `dashboard/projects/[id]/page.tsx:133`, `.../schedule/page.tsx:54` |
+| C-4d | `/m/p/[projectId]` (hub) | — (server waste, not payload) | `getFiles({photo_view})` (`page.tsx:125`, `select('*')` ≤500 rows) only for `photos.length` (`:191`); full delivery lists (`:119-120`) only to count damaged | a count query would do |
+| C-4e | **every `/m` request** | — (server waste) | `app/m/layout.tsx:90,133` runs `getMembers()` (`select('*', …)`) only to pass `members.length` | a count would do |
+| C-4f | every dashboard project tab | full `project` row → `ProjectHeader` (`app/dashboard/projects/[id]/layout.tsx:42-43`) | `select('*, contact…')` (`lib/services/projects.ts:41`) | header reads `id`, `name`, `status`, `project_number` only (`project-header.tsx:158-221`) |
+| C-4g | `/dashboard/projects/[id]/files` | `files` (≤500 `FileRecord`, incl. `markup_data`) → `FilesList` (`page.tsx:34,46-47`) | | partly |
+| — | `/m/timeclock`, `/m/capture`, dashboard photos | ✅ map to small pickers / server-rendered grid (`timeclock/page.tsx:58-62`; `capture/page.tsx`; `dashboard/projects/[id]/photos/grid-thumb.tsx`) | | done well |
 
 ## D — Images
 
-_(in progress)_
+**Zero `next/image` imports and zero `loading="lazy"` attributes in `app/` and `components/`** (grep on this ref,
+0 and 0). `next.config.js` has no `images` key. Lazy loading is done by hand where it exists.
+
+**What exists and is good:** a stored **400×400 WebP thumbnail** per photo, made once per upload / markup save
+(`lib/services/files-client.ts:284,301` → `/api/photos/thumbnail` → `lib/photos/thumbnail-server.ts:84-119`, Supabase
+transform `THUMB_TRANSFORM` `lib/photos/thumbnail.ts:35`, which also renders HEIC). Signed in **one batch**
+`createSignedUrls` per page (`files.ts:303-325`, via `photos.ts:216`). Displayed ~117 CSS px in the 3-column `/m` grid
+(`photo-grid.tsx:192`) ≈ 350 device px at 3× — **400 px is right-sized**.
+
+| surface | image shown | lazy? | finding |
+| --- | --- | --- | --- |
+| **`/m` photo grid** | `thumbUrl` (`photo-grid.tsx:255,278-311`) | yes — `useLazySrc`, IntersectionObserver, 6 concurrent, 3 retries (`use-lazy-src.ts:34-35`) | **D-1:** look-ahead is **12 screens** on mobile, 3 when constrained (`thumbnail.ts:40-45`) — but "constrained" is read from `navigator.connection`, which **Safari does not expose** (`thumbnail.ts:46-51`, the code says so), so **every iPhone gets 12 screens ≈ 220 tiles ≈ the whole grid of a 200-photo project on first view**. **D-2:** a photo without a stored thumbnail falls back to the **full original** (`photos.ts:245-247`) |
+| **`/m` viewer filmstrip** | thumb, else full file (`viewer.tsx:90-94,653`) | **no — all N `<img>` mounted at once** (`viewer.tsx:636-660`) | **D-3:** opening one photo of 200 requests ~200 thumbnails |
+| `/m` viewer main image | `displayUrl` = full file (`viewer.tsx:491`) | n/a | expected |
+| dashboard project photos | thumb (`grid-thumb.tsx`, 2-screen buffer) | yes | fine |
+| site-visit record (dashboard + `/m/site-visits/[id]`) | thumb → display → original (`site-visit-record.tsx:488`) | no | **D-4:** **one API call per photo** (`lib/.../media.ts:71` → `/api/estimates/…/url`), each signing separately — an N+1 |
+| **material sign-out detail (also `/m`)** | **full original** (`signout-detail.tsx:105`; `lib/services/material-signouts.ts:113`) | no | **D-5** |
+| `/m/logs/[logId]` | none in a grid; signed per tap (`app/m/logs/[logId]/page.tsx:231-255`) | n/a | fine |
+| portal photos / chat-thread photos | **full original or markup file** (`app/portal/[projectId]/files/page.tsx:166,246` — the chat thumbnails display at 108×81 px) | no | **D-6**; portal photo list has **no limit** (`lib/services/portal.ts:474-488`) |
+| dashboard daily-log / safety / delivery detail | **full original** (`daily-logs/[logId]/page.tsx:90-98` — a comment calls them "thumbnails"; `safety/[incidentId]/page.tsx:73-79,199`; `deliveries/d/[deliveryId]/page.tsx:66-68,195,238`) | no | **D-7** |
+
+**D-8. No browser caching of images is possible today (inference from code).** Signed URLs are minted fresh on every
+server render (2-hour TTL, `signed-url-ttl.ts`), so the URL string — the cache key — changes on every visit and every
+`router.refresh()`; uploads set no `cacheControl` (`files-client.ts:241-244`, `thumbnail-server.ts:109-111`); the
+service worker skips cross-origin requests (`public/sw.js:135`), so Supabase images are never cached there either.
+**Every visit to a photo grid re-downloads every thumbnail.**
+
+**D-9. Upload size and HEIC.** Nothing downsizes before upload — *"Uploads keep full resolution"*
+(`lib/photos/thumbnail.ts:28`, confirmed). A 12 MP photo goes up as ~2–5 MB over LTE (**inference**: typical phone
+JPEG/HEIC size). HEIC→JPEG runs **on the phone's main thread** via `heic2any` before upload
+(`files-client.ts:83-91`, called `:194`), one at a time by design to avoid crashing older iPhones
+(`capture-screen.tsx:36-41`). iOS Safari typically transcodes to JPEG itself for `accept="image/*"`, so `heic2any`
+likely fires mostly on Android/desktop (**inference about platform behaviour — the timing half should confirm on a
+device**).
+
+**D-10. What a `/m` photo grid of 200 photos downloads (estimate from code, iPhone):** 1 page request (server signs
+~400–600 paths in one call) → ~350–450 KB RSC payload (inference) → ~200 thumbnail requests, 6 at a time, ~15–40 KB each
+(inference) ≈ **3–8 MB**, all again on the next visit; any photo missing its thumbnail costs its 2–5 MB original
+instead. Possibly also one RSC **prefetch per visible tile** (each tile is a `<Link>`, `photo-grid.tsx:401`, default
+prefetch) — **inference; confirm in the timing half.**
 
 ## F — Caching and revalidation
 
