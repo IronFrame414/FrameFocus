@@ -29,6 +29,8 @@ import { rollupPhases, type Phase, type Task } from '@/lib/services/tasks-shared
 import { moveCalendarEvent } from '@/lib/services/schedule-client';
 import type { CpSettings } from '@/lib/critical-path/load';
 import { pendingConsequence, type PendingEdit } from '@/lib/critical-path/pending';
+import type { ScheduleTemplateSummary } from '@/lib/critical-path/templates';
+import { TemplatesCard } from './templates-card';
 import { anyUntold, parseUntold, untoldNotice } from '@/lib/critical-path/untold';
 import { UNTOLD_WORDS_EN } from '@/lib/critical-path/notify-text';
 import { WEATHER_ICONS, WEATHER_ICON_KEYS, weatherGlyph, type WeatherIcon } from '@/lib/critical-path/weather';
@@ -119,6 +121,8 @@ export function CriticalPathTab({
   pending = [],
   pendingError = false,
   myMemberId = null,
+  role,
+  templates = [],
 }: {
   projectId: string;
   role: string;
@@ -134,6 +138,8 @@ export function CriticalPathTab({
   pending?: PendingEdit[];
   pendingError?: boolean;
   myMemberId?: string | null;
+  /** [S122 Part 8] The company's templates the caller may read (RLS: schedule editors). */
+  templates?: ScheduleTemplateSummary[];
 }) {
   const router = useRouter();
   const confirm = useConfirm();
@@ -334,6 +340,9 @@ export function CriticalPathTab({
           {canEdit ? ' Drag the end of a bar to extend it.' : ''}
         </p>
       </div>
+
+      {/* [S122 Part 8] Templates: stamp (an empty network), save (Owner/Admin), delete. */}
+      <TemplatesCard projectId={projectId} role={role} canEdit={canEdit} taskCount={tasks.length} templates={templates} />
 
       {/* 6. The float table */}
       <div style={card}>

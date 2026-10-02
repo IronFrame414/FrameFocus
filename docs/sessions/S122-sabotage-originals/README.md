@@ -25,3 +25,7 @@ Same files, same use. Its sabotages (`sabotage-L` = the link check removed, `sab
 `CREATE OR REPLACE` with the SAME return type, so the ACL and the comment survive; `RESTORE.sql` re-applies the captured definition.
 The migration file itself is also the original. **If found without `is_client_of_project` or `critical_path_enabled = true` in its body:**
 run `client_critical_path.RESTORE.sql`, then the baseline query, and compare.
+
+## `schedule_templates` policies — S122 Part 8 sabotage T2
+
+T2 ADDS one permissive INSERT policy (nothing is dropped or replaced). **If `schedule_templates_insert_sabotage_t2` exists on any database, run `schedule_templates.RESTORE-T2.sql`.** The table must then list exactly: `schedule_templates_insert_owner_admin`, `schedule_templates_select_editors`, `schedule_templates_update_owner_admin`.

@@ -336,6 +336,9 @@ export const COMPANY_TABLES: string[] = [
   // [Q3]; templates carry SET NULL from releases, and every company has 8
   // seeded ones pinning the shell.
   'lien_releases', 'lien_release_template_boxes', 'lien_release_templates',
+  // [S122 Part 8] Critical Path schedule templates reference only companies and
+  // each other (dependencies → tasks → phases → template), children first.
+  'schedule_template_dependencies', 'schedule_template_tasks', 'schedule_template_phases', 'schedule_templates',
   'change_order_line_rows', 'change_order_line_items',
   'co_signing_sessions', 'signing_sessions',
   // Signed change orders were archived (with their line items embedded)

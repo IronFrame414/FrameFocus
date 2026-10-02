@@ -2071,3 +2071,88 @@ Built so far, **without touching the database** (`main`'s merge run `36944879271
 - **Verification:** the same read-only file on both, then `diff` → **exit 0, 10 lines identical**: ledger `…2129, …2130`; function count 1; definition md5
   `ac958d4f…`; result type; secdef/STABLE; comment md5 `b22502a4…`; EXECUTE `anon` **false**, `authenticated` true, `PUBLIC` **false**;
   `client_schedule` md5 `22d6e081…` (unchanged). Production ACL `postgres, authenticated, service_role, supabase_auth_admin`. Workdir deleted.
+
+### R3.5 — Part 7 MERGED → `main` `48f7cf01`
+
+- Merge commit `48f7cf01` (parents `bacf1bb8`, `1330a5c7`); `HEAD^{tree}` `1b8d5d57` = branch head `1330a5c7^{tree}`. Pushed.
+- S180: (1) CI `36949563622` green on `61dfc453`, base `bacf1bb8` = `origin/main` re-fetched. Tree-identity exemption: `git diff --name-only
+  61dfc453 1330a5c7` → `docs/sessions/S122-report.md` only; the code-path diff `--quiet` exit 0. (2) R3.2–R3.4. (3) `…30` on production,
+  MATCH ×10, **applied before the merge**.
+- `main`'s merge run `36952604763` follows. **Part 8 rebased onto `48f7cf01`** (5 commits, clean); its side report is folded in below.
+
+### R4.1 — Part 8 (templates), build log — branch `feature/s122-p8-templates` from `bacf1bb8`
+
+- Migration `20262131000000_s122_schedule_templates.sql` (plan row 11 named `…29_s122_schedule_templates`; the timestamp moved because 29 and 30
+  are taken). It creates the four tables plan row 11 names: `schedule_templates`, `schedule_template_phases`, `schedule_template_tasks`,
+  `schedule_template_dependencies`, each with the CLAUDE.md standard columns, defaults and `updated_at`/`set_…_updated_by` triggers (the four
+  `set_…_updated_by()` functions are the standard per-table trigger functions, not new behaviour).
+  **No date, assignee or percent column exists**, so none can be copied.
+  RLS: read = Owner/Admin/PM/PE of the company; insert/update = Owner/Admin; a child's template must be in the caller's company; no DELETE policy.
+
+#### DECIDED UNATTENDED — Part 8
+
+| # | decided | alternative rejected | why |
+| --- | --- | --- | --- |
+| D8-1 | Save and stamp are app code writing **as the caller** (RLS + the existing task/dependency guards decide), **no SQL function** | a SECURITY INVOKER/DEFINER plpgsql function doing it in one transaction | Josh's unattended rule: a function the spec does not name stops the item. Cost: no single-transaction atomicity; a failure mid-stamp is **compensated** (the rows it wrote are soft-deleted) and said so. |
+| D8-2 | Stamping requires Critical Path to be **on** already (the stamp lives in the CP tab's empty network) | turning CP on as part of the stamp | Narrower: the stamp never flips a project-level switch (or its client-notification checkbox) as a side effect. |
+| D8-3 | The refusal counts **live tasks** (Josh's ruling: "already has tasks", names how many). Existing phases with no tasks do not refuse | refusing on phases too | Follows the ruling's wording; phases alone carry no schedule. |
+
+### R4.2 — Part 8 on rebuild-test: migration, live proofs, sabotages
+
+- `main`'s Part 7 merge run `36952604763` on `48f7cf01`: **green** (693 passed). Then m31 on rebuild-test: dry run *"• 20262131000000_s122_schedule_templates.sql"*,
+  exactly one; `npm run db:push` exit 0; types **+254** (the four tables only); type-check 5/5. Deletion census `deletion-census.test.ts` **5/5**
+  with the four tables registered children-first.
+- **Live `s122-cp-templates.live.ts`: 25/25** (writes as a role return no rows; outcomes counted by the service role). The first run failed in its
+  own fixture (`projects.contact_id` NOT NULL); fixed.
+  - **CREATE total map:** owner, admin yes; PE, PM, foreman, crew, client, sub no. **READ total map:** owner, admin, PM, PE yes; the rest no.
+  - **SAVE** (owner): 2 phases, 3 tasks (durations 3/2/1 in order), 1 link. ⚠️ A template task's columns are the CLOSED set: id, company,
+    template, phase, title, description, priority, duration, sort, standard columns. **No date, assignee or percent column exists.** A PM's save → 403,
+    nothing kept.
+  - **STAMP** onto an empty CP project, start Mon 4 Jan 2027: 3 tasks, 2 phases, 1 link, start date set; A Jan 4–6, B Jan 7–8, C Jan 4; all
+    `not_started`, 0%; **0 assignees**; history `[{template, 2027-01-08}]`.
+  - ⚠️ **Onto a project that already has 3 tasks → `{ok:false, 409, "This project already has 3 tasks; stamping would mix two plans. Stamp onto a
+    project with no tasks."}` and the counts (tasks, phases, links, start date) are IDENTICAL before and after.**
+  - **A PM** (on the project, a schedule editor) stamps successfully. This settles the open question of whether `projects_update` admits the PMs
+    the editor function admits: for an assigned PM, yes.
+  - A **foreman** → 403 with the editor sentence, nothing written. **CP off** → 409 *"Turn on Critical Path for this project first."*, nothing written.
+  - **DELETE:** a PM → 403, still live; the Admin → soft-deleted.
+- **Sabotages** (T2's SQL + RESTORE committed first, `77be4934`):
+
+  | # | sabotage | ✘ |
+  | --- | --- | --- |
+  | (T1) | the has-tasks refusal removed from the stamp | **1**: the refusal test |
+  | (T2) | a permissive `INSERT … WITH CHECK (true)` policy on `schedule_templates` | **7**: client, crew, foreman, PE, PM, sub in the CREATE map, and the PM save. Dropped; policies read back as exactly the 3 originals |
+  | (T3) | the stamp's editor check removed | **1**: the foreman test. Received `404 "That template was not found…"`: **RLS on the templates stopped the foreman before any write**, a second line of defence, with the task/dependency guards behind it |
+
+  `templates.ts` restored (`cmp` 0, == HEAD). Clean: **25/25**.
+
+### R4.3 — Part 8 UI proofs (production build, rebuild-test)
+
+- **e2e `desktop-critical-path-templates-s122.spec.ts`**, first run **4/4**: the owner saves the source network from the tab (notice; DB 2 phases / 2 tasks
+  / 1 link); the owner stamps it onto an empty project with Mon 4 Jan 2027 (A Jan 4–6, B Jan 7–8, the tab shows *Fri 8 Jan 2027*); ⚠️ on a project with
+  1 task the tab reads *"This project already has 1 task; stamping would mix two plans. Stamp onto a project with no tasks."* and offers **no Stamp
+  button**; a PM sees the stamp area but no Save.
+- ⚠️ **A race in my test, found by the first sabotage build:** the stamp test went red under (U1) and again on the clean rebuild. It waited for "2
+  tasks exist", which arrives BEFORE the stamp's link and recompute, and once read A dated (by another read, most likely a Next prefetch running
+  `ensureScheduleFresh` after the start-date write marked the project dirty) with B still undated. Harmless to the product: the stamp's own
+  recompute writes every date. The test now waits for the WHOLE stamp (every task dated, plus the `template` history row). Same build: **20/20** over 5 repeats.
+- **Sabotage (U1)** (the card drops the has-tasks notice and shows the stamp form): tests 1–3 ✓ … **✘ the refusal test** at
+  `waiting for getByTestId('tpl-has-tasks')`. Restored, `cmp` 0, tree == HEAD. (The first U1 build is NOT counted: the race reddened an earlier test,
+  so U1's own test never ran.)
+- Clean rebuild: Part 8 + every CP / portal-CP / schedule spec, one worker → **28 passed**.
+
+- **Pre-CI** (`80075c68`): type-check 0 (0/5 cached); lint 0 (no new warning); unit **167 / 2,281** (0 cached). **CI requested** (base `48f7cf01` = `origin/main`; 0 runs in progress or queued). m31 is on rebuild-test.
+
+#### Part 8 CI and PRODUCTION section 8: `20262131000000_s122_schedule_templates` — **MATCH ×13**
+
+- **CI `36957453386`** on `468230f9` (base `48f7cf01` = `origin/main`; 0 other runs): **green**. Unit **167 / 2,281**; e2e **697 passed, 24 skipped, 0 flaky,
+  0 failed** (35.6 m).
+- **Spec check (unattended rule):** m31 creates the four tables plan row 11 names. Their RLS policies and four `set_…_updated_by()` trigger
+  functions are the standard parts CLAUDE.md requires of every new per-tenant table, not new behaviour. New tables only, so no constraint over existing
+  rows (stop rule 2 does not apply).
+- Workdir `wd8`: all **294** migrations, `cmp` 0 each; linked to production; checkout read back `nmyphyhmfttxkdoposvf`.
+- **Pre-check, PRODUCTION:** ledger from `…2130` = `20262130000000` only; template tables **0**; trigger functions **0**.
+- **Dry run:** *"• 20262131000000_s122_schedule_templates.sql"*, exactly one. **Push:** exit 0.
+- **Verification:** the same read-only file on both, then `diff` → **exit 0, 13 lines identical**: ledger `…2130, …2131`; tables 4; columns 48 (md5
+  `3fff038c…`); constraints md5 `2f7c233f…`; indexes md5 `e5559934…`; RLS on for all four; policies 12 (md5 `bbbda19b…`); triggers (8, all `O`); trigger
+  functions md5 `97c7c9ee…`, EXECUTE by `authenticated` **false** for all four; rows **0**. Workdir deleted.

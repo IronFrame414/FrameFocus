@@ -8833,6 +8833,260 @@ export type Database = {
           },
         ]
       }
+      schedule_template_dependencies: {
+        Row: {
+          company_id: string
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          dependency_type: string
+          id: string
+          is_deleted: boolean
+          predecessor_id: string
+          successor_id: string
+          template_id: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          company_id?: string
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          dependency_type?: string
+          id?: string
+          is_deleted?: boolean
+          predecessor_id: string
+          successor_id: string
+          template_id: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          dependency_type?: string
+          id?: string
+          is_deleted?: boolean
+          predecessor_id?: string
+          successor_id?: string
+          template_id?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "schedule_template_dependencies_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "schedule_template_dependencies_predecessor_id_fkey"
+            columns: ["predecessor_id"]
+            isOneToOne: false
+            referencedRelation: "schedule_template_tasks"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "schedule_template_dependencies_successor_id_fkey"
+            columns: ["successor_id"]
+            isOneToOne: false
+            referencedRelation: "schedule_template_tasks"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "schedule_template_dependencies_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "schedule_templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      schedule_template_phases: {
+        Row: {
+          company_id: string
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          id: string
+          is_deleted: boolean
+          name: string
+          sort_order: number
+          template_id: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          company_id?: string
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          is_deleted?: boolean
+          name: string
+          sort_order: number
+          template_id: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          is_deleted?: boolean
+          name?: string
+          sort_order?: number
+          template_id?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "schedule_template_phases_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "schedule_template_phases_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "schedule_templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      schedule_template_tasks: {
+        Row: {
+          company_id: string
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          description: string | null
+          duration_days: number | null
+          id: string
+          is_deleted: boolean
+          phase_id: string | null
+          priority: string | null
+          sort_order: number
+          template_id: string
+          title: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          company_id?: string
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          description?: string | null
+          duration_days?: number | null
+          id?: string
+          is_deleted?: boolean
+          phase_id?: string | null
+          priority?: string | null
+          sort_order: number
+          template_id: string
+          title: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          description?: string | null
+          duration_days?: number | null
+          id?: string
+          is_deleted?: boolean
+          phase_id?: string | null
+          priority?: string | null
+          sort_order?: number
+          template_id?: string
+          title?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "schedule_template_tasks_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "schedule_template_tasks_phase_id_fkey"
+            columns: ["phase_id"]
+            isOneToOne: false
+            referencedRelation: "schedule_template_phases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "schedule_template_tasks_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "schedule_templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      schedule_templates: {
+        Row: {
+          company_id: string
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          description: string | null
+          id: string
+          is_deleted: boolean
+          name: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          company_id?: string
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          description?: string | null
+          id?: string
+          is_deleted?: boolean
+          name: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          description?: string | null
+          id?: string
+          is_deleted?: boolean
+          name?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "schedule_templates_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       scope_library: {
         Row: {
           bullets: Json

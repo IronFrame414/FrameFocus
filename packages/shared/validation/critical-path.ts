@@ -84,3 +84,25 @@ export const heldScheduleChangesSchema = z
   .strict();
 
 export type HeldScheduleChanges = z.infer<typeof heldScheduleChangesSchema>;
+
+/**
+ * S122 Part 8 — SCHEDULE TEMPLATES. Save a project's network as a template
+ * (POST /api/schedule-templates) and stamp one onto a project with ONE start
+ * date (POST /api/projects/[id]/critical-path/stamp). Shape only: RLS and the
+ * task/dependency guards decide whether the write is ALLOWED.
+ */
+export const scheduleTemplateSaveSchema = z
+  .object({
+    projectId: uuid,
+    name: z.string().trim().min(1, 'A template needs a name.').max(200),
+  })
+  .strict();
+export type ScheduleTemplateSave = z.infer<typeof scheduleTemplateSaveSchema>;
+
+export const scheduleTemplateStampSchema = z
+  .object({
+    templateId: uuid,
+    startDate: isoDate,
+  })
+  .strict();
+export type ScheduleTemplateStamp = z.infer<typeof scheduleTemplateStampSchema>;
