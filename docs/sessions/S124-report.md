@@ -430,6 +430,10 @@ call.
 - Pre-CI: `tsc` exit 0 (0 errors); `next lint` on both files clean; **unit 170 files / 2296 tests, exit 0**;
   `next build` exit 0 (*"✓ Compiled successfully"*, 136/136).
 - Residual, stated in the code: Resend counts per **account**, so other send paths can still collide.
+- **CI `37050370621` GREEN** (18:52→19:44Z, alone on rebuild-test): unit **170 files / 2296 tests**, e2e **705 passed,
+  0 failed, 24 skipped** (48.9 m). The branch contained current `main` `91fa32e1`; no migration.
+- ✅ **MERGED to `main` as `5a78a648`** under the S180 three conditions (CI green on current main; every check with
+  its number; no migration). Live on the next Vercel deploy. No production DB change.
 
 ## Part 2 — the switch (`feature/s124-p2-toggle`): built, unit-proved, NOT yet applied anywhere
 
