@@ -1925,3 +1925,20 @@ m29 is applied; checkout read back `nmyphyhmfttxkdoposvf`; 1 constraint row each
   as unnamed, which is false since that line is in the union). Discarded, not counted; re-cut at the union's real terminator, with the control
   above.
 - **Condition met. Proceeding:** dry run (exactly one file), push, verify, merge.
+
+#### Part 6 PRODUCTION section 6: `20262129000000_s122_cp_notify_types` — **MATCH ×6**
+
+- Superset condition met first (R2.12). **Dry run:** *"• 20262129000000_s122_cp_notify_types.sql"*, **exactly one** (1 bullet; no seeds, no roles).
+  **Push:** exit 0, *"Applying migration 20262129000000_s122_cp_notify_types.sql..."*.
+- **Verification:** the same read-only file on both databases, then `diff` → **exit 0, every line identical** (6 lines):
+
+  | object | expected (rebuild-test) | PRODUCTION |
+  | --- | --- | --- |
+  | ledger ≥ `…2128` | `…2128, …2129` | `…2128, …2129` |
+  | `notifications_type_check` count | 1 | 1 |
+  | CHECK md5 | `bac8720e…` | `bac8720e…` |
+  | CHECK contains `schedule_changed` | true | true |
+  | `email_types` new rows | `schedule_change, schedule_change_client` | same |
+  | `notifications` rows outside the CHECK | 0 | 0 |
+
+  Plus: the full production CHECK definition == rebuild-test's (byte-equal). Workdir `wd6` deleted; checkout read back `nmyphyhmfttxkdoposvf`.
