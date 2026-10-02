@@ -282,7 +282,11 @@ test.describe('S122 Part 6 · who could not be told is shown at save time, on ev
     await page.goto('/dashboard/notifications');
 
     await expect.poll(async () => (await rowT()).duration_days, { timeout: 20_000 }).toBe(before + 1);
-    expect(await reports(), 'exactly one report row for this save').toBe(1);
+    // The duration is written first and the report a moment later in the SAME
+    // request (recompute → plan → report), so wait for the row itself. That it
+    // is written BEFORE the response is proven in s123-cp-background.live.ts (P1).
+    await expect.poll(reports, { timeout: 20_000, message: 'exactly one report row for this save' }).toBe(1);
+    await page.reload();
     await expect(page.getByText('Not everyone could be told about your schedule change').first()).toBeVisible({ timeout: 20_000 });
     await expect(page.getByText(`No login and no email on file: ${unreachableName}.`).first()).toBeVisible();
   });
