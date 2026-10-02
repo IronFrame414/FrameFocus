@@ -2183,3 +2183,30 @@ Built so far, **without touching the database** (`main`'s merge run `36944879271
 | D9-1 | The card lives on the **/m project SCHEDULE page** (M-12) | the /m project hub (M-3) | M-3's layout is pinned by M6M rulings and e2e (A-11e's 50/50 stat strip, exactly nine tiles, no finance tile). M-12 is the schedule screen. |
 | D9-2 | Shown only to the roles that see the desktop Critical Path tab (Owner, Admin, PE, PM, foreman), on a CP project | showing crew/subs too | It shows float-derived facts ("N tasks have room"). The desktop tab already draws that line; crew are sent to Schedule. |
 | D9-3 | "Extend" = the card's **duration form**, through the SAME `previewEdit` sentences and the SAME `saveCriticalPathTask` route as the desktop sheet (a foreman's change is HELD, as there) | a drag, or a mobile-only save path | Spec: "follows ruling 13's sheet path, not the drag path"; PARITY: one mechanism. The edit/consequence sentences are English on /m, as the existing /m CP drag confirm already is (server sentences). |
+
+### R5.2 — Part 9: the /m phone board, built and proven (production build, rebuild-test)
+
+- **The card** (`app/m/p/[projectId]/schedule/critical-path-card.tsx`) on the /m project schedule page (D9-1), for the desktop CP tab's roles on a CP
+  project (D9-2): the running critical task, the next two, *"Tasks with room to slip: N"* (count-safe; first drafted as "N tasks have room", which
+  reads "1 tasks"). **No Gantt.** Extending = the duration form, previewed with the SAME `previewEdit`/`editSentence`/`consequenceSentence` and saved
+  through the SAME `saveCriticalPathTask` as the desktop sheet (D9-3). All words via `t()`, en + es (10 keys).
+- ⚠️ **The /m guard caught two things, both fixed:**
+  1. two `data-testid` literals passed as function arguments inside JSX are now constants;
+  2. the page importing `ensureScheduleFresh` pulled the recompute's NOTIFICATION layer (`notify-text`, the email template) into /m's graph.
+     The read moved to a data-layer service, `lib/services/critical-path-mobile.ts`, which the guard skips by design: the same freshness check and
+     caller-scoped load as the desktop tab.
+
+  Guard **181/181**. (Four Tailwind tokens I first wrote, `m6m-red/green/bg/line`, do not exist and would have rendered unstyled; mapped to the real
+  `danger/navy/surface/border`.)
+- **e2e `m-critical-path-s122.spec.ts`** (402px, touch), first run **4/4**: the owner's board shows A running, B and C next, room 1, and **0 `gantt*`
+  elements**; the owner extends A 2 → 4 (*"Changes the DURATION: 2 working days → 4 working days."*, nothing written while editing) → DB 4; ⚠️ the
+  **foreman** extends B → *held* note, **DB still 3**, exactly one pending edit `{duration_days: 5}`; **crew: no card**. Words are asserted in each
+  user's own `profiles.language`.
+- **Sabotages** (one build each; restored, `cmp` 0, tree == HEAD):
+
+  | # | sabotage | result |
+  | --- | --- | --- |
+  | (M1) PARITY | the card's save bypasses the shared route and writes `tasks.duration_days` directly from the browser | **✘ the foreman test** (no held note: the direct write is not the path that holds a foreman's change). The owner's direct write "succeeded", which is exactly why one mechanism matters. |
+  | (M2) | the role gate removed: crew get the card | **✘ the crew test** (card count 1) |
+
+- **Regression**, clean build, one worker: **every `m-*` spec + every CP / portal spec + desktop-schedule (38 files) → 480 passed, 16 skipped, 0 failed.**
