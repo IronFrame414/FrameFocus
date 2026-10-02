@@ -591,3 +591,10 @@ captured and committed first (`docs/sessions/S123-sabotage-originals/client_crit
 | (d) | the disclaimer on the List view only | **✘** *"the disclaimer on the Gantt view too … element(s) not found"* |
 | (e) | the client Gantt imports `components/schedule/gantt` (stop rule 10) | **✘ 2** import tests (the walk then reaches `critical-path.ts`, `critical-path-writes.ts`, the staff Gantt) |
 | (f) | `client_schedule` gains a column (S122's committed sabotage + RESTORE, `46b35cbf`) | **✘ 2** of Part 7's CP-off control (keys, values); RESTORE read back **md5, the full 15-role ACL and the comment byte-identical** to before |
+
+**D-3 CI `37021426175`** on `298c6d9b` (stacked on D-2 → `30869f3c` = `origin/main`): **green**. Both jobs success. Unit **169 / 2,290**; e2e **702 passed**
+(701 + the new D-3a navigate-away test, which ran `✓`), 24 skipped, 0 failed, 0 `✘` (47.5 min, 14:39:47–15:30:57Z, nothing else running).
+
+**D-1 pre-CI** (on `fa619ff9`, stacked on D-3 `298c6d9b`): **`next build` exit 0**; type-check exit 0 (0 cached); lint exit 0 (5 pre-existing); unit
+**169 / 2,293** (+3: D-1a's import tests). Migration `20262133000000` already on rebuild-test (applied 13:2xZ while no run was active; the earlier
+branches' code ignores the two added columns, since it builds its shape field by field). 0 runs in progress. **CI requested by this commit.**
