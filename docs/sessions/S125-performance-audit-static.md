@@ -1031,6 +1031,88 @@ cache. Built as its own reviewed change, after the Q1 work.
 
 Josh's reason: *a cross-tenant cache leak is worse than any amount of slow.*
 
+### Rulings, second round (2026-10-02): ASK-5, ASK-6, ASK-7
+
+**ASK-5: A. Correct the stale middleware comment in the first fix build.**
+- **Where:** `middleware.ts:389-390`. The comment says "Every API request now runs getUser()", but the code has run
+  `getClaims()` since S116.
+- **Addition (Josh):** the corrected comment must also say that **it misled a reading on 2026-09-29 and produced a
+  wrong diagnosis.** A stale comment becomes one that documents why accuracy there matters.
+- **Not done here.** This session fixes nothing.
+
+**ASK-6: A. Narrow the S157 ruling for thumbnails served through the proxy route.**
+- **Where:** record the narrowing in `lib/services/signed-url-ttl.ts`, in the fix build that builds the proxy.
+- **How to write it: narrowed, NOT overturned.** S157's stated reason was that re-checking authorisation would cost
+  *"a round trip on every photo thumbnail"*. Through the proxy, the round trip happens per browser-cache **miss**,
+  not per view. The premise does not hold on this path, so the conclusion does not carry.
+- **Independent second reason:** option A would need a long-lived bearer credential held across requests **plus**
+  the cross-request cache from Q4. That is two risks to avoid one round trip, and the proxy carries neither.
+- **The ruling holds however R2(a) resolves** (whether re-signing a path yields a new URL). The proxy hands the
+  browser no credential at all. The caching argument and the credential argument are independent.
+- **⚠️ HARD CONDITION: `Cache-Control: private`, PROVEN BY TEST, not by code review.**
+  - The reason: a `public` header lets Vercel's CDN serve one company's thumbnail to another. That is a cross-tenant
+    leak through the CDN, the worst outcome available in this audit.
+  - The test is built exactly like the R4 cache-key test: a negative test with its own sabotage (flip the header to
+    `public`) that must go red.
+
+**ASK-7: A. Do 16a only.** 16a is a straight replacement with no security change; it goes in the B batch.
+- **16b is revisited only if BOTH hold:**
+  1. `#1-s125perf` (below) comes back reassuring;
+  2. the timing half shows the one remaining `getUser()` per render costs enough to be worth the trade.
+- **The gate is primarily the security answer, not the timing.**
+
+### `#1-s125perf` — Does removing a company member cut their data access IMMEDIATELY? ⚠️ SECURITY, open
+
+**Filed on Josh's word as its own item, not as a precondition inside 16b.**
+- It is a security question that happened to surface in a performance audit.
+- If removal does **not** cut data access immediately, then a removed person keeps real access until their access
+  token expires (≤ 1 h). That is true **today**, with or without `getUser()` in the pages, because PostgREST and
+  Storage authorise on the token, not the session. It would be a finding whatever happens to 16b.
+- **Owner:** whoever next touches auth.
+- **Number:** branch-tagged per the S136 rule. Convert it to the next free `#N` from `TECH_DEBT.md` when this branch
+  lands. This session changes no file outside the report, so it is not yet in `TECH_DEBT.md`.
+
+**A first STATIC reading, done to give the owner a head start.** Code and migrations on this ref only; no database
+was queried. **It is not an answer.** Re-read the live definitions before relying on any of it, because a later
+migration or a dashboard edit could differ.
+
+1. **Path P: removal from the team page probably cuts data access immediately.**
+   - `app/dashboard/team/[id]/actions.ts:98` → `softDeleteTeamMember` (`lib/services/team.ts:118-134`) sets
+     `profiles.is_deleted = true`, then bans the auth user (`ban_duration: '876000h'`).
+   - `get_my_company_id()` (`supabase/migrations/20260101000000_baseline_schema.sql:153-161`) returns only a
+     profile with `is_deleted = false`. My grep found no later migration redefining it.
+   - So every policy keyed on `get_my_company_id()` should return NULL for that user on the **next query**,
+     whatever their token says.
+   - The `project-files` storage policy repeats the `is_deleted = false` filter inline.
+   - **The ban does not end live tokens.** It blocks refresh and sign-in. The immediate cut, if it holds, comes from
+     the profile flag, not the ban.
+2. **Path M: a member-only deactivation looks like it does NOT cut data access.**
+   - `company_members.is_deleted` can be set on its own: `members-client.ts:69`, "`true` deactivates",
+     Owner/Admin for any member.
+   - The S109 suite asserts that this state exists: `test/s109-profile-member-sync.live.ts:138`, "a profile save
+     that does not change is_deleted leaves a member-only deactivation alone".
+   - `get_my_company_id()` reads `profiles`, not `company_members`. So a person with a login, deactivated **only**
+     on `company_members`, appears to keep full company data access **with no time limit at all**, not just until
+     their token expires.
+   - **This needs checking first:** which UI reaches a member-only deactivation for a member who has a login, and
+     whether any policy or trigger also keys on `company_members.is_deleted`.
+3. **Not covered by this reading. These are stated residuals:**
+   - policies keyed on `auth.uid()` alone (own-row reads such as notifications);
+   - SECURITY DEFINER RPCs that take the caller from `auth.uid()` without going through `get_my_company_id()`;
+   - Realtime subscriptions already open at removal time;
+   - the trial-lock / `ff_lock_ok` path.
+4. **No test found that asserts it.** `grep` across `apps/web/test` and `apps/web/e2e` found no test titled for a
+   removed member's data access. That is a grep for titles; it could miss a differently-named assertion.
+
+**What answering it takes:**
+- A live test on rebuild-test, owned by the auth work, not this audit:
+  - remove a member by **each** path (P and M);
+  - on the member's **still-unexpired** token, attempt: a PostgREST read, a write (without returning rows, per the
+    S181c rule), a storage download, and one SECURITY DEFINER RPC;
+  - assert each is refused;
+  - control: the same calls succeed before removal.
+- **If path M keeps access, it is a fix in its own right**, independent of performance work.
+
 ### Finding 16 — 79 pages make their own Auth-server call on top of the layout's
 
 Numbered on Josh's word, so it does not get lost under "office side".
@@ -1126,7 +1208,8 @@ Numbered on Josh's word, so it does not get lost under "office side".
 
 **Recommendation:**
 - **16a in the B batch.** It removes the duplicate at no security cost.
-- **16b only on an explicit ruling** (ASK-7), after the member-removal check.
+- **16b only on an explicit ruling** (ASK-7). **RULED 2026-10-02: 16a only.** 16b waits on `#1-s125perf` being
+  reassuring **and** on the timing half showing the remaining call is worth the trade.
 
 ---
 
@@ -1161,15 +1244,16 @@ Numbered on Josh's word, so it does not get lost under "office side".
 | ASK-3 | Upload resolution | **Keep full resolution** (evidence); remove the *wait* instead (assessed in R3) |
 | ASK-4 | Cross-request caching | Yes, service role + explicit company filter, own reviewed change after Q1; **`company_id` in the key and a no-rows negative test with a sabotage that goes red** |
 
-**Still open:**
+**Decided in the second round (2026-10-02):**
 
-5. **(ASK-5)** Whether the stale middleware comment (`middleware.ts:389-390`, "Every API request now runs getUser()";
-   it runs `getClaims()` since S116) gets corrected in the first fix build. Docs only.
-6. **(ASK-6)** Narrowing the S157 ruling in `lib/services/signed-url-ttl.ts` ("Explicitly NOT a re-check of
-   authorisation when the URL is used") for **thumbnails served through the proxy route**, where the re-check runs
-   per browser-cache miss, not per view. Needed before the proxy is built.
-7. **(ASK-7)** Finding 16b: whether pages and layouts may use verified claims (`getClaims()`) instead of `getUser()`,
-   giving up the layout's revoked-session backstop (≤ 1 h) that S116 relied on. 16a needs no ruling.
+| ask | ruling |
+| --- | --- |
+| ASK-5 | A. Correct `middleware.ts:389-390` in the first fix build, and record in the comment that it misled the 2026-09-29 reading |
+| ASK-6 | A. Narrow S157 for proxy thumbnails, because its reason does not hold there (narrowed, not overturned); record it in `signed-url-ttl.ts`. **`private` header proven by a negative test with a sabotage** |
+| ASK-7 | A. 16a only. 16b needs `#1-s125perf` to be reassuring **and** the timing half to justify it |
+
+**Open, owned outside this audit:** `#1-s125perf`, whether removing a member cuts data access immediately
+(security; whoever next touches auth). The static first reading suggests path M does **not**.
 
 ## What the timing half will need
 
