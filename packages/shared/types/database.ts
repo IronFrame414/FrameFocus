@@ -11470,6 +11470,18 @@ export type Database = {
           unread_count: number
         }[]
       }
+      client_critical_path: {
+        Args: { p_project_id: string }
+        Returns: {
+          phase_finish: string
+          phase_name: string
+          phase_sort: number
+          phase_start: string
+          projected_finish: string
+          task_sort: number
+          task_title: string
+        }[]
+      }
       client_document_visible: { Args: { p_status: string }; Returns: boolean }
       client_has_full_access: { Args: never; Returns: boolean }
       client_invoice_sections: {
