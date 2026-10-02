@@ -2031,3 +2031,26 @@ Built so far, **without touching the database** (`main`'s merge run `36944879271
   | (C) | `critical_path_enabled = true` removed | **1**: CP toggled off on the same project. (The CP-off `eaf0e25b` test stays green: that project has NO settings row, so the gate's join refuses it whatever the flag. The toggle isolates the flag.) |
 
 - Clean after both: **7/7**.
+
+### R3.4 — Part 7: the PAYLOAD proof (production build, rebuild-test)
+
+`e2e/portal-critical-path-s122.spec.ts`. It reads what the linked client's browser RECEIVED, two ways: `page.content()` (the document with its
+`self.__next_f` RSC scripts) and the flight payload a client-side navigation fetches (`RSC: 1`). Never a locator, never the function.
+- Fixture S122CPP: Framing A(3) → Finish B, crew on A, CP on. The owner's desktop read computes it (finish 8 Jan); B 2 → 4 plus a dirty mark → finish
+  12 Jan, and a REAL history row holds 8 Jan. (A first run failed in its own setup: the dirty trigger skips the service role by design, so the admin
+  edit never marked the schedule. The fixture now marks it as a user's edit would.)
+- In BOTH payloads, 0 of: float (`totalFloat`/`"float"`/`freeFloat`), critical (`isCritical`/`"critical"`/`criticalChain`), durations, the crew
+  member's name or `assignee`, the old finish (ISO and as the portal formats it), history keys, task statuses. **Positive control in the same
+  payloads:** the projected finish, both phase names, both task titles and the disclaimer ARE there. The unlinked client's page carries none of the
+  fixture. **3/3.**
+- **Sabotages** (one build each; restored, `cmp` 0, page == HEAD):
+
+  | # | sabotage in the portal page | result |
+  | --- | --- | --- |
+  | (P1) | serializes `{ ...criticalPath, totalFloat: 2 }` | **✘ in BOTH: document `float: 2`, flight `float: 1`** |
+  | (P2) | also calls `client_schedule` on a CP project (undoing D7-2) and renders statuses | **✘ in BOTH: document `status: 4`, flight `status: 2`** |
+
+  ⚠️ (P1) first showed only the document red: the loop's hard `expect` stopped at the document, so the flight's detector was never exercised. The
+  per-payload checks are now `expect.soft`; re-run under (P1): both red.
+- Clean rebuild after both: payload + `portal-pages` **6/6**. Regression (every `portal*`, `*client*` and `*critical-path*` spec), one worker:
+  **19 passed**.

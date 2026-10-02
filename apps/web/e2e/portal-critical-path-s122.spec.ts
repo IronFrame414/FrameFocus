@@ -186,9 +186,10 @@ test.describe('S122 Part 7 · the client portal payload never carries float', ()
     for (const [name, text] of [['document', html], ['flight', flight]] as const) {
       // Positive control: the view itself travelled, so the zeros below are about a REAL payload.
       for (const must of [day('2027-01-12'), 'Framing', 'Finish', `${MARKER} A`, `${MARKER} B`, DISCLAIMER]) {
-        expect(text.includes(must), `${name} carries "${must}"`).toBe(true);
+        expect.soft(text.includes(must), `${name} carries "${must}"`).toBe(true);
       }
-      expect(leaks(text), `${name}: nothing it must not carry`).toEqual(NONE);
+      // soft: BOTH payloads are always judged and reported (a hard fail on the document hid the flight).
+      expect.soft(leaks(text), `${name}: nothing it must not carry`).toEqual(NONE);
     }
   });
 
