@@ -193,14 +193,14 @@ transform `THUMB_TRANSFORM` `lib/photos/thumbnail.ts:35`, which also renders HEI
 | **`/m` viewer filmstrip** | thumb, else full file (`viewer.tsx:90-94,653`) | **no — all N `<img>` mounted at once** (`viewer.tsx:636-660`) | **D-3:** opening one photo of 200 requests ~200 thumbnails |
 | `/m` viewer main image | `displayUrl` = full file (`viewer.tsx:491`) | n/a | expected |
 | dashboard project photos | thumb (`grid-thumb.tsx`, 2-screen buffer) | yes | fine |
-| site-visit record (dashboard + `/m/site-visits/[id]`) | thumb → display → original (`site-visit-record.tsx:488`) | no | **D-4:** **one API call per photo** (`lib/.../media.ts:71` → `/api/estimates/…/url`), each signing separately — an N+1 |
+| site-visit record (dashboard + `/m/site-visits/[id]`) | thumb → display → original (`site-visit-record.tsx:488`) | no | **D-4:** **one API call per photo** (`lib/site-visits/media.ts:71` → `/api/estimates/…/url`), each signing separately — an N+1 (fired in parallel, `media.ts:72-74`, so N concurrent requests rather than a chain) |
 | **material sign-out detail (also `/m`)** | **full original** (`signout-detail.tsx:105`; `lib/services/material-signouts.ts:113`) | no | **D-5** |
 | `/m/logs/[logId]` | none in a grid; signed per tap (`app/m/logs/[logId]/page.tsx:231-255`) | n/a | fine |
 | portal photos / chat-thread photos | **full original or markup file** (`app/portal/[projectId]/files/page.tsx:166,246` — the chat thumbnails display at 108×81 px) | no | **D-6**; portal photo list has **no limit** (`lib/services/portal.ts:474-488`) |
 | dashboard daily-log / safety / delivery detail | **full original** (`daily-logs/[logId]/page.tsx:90-98` — a comment calls them "thumbnails"; `safety/[incidentId]/page.tsx:73-79,199`; `deliveries/d/[deliveryId]/page.tsx:66-68,195,238`) | no | **D-7** |
 
 **D-8. No browser caching of images is possible today (inference from code).** Signed URLs are minted fresh on every
-server render (2-hour TTL, `signed-url-ttl.ts`), so the URL string — the cache key — changes on every visit and every
+server render (2-hour TTL, `lib/services/signed-url-ttl.ts`), so the URL string — the cache key — changes on every visit and every
 `router.refresh()`; uploads set no `cacheControl` (`files-client.ts:241-244`, `thumbnail-server.ts:109-111`); the
 service worker skips cross-origin requests (`public/sw.js:135`), so Supabase images are never cached there either.
 **Every visit to a photo grid re-downloads every thumbnail.**
