@@ -514,3 +514,12 @@ the tree tested.
 **D-3 pre-CI** (on `b0cfe063`, stacked on D-2 `99c170d1` → `30869f3c` = `origin/main`): **`next build` exit 0**; type-check exit 0 (0 cached); lint exit
 0 (5 pre-existing warnings); unit **169 / 2,290**. No migration. The D-3 live tests (18/18 + 8/8 sabotage runs) and e2e (6/6 against a
 production build) ran above. 0 runs in progress. **CI requested by this commit.**
+### ⚠️ FINDING for Josh (D-1 / Q3): ordinary jobs do NOT show task status in the portal today
+Josh's Q3 addition says *"client_schedule already returns status, so non-Critical-Path jobs show status in the portal TODAY. Do not remove it."*
+`client_schedule` does **return** `status`, but the page **does not display it**: on `origin/main` (`b7e6b7fe`),
+`app/portal/[projectId]/page.tsx:101-109` renders `s.title`, `s.phase_name`, `s.start_date`, `s.due_date`. The only "Status" on the page is the
+**project's** (`:58`, `<PortalStatus value={project.status} />`). A server component sends only what it renders, so task status is not in today's
+payload either.
+**Decided for this build (narrower, reversible):** D-1 keeps exactly the fields displayed today. The ordinary list is unchanged. Its Gantt shows
+title, phase and dates. **No task status is displayed on either kind of job**, so nothing is taken away from existing clients and nothing new is
+shown. If Josh wants status SHOWN on ordinary jobs, it is a one-line addition to the list. Asked in the final message (Q-D1).
