@@ -481,6 +481,31 @@ call.
 - Pre-CI: tsc exit 0 (after clearing a stale local `.next/types` left by the Part 1 build: 2 phantom errors,
   outside git), unit **171 / 2317** exit 0, the Part 2 file 21/21.
 
+- **CI `37061570445` GREEN** (20:35→21:25Z, alone): unit **171 / 2317**, e2e **705 passed, 0 failed**.
+- **PRODUCTION section Part 2: `20262134000000_s124_qb_time_export_toggle` — MATCH ×11.** Scratch workdir
+  `wd-m34` was made by `git archive feature/s124-p2-toggle supabase/migrations` (297 files, `cmp` **0** mismatches),
+  linked `jwkcknyuyvcwcdeskrmz` (WD REF read back). The checkout stayed on `nmyphyhmfttxkdoposvf` (read back).
+  - Pre-check: ledger max `20262133000000`; 0 `qb_time_export%` columns; 0 functions; 2 companies.
+  - Dry run: *"Would push these migrations: • 20262134000000_s124_qb_time_export_toggle.sql"*, **exactly one**.
+    Push exit 0, *"Applying migration 20262134000000…"*.
+
+  | object | expected | production |
+  | --- | --- | --- |
+  | ledger ≥ …2133 | `…2133, …2134` | `20262133000000,20262134000000` ✅ |
+  | column default | `false` | `false` ✅ |
+  | nullable | `NO` | `NO` ✅ |
+  | type | boolean | boolean ✅ |
+  | ⚠️ **companies ON** | **0 of 2** | **0 of 2** ✅ (stop rule 9 clear) |
+  | stamped `_at`/`_by` | 0 | 0 ✅ |
+  | trigger `companies_qb_time_export_scope` | 1 | 1 ✅ |
+  | function md5 | `57240739…` (rebuild-test) | `57240739631328c1215351024c4f4a43` ✅ |
+  | `enforce_companies_qb_scope` md5 (untouched) | `4c5a5aae…` | `4c5a5aae73b9a2e25aca97f17c4c6384` ✅ |
+  | `authenticated` EXECUTE | false | false ✅ |
+  | ACL | as captured | `{postgres=X/postgres,service_role=X/postgres,supabase_auth_admin=X/postgres}` ✅ |
+- ✅ **MERGED to `main` as `81fe1efc`** (S180: CI green on current main `5a78a648`; checks stated; migration on
+  production, verified by object). **Nothing reads the switch until Part 1 lands**, so turning it on today does
+  nothing.
+
 ## Part 1 / 3 — the push (`feature/s124-p1-push`, stacked on Part 2): built, unit-proved, sandbox BLOCKED
 
 - Migration **`20262135000000_s124_qb_time_activity_push.sql`**: `qb_employee_map` (realm-scoped; one member
