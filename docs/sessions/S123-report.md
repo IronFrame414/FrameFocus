@@ -598,3 +598,25 @@ captured and committed first (`docs/sessions/S123-sabotage-originals/client_crit
 **D-1 pre-CI** (on `fa619ff9`, stacked on D-3 `298c6d9b`): **`next build` exit 0**; type-check exit 0 (0 cached); lint exit 0 (5 pre-existing); unit
 **169 / 2,293** (+3: D-1a's import tests). Migration `20262133000000` already on rebuild-test (applied 13:2xZ while no run was active; the earlier
 branches' code ignores the two added columns, since it builds its shape field by field). 0 runs in progress. **CI requested by this commit.**
+
+**D-1 CI `37027639690`** on `52a14798`: **green**. Both jobs success. Unit **169 / 2,293**; e2e **705 passed** (702 + D-1's three: the Gantt payload test and the two
+ordinary-schedule tests; all 6 portal tests `✓`), 24 skipped, 0 failed, 0 `✘` (44.2 min, 15:32:01–16:19:52Z, nothing else running).
+
+**PRODUCTION section D-1 — `20262133000000_s123_client_schedule_one_view` — MATCH ×9.** Workdir `wd-m33` = `git archive feature/s123-d1-client-schedule
+supabase/migrations` (296 files, `cmp` 0), linked `jwkcknyuyvcwcdeskrmz` (read back); the checkout stayed on `nmyphyhmfttxkdoposvf` (read back).
+- Pre-check (read-only): ledger from `…2132` = `20262132000000` only; `client_critical_path` md5 **`ac958d4f…` = the captured original**, ACL = the
+  captured ACL; **0** objects depend on it (safe to DROP); `client_schedule` md5 `22d6e081…`.
+- Dry run (run twice, before and after D-1's CI): *"• 20262133000000_s123_client_schedule_one_view.sql"*, **exactly one**. Push: exit 0, *"Applying migration
+  20262133000000…"*. Production's pre-D-1 code reads the function field by field, so the two added columns are ignored until D-1's code deploys.
+
+| expected (the same file rebuild-test matched 9/9) | production |
+| --- | --- |
+| ledger `20262132000000,20262133000000` | MATCH |
+| count 1 | MATCH |
+| md5 `d37fce44b4c0426c7f6258f28a0d7e43` | MATCH |
+| `p_project_id uuid -> TABLE(…, task_title, task_sort, task_start, task_finish, projected_finish)` | MATCH |
+| DEFINER **true** / STABLE / sql / `search_path=public` | MATCH |
+| comment md5 `fafbe04a80d57194f21351d2b2a32407` | MATCH |
+| EXECUTE anon **false** / authenticated **true** | MATCH |
+| ACL `postgres, authenticated, service_role, supabase_auth_admin` (= the original's: the DROP lost no grant) | MATCH |
+| `client_schedule` md5 `22d6e0814a6bbdd8791f354dbbd0153f` (**untouched**, Q2) | MATCH |
