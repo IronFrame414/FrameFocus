@@ -304,6 +304,49 @@ export async function getPortalSchedule(
   return (data ?? []) as unknown as PortalScheduleEntry[];
 }
 
+/** [S122 Part 7] The client's Critical Path view: phases with dates, task TITLES only, the projected finish. */
+export interface PortalCriticalPath {
+  projectedFinish: string | null;
+  phases: { name: string | null; start: string | null; finish: string | null; tasks: string[] }[];
+}
+
+/**
+ * [S122 Part 7, ruling 8] Through `client_critical_path()`, the client's ONLY
+ * Critical Path read. Null when it returns no rows: Critical Path off, not their
+ * project, or not full access — the page then shows `client_schedule` as before.
+ *
+ * ⚠️ The shape is BUILT field by field, never spread from a row, so a column
+ * added to the function later still cannot reach the page through here. And
+ * nothing here (or anything the portal imports) may reach the engine — float
+ * is computed by it and must never exist on a client request
+ * (test/s122-cp-portal-imports.test.ts walks the graph).
+ */
+export async function getPortalCriticalPath(
+  supabase: SupabaseClient<Database>,
+  projectId: string
+): Promise<PortalCriticalPath | null> {
+  const { data, error } = await supabase.rpc('client_critical_path', { p_project_id: projectId });
+  if (error) throw error;
+  const rows = (data ?? []) as {
+    phase_name: string | null;
+    phase_start: string | null;
+    phase_finish: string | null;
+    task_title: string;
+  }[];
+  if (rows.length === 0) return null;
+  const phases: PortalCriticalPath['phases'] = [];
+  for (const r of rows) {
+    let p = phases[phases.length - 1];
+    if (!p || p.name !== r.phase_name) {
+      p = { name: r.phase_name, start: r.phase_start, finish: r.phase_finish, tasks: [] };
+      phases.push(p);
+    }
+    p.tasks.push(r.task_title);
+  }
+  const first = (data as { projected_finish: string | null }[])[0];
+  return { projectedFinish: first.projected_finish, phases };
+}
+
 /** Contracts, contract documents and change orders, in one list. */
 export async function getPortalDocuments(
   supabase: SupabaseClient<Database>,
