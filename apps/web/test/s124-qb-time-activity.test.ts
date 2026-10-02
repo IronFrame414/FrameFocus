@@ -7,6 +7,7 @@ import {
   timeActivityMarker,
   txnDateFor,
 } from '@/lib/quickbooks/time-activity-body';
+import { memoMatches } from '@/lib/quickbooks/reconcile';
 
 // ============================================================================
 // S124 Part 1 — the TimeActivity body, and STOP RULE 6: the invoicing rule
@@ -91,12 +92,14 @@ describe('the body', () => {
       Hours: 7,
       Minutes: 11,
       BillableStatus: 'NotBillable',
-      Description: 'EZCB session abc',
+      Description: 'EZCB session [FF:abc]',
     });
   });
 
-  it('the marker is exactly "EZCB session <id>"', () => {
-    expect(timeActivityMarker('9d9c')).toBe('EZCB session 9d9c');
+  it('the marker is exactly "EZCB session [FF:<id>]" — the shared linkMarker token', () => {
+    expect(timeActivityMarker('9d9c')).toBe('EZCB session [FF:9d9c]');
+    expect(memoMatches(timeActivityMarker('9d9c'), '9d9c')).toBe(true);
+    expect(memoMatches(timeActivityMarker('9d9c'), '9d9')).toBe(false);
   });
 
   it('refuses fractional or negative minutes', () => {
@@ -115,8 +118,9 @@ describe('B. the two rounding rules cannot reach each other (import graph)', () 
     expect(importsOf(read('../../../packages/shared/utils/time-tracking.ts'))).toEqual([]);
   });
 
-  it('the push body imports ONLY the payroll rule', () => {
+  it('the push body imports ONLY the payroll rule and the shared marker', () => {
     expect(importsOf(read('../lib/quickbooks/time-activity-body.ts'))).toEqual([
+      './reconcile',
       '@framefocus/shared/utils/time-tracking',
     ]);
   });

@@ -18,13 +18,17 @@
  * ⚠️ NO RATE IS SENT. QuickBooks Payroll pays from the employee's own pay
  * setup; a rate here would be a second, competing figure.
  *
- * ⚠️ THE MARKER [Josh, RULED Q9]. `Description` carries `EZCB session <id>`. It
- * is what lets a retry FIND an entry it already created when
- * `qb_time_activity_id` was lost (the half-synced create), instead of creating
- * a second one. It is visible to anyone reading the books, including an
- * accountant — a deliberate choice.
+ * ⚠️ THE MARKER [Josh, RULED Q9]. `Description` carries
+ * `EZCB session [FF:<session id>]`. It is what lets a retry FIND an entry it
+ * already created when `qb_time_activity_id` was lost (the half-synced create),
+ * instead of creating a second one. It is visible to anyone reading the books,
+ * including an accountant — a deliberate choice. ⚠️ THE `[FF:<id>]` TOKEN IS
+ * `linkMarker()` FROM `reconcile.ts`, THE PROJECT'S ONE FROZEN MARKER — shared,
+ * not re-invented (PARITY: "a second implementation that does the same thing
+ * IS the divergence"), and matched with the same `memoMatches()`.
  *
- * NOT `server-only`: pure, so the unit test imports it without a stub.
+ * Pure apart from that import (`reconcile.ts` is `server-only`, which the test
+ * config stubs).
  */
 import {
   paidHoursPerSession,
@@ -32,11 +36,11 @@ import {
   type SessionLike,
   type TimeSettings,
 } from '@framefocus/shared/utils/time-tracking';
+import { linkMarker } from './reconcile';
 
-export const TIME_ACTIVITY_MARKER_PREFIX = 'EZCB session ';
-
+/** The Description a NEW entry carries. Match with `memoMatches(description, sessionId)`. */
 export function timeActivityMarker(sessionId: string): string {
-  return `${TIME_ACTIVITY_MARKER_PREFIX}${sessionId}`;
+  return `EZCB session ${linkMarker(sessionId)}`;
 }
 
 export interface SessionWithSegments {

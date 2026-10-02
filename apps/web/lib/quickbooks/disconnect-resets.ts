@@ -52,10 +52,11 @@ export const QB_LINK_RESETS: Array<[string, Record<string, unknown>]> = [
     { qb_bill_id: null, qb_purchase_id: null, qb_push_status: 'not_pushed', qb_synced_at: null },
   ],
   ['expense_payments', { qb_purchase_id: null, qb_push_status: 'not_pushed', qb_synced_at: null }],
-  // ⚠️ NOTHING WRITES THIS YET — `time_activity:create` returns terminal
-  // ("Module 6 payroll, not the 7G connector"). Reset anyway: it is a link by
-  // shape, clearing an always-null column costs nothing, and forgetting it the
-  // day Module 6 lands costs the paragraph in the header.
+  // [S124 Part 1] WRITTEN NOW — approved timesheets push as TimeActivity
+  // behind the Owner's switch. (Superseded: "NOTHING WRITES THIS YET —
+  // `time_activity:create` returns terminal".) The reset is what keeps a
+  // reconnect to DIFFERENT books from sparse-updating a stranger's entry by a
+  // stale id — the header's five-step failure, now live.
   [
     'time_clock_sessions',
     { qb_time_activity_id: null, qb_push_status: 'not_pushed', qb_synced_at: null },

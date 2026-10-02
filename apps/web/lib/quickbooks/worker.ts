@@ -381,6 +381,8 @@ const RECORD_TABLE_FOR_ENTITY: Record<string, string> = {
   expense_payment: 'expense_payments',
   payment: 'client_payments',
   refund: 'client_refunds',
+  // [S124 Part 1] A terminal time-entry failure shows on the timesheet too.
+  time_activity: 'time_clock_sessions',
 };
 
 /**

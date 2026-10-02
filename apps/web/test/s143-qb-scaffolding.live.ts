@@ -357,21 +357,27 @@ describe('S143-Q5 — the connector is the only writer, and it writes id and sta
     }
   });
 
-  it('⚠️ nothing writes the column the connector deliberately REFUSES', async () => {
-    // `time_activity:create` returns terminal — "Time export to QuickBooks is
-    // Module 6 payroll, not the 7G connector" (`entities.ts:1667-1671`). So
+  it('⚠️ a time activity id exists ONLY as the connector writes it: with pushed + synced', async () => {
+    // [S124 Part 1] SUPERSEDED — this asserted that NO session carries a
+    // qb_time_activity_id: "`time_activity:create` returns terminal — 'Time
+    // export to QuickBooks is Module 6 payroll, not the 7G connector' … So
     // `time_clock_sessions.qb_time_activity_id` must stay null for as long as
-    // that refusal stands. A value here means something OTHER than the
-    // connector wrote it, which is the original Q5 question asked where it is
-    // still the right question.
+    // that refusal stands." The refusal no longer stands: approved timesheets
+    // push behind the Owner's switch (companies.qb_time_export_enabled, DEFAULT
+    // false). INVERTED, not deleted: the connector's ONLY writer (recordLink in
+    // lib/quickbooks/time-activity.ts) sets the id, qb_push_status='pushed' and
+    // qb_synced_at TOGETHER, so an id without the other two means something
+    // other than the connector wrote it — the original question, still asked.
     const { data } = await admin
       .from('time_clock_sessions')
-      .select('id, qb_time_activity_id')
+      .select('id, qb_time_activity_id, qb_push_status, qb_synced_at')
       .not('qb_time_activity_id', 'is', null);
+    const strays = (data ?? []).filter(
+      (r) => (r as { qb_push_status: string }).qb_push_status !== 'pushed' || !(r as { qb_synced_at: string | null }).qb_synced_at
+    );
     expect(
-      (data ?? []).map((r) => (r as { id: string }).id),
-      'a time activity id exists, but the connector refuses to create one — ' +
-        'either Module 6 landed (update this test) or something hand-wrote it'
+      strays.map((r) => (r as { id: string }).id),
+      'a time activity id exists without pushed + synced — something other than the connector wrote it'
     ).toEqual([]);
   });
 });

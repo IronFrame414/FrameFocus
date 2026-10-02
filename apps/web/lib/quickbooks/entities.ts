@@ -11,6 +11,7 @@ import {
   totalMismatch,
   withMarker,
 } from './reconcile';
+import { handleTimeActivity } from './time-activity';
 
 /**
  * 7G — the entity mappers. Platform rows in, QuickBooks objects out.
@@ -1974,11 +1975,14 @@ export async function handleQueueRow(
         kind: 'terminal',
         reason: 'Vendors are resolved when the bill is pushed; this row is not needed.',
       };
+    // [S124 Part 1] SUPERSEDED: this arm returned terminal — "Time export to
+    // QuickBooks is Module 6 payroll, not the 7G connector." Approved timesheets
+    // now push, gated by the Owner's switch (companies.qb_time_export_enabled,
+    // DEFAULT false). ONE handler for both: the stored id decides update vs
+    // create, never the row's label (stop rule 5).
     case 'time_activity:create':
-      return {
-        kind: 'terminal',
-        reason: 'Time export to QuickBooks is Module 6 payroll, not the 7G connector.',
-      };
+    case 'time_activity:update':
+      return handleTimeActivity(ctx, row);
     default:
       return { kind: 'terminal', reason: `No QuickBooks handler for ${key}.` };
   }
