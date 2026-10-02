@@ -414,3 +414,77 @@ Read-only, production `jwkcknyuyvcwcdeskrmz` (scratch workdir, ref read back), 2
 **Also probable, not proven:** the parked customer row is re-checked every 5 minutes (`parkAwaitingHuman`), and
 each re-check looks like a metered read. That fits October's 236 CorePlus reads, but I have not traced it to the
 call.
+
+## Part 0 — email pacing (`feature/s124-p0-email-pacing`, commit `ca432c9a`)
+
+- `lib/critical-path/notify.ts` `deliverScheduleNotify`: emails start **no closer than `SEND_INTERVAL_MS = 600`**.
+  ⚠️ 600, not 500: starts at 0, 500 and 1000 ms are three inside one closed second, while 600 keeps any
+  one-second window at two. The wait runs **before** the deadline check, so a send that the wait carries too
+  close to the time limit is logged `not_sent`, never started. The pacer clock is injectable. The file is not
+  Prettier-formatted on main, so it was matched by hand: the diff is +35/−1.
+- **Test** `test/s124-email-pacing.test.ts`, **3/3**: 15 subs + the client gives 16 starts, 16 `email_logs` rows
+  all `sent`, gaps **exactly `[600 ×15]`**, ≤ 2 in any one-second window, first-to-last 9000 ms; the first email
+  is not delayed.
+- **Sabotage** (wait removed): **✘ 1** (*"expected [120, 120, …] to deeply equal [600, 600, …]"*). Restored, md5
+  `9985c26c…` identical, 3/3.
+- Pre-CI: `tsc` exit 0 (0 errors); `next lint` on both files clean; **unit 170 files / 2296 tests, exit 0**;
+  `next build` exit 0 (*"✓ Compiled successfully"*, 136/136).
+- Residual, stated in the code: Resend counts per **account**, so other send paths can still collide.
+
+## Part 2 — the switch (`feature/s124-p2-toggle`): built, unit-proved, NOT yet applied anywhere
+
+- Migration **`20262134000000_s124_qb_time_export_toggle.sql`**: `companies.qb_time_export_enabled boolean NOT
+  NULL DEFAULT false`, plus `_enabled_at` / `_enabled_by`. A **new** trigger function
+  `enforce_companies_qb_time_export()` (`enforce_companies_qb_scope`, md5 `4c5a5aae…`, is **not touched**, so no
+  original needed capturing):
+  - a non-Owner changing it → 42501;
+  - turning it on while not connected → 22023;
+  - the stamps are written only by the trigger;
+  - ⚠️ **a disconnect or revoke turns it OFF** (stated where it is flipped: *"After reconnecting, turn it on
+    again yourself."*). **This is my addition, not a ruling.** It errs safe: a reconnect, possibly to different
+    books, must be a fresh opt-in. Josh may overrule.
+- Owner-only route `POST /api/quickbooks/time-export` writes through the **user's own session**, so the trigger
+  judges the real caller. The screen (`components/quickbooks/time-export-settings.tsx`) is mounted on both
+  Accounting surfaces (PARITY). Its copy is pinned exactly and includes the payroll sentence (Q3), no backfill,
+  off-is-not-undo, and Owner-only.
+- `test/s124-qb-time-export-toggle.test.ts` **21/21**: the migration's ADD COLUMN read exactly; no `= true` /
+  `UPDATE` in the file; the copy exact; the confirm carries the payroll warning verbatim; the component renders
+  every safety sentence; the route as a **total role map** (8 roles + 6 junk, Owner only), non-boolean → 400.
+- **Sabotages, all red, all restored identical:** `DEFAULT true` → ✘ 1; route admits Admin → ✘ 1 (*admin →
+  403*); payroll sentence dropped from the screen → ✘ 1.
+- Live harness `test/s124-qb-time-export-toggle.live.ts` is written and **not yet run**. A migration cannot
+  go to rebuild-test while CI is using it.
+
+## Part 1 / 3 — the push (`feature/s124-p1-push`, stacked on Part 2): built, unit-proved, sandbox BLOCKED
+
+- Migration **`20262135000000_s124_qb_time_activity_push.sql`**: `qb_employee_map` (realm-scoped; one member
+  per Employee and one Employee per member; Owner writes, Owner/Admin reads), and `qb_enqueue_time_activity()`
+  AFTER UPDATE OF status. It queues **only on the transition into `approved`**, only with the switch on and
+  connected, and as `update` when `qb_time_activity_id` is stored. **No other enqueue path exists.**
+- Handler `lib/quickbooks/time-activity.ts`, one for both operations. **The stored id decides**, then a marker
+  lookup runs before every create (±7 days, 1000-row page; a full page → park, never create; two marked
+  entries → terminal), then a create. Gates re-checked at pickup: switch on, day still approved, closed and live,
+  member matched (else **park**). No rate, no customer; actual paid minutes, nearest minute.
+- ⚠️ **The marker reuses the project's frozen `linkMarker()` token:** Description = **`EZCB session
+  [FF:<session id>]`**, matched by the same `memoMatches()`. This is Q9's visible note, written in the existing
+  convention rather than a second marker scheme (PARITY).
+- Employee matching: `GET/POST /api/quickbooks/employees`, Owner-only. It lists active QuickBooks Employees
+  (one metered read) and **never creates one**. Matching wakes parked days.
+- Q6 flag: `lib/quickbooks/time-entry-flag.ts`, **one** function used by the timesheet day page AND the
+  Accounting card.
+- Tests **13 + 10 + 5 + 21**, all green. Sabotages, all red and restored identical:
+  - the half-hour rule in the push → ✘ 5;
+  - truncate instead of round → ✘ 1;
+  - no marker lookup → ✘ 3;
+  - ⚠️ **naive re-push** (stored id ignored and no lookup) → ✘ 7;
+  - switch gate removed → ✘ 1;
+  - flag arm removed → ✘ 1.
+- Existing tests swept: `s143-qb-scaffolding.live.ts` *"nothing writes the column the connector deliberately
+  REFUSES"* is **inverted in place** (an id may exist only with `pushed` + `synced`), with the old assertion
+  quoted. `s149` is unaffected. `disconnect-resets.ts`'s "NOTHING WRITES THIS YET" comment is superseded in
+  place.
+- ⚠️ **Residual found, NOT fixed (out of scope):** `reopen_session_on_segment_hours` reopens an approved day
+  only when a segment's start, end or deletion changes. A direct Owner/Admin UPDATE that changes **only
+  `segment_type`** (work ↔ break) shifts paid hours while the day stays approved, so QuickBooks would not be
+  told. Week-sheet edits go through `edit_time_segment`, which always reopens. Candidate `#1-s124qb`.
+- Sandbox harness `test/s124-qb-time-activity.live.ts` is written and **BLOCKED on the sandbox keys**.
