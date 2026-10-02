@@ -426,3 +426,12 @@ the checkout stayed on `nmyphyhmfttxkdoposvf` (read back). The same query ran fi
 | (b) | a second copy of the sentence appended to `app/portal/[projectId]/page.tsx` | **✘ 1**: carriers = `[lib/…/client-disclaimer.ts, app/portal/[projectId]/page.tsx]` |
 
 Both restored by `git checkout`, `cmp` 0 against copies taken before each edit; `git status` shows only the new test.
+
+### ✅ D-4 MERGED — `30869f3c` (parents `b7e6b7fe`, `d72096fc`); its migration `20262132000000` is ON PRODUCTION (MATCH ×8)
+Merged under S180 without a round-trip. (1) CI `37002581074` green on `606b1713`, base = `main`; the one later commit (`d72096fc`) is
+`docs/sessions/S123-report.md` only (`git diff --name-only 606b1713 d72096fc`); the merge tree `42522908…` = `d72096fc`'s tree. (2) Every agreed check
+above, with its numbers. (3) The migration on production BEFORE the merge, verified by object. `origin/main` read back `30869f3c`.
+- **`feature/s122-p9-mobile` deleted** (local + remote, `20e0f6c4`): its two commits (`440522ca`, `20e0f6c4`) are patch-identical (`git cherry` → `-`
+  both) to `a10f05b1`, `ddfc6781`, which are now ancestors of `main` via this merge.
+- **The stack was rebased onto `30869f3c`:** D-2 (one report conflict, both appended entries kept in order, then `--continue`), D-3 and D-1
+  (clean). All force-pushed `--with-lease`. `main`'s own run for `30869f3c` holds rebuild-test, so D-3's live tests and D-1's migration wait for it.
