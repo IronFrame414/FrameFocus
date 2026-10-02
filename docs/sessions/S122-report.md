@@ -2056,3 +2056,18 @@ Built so far, **without touching the database** (`main`'s merge run `36944879271
   **19 passed**.
 
 - **Pre-CI** (`f504b26d`): type-check 0 (0/5 cached); lint 0 (no new warning); unit **167 / 2,281** (0 cached). **CI requested** (base `bacf1bb8` = `origin/main`; 0 runs in progress or queued). m30 is on rebuild-test.
+
+#### Part 7 CI and PRODUCTION section 7: `20262130000000_s122_cp_client_view` — **MATCH ×10**
+
+- **CI `36949563622`** on `61dfc453` (base `bacf1bb8` = `origin/main`; 0 other runs): **green**. Unit **167 / 2,281**; e2e **693 passed, 24 skipped, 0 flaky,
+  0 failed** (33.2 m).
+- **Spec check (unattended rule):** m30 creates ONE function, `client_critical_path`, which plan row 10 names. No table, column or policy; no
+  constraint over existing rows (stop rule 2 does not apply).
+- Workdir `wd7`: all **293** migrations, `cmp` 0 each, m30 last; linked to production (`WD REF=jwkcknyuyvcwcdeskrmz`); checkout read back `nmyphyhmfttxkdoposvf`.
+- **Pre-check, PRODUCTION:** ledger from `…2129` = `20262129000000` only; `client_critical_path` count **0**; production `client_schedule` md5
+  `22d6e081…` = rebuild-test's (untouched). (The full verification query cannot run before the function exists, because
+  `has_function_privilege` errors on a missing function, so the pre-check is its absence-safe subset.)
+- **Dry run:** *"• 20262130000000_s122_cp_client_view.sql"*, exactly one. **Push:** exit 0.
+- **Verification:** the same read-only file on both, then `diff` → **exit 0, 10 lines identical**: ledger `…2129, …2130`; function count 1; definition md5
+  `ac958d4f…`; result type; secdef/STABLE; comment md5 `b22502a4…`; EXECUTE `anon` **false**, `authenticated` true, `PUBLIC` **false**;
+  `client_schedule` md5 `22d6e081…` (unchanged). Production ACL `postgres, authenticated, service_role, supabase_auth_admin`. Workdir deleted.
