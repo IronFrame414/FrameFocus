@@ -410,3 +410,32 @@ the checkout stayed on `nmyphyhmfttxkdoposvf` (read back). The same query ran fi
 | comment md5 `405bf4dc3eb55cd72761259622915dd6` | MATCH |
 | EXECUTE anon **false** / authenticated **true** | MATCH |
 | ACL `postgres, authenticated, service_role, supabase_auth_admin` (no anon, no PUBLIC) | MATCH |
+### D-2 — "these dates" (branch `feature/s123-d2-disclaimer`, stacked on D-4; no migration; no DB)
+
+**Strings changed, by file: NONE.** The sentence already said "these dates" in its one home, `apps/web/lib/critical-path/client-disclaimer.ts:13`
+(1.4d), and "and figures" exists nowhere, so there is no money surface whose wording must be kept apart. What D-2 adds is the guard:
+- **`apps/web/test/s123-client-disclaimer.test.ts`** (unit, runs in CI) **3/3**: (1) the constant is exactly the "these dates" sentence;
+  (2) it contains "these dates" and NOT "figures"; (3) **ONE copy**: a walk over `app/`, `lib/`, `components/` (asserted > 100 files, so an empty
+  walk cannot pass) finds the sentence ONLY in `lib/critical-path/client-disclaimer.ts`. The scan matches the sentence ("fluid and dynamic"), not
+  the phrase "dates and figures", so a future MONEY surface may still carry its own "and figures" wording, as the ruling requires.
+- The D-1 list and Gantt views will render this same constant (asserted in D-1's e2e).
+
+| # | sabotage | result |
+| --- | --- | --- |
+| (a) | the constant → "these dates **and figures** are for…" | **✘ 2** (exact sentence; "figures") |
+| (b) | a second copy of the sentence appended to `app/portal/[projectId]/page.tsx` | **✘ 1**: carriers = `[lib/…/client-disclaimer.ts, app/portal/[projectId]/page.tsx]` |
+
+Both restored by `git checkout`, `cmp` 0 against copies taken before each edit; `git status` shows only the new test.
+
+### ✅ D-4 MERGED — `30869f3c` (parents `b7e6b7fe`, `d72096fc`); its migration `20262132000000` is ON PRODUCTION (MATCH ×8)
+Merged under S180 without a round-trip. (1) CI `37002581074` green on `606b1713`, base = `main`; the one later commit (`d72096fc`) is
+`docs/sessions/S123-report.md` only (`git diff --name-only 606b1713 d72096fc`); the merge tree `42522908…` = `d72096fc`'s tree. (2) Every agreed check
+above, with its numbers. (3) The migration on production BEFORE the merge, verified by object. `origin/main` read back `30869f3c`.
+- **`feature/s122-p9-mobile` deleted** (local + remote, `20e0f6c4`): its two commits (`440522ca`, `20e0f6c4`) are patch-identical (`git cherry` → `-`
+  both) to `a10f05b1`, `ddfc6781`, which are now ancestors of `main` via this merge.
+- **The stack was rebased onto `30869f3c`:** D-2 (one report conflict, both appended entries kept in order, then `--continue`), D-3 and D-1
+  (clean). All force-pushed `--with-lease`. `main`'s own run for `30869f3c` holds rebuild-test, so D-3's live tests and D-1's migration wait for it.
+
+**D-2 pre-CI** (on `6ff827c6`, base `30869f3c` = `origin/main`): **`next build` exit 0** (✓ Compiled successfully); `turbo run type-check --force` exit 0
+(5/5, 0 cached); `next lint` exit 0 (5 pre-existing warnings); unit exit 0: **169 files / 2,290 tests**. No migration. 0 runs in progress
+(`main` `30869f3c` **success**, 12:33–13:22Z). **CI requested by this commit.**
