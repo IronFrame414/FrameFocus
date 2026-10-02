@@ -1,0 +1,1 @@
+S123 D-4: stamp a schedule template onto an empty Critical Path project in ONE transaction, as the caller (SECURITY INVOKER). Refuses a project with live tasks (FFHAS, DETAIL = count). Serialised per project by an advisory lock. Returns the number of tasks written.
