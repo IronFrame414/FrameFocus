@@ -2096,3 +2096,32 @@ Built so far, **without touching the database** (`main`'s merge run `36944879271
 | D8-1 | Save and stamp are app code writing **as the caller** (RLS + the existing task/dependency guards decide), **no SQL function** | a SECURITY INVOKER/DEFINER plpgsql function doing it in one transaction | Josh's unattended rule: a function the spec does not name stops the item. Cost: no single-transaction atomicity; a failure mid-stamp is **compensated** (the rows it wrote are soft-deleted) and said so. |
 | D8-2 | Stamping requires Critical Path to be **on** already (the stamp lives in the CP tab's empty network) | turning CP on as part of the stamp | Narrower: the stamp never flips a project-level switch (or its client-notification checkbox) as a side effect. |
 | D8-3 | The refusal counts **live tasks** (Josh's ruling: "already has tasks", names how many). Existing phases with no tasks do not refuse | refusing on phases too | Follows the ruling's wording; phases alone carry no schedule. |
+
+### R4.2 — Part 8 on rebuild-test: migration, live proofs, sabotages
+
+- `main`'s Part 7 merge run `36952604763` on `48f7cf01`: **green** (693 passed). Then m31 on rebuild-test: dry run *"• 20262131000000_s122_schedule_templates.sql"*,
+  exactly one; `npm run db:push` exit 0; types **+254** (the four tables only); type-check 5/5. Deletion census `deletion-census.test.ts` **5/5**
+  with the four tables registered children-first.
+- **Live `s122-cp-templates.live.ts`: 25/25** (writes as a role return no rows; outcomes counted by the service role). The first run failed in its
+  own fixture (`projects.contact_id` NOT NULL); fixed.
+  - **CREATE total map:** owner, admin yes; PE, PM, foreman, crew, client, sub no. **READ total map:** owner, admin, PM, PE yes; the rest no.
+  - **SAVE** (owner): 2 phases, 3 tasks (durations 3/2/1 in order), 1 link. ⚠️ A template task's columns are the CLOSED set: id, company,
+    template, phase, title, description, priority, duration, sort, standard columns. **No date, assignee or percent column exists.** A PM's save → 403,
+    nothing kept.
+  - **STAMP** onto an empty CP project, start Mon 4 Jan 2027: 3 tasks, 2 phases, 1 link, start date set; A Jan 4–6, B Jan 7–8, C Jan 4; all
+    `not_started`, 0%; **0 assignees**; history `[{template, 2027-01-08}]`.
+  - ⚠️ **Onto a project that already has 3 tasks → `{ok:false, 409, "This project already has 3 tasks; stamping would mix two plans. Stamp onto a
+    project with no tasks."}` and the counts (tasks, phases, links, start date) are IDENTICAL before and after.**
+  - **A PM** (on the project, a schedule editor) stamps successfully. This settles the open question of whether `projects_update` admits the PMs
+    the editor function admits: for an assigned PM, yes.
+  - A **foreman** → 403 with the editor sentence, nothing written. **CP off** → 409 *"Turn on Critical Path for this project first."*, nothing written.
+  - **DELETE:** a PM → 403, still live; the Admin → soft-deleted.
+- **Sabotages** (T2's SQL + RESTORE committed first, `77be4934`):
+
+  | # | sabotage | ✘ |
+  | --- | --- | --- |
+  | (T1) | the has-tasks refusal removed from the stamp | **1**: the refusal test |
+  | (T2) | a permissive `INSERT … WITH CHECK (true)` policy on `schedule_templates` | **7**: client, crew, foreman, PE, PM, sub in the CREATE map, and the PM save. Dropped; policies read back as exactly the 3 originals |
+  | (T3) | the stamp's editor check removed | **1**: the foreman test. Received `404 "That template was not found…"`: **RLS on the templates stopped the foreman before any write**, a second line of defence, with the task/dependency guards behind it |
+
+  `templates.ts` restored (`cmp` 0, == HEAD). Clean: **25/25**.
