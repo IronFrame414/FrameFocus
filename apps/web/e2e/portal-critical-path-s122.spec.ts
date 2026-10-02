@@ -125,9 +125,9 @@ async function finishNow(): Promise<string | null> {
 }
 
 /** Both payloads the client's browser receives for the page: the document (with its RSC scripts) and the flight data. */
-async function payloads(page: Page): Promise<{ html: string; flight: string }> {
+async function payloads(page: Page, query = ''): Promise<{ html: string; flight: string }> {
   const html = await page.content();
-  const res = await page.request.get(`/portal/${projectId}`, { headers: { RSC: '1' } });
+  const res = await page.request.get(`/portal/${projectId}${query}`, { headers: { RSC: '1' } });
   expect(res.ok(), `flight fetch ${res.status()}`).toBe(true);
   return { html, flight: await res.text() };
 }
@@ -193,12 +193,57 @@ test.describe('S122 Part 7 · the client portal payload never carries float', ()
     }
   });
 
+  // [S123 D-1, Josh RULED] ONE schedule with a List ⇄ Gantt switch, and the
+  // payload proof RE-RUN against the merged page — in BOTH views, because each
+  // view is a different server render with its own payload. [D-1a] The Gantt is
+  // bars only: no arrows, no ghosts, one colour.
+  test('⚠️ LINKED client, D-1: the list now shows each task\'s dates, and the GANTT view\'s payloads carry nothing they must not', async ({ page }) => {
+    await signInPortal(page, LINKED, /\/portal/);
+    await page.goto(`/portal/${projectId}`);
+    // LIST: one schedule, the switch, the disclaimer, each task with its dates.
+    await expect(page.getByTestId('portal-schedule')).toHaveAttribute('data-view', 'list', { timeout: 20_000 });
+    await expect(page.getByTestId('portal-schedule-view-list')).toHaveAttribute('aria-current', 'page');
+    await expect(page.getByTestId('portal-schedule-disclaimer')).toHaveText(DISCLAIMER);
+    await expect(page.getByTestId('portal-cp-task')).toHaveCount(2);
+    await expect(page.getByTestId('portal-cp-task').nth(0)).toContainText(`${day('2027-01-04')} → ${day('2027-01-06')}`);
+    await expect(page.getByTestId('portal-cp-task').nth(1)).toContainText(`${day('2027-01-07')} → ${day('2027-01-12')}`);
+    await expect(page.getByTestId('portal-gantt'), 'only the chosen view is rendered').toHaveCount(0);
+
+    // GANTT: through the switch, as a client would.
+    await page.getByTestId('portal-schedule-view-gantt').click();
+    await expect(page.getByTestId('portal-schedule')).toHaveAttribute('data-view', 'gantt', { timeout: 20_000 });
+    await expect(page.getByTestId('portal-schedule-disclaimer'), 'the disclaimer on the Gantt view too').toHaveText(DISCLAIMER);
+    await expect(page.getByTestId('portal-cp-finish')).toHaveText(day('2027-01-12'));
+    const gantt = page.getByTestId('portal-gantt');
+    await expect(gantt.getByTestId('portal-gantt-phase')).toHaveText(['Framing', 'Finish']);
+    await expect(gantt.getByTestId('portal-gantt-bar')).toHaveCount(2);
+    // ⚠️ D-1a, in the DOM: nothing that could be an arrow, and every bar the same colour.
+    expect(await gantt.locator('svg, path, line, polyline, marker, canvas').count(), 'no arrows: no vector drawing at all').toBe(0);
+    const colours = await gantt.getByTestId('portal-gantt-bar').evaluateAll((els) => [...new Set(els.map((e) => getComputedStyle(e).backgroundColor))]);
+    expect(colours, 'one colour for every bar (no critical colouring)').toHaveLength(1);
+    await expect(page.getByTestId('portal-cp-phase'), 'the list is not also sent').toHaveCount(0);
+
+    const { html, flight } = await payloads(page, '?view=gantt');
+    for (const [name, text] of [['gantt document', html], ['gantt flight', flight]] as const) {
+      for (const must of [day('2027-01-12'), 'Framing', 'Finish', `${MARKER} A`, `${MARKER} B`, DISCLAIMER, 'portal-gantt-bar']) {
+        expect.soft(text.includes(must), `${name} carries "${must}"`).toBe(true);
+      }
+      expect.soft(leaks(text), `${name}: nothing it must not carry`).toEqual(NONE);
+    }
+  });
+
   test('UNLINKED client (same company): the page carries none of the fixture', async ({ page }) => {
     await signInPortal(page, CONTROL, /\/portal/);
     await page.goto(`/portal/${projectId}`);
     const html = await page.content();
     for (const never of [`${MARKER} A`, `${MARKER} B`, day('2027-01-12'), 'portal-cp-finish']) {
       expect(html.includes(never), `the unlinked client received "${never}"`).toBe(false);
+    }
+    // [S123 D-1] And the Gantt view sends them nothing either.
+    await page.goto(`/portal/${projectId}?view=gantt`);
+    const gantt = await page.content();
+    for (const never of [`${MARKER} A`, `${MARKER} B`, day('2027-01-12'), 'portal-gantt-bar']) {
+      expect(gantt.includes(never), `the unlinked client's Gantt view received "${never}"`).toBe(false);
     }
     // Control that the page did respond (a 404 page, not a crash or a blank).
     expect(html.length).toBeGreaterThan(500);

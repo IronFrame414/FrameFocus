@@ -514,3 +514,109 @@ the tree tested.
 **D-3 pre-CI** (on `b0cfe063`, stacked on D-2 `99c170d1` → `30869f3c` = `origin/main`): **`next build` exit 0**; type-check exit 0 (0 cached); lint exit
 0 (5 pre-existing warnings); unit **169 / 2,290**. No migration. The D-3 live tests (18/18 + 8/8 sabotage runs) and e2e (6/6 against a
 production build) ran above. 0 runs in progress. **CI requested by this commit.**
+### ⚠️ FINDING for Josh (D-1 / Q3): ordinary jobs do NOT show task status in the portal today
+Josh's Q3 addition says *"client_schedule already returns status, so non-Critical-Path jobs show status in the portal TODAY. Do not remove it."*
+`client_schedule` does **return** `status`, but the page **does not display it**: on `origin/main` (`b7e6b7fe`),
+`app/portal/[projectId]/page.tsx:101-109` renders `s.title`, `s.phase_name`, `s.start_date`, `s.due_date`. The only "Status" on the page is the
+**project's** (`:58`, `<PortalStatus value={project.status} />`). A server component sends only what it renders, so task status is not in today's
+payload either.
+**Decided for this build (narrower, reversible):** D-1 keeps exactly the fields displayed today. The ordinary list is unchanged. Its Gantt shows
+title, phase and dates. **No task status is displayed on either kind of job**, so nothing is taken away from existing clients and nothing new is
+shown. If Josh wants status SHOWN on ordinary jobs, it is a one-line addition to the list. Asked in the final message (Q-D1).
+
+### ⚠️ Vercel preview builds red on `feature/s123-d1-client-schedule` (raised by Josh) — classified **A: expected work-in-progress**
+- **`next build` on HEAD `d6be9b66`** (clean tree): **exit 1**, ONE error and nothing else: `./lib/services/portal.ts:339:16 Type error: Conversion of type
+  '{ … task_title: string; }[]' to type '{ … task_start: string | null; task_finish: string | null; }[]'`. "Compiled successfully" precedes it,
+  so bundling, imports and dependencies are fine; it fails only at type-checking.
+- **Cause:** `03a057e` (D-1 WIP) made the portal service read the two new columns that migration `20262133000000` adds. The generated
+  `packages/shared/types/database.ts` gains them only when that migration is applied to rebuild-test and `npm run db:push` regenerates the
+  types. The migration is written but NOT applied, because D-4's CI run held rebuild-test. The four red previews (`03a057e`, `2abddcd`, `cde8e77`,
+  `d6be9b6`) all descend from `03a057e`. `b605c6a`, its parent, was the last Ready. Not structural: the D-3 branch (the new `@vercel/functions`
+  dependency) builds with **exit 0**, the same 5 pre-existing warnings, ✓ Compiled successfully.
+- **Fixed by D-1's completion** (apply m33 to rebuild-test → regenerate types → `next build` re-read) **before** any CI request for D-1. The
+  standing rule holds: no CI has been or will be requested on a branch whose `next build` exit line has not been read as 0.
+- **My error, recorded:** I pushed commits I knew did not compile. They were saved for restart-safety, but that left four red previews. The commit
+  said "types pending the migration"; the previews did not.
+
+### D-1 — ONE client schedule, engine-fed, List ⇄ Gantt (branch `feature/s123-d1-client-schedule`)
+
+**How the ONE schedule is assembled (as built).** `app/portal/[projectId]/page.tsx` renders ONE "Schedule" card.
+- **Critical Path project:** fed ONLY by `client_critical_path`, which now also returns `task_start`/`task_finish` (the engine's write-through dates).
+  `client_schedule` is NOT called there. The card shows the projected finish, the disclaimer, then the List (phases with date ranges, each task with
+  its dates) or the Gantt. **No status** (D7-4, Q3).
+- **Ordinary project:** fed by `client_schedule`, unchanged. The List is **exactly today's markup** (title, phase, start → due). Added: the disclaimer
+  and the switch (Q1, ⚠️ **live-facing**: every linked client on an ordinary job sees these the moment D-1 merges).
+- **The switch is a URL parameter (`?view=gantt`), not client state.** Both views are server components. Only the chosen view is rendered and
+  sent. **Nothing is handed to client code**, so there is no props object for a field to ride in (`portal-ui.tsx`'s rule, kept).
+- **Float out of the PAYLOAD:** neither function's return type has a column for float, critical, duration, assignee, history (or, on CP, status);
+  the service builds its shape field by field; the page hands the Gantt `{phase, title, start, finish}` per task, built field by field. Proven
+  below in what the page **sends**, in both views.
+- **D-1a:** `app/portal/[projectId]/client-gantt.tsx` is its own server drawing: bars on a date axis, one colour (`color.primary`), no `svg`, no
+  arrows, no ghosts. The axis labels only the first start and the last finish, so no day the history holds is printed. No CSS `float` anywhere,
+  because the payload regex would read it as a float field. It imports only `lib/theme` and `../portal-ui`.
+
+**Migration `20262133000000_s123_client_schedule_one_view`:** DROP + CREATE `client_critical_path` (the return type gains `task_start date,
+task_finish date`; the body and the gate are otherwise unchanged); `REVOKE … PUBLIC, anon`; `GRANT … authenticated`; the comment. The original was
+captured and committed first (`docs/sessions/S123-sabotage-originals/client_critical_path/`, md5 `ac958d4f…` = production's).
+- **rebuild-test:** dry run *"• 20262133000000_s123_client_schedule_one_view.sql"*, exactly one; `npm run db:push` exit 0 (web type-check a cache
+  miss, passed); `database.ts` diff = `+task_finish`, `+task_start`, nothing else. **Verified by object, 9/9 against the expectation file:** ledger
+  `…2132, …2133`; count 1; md5 `d37fce44b4c0426c7f6258f28a0d7e43`; return type with the two columns; DEFINER/STABLE/sql/`search_path=public`;
+  comment md5 `fafbe04a…`; EXECUTE anon **false**, authenticated **true**; **ACL identical to the original** (`postgres, authenticated, service_role,
+  supabase_auth_admin`: the drop lost nothing); `client_schedule` md5 **`22d6e081…` unchanged**.
+- **`next build` exit 0 after the types** (✓ Compiled successfully). The red previews end at this commit.
+
+**Proofs** (rebuild-test; e2e against a production build, `next start`):
+- **Live 38/38:** `s122-cp-client-view` 7/7 (the inverted closed shape, exact values incl. task dates A Jan 4–6, B Jan 7–12; nothing is the old finish
+  Jan 8 or a duration; the tasks table still closed; **THE STRANGER → 0**; unlinked → 0; linked on CP-OFF → 0; CP off → 0, back on → 2).
+  **Part 7's CP-OFF regression control `s122-cp-client-schedule-regression` 4/4: GREEN** (exact sorted keys, values = the service role's
+  projection, unlinked → 0). `s164-m9-portal-shell` 27/27.
+- **Import graph** (`s122-cp-portal-imports.test.ts`, unit, CI) **6/6**: transitive walk, positive controls (page, service, disclaimer, client Gantt), and the
+  desktop CP page DOES reach the engine AND the staff Gantt (controls that must fire). **Nothing under `app/portal` reaches the engine, `lib/critical-path`
+  (but the disclaimer), or `components/schedule/`.**
+- **⚠️ THE PAYLOAD PROOF, re-run against the merged page** (`portal-critical-path-s122.spec.ts` 4/4 + `portal-schedule-s123.spec.ts` 2/2 +
+  regression `portal-pages.spec.ts` 3/3 = **9/9**):
+  - LIST view (document + flight, as Part 7): 0 float / critical / duration / assignee / history-date / history / status. Positive control: the
+    finish, both phase names, both titles, the disclaimer.
+  - **GANTT view (document + flight of `?view=gantt`): the same zeros**, and the same positives plus `portal-gantt-bar`. DOM: 2 bars, phases
+    `[Framing, Finish]`, **0** `svg/path/line/polyline/marker/canvas`, **1** bar colour; the list is not also sent (`portal-cp-phase` 0).
+  - The disclaimer is visible in BOTH views (`portal-schedule-disclaimer`, exact text). The list shows each task's dates (`Jan 4, 2027 → Jan 6, 2027`,
+    `Jan 7, 2027 → Jan 12, 2027`). The unlinked client's list AND Gantt views carry none of the fixture.
+  - Ordinary job (S164's `eaf0e25b`, CP off, **2 tasks, 2 dated**): List = today's rows + disclaimer + switch, no CP pieces; Gantt = 2 rows, 2 bars, no arrows.
+
+| # | sabotage (each its own production build, restored by `git checkout`, diff vs HEAD empty) | result |
+| --- | --- | --- |
+| (a) | the #136 shape: the Gantt row serializes `{ totalFloat: 2 }` | **✘** both *"gantt document"* (`float: 4`) and *"gantt flight"* |
+| (b) | an `svg` arrow in the client Gantt | **✘** *"no arrows: … Expected 0, Received 2"* |
+| (c) | critical colouring: the first bar `color.danger` | **✘** *"one colour for every bar … Received ["rgb(192, 54, 44)", "rgb(59, 74, 224)"]"* |
+| (d) | the disclaimer on the List view only | **✘** *"the disclaimer on the Gantt view too … element(s) not found"* |
+| (e) | the client Gantt imports `components/schedule/gantt` (stop rule 10) | **✘ 2** import tests (the walk then reaches `critical-path.ts`, `critical-path-writes.ts`, the staff Gantt) |
+| (f) | `client_schedule` gains a column (S122's committed sabotage + RESTORE, `46b35cbf`) | **✘ 2** of Part 7's CP-off control (keys, values); RESTORE read back **md5, the full 15-role ACL and the comment byte-identical** to before |
+
+**D-3 CI `37021426175`** on `298c6d9b` (stacked on D-2 → `30869f3c` = `origin/main`): **green**. Both jobs success. Unit **169 / 2,290**; e2e **702 passed**
+(701 + the new D-3a navigate-away test, which ran `✓`), 24 skipped, 0 failed, 0 `✘` (47.5 min, 14:39:47–15:30:57Z, nothing else running).
+
+**D-1 pre-CI** (on `fa619ff9`, stacked on D-3 `298c6d9b`): **`next build` exit 0**; type-check exit 0 (0 cached); lint exit 0 (5 pre-existing); unit
+**169 / 2,293** (+3: D-1a's import tests). Migration `20262133000000` already on rebuild-test (applied 13:2xZ while no run was active; the earlier
+branches' code ignores the two added columns, since it builds its shape field by field). 0 runs in progress. **CI requested by this commit.**
+
+**D-1 CI `37027639690`** on `52a14798`: **green**. Both jobs success. Unit **169 / 2,293**; e2e **705 passed** (702 + D-1's three: the Gantt payload test and the two
+ordinary-schedule tests; all 6 portal tests `✓`), 24 skipped, 0 failed, 0 `✘` (44.2 min, 15:32:01–16:19:52Z, nothing else running).
+
+**PRODUCTION section D-1 — `20262133000000_s123_client_schedule_one_view` — MATCH ×9.** Workdir `wd-m33` = `git archive feature/s123-d1-client-schedule
+supabase/migrations` (296 files, `cmp` 0), linked `jwkcknyuyvcwcdeskrmz` (read back); the checkout stayed on `nmyphyhmfttxkdoposvf` (read back).
+- Pre-check (read-only): ledger from `…2132` = `20262132000000` only; `client_critical_path` md5 **`ac958d4f…` = the captured original**, ACL = the
+  captured ACL; **0** objects depend on it (safe to DROP); `client_schedule` md5 `22d6e081…`.
+- Dry run (run twice, before and after D-1's CI): *"• 20262133000000_s123_client_schedule_one_view.sql"*, **exactly one**. Push: exit 0, *"Applying migration
+  20262133000000…"*. Production's pre-D-1 code reads the function field by field, so the two added columns are ignored until D-1's code deploys.
+
+| expected (the same file rebuild-test matched 9/9) | production |
+| --- | --- |
+| ledger `20262132000000,20262133000000` | MATCH |
+| count 1 | MATCH |
+| md5 `d37fce44b4c0426c7f6258f28a0d7e43` | MATCH |
+| `p_project_id uuid -> TABLE(…, task_title, task_sort, task_start, task_finish, projected_finish)` | MATCH |
+| DEFINER **true** / STABLE / sql / `search_path=public` | MATCH |
+| comment md5 `fafbe04a80d57194f21351d2b2a32407` | MATCH |
+| EXECUTE anon **false** / authenticated **true** | MATCH |
+| ACL `postgres, authenticated, service_role, supabase_auth_admin` (= the original's: the DROP lost no grant) | MATCH |
+| `client_schedule` md5 `22d6e0814a6bbdd8791f354dbbd0153f` (**untouched**, Q2) | MATCH |

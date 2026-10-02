@@ -46,3 +46,25 @@ describe('S122 Part 7 — the portal import graph never reaches the engine', () 
     expect(forbidden(PORTAL)).toEqual([]);
   });
 });
+
+// [S123 D-1a, Josh RULED] THE CLIENT GANTT IS ITS OWN DRAWING. The staff Gantt
+// draws dependency arrows, slack ghosts and the red critical chain; a client
+// version made from it "with a flag" would still carry that data into the
+// payload (#136). So the portal must not reach the staff schedule components
+// at all — enforced by the graph walk, not by review (stop rule 10).
+const STAFF_GANTT = 'components/schedule/gantt.tsx';
+
+describe('S123 D-1a — the portal never reaches the staff Gantt', () => {
+  it('the walk reached the client Gantt (positive control)', () => {
+    expect(PORTAL).toContain('app/portal/[projectId]/client-gantt.tsx');
+  });
+
+  it('CONTROL — the desktop Critical Path page DOES reach the staff Gantt', () => {
+    const desktop = reachableFrom([join(WEB_ROOT, 'app/dashboard/projects/[id]/critical-path/page.tsx')], OPTS);
+    expect(desktop).toContain(STAFF_GANTT);
+  });
+
+  it('⚠️ nothing under app/portal reaches components/schedule/ (the staff Gantt, its calendar, its sheet)', () => {
+    expect(PORTAL.filter((f) => f.startsWith('components/schedule/'))).toEqual([]);
+  });
+});

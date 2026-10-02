@@ -304,10 +304,19 @@ export async function getPortalSchedule(
   return (data ?? []) as unknown as PortalScheduleEntry[];
 }
 
-/** [S122 Part 7] The client's Critical Path view: phases with dates, task TITLES only, the projected finish. */
+/**
+ * [S122 Part 7; S123 D-1] The client's Critical Path schedule: phases with dates,
+ * each task's TITLE and DATES, the projected finish. ⚠️ No status (D7-4 stands
+ * for CP jobs), no float, no duration, no person, no history.
+ */
 export interface PortalCriticalPath {
   projectedFinish: string | null;
-  phases: { name: string | null; start: string | null; finish: string | null; tasks: string[] }[];
+  phases: {
+    name: string | null;
+    start: string | null;
+    finish: string | null;
+    tasks: { title: string; start: string | null; finish: string | null }[];
+  }[];
 }
 
 /**
@@ -332,6 +341,8 @@ export async function getPortalCriticalPath(
     phase_start: string | null;
     phase_finish: string | null;
     task_title: string;
+    task_start: string | null;
+    task_finish: string | null;
   }[];
   if (rows.length === 0) return null;
   const phases: PortalCriticalPath['phases'] = [];
@@ -341,7 +352,7 @@ export async function getPortalCriticalPath(
       p = { name: r.phase_name, start: r.phase_start, finish: r.phase_finish, tasks: [] };
       phases.push(p);
     }
-    p.tasks.push(r.task_title);
+    p.tasks.push({ title: r.task_title, start: r.task_start, finish: r.task_finish });
   }
   const first = (data as { projected_finish: string | null }[])[0];
   return { projectedFinish: first.projected_finish, phases };

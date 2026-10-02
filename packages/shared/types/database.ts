@@ -11732,7 +11732,9 @@ export type Database = {
           phase_sort: number
           phase_start: string
           projected_finish: string
+          task_finish: string
           task_sort: number
+          task_start: string
           task_title: string
         }[]
       }
