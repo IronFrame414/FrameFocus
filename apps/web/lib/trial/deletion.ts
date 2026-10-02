@@ -436,6 +436,10 @@ export const COMPANY_TABLES: string[] = [
   // record anyone must retain [Q4]. Nothing references it, so its position
   // among the other QuickBooks tables is free.
   'qb_sync_queue', 'qb_read_budget', 'qb_webhook_events', 'qb_vendor_map',
+  // [S124 Part 1] `qb_employee_map` (20262135000000): member -> QuickBooks
+  // Employee, per realm. Operational mapping, not a record to retain. It
+  // references company_members, so it must go BEFORE them (line ~464, below).
+  'qb_employee_map',
   // M-J (20261430000000) adds two more. ⚠️ THE ORDER IS A REAL CONSTRAINT, not
   // tidiness: `expenses.payment_account_id` references company_payment_accounts
   // with NO ACTION, so that table cannot go until `expenses` has (line 342,

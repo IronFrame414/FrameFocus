@@ -99,4 +99,9 @@ export const QB_LINK_EXEMPT: Record<string, string> = {
   // census exists to catch were missed precisely that way. There is nothing to
   // forget, and forgetting to forget it cannot hurt.
   'qb_vendor_map.qb_vendor_id': 'Realm-scoped by column and by query; a stale realm can never match.',
+
+  // [S124 Part 1] SAME SHAPE AS THE VENDOR MAP, SAME REASON. Every row carries
+  // `realm_id` and the time-entry handler filters on `ctx.conn.realmId`, so a
+  // match made under one QuickBooks company can never be read under another.
+  'qb_employee_map.qb_employee_id': 'Realm-scoped by column and by query; a stale realm can never match.',
 };
