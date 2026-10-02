@@ -4,6 +4,150 @@ Running record. Branch `feature/s123-cp-closeout`. Every measurement names its r
 
 ---
 
+## PHASE 2 — PLAN AND QUESTIONS (awaiting Josh's approval; nothing built)
+
+### What Phase 1 changed about the plan (details below, in Phase 1)
+- **Production sends real email today** (1.5): 0 kill-switch refusals; cron-timed `delivered` rows as recent as 2026-10-01 21:15Z.
+- **D-2 is already true in code**: one constant, "these dates", used by the portal CP card and the client email; "and figures" exists nowhere (1.4d).
+- **D-3a's durable path already exists**: the saver gets an in-app notification row naming whoever could not be reached, written unconditionally (1.4b).
+  What D-3 changes is WHEN the sending happens.
+- **D-4 has a second defect beyond the prompt's**: no lock between the refusal count and the inserts, so two simultaneous stamps can both pass
+  (1.4c). Also, the compensation never checks its own writes.
+
+### Build order (as the prompt sets): D-4 → D-2 → D-3 → D-1. One branch per item, each merged whole or not at all.
+
+---
+
+#### D-4 — the stamp becomes one database function, all-or-nothing · **migration: `20262132000000_s123_stamp_schedule_template`** · size: M
+**Build.** One function `stamp_schedule_template(p_project_id, p_template_id, p_start_date) RETURNS integer` (tasks written), **plpgsql,
+SECURITY INVOKER**: it runs as the caller, so RLS and the existing task/dependency guards decide exactly as they do today (D8-1's "as the caller"
+is kept; only the transaction changes). Inside one transaction:
+1. the editor check (`critical_path_schedule_editor`), and CP must be on;
+2. **`SELECT … FROM projects WHERE id = p_project_id FOR UPDATE`**: locks the project, so a second simultaneous stamp waits and then hits the refusal;
+3. **Part 8's refusal, unchanged:** count live tasks; if > 0, raise with the count (the route maps it to today's 409 sentence *"already has N tasks"*);
+4. read the template (0 tasks → 404);
+5. set `start_date` (0 rows → raise), insert phases, then tasks **one at a time in template order with `created_at = clock_timestamp()`** (inside one
+   transaction `now()` is constant, and the engine orders tasks by `created_at, id` (`load.ts:89-90`); without this the stamped order would
+   be random), then dependencies.
+Any error → Postgres rolls the whole thing back. `stampScheduleTemplate` (TS) then calls the function, and **only after it commits** runs
+`recomputeProject` (the engine is TypeScript and cannot run inside the transaction). If the recompute fails, the project stays marked (by the
+insert triggers) and the next read or the hourly cron recomputes it, which is today's behaviour for every save. **The `fail()` compensation is deleted.**
+**Prove it** (rebuild-test): force a failure partway (a rebuild-test-only BEFORE INSERT trigger on `task_dependencies`, scoped to the fixture project,
+applied and removed by `db query`, never a migration, its RESTORE committed first). By service-role row count: **0** new phases, tasks,
+dependencies and `project_finish_history` rows, and `start_date` unchanged. Then stamp again with no cleanup → succeeds. Plus a concurrency test
+(two stamps at once → exactly one succeeds, the other is refused with the count), the refusal test, and the order test (stamped order = template order).
+**Sabotage:** the function without its transaction (each insert committed separately; simulated by splitting the call) must go red on the 0-rows proof.
+**Sweep:** `s122-cp-templates.live.ts` and `desktop-critical-path-templates-s122.spec.ts`. Every assertion about "Nothing from the template was
+kept" / compensation is inverted in place, never deleted.
+**What could go wrong:** the grants on the new function (it must be EXECUTE for `authenticated`, not `anon`/`PUBLIC`), verified by object →
+stop rule 1. An error message naming an unverified cause → the route maps each raised SQLSTATE to its own status and logs the real cause.
+
+#### D-2 — "these dates" · **no migration** · size: XS
+**Build.** Nothing to rename (1.4d). The D-1 list AND Gantt views both render `CLIENT_DISCLAIMER` from `lib/critical-path/client-disclaimer.ts`.
+A unit test pins the constant: contains "these dates", does **not** contain "figures". "And figures" is **not** introduced anywhere, because no money
+surface carries a disclaimer to keep (1.4d). The report states every string touched by file (expected: none changed).
+**Sabotage:** set the constant to "these dates and figures" → the pin goes red.
+
+#### D-3 — notifications in the BACKGROUND, the unreachable list never lost · **no migration**; **one new dependency: `@vercel/functions`** · size: M
+**The key fact:** "unreachable" (no login AND no email) is known **before anything is sent**. It is a DB read (`resolveMemberReachability`), not
+a send result. So the save can name them instantly while the slow part (one Resend round-trip per email-only sub) runs after the response.
+**Build.**
+1. Split `notifyScheduleChange` into **plan** (the DB reads: who chose it, each one's reachability, the client's email; a few fast queries) and
+   **deliver** (in-app rows, emails, `email_logs`).
+2. `recomputeProject` runs the plan **inside** the save, and **writes the saver's "Not everyone could be told" in-app row inside the save too**,
+   before responding (one insert). Then it hands **deliver** to **`waitUntil`** (`@vercel/functions`), so the response returns without waiting for any
+   email. Next 14.2 has no `after()` (1.4b); `waitUntil` is the primitive `after()` is built on, and on `next start` (CI, Codespaces) the
+   promise simply runs to completion in the live server. Centralised in `recomputeProject`, so **every** apply path (sheet save and release,
+   the three drags, approval, stamp, page-read recompute, cron) is backgrounded with no per-route change.
+3. The route still returns `untold` from the plan, so the **popup** (all six existing call sites) works unchanged, with no polling or race.
+**D-3a: the list survives navigation.** The saver's in-app row is written **before** the response, so it exists even if the user has already
+left the screen. It is read at `/dashboard/notifications` and `/m/notifications` (the bell). **The popup is the fast path; the notification row is
+the durable path** (stop rule 11 is satisfied by construction).
+**Prove it.** (a) e2e: save with an unreachable assignee, **navigate away before the response is read** (`page.goto` straight after the click),
+then open notifications → the row is there, naming them. (b) A live/unit proof that the save returns **before** sending finishes: a stubbed
+`sendEmail` that never resolves → the save still responds and the plan's `untold` is correct; the `email_logs` row appears afterwards.
+(c) Part 6's "who is told" live test re-run unchanged in its outcomes (in-app / email / reported / client) after the split.
+**Sabotages:** writing the saver's row inside `deliver` (background) → (a) goes red on the immediate-navigation run; awaiting `deliver` → (b) red.
+**What could go wrong:** the background work is cut off by the platform's function time limit. No route sets `maxDuration` today; 15
+email-only subs ≈ 15 sequential Resend calls. Mitigation is stated, not assumed: I measure one send's time on rebuild-test and report the
+arithmetic. A failed send is already logged in `email_logs` as `failed`, so a cut-off is visible.
+
+#### D-1 — ONE client schedule, engine-fed, list ⇄ Gantt · **migration: `20262133000000_s123_client_schedule_one_view`** · size: L (most of the work)
+**How the ONE schedule is assembled.**
+- **Critical Path project:** fed ONLY by `client_critical_path`, extended to return **each task's start and finish** (`task_start`, `task_finish`)
+  beside what it returns now. On a CP project `tasks.start_date/due_date` ARE the engine's computed dates (write-through), so the client sees
+  the engine's schedule. The client's read never runs the engine (D7-5 stands). Adding columns changes the return type, so it is
+  **DROP + CREATE in one migration, with every grant re-stated and verified by object** (S122 lost 11 of 15 grants on a drop; the original
+  definition, comment, ACL and md5 are committed with a RESTORE script **before** anything is touched).
+- **Non-Critical-Path project:** `client_schedule`, **unchanged** (Part 7's CP-off control: exact sorted keys and values, unlinked → 0 rows, must stay green).
+- **One page, one component.** `app/portal/[projectId]/page.tsx` renders ONE "Schedule" card. On a CP project it shows the projected finish and
+  phases with dates, each task with its dates. On a non-CP project it shows today's task list. Above both views is a **List | Gantt toggle**, and
+  **`CLIENT_DISCLAIMER` is shown in both views** (and see Q1 on the non-CP project).
+- **How float stays out of the PAYLOAD, not just the render.** (1) Neither function's return type has a column for float, criticality, duration,
+  assignee, status-on-CP or history, so the database cannot send it. (2) The service builds the shape **field by field** (as today), so a column
+  added later still cannot pass through. (3) The toggle needs a client component, so its props are serialized into the RSC payload. The server page
+  passes it **only** `{phase, title, start, finish}` rows plus the finish date: a narrowed type, never a row spread. (4) **Proof by inspecting the
+  payload**: the existing Part 7 e2e is re-run against the merged page, both the HTML document and the flight payload, **in both views**.
+  0 float / critical / duration / assignee / history values; the finish date and a phase name present (so an empty page cannot pass).
+- **D-1a: the client Gantt is its own drawing**: a new `app/portal/[projectId]/client-gantt.tsx` that draws bars on a date axis and nothing else.
+  It does **not** import `components/schedule/gantt.tsx` or anything under `lib/critical-path` but the disclaimer. **No arrows, no slack ghosts, no
+  critical colouring.** Its props type has no field that could carry them. The import-graph test (`s122-cp-portal-imports.test.ts`) is extended
+  to also forbid `components/schedule/gantt.tsx` (stop rule 10, enforced by the graph walk, not by review). Plus a DOM assertion: 0 arrow/path
+  elements, one colour for every bar.
+**Sabotages:** the page passes a row spread including a `total_float` → payload test red; the client Gantt imports the internal Gantt →
+import test red; the disclaimer removed from the Gantt view → e2e red; `client_schedule` given an extra column → CP-off control red.
+**What could go wrong:** the DROP loses a grant or the comment (verified by object → stop rule 1); a client reaching float (stop rule 8);
+the CP-off control going red (stop rule 9).
+
+### Production
+Two migrations (D-4, D-1), one per section: a dry run listing exactly one file, push, verification by object with every value stated.
+D-2 and D-3 carry none.
+
+### Housekeeping (Phase 3, after Josh approves)
+Delete **local and remote**: `feature/s122-p1-schema` … `feature/s122-p8-templates` (8 branches, each an ancestor of `main`), and
+`feature/s122-critical-path` (docs only; every line is on `main`, proof in 1.6). Delete `feature/s122-p9-mobile` **after** this session's first merge
+(its 2 extra commits are patch-identical to commits on this branch, and both reach `main` with that merge). **Keep `feature/s114-c5-multi-upload`**:
+it holds unmerged code.
+
+---
+
+### QUESTIONS FOR JOSH (all at once; plain text)
+
+**Q1. [ASK-1] The non-Critical-Path client schedule: does it also get the disclaimer and the Gantt toggle?** Your reason for D-1 is that the old
+task-level page has no disclaimer and that's the screenshot a client keeps. A job WITHOUT Critical Path shows that same undisclaimered task list,
+with dates someone typed by hand. The prompt says "this change affects CP projects only", which I read as being about the functions'
+data (Part 7's control pins `client_schedule`'s keys and values). Rendering a sentence and a toggle does not touch that.
+Options: A) Both kinds of project get the disclaimer and the List | Gantt toggle; one component, two data feeds; `client_schedule` untouched.
+B) Only CP projects change; non-CP keeps today's list with no disclaimer.
+**My recommendation: A.** It is the same screenshot risk, it is one component instead of two, and Part 7's control still pins the function
+exactly.
+
+**Q2. [ASK-2] `client_schedule` called directly on a Critical Path project.** After D-1 the page never calls it on a CP project, but a client calling
+the RPC by hand still gets each task's dates **and status** (status is not shown on the CP view: D7-4). Options: A) Leave it unchanged.
+No float exists in it, the page no longer uses it on CP, and the CP-off control keeps pinning it. B) Narrow it to return nothing when Critical
+Path is on: a second function change in the D-1 migration, and the control proves CP-off is unchanged.
+**My recommendation: A**, the smaller change; your D-1 reasoning says this was never a float leak. Pick B if you want the client to have exactly one
+way in.
+
+**Q3. [ASK-3] Task status on the client's Critical Path schedule.** D7-4 left status out ("task titles only"). With per-task dates on the page,
+should a CP task show done / in progress? A) No, keep D7-4. B) Yes, add status to `client_critical_path`. **My recommendation: A.** It
+keeps the CP view to dates only, which is exactly what "these dates" (D-2) describes.
+
+**Q4. [ASK-4] Who applies the two migrations to production?** CLAUDE.md (S180) says applying a migration to production is your action; S122 ran
+under a standing authorisation for its own parts. Options: A) Same as S122: I push D-4's and D-1's migrations to production after approval, one
+section each, verified by object. B) I stop at each and you apply them. **My recommendation: A**, under the same one-file / verify-by-object rules.
+
+**Q5. [ASK-5] The new dependency `@vercel/functions`** (for `waitUntil`, D-3). Options: A) Add it (Vercel's own package, one function used).
+B) Upgrade Next to 15 for `after()`. That is a framework upgrade, far outside this session. C) Fire-and-forget with no `waitUntil`, which Vercel
+may freeze mid-send. **My recommendation: A.**
+
+**Q6. [ASK-6] Email is LIVE in production (1.5). Do you want anything before Critical Path is used on a real job?** Nothing in this session changes
+it, and the only off switch (`EMAIL_SEND_ENABLED=false` in Vercel) stops ALL mail. Options: A) No change. CP emails go only to assignees who
+ticked "notify of changes" (off by default) and to the client if its box was ticked. B) Something narrower (e.g. a CP-only switch). That would be a new
+item, not built here. **My recommendation: A**, with the reminder that "notify of changes" is per line and off by default.
+
+---
+
 ## PHASE 1 — ASSESS (nothing built)
 
 ### 1.0 — First action
