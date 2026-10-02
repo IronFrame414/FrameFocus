@@ -60,8 +60,9 @@ const db = admin as unknown as SupabaseClient<Database>;
 const session = {} as Record<CompanyRole, SupabaseClient>;
 const member = {} as Record<CompanyRole, string>;
 let companyId = '';
+let contactId = '';
 let seq = 0;
-const proj = { src: '', empty: '', off: '', foremanTarget: '' };
+const proj = { src: '', empty: '', off: '', foremanTarget: '', pmTarget: '' };
 let templateId = '';
 
 const must = (label: string, error: { message: string } | null) => {
@@ -99,6 +100,7 @@ async function project(name: string, cpOn: boolean): Promise<string> {
     .from('projects')
     .insert({
       company_id: companyId,
+      contact_id: contactId,
       name: `${MARKER} ${name}`,
       status: 'active',
       project_number: `PRJ-${MARKER}-${name}`,
@@ -149,6 +151,16 @@ beforeAll(async () => {
     .limit(1)
     .single();
   seq = (seqRow!.project_internal_seq as number) + 9600;
+  const { data: ct } = await admin
+    .from('contacts')
+    .select('id')
+    .eq('company_id', companyId)
+    .eq('is_deleted', false)
+    .order('created_at', { ascending: true })
+    .order('id', { ascending: true })
+    .limit(1)
+    .single();
+  contactId = (ct as { id: string }).id;
 
   // The SOURCE network.
   proj.src = await project('src', true);
@@ -179,6 +191,7 @@ beforeAll(async () => {
   proj.empty = await project('empty', true);
   proj.off = await project('off', false);
   proj.foremanTarget = await project('foreman', true);
+  proj.pmTarget = await project('pm', true);
 }, 600_000);
 
 afterAll(async () => {
@@ -277,6 +290,17 @@ describe('STAMP', () => {
     expect(r).toEqual({ ok: false, status: 409, error: alreadyHasTasks(3), cause: expect.any(String) });
     expect(alreadyHasTasks(3)).toBe('This project already has 3 tasks; stamping would mix two plans. Stamp onto a project with no tasks.');
     expect(await counts(proj.empty)).toEqual(before);
+  });
+
+  it('by the PROJECT MANAGER (on the project, a schedule editor) → stamped: start date set, network written, computed', async () => {
+    const r = await stampScheduleTemplate(session.project_manager as SupabaseClient<Database>, db, {
+      projectId: proj.pmTarget,
+      templateId,
+      startDate: '2027-01-04',
+      savedByMemberId: member.project_manager,
+    });
+    expect(r).toMatchObject({ ok: true, tasks: 3 });
+    expect(await counts(proj.pmTarget)).toEqual({ tasks: 3, phases: 2, deps: 1, start: '2027-01-04' });
   });
 
   it('by a FOREMAN (on the project) → 403 with the editor sentence, and NOTHING written', async () => {
