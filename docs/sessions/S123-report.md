@@ -435,3 +435,7 @@ above, with its numbers. (3) The migration on production BEFORE the merge, verif
   both) to `a10f05b1`, `ddfc6781`, which are now ancestors of `main` via this merge.
 - **The stack was rebased onto `30869f3c`:** D-2 (one report conflict, both appended entries kept in order, then `--continue`), D-3 and D-1
   (clean). All force-pushed `--with-lease`. `main`'s own run for `30869f3c` holds rebuild-test, so D-3's live tests and D-1's migration wait for it.
+
+**D-2 pre-CI** (on `6ff827c6`, base `30869f3c` = `origin/main`): **`next build` exit 0** (✓ Compiled successfully); `turbo run type-check --force` exit 0
+(5/5, 0 cached); `next lint` exit 0 (5 pre-existing warnings); unit exit 0: **169 files / 2,290 tests**. No migration. 0 runs in progress
+(`main` `30869f3c` **success**, 12:33–13:22Z). **CI requested by this commit.**
