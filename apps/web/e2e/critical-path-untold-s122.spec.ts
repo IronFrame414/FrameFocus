@@ -251,4 +251,39 @@ test.describe('S122 Part 6 · who could not be told is shown at save time, on ev
     await expectUntoldNotice(page);
     expect(await rowT()).toMatchObject({ constraint_date: null, start_date: START });
   });
+
+  // [S123 D-3a, Josh RULED] Sending now runs AFTER the response, and the popup
+  // is the FAST path, never the only one: a saver who has already left the
+  // screen must still be able to find who could not be told. So: save, leave
+  // BEFORE the response is read, and find it in Notifications.
+  test('⚠️ desktop: a SHEET SAVE, then leaving at once: the unreachable list is waiting in Notifications', async ({ page }) => {
+    const { data: op } = await admin.from('profiles').select('id').eq('email', OWNER).single();
+    const ownerProfile = (op as { id: string }).id;
+    await admin.from('notifications').delete().eq('project_id', projectId).eq('recipient_profile_id', ownerProfile);
+    const reports = async () =>
+      (
+        await admin
+          .from('notifications')
+          .select('id', { count: 'exact', head: true })
+          .eq('project_id', projectId)
+          .eq('recipient_profile_id', ownerProfile)
+          .eq('title', 'Not everyone could be told about your schedule change')
+      ).count ?? 0;
+    expect(await reports(), 'the control: no report row before the save').toBe(0);
+    const before = (await rowT()).duration_days;
+
+    await signInAs(page, OWNER);
+    await openT(page);
+    await page.getByTestId('cp-duration').fill(String(before + 1));
+    // Leave the moment the save REQUEST is on the wire: no response is read, no popup is seen.
+    const sent = page.waitForRequest((r) => r.method() !== 'GET' && r.url().includes(`/critical-path/tasks/${taskT}`));
+    await page.getByRole('button', { name: 'Save Task' }).click();
+    await sent;
+    await page.goto('/dashboard/notifications');
+
+    await expect.poll(async () => (await rowT()).duration_days, { timeout: 20_000 }).toBe(before + 1);
+    expect(await reports(), 'exactly one report row for this save').toBe(1);
+    await expect(page.getByText('Not everyone could be told about your schedule change').first()).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByText(`No login and no email on file: ${unreachableName}.`).first()).toBeVisible();
+  });
 });
