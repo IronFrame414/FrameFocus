@@ -1952,3 +1952,45 @@ m29 is applied; checkout read back `nmyphyhmfttxkdoposvf`; 1 constraint row each
   6c8cf937 d25bf6b4` → `docs/sessions/S122-report.md` only; the code-path diff `--quiet` exit 0. (2) The numbers in R2.4–R2.9. (3) `…29` on
   production, superset proven (R2.12), MATCH ×6, **applied before the merge**.
 - `main`'s merge run **`36944879271`** follows. **Part 7 starts on `feature/s122-p7-portal` from `bacf1bb8`.** No DB work until that run finishes.
+
+## UNATTENDED FROM 2026-10-01 20:21 ET (Josh's rules: `docs/sessions/S122-resume-prompt.md`, same heading)
+
+### R3.1 — Part 7 (client portal view), build log — branch `feature/s122-p7-portal` from `bacf1bb8`
+
+Built so far, **without touching the database** (`main`'s merge run `36944879271` holds rebuild-test):
+
+- **The CP-off regression control** (`test/s122-cp-client-schedule-regression.live.ts`, `83371ced`), written FIRST as required. It has not run yet.
+  `client_schedule`'s captured original + RESTORE script are committed **before** its sabotage (`46b35cbf`, `docs/sessions/S122-sabotage-originals/`;
+  file md5 = live md5 for both the definition and the comment).
+- **The import walker, generalized** (`00e10fb7`). The S110 walker could not have proven anything about the portal: it **skipped `lib/services/`**
+  and **never resolved `@framefocus/shared/…`**, so the engine was unreachable by construction. `reachableFrom(roots, {shared, dynamic, skip})`
+  now does both. The /m guard keeps its behaviour through options: its file set is **176 before = 176 after, `diff` exit 0**; the guard is 179/179.
+- **A finding the walk made real:** `notify-text.ts` → `critical-path-writes.ts` → `critical-path.ts` (`computeCriticalPath`). The disclaimer lived
+  in `notify-text`, so a portal importing it would have pulled the whole engine in, two hops down. **`CLIENT_DISCLAIMER` moved to
+  `lib/critical-path/client-disclaimer.ts`, which imports nothing.** `notify-text` re-exports it, so the email and the portal share one string.
+- **Migration `20262130000000_s122_cp_client_view.sql`**: `client_critical_path(p_project_id)`, the plan's planned function (plan row 10 named it
+  `…28_s122_cp_client_view`; the timestamp moved because 28 and 29 are taken). It is **new**; `client_schedule` is untouched. Return type: phase
+  name/sort/start/finish, task title/sort, projected finish. Gate (zero rows otherwise): CP on + `is_client_of_project` + `client_has_full_access`.
+  **Not applied anywhere yet.**
+- **Portal** (`lib/services/portal.ts` `getPortalCriticalPath`; `app/portal/[projectId]/page.tsx`): the shape is built field by field, never spread
+  from a row. On a CP project the card shows the projected finish, the disclaimer, and the phases with dates and task titles, and
+  **`client_schedule` is not called**, so task dates never enter that page.
+- **Transitive import check** (`test/s122-cp-portal-imports.test.ts`): everything reachable from every file under `app/portal/` (server and client,
+  `@framefocus/shared` and dynamic `import()` included) reaches no `packages/shared/utils/critical-path*` and no `lib/critical-path/*` except the
+  disclaimer. **3/3.** The walk reaches the page, `lib/services/portal.ts` and the disclaimer (not vacuous). **Control:** the desktop CP page DOES
+  reach the engine.
+  - Sabotage **(i1)** the portal page imports `computeCriticalPath` → **1 ✘**. Restored, `cmp` 0.
+  - Sabotage **(i2)** the page imports the disclaimer from `notify-text` → **1 ✘**, listing `critical-path-writes.ts`, `critical-path.ts`,
+    `notify-text.ts`: the two-hop chain, caught. Restored, `cmp` 0.
+- `tsc` is red **only** on `rpc('client_critical_path')` (3 lines, the function is not in the generated types yet); that clears once m30 is applied
+  to rebuild-test and types are regenerated.
+
+#### DECIDED UNATTENDED — Part 7
+
+| # | decided | alternative rejected | why |
+| --- | --- | --- | --- |
+| D7-1 | A **new** function `client_critical_path`; `client_schedule` left byte-for-byte | extending `client_schedule` | Josh's R2.10 reasoning: it serves every project, so an added field reaches CP-off clients too. A new return type cannot leak what it does not declare. |
+| D7-2 | On a CP project the page shows the CP view **instead of** the task-date list. **`client_schedule` itself is NOT narrowed** | changing `client_schedule` to return nothing on CP projects | Altering it is a function change the spec does not name (an unattended stop), and the CP-off control pins it. **⚠️ Residual for Josh:** a linked client calling the `client_schedule` RPC **directly** (not through the page) on a CP project still gets task start/due/status, as since S164. Start and due imply durations. **No float or critical flag** (they are never stored). |
+| D7-3 | The disclaimer is Part 6's email sentence exactly (*"…these dates are for planning purposes…"*) | the spec's §7 wording *"these dates **and figures**…"* | The resume prompt: "keep it identical in Part 7". The email is on production; one string beats two drifting ones. Josh can change the one constant. |
+| D7-4 | Task **status** is not in the CP view | including it, as `client_schedule` does | The spec: "task titles only". |
+| D7-5 | The client's projected finish is whatever was last computed (the engine never runs on a client request) | recomputing on the client's read | Running the engine on a client request is the thing stop rule 8 guards. Staff reads and the recompute cron (`/api/cron/critical-path-recompute`) refresh it. |
