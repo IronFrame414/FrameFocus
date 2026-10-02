@@ -67,7 +67,7 @@ beforeAll(async () => {
     .from('company_members')
     .select('id')
     .eq('company_id', SABAL)
-    .eq('display_name', 'Casey Crew')
+    .eq('display_name', 'QA Crew A')
     .eq('is_deleted', false)
     .single();
   memberId = data!.id as string;

@@ -80,7 +80,7 @@ beforeAll(async () => {
     .from('company_members')
     .select('id')
     .eq('company_id', SANDBOX_COMPANY_ID)
-    .eq('display_name', 'Casey Crew')
+    .eq('display_name', 'QA Crew A')
     .single();
   memberId = m!.id as string;
   await admin
