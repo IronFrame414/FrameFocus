@@ -18,3 +18,10 @@ Files stay here afterwards; they are the written record of the original.
 
 **If you find `client_schedule` missing or carrying `duration_days` on rebuild-test:** run `client_schedule.RESTORE.sql`, then
 `client_schedule.baseline-query.sql`, and compare against `client_schedule.baseline.json`.
+
+## `public.client_critical_path(uuid)` — rebuild-test, captured 2026-10-02 (S122 Part 7, migration 20262130000000)
+
+Same files, same use. Its sabotages (`sabotage-L` = the link check removed, `sabotage-C` = the Critical Path gate removed) are
+`CREATE OR REPLACE` with the SAME return type, so the ACL and the comment survive; `RESTORE.sql` re-applies the captured definition.
+The migration file itself is also the original. **If found without `is_client_of_project` or `critical_path_enabled = true` in its body:**
+run `client_critical_path.RESTORE.sql`, then the baseline query, and compare.

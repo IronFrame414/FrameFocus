@@ -1,0 +1,8 @@
+{
+  "acl": "{postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres,supabase_auth_admin=X/postgres}",
+  "comment_md5": "b22502a46bd9a065df87de001afe3f9f",
+  "def_md5": "ac958d4fde68d96d9ac0904192024f53",
+  "result": "TABLE(phase_name text, phase_sort integer, phase_start date, phase_finish date, task_title text, task_sort integer, projected_finish date)",
+  "secdef": true,
+  "vol": "s"
+}
