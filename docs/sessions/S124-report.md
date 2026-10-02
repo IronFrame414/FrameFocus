@@ -587,3 +587,73 @@ part ships whole or not at all. Everything that does not need Intuit is done and
 
 **Nothing on production can push a time entry today.** Production has the switch (Part 2), defaulting OFF, but
 no enqueue trigger and no handler. Its `time_activity:create` arm still answers terminal.
+
+---
+
+# FINAL REPORT
+
+| part | state | where |
+| --- | --- | --- |
+| **0**, email pacing | ✅ **MERGED `5a78a648`** | no migration; CI `37050370621` green (unit 170/2296, e2e 705/0) |
+| **2**, the switch (built before 1, per Q7) | ✅ **MERGED `81fe1efc`; `20262134` ON PRODUCTION, MATCH ×11** | CI `37061570445` green (unit 171/2317, e2e 705/0) |
+| **1**, the push | ⛔ **STOPPED, unmerged** at `9e08c3dc` (`feature/s124-p1-push`); `20262135` on **rebuild-test only** | waits on the sandbox (Part 3) |
+| **3**, the re-push cases | ⛔ **STOPPED**: proved against a fake QuickBooks (10/10, sabotages red); **sandbox proof BLOCKED, no keys** | `test/s124-qb-time-activity.live.ts` ready to run |
+
+- **1.2, which host answered:** **PRODUCTION**, `quickbooks.api.intuit.com`, HTTP 200 *"Worth Properties"*. The
+  sandbox host returned 403 `ApplicationAuthorizationFailed` to the same token. It is corroborated by 244 metered
+  2xx reads and real Truist/payroll accounts in the cached chart. ⇒ `QBO_ENVIRONMENT=production` on the
+  deployment.
+- **1.4, stranded:** **9 approved, never-pushed sessions, 2026-09-29 → 2026-09-30, 51.65 raw hours, 3 people**
+  (plus 10 pending for Oct 1–2, and 6 Owner sessions that are never approved). Per Q5 they are **not
+  backfilled**. Josh can key them in by hand, or re-approve them after the switch is on.
+- **Sandbox proof per Part 3 case:** **NOT YET DONE (blocked).** Every case is proved at unit level against a
+  fake QuickBooks, with the duplicate count read from the fake's store:
+  - create → 1;
+  - edit → update, count 1;
+  - split → update, count 1;
+  - add → update, count 1;
+  - **null id but the entry exists → marker adopt + update, count 1**;
+  - two marked → terminal;
+  - stored id missing → terminal, not re-created.
+  - Sabotages red: no marker lookup ✘ 3; **naive re-push ✘ 7**.
+- **The switch defaults OFF, read back from production:** default `false`, `NOT NULL`, **0 of 2 companies on**,
+  0 stamped.
+- **The two rounding rules cannot reach each other:** `time-tracking.ts` imports nothing. The push body imports
+  only it and `./reconcile`. `invoice-derivation.ts` imports only `./estimate-totals`. No `lib/quickbooks` module
+  imports `invoice-derivation`. Value checks: 7h10m29s → **430 min** (the half-hour rule would give 450), and
+  7h10m30s → 431. Sabotages: half-hour leak ✘ 5, truncation ✘ 1.
+- **Production sections:** one, Part 2, **MATCH ×11** (table above). There is no Part 1 production section, by
+  design.
+- **CLI:** the checkout is linked to `nmyphyhmfttxkdoposvf` (rebuild-test) and was read back after every
+  production step. Production work ran in scratch workdirs only.
+
+## ⚠️ Risks carried, stated
+
+- **rebuild-test is ahead of `main` by `20262135`** (`qb_employee_map` + the gated trigger) until Part 1 merges.
+  The trigger does nothing while every company's switch is OFF (all 10 are OFF). If any CI schema-drift check
+  compares rebuild-test to the repo, a `main` run could flag it. That is the same position every branch-applied
+  migration has been in before.
+- `#1-s124qb` (candidate): a direct UPDATE that changes only `segment_type` (work ↔ break) on an approved day
+  does not reopen it.
+- The switch turns itself OFF on disconnect or revoke. **That is my addition, not a ruling.**
+
+## What a person still has to click
+
+1. **Settings → Accounting** (production): the new **"Send approved timesheets to QuickBooks"** card, shown
+   **Off**. Read the text, and **do NOT turn it on yet.** Nothing reads it until Part 1 merges, and Q3
+   (QuickBooks Payroll) is yours to check first.
+2. A schedule save on a Critical Path job with several email-only subs: the emails now go out ~0.6 s apart.
+
+## What Josh has to decide or do
+
+1. **Put the sandbox Development keys back in `apps/web/.env.local`** (`QBO_CLIENT_ID`, `QBO_CLIENT_SECRET`, no
+   `QBO_ENVIRONMENT=production`). Without them Parts 1 and 3 cannot finish.
+2. **Q3:** check, in QuickBooks Payroll, whether hourly staff are paid from time entries. Do this before the
+   switch is ever turned on.
+3. **The disconnect-turns-it-off behaviour**: keep it, or overrule.
+4. **Stranded hours:** nothing is built for them (Q5). Your options are keying them by hand or re-approving
+   them after the switch is on.
+5. **Mary Ellen:** "Create new under a different name" **writes a Customer to the live books**. Either way the
+   $128.39 purchase will **not** post while its project stays excluded.
+6. Merged branches safe to delete: `feature/s123-*` (5), `feature/s124-p0-email-pacing`,
+   `feature/s124-p2-toggle`. `feature/s114-c5-multi-upload` was not touched.
