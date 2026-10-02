@@ -356,3 +356,30 @@ reading wins."*
 **Two items before Phase 3 can finish:** (1) establish EARLY whether the rebuild-test sandbox connection still
 works, and say so in plain text if it does not; (2) write down what can be determined about whether Mary Ellen's
 stuck expense will post once the name clash is resolved. Change nothing there.
+
+---
+
+# PHASE 3
+
+## ⚠️ SANDBOX CHECK, run FIRST (2026-10-02): **BLOCKED. This Codespace has no QuickBooks keys.**
+
+`test/qb-sandbox-gate.ts` (`assertSandbox`) + `test/s124-qb-sandbox-gate.live.ts`, run against rebuild-test
+(`[live-guard] target nmyphyhmfttxkdoposvf`). **Result: 1 failed, 2 passed (3).** Exit 1.
+
+- Case 1 (the sandbox is alive) **FAILED** at the token step: *"[qb-tokens] transient refresh failure for company
+  03bb903f…: Error: QuickBooks is not configured on this deployment (QBO_CLIENT_ID / QBO_CLIENT_SECRET)."* The
+  stored sandbox access token has expired (last used 2026-09-09), and the refresh cannot even be attempted,
+  because **`QBO_CLIENT_ID` / `QBO_CLIENT_SECRET` are not in this Codespace's environment or `.env.local`.** The
+  file was most likely recreated after a rebuild without them. (I did not read the file. The message is the
+  app's own `qboCredentials()` throw.) Step 1 of the gate (`qboEnvironment() === 'sandbox'`) passed.
+- Cases 2 and 3 (the refusal controls) **PASSED**: production env → *"REFUSED: qboEnvironment() is
+  'production'"*; an unknown company → *"REFUSED: … not readable"*. Both refuse before any network call.
+- **No harm done:** rebuild-test Sabal Point, read back after the run: `connected`, realm `9341457813274121`,
+  `qb_refresh_lock_at` null, secret present. A failed refresh never ran, so nothing was rotated.
+
+⇒ **Part 3, and Part 1's live push proof, cannot be proved until Josh puts the SANDBOX (Development) keys back
+into `apps/web/.env.local`.** These are the Intuit Developer portal → app "EZ Contractor Binder" → Keys &
+credentials → **Development** Client ID and Client Secret, as `QBO_CLIENT_ID=` and `QBO_CLIENT_SECRET=`. Leave
+`QBO_ENVIRONMENT` out or set it to `sandbox`, **never `production`**. ⚠️ **Never the Production keys**: the
+gate would refuse them (the realm would not answer on the sandbox host), but they do not belong in this file.
+Parts 0 and 2 do not need the sandbox and proceed meanwhile.
