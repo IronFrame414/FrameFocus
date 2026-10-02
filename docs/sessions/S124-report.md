@@ -383,3 +383,34 @@ credentials → **Development** Client ID and Client Secret, as `QBO_CLIENT_ID=`
 `QBO_ENVIRONMENT` out or set it to `sandbox`, **never `production`**. ⚠️ **Never the Production keys**: the
 gate would refuse them (the realm would not answer on the sandbox host), but they do not belong in this file.
 Parts 0 and 2 do not need the sandbox and proceed meanwhile.
+
+## Josh's item 2: will Mary Ellen's stuck expense post once the name clash is resolved? **As things stand, NO.** (Nothing changed.)
+
+Read-only, production `jwkcknyuyvcwcdeskrmz` (scratch workdir, ref read back), 2026-10-02 ~18:55Z:
+
+| fact | value |
+| --- | --- |
+| queue `18159383…` | `purchase:create` for expense `d83fa71f…`, `queued`, attempts 0, `depends_on` the customer row `78fdd275…` |
+| the expense | **$128.39, material, 2026-10-01, `approved`**, payment account set (CreditCard, has a QuickBooks account id, not deleted), `qb_purchase_id` null |
+| GL mapping for material | the id is set (picked from the chart), so it cannot park on a typo |
+| ⚠️ **its project `0e0eedac…`** | **EXCLUDED from QuickBooks**: a live `project_qb_exclusions` row created **2026-10-01 11:41:09Z, 2 min 13 s AFTER the expense was queued** (11:38:56Z). `qb_entity_excluded('purchase', d83fa71f…)` = **true**. Worth Properties has 2 live exclusions across 8 projects |
+| the customer contact `9d9cd560…` | `qb_customer_id` null |
+
+**What happens in order, read from the code:**
+1. `claimDue` withholds the purchase while its dependency (the customer row) is not `pushed` (`queue.ts`).
+2. Josh resolves the clash on Settings → Accounting:
+   - **"Link to the existing QuickBooks customer"** stores `qb_customer_id = 100000011` locally. The customer
+     row then returns `pushed` without writing to QuickBooks (`handleCustomerCreate`: *"if (contact.qb_customer_id)
+     return pushed"*).
+   - **"Create a new one under a different name"** ⚠️ **creates a new Customer in the live books.**
+     `qb_entity_excluded` returns `false` for `customer` (its `ELSE` arm), so the project exclusion does not stop
+     the customer step.
+3. The purchase is then claimed, and the worker's **exit gate** (`worker.ts`, S114 Part B) asks
+   `qb_entity_excluded`. **It is true, so the row is marked `failed_terminal` with *"Not sent: this project is
+   excluded from QuickBooks by the Owner."*** The $128.39 does **not** reach QuickBooks.
+4. **It WOULD post** if the exclusion row were removed before step 3 (and the payment-account and GL checks
+   still passed, as they do today).
+
+**Also probable, not proven:** the parked customer row is re-checked every 5 minutes (`parkAwaitingHuman`), and
+each re-check looks like a metered read. That fits October's 236 CorePlus reads, but I have not traced it to the
+call.
