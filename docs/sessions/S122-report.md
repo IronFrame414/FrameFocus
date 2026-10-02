@@ -2008,3 +2008,26 @@ Built so far, **without touching the database** (`main`'s merge run `36944879271
   (`2b3db2d3`, then `…` re-grant in baseline order), then re-applied: **all 6 baseline values byte-equal**, the ACL text included.
   ⚠️ **Generalized:** any sabotage that DROPs a function must restore its full ACL, not just the definition. The committed RESTORE does.
 - After the restore: regression control **4/4**; `s164-m9-read-arms.live.ts` **35/35**.
+
+### R3.3 — Part 7: `client_critical_path` live, applied to rebuild-test, sabotaged
+
+- **m30 on rebuild-test:** dry run *"• 20262130000000_s122_cp_client_view.sql"*, exactly one; `npm run db:push` exit 0; types **+12** (the function only);
+  type-check 5/5. Live ACL: `postgres, authenticated, service_role, supabase_auth_admin`, with **no `anon`, no `PUBLIC`** (the REVOKE held).
+- **Live `s122-cp-client-view.live.ts`, first run 6/6.** Fixture S122CPV (linked via `projects.contact_id`): Framing A(3) → Finish B, crew on A, CP on,
+  computed by the engine; B 2 → 4 moves the finish 8 → 12 Jan, and a REAL history row holds `previous_finish 2027-01-08`. The linked client gets
+  **exactly 2 rows, the closed 7-key shape, the exact values**; nothing serialized contains the old finish or `duration|float|critical|assignee|status|days_left`;
+  the `tasks` table is 0 rows for them; the unlinked client gets 0; the linked client on CP-off `eaf0e25b` gets 0 (while `client_schedule` shows they
+  DO reach it); CP toggled off on S122CPV → 0, back on → 2.
+- Captured original + baseline + RESTORE + both sabotage scripts committed **before** any replacement (`1b396e5e`; file md5 = live).
+- ⚠️ **FINDING — sabotage (L) (the link check removed) first stayed GREEN, 6/6.** The unlinked control is ALSO refused by
+  `client_has_full_access()` (a client with no contact has access `none`), so it never isolated the link. A test that passes after a sabotage is
+  vacuous. **Added THE STRANGER:** the linked client (access `full`, read back) on a second CP-ON, computed fixture whose contact is someone else (and
+  no `project_contacts` row, read back). Only the link check can refuse that. The unlinked test is kept, with a note saying what it does and does not prove.
+- **Sabotages** (each via `CREATE OR REPLACE`, same return type; restored; **baseline 6/6 MATCH** after each):
+
+  | # | sabotage | ✘ |
+  | --- | --- | --- |
+  | (L) | `is_client_of_project` removed from the gate | **1**: THE STRANGER |
+  | (C) | `critical_path_enabled = true` removed | **1**: CP toggled off on the same project. (The CP-off `eaf0e25b` test stays green: that project has NO settings row, so the gate's join refuses it whatever the flag. The toggle isolates the flag.) |
+
+- Clean after both: **7/7**.
