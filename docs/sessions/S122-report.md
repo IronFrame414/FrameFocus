@@ -2054,3 +2054,5 @@ Built so far, **without touching the database** (`main`'s merge run `36944879271
   per-payload checks are now `expect.soft`; re-run under (P1): both red.
 - Clean rebuild after both: payload + `portal-pages` **6/6**. Regression (every `portal*`, `*client*` and `*critical-path*` spec), one worker:
   **19 passed**.
+
+- **Pre-CI** (`f504b26d`): type-check 0 (0/5 cached); lint 0 (no new warning); unit **167 / 2,281** (0 cached). **CI requested** (base `bacf1bb8` = `origin/main`; 0 runs in progress or queued). m30 is on rebuild-test.
