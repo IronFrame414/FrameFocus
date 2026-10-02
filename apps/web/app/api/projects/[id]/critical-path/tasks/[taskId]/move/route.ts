@@ -17,6 +17,12 @@ import { getMyMember } from '@/lib/services/members';
 import { loadCriticalPathData } from '@/lib/critical-path/load';
 import { applyCriticalPathSave, readCriticalPathTask, untoldOf } from '@/lib/critical-path/save';
 
+// [S123 D-3] The ceiling for this invocation INCLUDING the notifications sent
+// after the response (lib/critical-path/background.ts). Stated, not inherited
+// from a project default nobody can read from the code. Sends that would start
+// within 5 s of it are not started and are logged 'failed' with the reason.
+export const maxDuration = 60;
+
 // S122 Part 4 — A DATE GESTURE ON A TASK (the calendar drag, the schedule
 // sheet's dates, the Gantt's end handle), translated for Critical Path
 // [Josh, Q19, 2026-10-01: "A drag means 'not before here.'"].

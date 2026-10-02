@@ -7,6 +7,12 @@ import { getSupabaseAdmin } from '@/lib/supabase-admin';
 import { getMyMember } from '@/lib/services/members';
 import { applyCriticalPathSave, readCriticalPathTask, untoldOf } from '@/lib/critical-path/save';
 
+// [S123 D-3] The ceiling for this invocation INCLUDING the notifications sent
+// after the response (lib/critical-path/background.ts). Stated, not inherited
+// from a project default nobody can read from the code. Sends that would start
+// within 5 s of it are not started and are logged 'failed' with the reason.
+export const maxDuration = 60;
+
 // S122 Part 3 — SAVE ONE TASK OF A CRITICAL PATH PROJECT (the line sheet),
 // then recompute. The mechanism — who may write, what is written, when the
 // engine runs — is lib/critical-path/save.ts, shared with the gesture route

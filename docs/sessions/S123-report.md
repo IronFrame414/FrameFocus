@@ -439,3 +439,78 @@ above, with its numbers. (3) The migration on production BEFORE the merge, verif
 **D-2 pre-CI** (on `6ff827c6`, base `30869f3c` = `origin/main`): **`next build` exit 0** (✓ Compiled successfully); `turbo run type-check --force` exit 0
 (5/5, 0 cached); `next lint` exit 0 (5 pre-existing warnings); unit exit 0: **169 files / 2,290 tests**. No migration. 0 runs in progress
 (`main` `30869f3c` **success**, 12:33–13:22Z). **CI requested by this commit.**
+### D-3 — notifications in the BACKGROUND; the unreachable list never lost (branch `feature/s123-d3-background`; no migration)
+
+**Built.**
+- **`lib/critical-path/notify.ts`, split in three** (`notifyScheduleChange` is gone; its only caller was `recomputeProject`):
+  1. `planScheduleNotify`: DB reads only (who ticked "notify of changes" on the moved tasks, each one's reachability through THE resolver
+     `resolveMemberReachability`, now resolved together; the client's email). **Who is unreachable (no login AND no email) is known here,
+     before anything is sent**, which is Part 6's meaning unchanged. An email-only sub is reachable.
+  2. `reportUnreachable`: the saver's in-app row *"Not everyone could be told about your schedule change" / "No login and no email on file: {names}."*,
+     **written inside the save, before the response.**
+  3. `deliverScheduleNotify`: the in-app rows, then the emails one at a time, **after the response**.
+- **`lib/critical-path/recompute.ts` step 5:** plan → report → `runInBackground(deliver)`. It is done here, not per route, so **every** recompute path is
+  backgrounded the same way: the sheet save and release, the three drags, the approval, the stamp, the page-read recompute, the cron.
+  `RecomputeOutcome.notified` is now **what WILL be sent** (`{inApp, email, client, unreachable, clientUnreachable}`). The routes still return
+  `untold` from it, so **the popup at all six call sites is unchanged** (fast path, no polling).
+- **`lib/critical-path/background.ts`:** `runInBackground` = `waitUntil` from **`@vercel/functions` 3.9.9** (new dependency, Q5 A). On Vercel it keeps
+  the invocation alive after the response. Off Vercel it is a no-op and the promise runs to completion in `next start` (read from its source:
+  `getContext().waitUntil?.(promise)`). Rejections are logged. `settleBackground()` is the test seam only.
+- **`maxDuration = 60`** on the four routes that apply a change (`…/tasks/[taskId]`, `…/tasks/[taskId]/move`, `…/edits/[editId]`, `…/stamp`).
+
+**⚠️ Josh's addition — the maximum duration, what happens when a send exceeds it, and the evidence it leaves:**
+- **Maximum duration:** **60 s** for the four applying routes, the whole invocation including the background sends (stated in code, not
+  inherited). The hourly CP cron already declares **300 s**. A **page-read** recompute (desktop schedule, CP tab, `/m` schedule) inherits the Vercel
+  project's default, which **cannot be read from here** (no Vercel CLI or token). The guard below does not depend on knowing it: it reads the
+  invocation's **actual** deadline at run time (`getDeadline()`).
+- **What happens near the limit:** in-app rows go first (DB only, fast). Before **each** email, if the deadline is **< 5 s** away, the email is **not
+  started**, and an `email_logs` row is written with `status 'failed'`, `metadata.error` = *"not sent: the function time limit was Ns away"*. A send
+  that has started but not answered by **deadline − 2 s** is abandoned and logged `'failed'`: *"no answer from the mail service before the function
+  time limit; it may still have been sent"*. Each case also writes a `console.error` line to the Vercel logs.
+- **Evidence:** every email recipient gets an `email_logs` row (`sent`, `failed` with the send error, or one of the two time-limit `failed` rows). The
+  unreachable list is in the saver's notification row before the response. **Residual, stated:** if the platform kills the invocation inside the
+  last ~2 s while a log row is being written, that one row can be lost; Vercel's own log then records the timeout.
+- **The ceiling in numbers (an estimate, NOT measured):** I cannot time a real Resend send from here (the send gate is off in the
+  Codespace and must stay off). 60 s minus the 5 s margin = 55 s of sending. At 1 s per send that is ~55 emails; at 0.5 s, ~110. **Fifteen
+  email-only subs fit with a wide margin.** ⚠️ **A separate risk, not new and not D-3's:** sends are sequential, and Resend's default rate limit
+  is 2 requests/second. Sends faster than that would get 429s. Each would be logged `'failed'` with Resend's message (evidence exists),
+  but the email would not go. Worth a look if a real job shows `failed` rows.
+
+**Proofs** (rebuild-test, the gate never reaches a mailbox):
+- **`test/s123-cp-background.live.ts` 8/8** (`sendEmail` replaced by a gate the test opens and closes; nothing else mocked):
+  P1: the save **returned** with the gate shut (15 s race not hit); `untold` named the unreachable member; **the saver's report row = 1 at return**;
+  the send had been **started (1 call) but 0 `email_logs` rows** at return. Gate opened → settled → **1 row, `sent`**.
+  P2: deadline 3 s away → **0 sends started**, 1 row `failed` *"not sent: the function time limit was 3s away"*; deadline 6 s away and the send
+  hanging → gave up in < 6 s, 1 row `failed` *"no answer … may still have been sent"*; control (no deadline) → `sent`.
+- **Part 6's `s122-cp-notify.live.ts` 10/10**, with its outcomes unchanged (crew 1 in-app; email-only 1 attempt, logged `failed` by the forced send gate; the unreachable member named +
+  the report row; PM and Owner nothing; client 1 email; approval names them; box unticked → 0 client emails; time passing → nothing). It now
+  `settleBackground()`s before counting; its one outcome-shape assertion was inverted, with the superseded line quoted in place.
+- **e2e `critical-path-untold-s122.spec.ts` 6/6** against a production build (`next build` exit 0, `next start`): the five Part 6 popups plus
+  **D-3a: a sheet save, then `page.goto('/dashboard/notifications')` as soon as the POST is on the wire, with no response read and no popup seen →
+  the row exists (1) and the page shows the title and *"No login and no email on file: <name>."***. The first local run of that test was red:
+  it counted the row right after the DURATION changed, but the same request writes the report a moment later. Fixed to wait for the row itself;
+  "before the response" is P1's proof, not this test's.
+
+| # | sabotage | result |
+| --- | --- | --- |
+| SD1 | the save `await`s `deliverScheduleNotify` (the old shape) | **✘ 3** (P1: the save did not return while the send was held) |
+| SD2 | no report row: **the popup is the only delivery** (stop rule 11) | **✘ 1** live (report row 0 at return) **and ✘ 1 e2e** (the navigate-away test, *"Received: 0"*), with the 5 popup e2e still green, which is exactly why stop rule 11 needs its own test |
+| SD3 | the report written in the background, after the sends | **✘ 1** (report row 0 at return) |
+| SD4 | the time-limit guard removed | **✘ 1** (P2: the email was started 3 s from the deadline) |
+
+Each was restored by `git checkout` (diff vs HEAD empty, read back). SD2's e2e ran against a build made with the sabotage. The server was
+stopped by its PID.
+
+**D-2 CI `37015465916`** on `99c170d1` (base `30869f3c` = `origin/main`): **green**. Both jobs success. Unit **169 files / 2,290 tests** (the D-2 test is in
+it); e2e **701 passed, 24 skipped, 0 failed, 0 `✘`** (46.8 min, 13:48:34–14:39:11Z, nothing else running). D-2 is ready to merge; it waits so that
+`main` runs once for D-2 + D-3 + D-1 (below).
+
+**Merge sequencing, DECIDED (recorded):** CI runs strictly one at a time and never overlaps a `main` run: D-2 → D-3 → D-1 branch runs, then D-1's
+migration to production, then D-2, D-3, D-1 merged back-to-back **in order**. `ci.yml`'s `cancel-in-progress` on the `main` group leaves one `main`
+run for all three. **Rejected:** merging each as soon as it is green, because every merge starts a 45-minute `main` run that the next branch run
+would have to wait for or collide with (fixture collision, the CI's failure mode 1). Each merge still carries its own proof that the tree merged is
+the tree tested.
+
+**D-3 pre-CI** (on `b0cfe063`, stacked on D-2 `99c170d1` → `30869f3c` = `origin/main`): **`next build` exit 0**; type-check exit 0 (0 cached); lint exit
+0 (5 pre-existing warnings); unit **169 / 2,290**. No migration. The D-3 live tests (18/18 + 8/8 sabotage runs) and e2e (6/6 against a
+production build) ran above. 0 runs in progress. **CI requested by this commit.**

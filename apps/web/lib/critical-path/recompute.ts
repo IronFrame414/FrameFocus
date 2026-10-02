@@ -21,7 +21,8 @@ import { computeCriticalPath } from '@framefocus/shared/utils/critical-path';
 import { planWriteThrough } from '@framefocus/shared/utils/critical-path-writes';
 import { companyToday } from '@framefocus/shared/utils/dates';
 import { CP_SETTINGS_COLUMNS, loadCriticalPathData, type CpSettings } from './load';
-import { NOTHING_SENT, notifyScheduleChange, type ScheduleNotifyOutcome } from './notify';
+import { runInBackground } from './background';
+import { deliverScheduleNotify, NOTHING_PLANNED, planScheduleNotify, plannedOf, reportUnreachable, type ScheduleNotifyPlanned } from './notify';
 
 export type CpCauseKind =
   | 'task'
@@ -51,8 +52,8 @@ export type RecomputeOutcome =
       historyWritten: boolean;
       cycle: string[] | null;
       error: string | null;
-      /** [S122 Part 6] Who was told, and who could not be. */
-      notified: ScheduleNotifyOutcome;
+      /** [S122 Part 6; S123 D-3] Who WILL be told (sent after the response), and who could not be. */
+      notified: ScheduleNotifyPlanned;
     }
   | { status: 'failed'; error: string };
 
@@ -143,10 +144,15 @@ export async function recomputeProject(
 
   // 5. [S122 Part 6] Tell the assignees who chose it, and the client if ticked.
   // After everything is written; a notification failure never fails the save.
-  let notified: ScheduleNotifyOutcome = NOTHING_SENT;
+  // [S123 D-3] Who is told is DECIDED here, and the saver's "could not be told"
+  // row is written here — both before the response. The SENDING runs after it
+  // (./background), so no save waits on a mail server. Here, not in each route,
+  // so every path that recomputes (sheet, drags, approval, stamp, page read,
+  // cron) is backgrounded the same way [PARITY].
+  let notified: ScheduleNotifyPlanned = NOTHING_PLANNED;
   if (writes.length > 0 || previousFinish !== projectedFinish) {
     try {
-      notified = await notifyScheduleChange(admin, {
+      const plan = await planScheduleNotify(admin, {
         companyId,
         projectId,
         changedTaskIds: writes.map((w) => w.id),
@@ -155,6 +161,11 @@ export async function recomputeProject(
         newFinish: projectedFinish,
         causeKind: cause.kind,
       });
+      if (plan) {
+        notified = plannedOf(plan);
+        await reportUnreachable(admin, plan);
+        runInBackground(`cp notify ${projectId}`, () => deliverScheduleNotify(admin, plan));
+      }
     } catch (e) {
       console.error(`[recompute] notify ${projectId}: ${e instanceof Error ? e.message : String(e)}`);
     }

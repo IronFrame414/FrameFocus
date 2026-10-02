@@ -25,6 +25,8 @@ import type { Database } from '@framefocus/shared/types/database';
 import { ensureScheduleFresh, recomputeProject } from '@/lib/critical-path/recompute';
 import { applyCriticalPathSave, untoldOf } from '@/lib/critical-path/save';
 import { decideScheduleEdit } from '@/lib/critical-path/held';
+// [S123 D-3] Sending runs AFTER the response; every count below waits for it first.
+import { settleBackground } from '@/lib/critical-path/background';
 import { admin, assertRebuildTest, deleteProjects, sessionFor, sweepProjectsNamed, upsertContact } from './live-session';
 
 process.env.EMAIL_SEND_ENABLED = 'false';
@@ -206,6 +208,7 @@ describe('the first computation tells the client nothing (there was no previous 
   it('turned on: finish Wed 6 Jan; 0 client emails', async () => {
     const r = await recomputeProject(db, projectId, { cause: { kind: 'enabled' }, now: new Date('2026-10-05T16:00:00Z') });
     expect(r).toMatchObject({ status: 'computed', projectedFinish: '2027-01-06' });
+    await settleBackground();
     expect((await emailLogs('schedule_change_client', contactEmail)).length).toBe(0);
   });
 });
@@ -221,6 +224,7 @@ describe('an applied change: the Owner extends T 3 → 5 (T Mon04–Fri08, finis
       { projectId, taskId: taskT, companyId, userId: '', savedByMemberId: m.owner },
       { duration_days: 5 }
     );
+    await settleBackground();
   }, 120_000);
 
   it('the change landed and the dates moved', async () => {
@@ -251,7 +255,11 @@ describe('an applied change: the Owner extends T 3 → 5 (T Mon04–Fri08, finis
   it('the unreachable member is NAMED back, and the saver gets a report row', async () => {
     if (!outcome || !outcome.ok || !outcome.recompute || outcome.recompute.status !== 'computed') throw new Error('no outcome');
     expect(outcome.recompute.notified.unreachable).toEqual([unreachableName]);
-    expect(outcome.recompute.notified).toMatchObject({ inApp: 1, emailed: 0, clientEmailed: false, clientUnreachable: false });
+    // ⚠️ SUPERSEDED [S123 D-3]: `notified` was what had BEEN sent, inside the save —
+    //   expect(outcome.recompute.notified).toMatchObject({ inApp: 1, emailed: 0, clientEmailed: false, clientUnreachable: false });
+    // It is now what WILL be sent (after the response): one in-app, one email, the client.
+    // What was actually delivered is asserted by the rows in the tests above and below.
+    expect(outcome.recompute.notified).toEqual({ inApp: 1, email: 1, client: true, unreachable: [unreachableName], clientUnreachable: false });
     expect(await inApp(prof.owner, 'Not everyone could be told%')).toBe(1);
     // [PARITY] What every route returns for the saver to be SHOWN at save time.
     expect(untoldOf(outcome.recompute)).toEqual({ names: [unreachableName], client: false });
@@ -294,6 +302,7 @@ describe('an APPROVAL applies the change, so the APPROVER is told who could not 
       'approve',
       null
     );
+    await settleBackground();
     expect(d).toEqual({ ok: true, untold: { names: [unreachableName], client: false } });
     const { data: t } = await admin.from('tasks').select('duration_days, due_date').eq('id', taskT).single();
     expect(t).toEqual({ duration_days: 6, due_date: '2027-01-11' });
@@ -314,6 +323,7 @@ describe('the client box UNTICKED: the finish moves and the client is told nothi
       { projectId, taskId: taskT, companyId, userId: '', savedByMemberId: m.owner },
       { duration_days: 7 }
     );
+    await settleBackground();
     expect(r).toMatchObject({ ok: true, held: false });
     const { data: after } = await admin.from('project_schedule_settings').select('projected_finish').eq('project_id', projectId).single();
     expect(after!.projected_finish, 'the finish DID move').not.toBe(before!.projected_finish);
@@ -334,6 +344,7 @@ describe('TIME passing tells nobody', () => {
       client: (await emailLogs('schedule_change_client', contactEmail)).length,
     };
     const r = await ensureScheduleFresh(db, projectId, new Date('2027-01-11T16:00:00Z'));
+    await settleBackground();
     expect(r.status).toBe('computed');
     const { data } = await admin.from('tasks').select('start_date').eq('id', taskT).single();
     expect(data!.start_date, 'the dates DID move').toBe('2027-01-11');

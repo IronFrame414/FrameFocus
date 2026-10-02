@@ -7,6 +7,12 @@ import { getSupabaseAdmin } from '@/lib/supabase-admin';
 import { getMyMember } from '@/lib/services/members';
 import { decideScheduleEdit } from '@/lib/critical-path/held';
 
+// [S123 D-3] The ceiling for this invocation INCLUDING the notifications sent
+// after the response (lib/critical-path/background.ts). Stated, not inherited
+// from a project default nobody can read from the code. Sends that would start
+// within 5 s of it are not started and are logged 'failed' with the reason.
+export const maxDuration = 60;
+
 // S122 Part 5 — decide a held schedule change: approve (an Owner, Admin, the
 // project's PM or PE, never the submitter — applied through the one save
 // path), reject, or withdraw (the submitter). The approval lives INSIDE the
