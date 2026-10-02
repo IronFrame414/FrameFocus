@@ -64,6 +64,8 @@ export const EXPORT_CATEGORIES: ExportCategory[] = [
       'company_work_calendars', 'company_holidays',
       // [S122 Part 5] held schedule changes (who asked for what, and the decision).
       'task_schedule_edits',
+      // [S122 Part 8] the company's schedule templates (phases, tasks, durations, links).
+      'schedule_templates', 'schedule_template_phases', 'schedule_template_tasks', 'schedule_template_dependencies',
     ],
     referencesFiles: true,
   },
