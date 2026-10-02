@@ -13,7 +13,7 @@ Files stay here afterwards; they are the written record of the original.
 - `client_schedule.baseline-query.sql`: the read-only query that produced them. Re-run it after a restore; every value must match.
 - `client_schedule.sabotage.sql`: DROP + CREATE with ONE added column (`duration_days`), for the CP-off regression control
   (`apps/web/test/s122-cp-client-schedule-regression.live.ts`). It must go red.
-- **`client_schedule.RESTORE.sql`**: DROP + CREATE from the original + COMMENT, in one transaction. Run it **as `postgres`** (the owner and
+- **`client_schedule.RESTORE.sql`**: DROP + CREATE from the original + COMMENT + the 11 grants a re-created function does NOT get from default privileges (found on the first restore: ACL 4 grantees vs 15), in one transaction. Run it **as `postgres`** (the owner and
   every grantor; `npx supabase db query --linked -f …` runs as `postgres`), so the ACL comes back identical.
 
 **If you find `client_schedule` missing or carrying `duration_days` on rebuild-test:** run `client_schedule.RESTORE.sql`, then
