@@ -523,3 +523,17 @@ payload either.
 **Decided for this build (narrower, reversible):** D-1 keeps exactly the fields displayed today. The ordinary list is unchanged. Its Gantt shows
 title, phase and dates. **No task status is displayed on either kind of job**, so nothing is taken away from existing clients and nothing new is
 shown. If Josh wants status SHOWN on ordinary jobs, it is a one-line addition to the list. Asked in the final message (Q-D1).
+
+### ⚠️ Vercel preview builds red on `feature/s123-d1-client-schedule` (raised by Josh) — classified **A: expected work-in-progress**
+- **`next build` on HEAD `d6be9b66`** (clean tree): **exit 1**, ONE error and nothing else: `./lib/services/portal.ts:339:16 Type error: Conversion of type
+  '{ … task_title: string; }[]' to type '{ … task_start: string | null; task_finish: string | null; }[]'`. "Compiled successfully" precedes it,
+  so bundling, imports and dependencies are fine; it fails only at type-checking.
+- **Cause:** `03a057e` (D-1 WIP) made the portal service read the two new columns that migration `20262133000000` adds. The generated
+  `packages/shared/types/database.ts` gains them only when that migration is applied to rebuild-test and `npm run db:push` regenerates the
+  types. The migration is written but NOT applied, because D-4's CI run held rebuild-test. The four red previews (`03a057e`, `2abddcd`, `cde8e77`,
+  `d6be9b6`) all descend from `03a057e`. `b605c6a`, its parent, was the last Ready. Not structural: the D-3 branch (the new `@vercel/functions`
+  dependency) builds with **exit 0**, the same 5 pre-existing warnings, ✓ Compiled successfully.
+- **Fixed by D-1's completion** (apply m33 to rebuild-test → regenerate types → `next build` re-read) **before** any CI request for D-1. The
+  standing rule holds: no CI has been or will be requested on a branch whose `next build` exit line has not been read as 0.
+- **My error, recorded:** I pushed commits I knew did not compile. They were saved for restart-safety, but that left four red previews. The commit
+  said "types pending the migration"; the previews did not.
