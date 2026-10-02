@@ -216,6 +216,30 @@ export async function reportUnreachable(admin: SupabaseClient<Database>, plan: S
 export const DEADLINE_MARGIN_MS = 5_000;
 
 /**
+ * [S124 Part 0, Josh RULED Q-D3 B] The gap between the STARTS of two emails.
+ * Resend's default limit is 2 requests per second; unpaced, a job with many
+ * email-only assignees takes a 429 and logs 'failed' — evidence written, message
+ * never delivered. ⚠️ 600, NOT 500: starts at 0, 500 and 1000 ms are THREE inside
+ * one closed second; 600 keeps any one-second window at two. The sends already
+ * run after the response (S123 D-3), so the wait costs the user nothing.
+ * ⚠️ Residual: Resend counts per ACCOUNT, so another send path in the same
+ * second (the warming cron, an invoice) can still collide. This paces only this
+ * path.
+ */
+export const SEND_INTERVAL_MS = 600;
+
+/** The pacer's clock. Injectable so a unit test can prove the gaps without waiting. */
+export interface SendPacer {
+  now: () => number;
+  sleep: (ms: number) => Promise<void>;
+}
+
+const realPacer: SendPacer = {
+  now: () => Date.now(),
+  sleep: (ms) => new Promise((res) => setTimeout(res, ms)),
+};
+
+/**
  * Step 3 — AFTER the response. The in-app rows first (fast, DB only), then the
  * emails one at a time. ⚠️ THE TIME LIMIT: before each email, if the invocation's
  * deadline is within DEADLINE_MARGIN_MS, the email is NOT started and a 'failed'
@@ -227,9 +251,12 @@ export const DEADLINE_MARGIN_MS = 5_000;
 export async function deliverScheduleNotify(
   admin: SupabaseClient<Database>,
   plan: ScheduleNotifyPlan,
-  opts: { deadline?: () => Date | undefined } = {}
+  opts: { deadline?: () => Date | undefined; pacer?: SendPacer } = {}
 ): Promise<ScheduleNotifyOutcome> {
   const deadlineOf = opts.deadline ?? getDeadline;
+  const pacer = opts.pacer ?? realPacer;
+  /** When the last email STARTED. Only a started send counts; a 'not_sent' does not. */
+  let lastStart: number | null = null;
   const out: ScheduleNotifyOutcome = { inApp: 0, emailed: 0, notSent: 0, clientEmailed: false };
 
   for (const a of plan.inApp) {
@@ -255,6 +282,12 @@ export async function deliverScheduleNotify(
     cta: { url: string; label: string },
     log: { email_type: 'schedule_change' | 'schedule_change_client'; metadata: Record<string, unknown> }
   ): Promise<'sent' | 'failed' | 'not_sent'> => {
+    // Pace FIRST, then read the deadline: a wait that carries a send too close to
+    // the time limit must end as a logged 'not_sent', never as a started send.
+    if (lastStart !== null) {
+      const wait = lastStart + SEND_INTERVAL_MS - pacer.now();
+      if (wait > 0) await pacer.sleep(wait);
+    }
     const deadline = deadlineOf();
     const left = deadline ? deadline.getTime() - Date.now() : Infinity;
     let messageId: string | null = null;
@@ -264,6 +297,7 @@ export async function deliverScheduleNotify(
       sendError = `not sent: the function time limit was ${Math.max(0, Math.round(left / 1000))}s away`;
       outcome = 'not_sent';
     } else {
+      lastStart = pacer.now();
       try {
         const attempt = sendEmail({
           from: plan.sender,
