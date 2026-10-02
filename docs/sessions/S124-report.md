@@ -574,7 +574,9 @@ call.
 part ships whole or not at all. Everything that does not need Intuit is done and proved:
 - `feature/s124-p1-push` at `9e08c3dc`, rebased on `main` `81fe1efc`;
 - migration `20262135` is **on rebuild-test only**;
-- CI `37071996311` was requested; its result is recorded below.
+- **CI `37071996311` GREEN** (22:20→22:56Z, alone): unit **174 / 2345**, e2e **705 passed, 0 failed**. On the
+  CI side it is merge-ready. It is held **only** for the sandbox proof and the production section.
+- Sandbox re-checked at ~22:57Z: still *"not configured"*, 1 failed / 2 passed.
 
 **What finishes it:**
 1. Josh puts the sandbox Development keys in `apps/web/.env.local` (1.6).
