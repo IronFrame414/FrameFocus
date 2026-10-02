@@ -148,6 +148,34 @@ item, not built here. **My recommendation: A**, with the reminder that "notify o
 
 ---
 
+### RULINGS [Josh, 2026-10-02] — plan APPROVED; Phase 3 authorised
+
+- **Ordering slip** (prompt read before `ListAgents`): not a defect; noted only.
+- **Q1 — A.** Both kinds of job get the disclaimer and the List | Gantt switch. *[Josh] A non-CP job's dates are hand-typed with no engine
+  behind them, so they are LESS reliable than the computed ones, and they are the ones currently carrying no disclaimer at all.*
+  ⚠️ **LIVE-FACING CHANGE, recorded as such [Josh]:** unlike everything else in S123, this changes a page linked clients can see **TODAY**.
+  No project has Critical Path on, so D-1's CP effects reach nobody yet, but **the disclaimer and the toggle on ordinary (non-CP) project
+  schedules are visible to every linked client the moment D-1 merges.**
+- **Q2 — A.** `client_schedule` unchanged. ⚠️ **KNOWN AND ACCEPTED PROPERTY, do not "fix" it:** a linked full-access client who calls the
+  `client_schedule` RPC **directly** on a Critical Path project receives each task's title, phase, start, due and **status**. The portal page never
+  calls it on a CP project after D-1. **Reason [Josh]:** calling it by hand means deliberately crafting an API request around the UI, which is
+  not what a client sees and screenshots. It contains no float, critical flag, duration, assignee or history. Part 7 deliberately pinned this
+  function (its CP-off control asserts its exact keys and values). A future session that finds this must not read it as a leak and change it.
+- **Q3 — A for CP jobs: dates only; D7-4 stands.** ⚠️ **DELIBERATE ASYMMETRY, not an oversight [Josh]:** the one component shows status
+  **where its feed has it**. Non-CP jobs keep the status they show today (from `client_schedule`; removing it would take something away from
+  existing clients for no reason). CP jobs show dates only (`client_critical_path` has no status column).
+- **Q4 — A.** CC applies D-4's and D-1's migrations to production under S122's rules: one migration per section, a dry run listing exactly one
+  file, push, verification by object with every expected value stated. **A mismatch is a stop.**
+- **Q5 — A.** Add `@vercel/functions`. (C, fire-and-forget, is the dangerous one: emails silently cut off partway with nobody knowing which.)
+  **ADDITION:** the report must state the function's **maximum duration**, **what happens when a send exceeds it**, and confirm that an email
+  dropped that way **leaves evidence** (a row or a log entry) rather than vanishing.
+- **Q6 — A.** No change. Opt-in defaults (per-line "notify of changes", the client box at setup) keep the blast radius under Josh's control.
+- **Branch cleanup approved** as proposed: delete the eight merged `feature/s122-p*` and `feature/s122-critical-path` with per-branch proof;
+  keep `feature/s114-c5-multi-upload`. (`feature/s122-p9-mobile` after its two commits reach `main`.)
+- **D-4:** the concurrent-stamp lock goes in the same migration.
+
+---
+
 ## PHASE 1 — ASSESS (nothing built)
 
 ### 1.0 — First action
