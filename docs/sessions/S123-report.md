@@ -389,3 +389,24 @@ rebuild-test by `db query --linked` (ref read back first). Every restore read ba
 **D-4 pre-CI** (on `feature/s123-d4-stamp`, base `b7e6b7fe` = `origin/main`): `turbo run type-check --force` exit 0 (5/5, **0 cached**); `next lint` exit 0,
 5 warnings, all pre-existing in files D-4 does not touch; unit (`vitest run`) exit 0: **168 files / 2,287 tests**. 0 runs in progress or queued
 (last: `main` `8cd52cec` **success**, 10:23–10:58Z). The migration is already on rebuild-test, so no CI-time apply is needed. **CI requested by this commit.**
+
+**D-4 CI `37002581074`** on `606b1713` (base `b7e6b7fe` = `origin/main`): **green**. Both jobs success. Unit **168 files / 2,287 tests**; e2e **701 passed,
+24 skipped, 0 failed, 0 `✘`** (44.4 min). No overlap: the previous run (`main` `8cd52cec`) ended 10:58:35Z; this ran 11:43:31–12:31:26Z.
+
+**PRODUCTION section D-4 — `20262132000000_s123_stamp_schedule_template` — MATCH ×8.** Scratch workdir `wd-m32`, made by `git archive
+feature/s123-d4-stamp supabase/migrations` (295 files, `cmp` 0 mismatches against the branch), linked `jwkcknyuyvcwcdeskrmz` (`WD REF` read back);
+the checkout stayed on `nmyphyhmfttxkdoposvf` (read back). The same query ran first on rebuild-test as the control (8/8 MATCH).
+- Pre-check: ledger from `…2131` = `20262131000000` only; `stamp_schedule_template` count **0**.
+- Dry run: *"Would push these migrations: • 20262132000000_s123_stamp_schedule_template.sql"*, **exactly one**. Push: exit 0, *"Applying migration
+  20262132000000_s123_stamp_schedule_template.sql…"*.
+
+| expected | production |
+| --- | --- |
+| ledger `20262131000000,20262132000000` | MATCH |
+| function count 1 | MATCH |
+| md5 `a18753193fcb33684df95cf91571ff17` (= rebuild-test, = the captured original) | MATCH |
+| `p_project_id uuid, p_template_id uuid, p_start_date date -> integer` | MATCH |
+| SECURITY DEFINER **false** / volatile / plpgsql / `search_path=public` | MATCH |
+| comment md5 `405bf4dc3eb55cd72761259622915dd6` | MATCH |
+| EXECUTE anon **false** / authenticated **true** | MATCH |
+| ACL `postgres, authenticated, service_role, supabase_auth_admin` (no anon, no PUBLIC) | MATCH |
