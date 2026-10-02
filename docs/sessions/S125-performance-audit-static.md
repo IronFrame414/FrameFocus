@@ -34,8 +34,8 @@ their distance — which is what Areas B and G are about.
   `regions`**; the only `runtime` exports are `runtime = 'nodejs'` in `app/api/portal/messages/route.ts:31` and
   `app/api/portal/photos/route.ts:17` (no edge runtime anywhere — functions all run in the project region).
 - So the function region is still the project default that S120 read as `iad1`. **Residual:** a change made in the
-  Vercel dashboard since 2026-09-30 would not show in the repo. If Josh wants it re-confirmed: Vercel → project
-  `frame-focus` → **Settings → Functions → Function Region**; Supabase → project → **Settings → General** (region
+  Vercel dashboard since 2026-09-30 would not show in the repo. If Josh wants it re-confirmed: Vercel → the FrameFocus
+  project → **Settings → Functions → Function Region**; Supabase → project → **Settings → General** (region
   is shown at the top). Neither is expected to have changed.
 
 **Connection pooling (from config only).**
@@ -110,7 +110,191 @@ by reading each statement window (script-assisted, then spot-checked):
 | bounded (`.limit`/`.range`) | 4 | `lib/services/files.ts:132` (the M3-05 fix, `DEFAULT_FILE_PAGE_SIZE = 500`, `:100`), `subcontractors.ts:59`, `contacts.ts:76`, `lib/trial/export.ts:137` |
 | list, no limit | 59 | almost all are **child rows scoped by a parent id and ordered** (estimate lines, CO lines, contract boxes, lien-release boxes, selection options/messages…). Bounded in practice by the parent, not by the query |
 
-_(Area B per-route detail is being filled from the route-by-route reading.)_
+### How the per-route counts below were made
+
+Every `page.tsx` under `app/m/` (53), `app/dashboard/` and `app/portal/`, and all six layouts, were read along with
+every `lib/services` / `lib/critical-path` function they reach (three read-only reading passes, then the load-bearing
+claims re-read by me on this ref — marked ✔ where I re-verified). **RT** = Supabase round trips in the page's own
+server render (layouts counted separately), counting `.from()`, `.rpc()`, storage signing and Auth-server calls.
+**Depth** = the longest chain that must run one after another. Counts are upper bounds where a branch skips a query.
+They are **counts from reading, not measurements** — the timing half traces the real number.
+
+Shared per request by React `cache()` (a second call is free): `createClient`, `getRequestUser`
+(`lib/supabase-server.ts:25,68`), `getMyLanguage` (`lib/i18n/server.ts:12`), `getProject` (`lib/services/projects.ts:63`).
+**Nothing else is cached** — every repeat below is a real query (see F-1).
+
+### B-1. Cross-cutting findings (rank order inside Area B)
+
+**B-1a. ✔ 79 dashboard/portal `page.tsx` files call `supabase.auth.getUser()` directly** (`grep -rln
+"supabase.auth.getUser()" app/dashboard app/portal --include=page.tsx` → 79; `app/m` → 1). The cached
+`getRequestUser()` exists for exactly this; S115 measured why it matters (`lib/supabase-server.ts:50-57`): *"6 calls
+to the Auth server for one render … They cannot overlap: auth-js runs every auth operation on a client through one
+queue, and every PostgREST query waits on that same queue for its session, so each getUser() in flight stalls every
+query behind it."* The S115 fix moved the layouts onto `getRequestUser()`; **the pages were not moved.** So every
+dashboard page pays **one extra Auth-server round trip that also stalls its own queries**. Portal pages ask the Auth
+server up to **3×** per request (`app/portal/layout.tsx:73`, `lib/services/portal.ts:173` from both the project
+layout and the page). Fix: mechanical replacement with `getRequestUser()`; small per file, 79 files; risk low (same
+call, memoised) — the one trap is a page that deliberately needs a *fresh* user after a write in the same request
+(none expected in a GET render; check Server Actions).
+
+**B-1b. ✔ The dashboard home and the projects list run a full profitability report per project.**
+`lib/services/dashboard.ts:236-238` — `Promise.all(activeProjects.map(getProfitabilityReport))` on the Owner/Admin
+home; `app/dashboard/projects/page.tsx:125-129` — every project, 6 at a time. One report is ~19–33 queries ~10 deep
+(`lib/services/profitability.ts:123…433`, counted by reading), and it also reads **all** `instrument_rates` with no
+filter (`profitability.ts:209-211`) each time. **This is the one place the query count scales with the company's
+size.** A company with 30 active projects → ~600–1000 queries for one home-page render (arithmetic on the reading
+count; not measured). Fix: a set-based portfolio rollup (one RPC or a handful of grouped queries) — **medium-large**;
+risk: the profitability numbers are Financial-Floor-governed money figures, so the rewrite needs the same
+role-matrix tests as the original.
+
+**B-1c. Reads with NO filter at all — company-wide, every time:**
+- ✔ `lib/services/selections.ts:124` — `selection_option_amounts` with **no `.in('option_id', ids)`** (the
+  neighbouring `selection_notes` read at `:127` has one). Runs on `/m/p/[projectId]/selections`, dashboard selections (twice on
+  `selections/[selectionId]`), and the portal. Correctness-adjacent: the caller presumably filters in JS.
+- ✔ `lib/services/invoices.ts:469-472` — every credit `invoice_lines` row in the company (`getAvailableCredits`,
+  invoices pages).
+- `lib/services/profitability.ts:209-211` — all `instrument_rates` (per project, inside B-1b).
+- `lib/services/payables.ts:238-243` — all compliance docs, on every calendar render (`getExpiringCompliance`).
+
+**B-1d. ✔ Lists that grow without bound and are only ever shown partly:**
+- `getCalendarEvents` (`lib/services/schedule.ts:129-265`) — **no date window, 4 sequential reads**
+  (tasks `:149` → entries `:172` → inspections `:205` → compliance `:239`), behind `/m/schedule`, the `/m` project hub,
+  `/m/p/[projectId]/schedule`, `/dashboard`, `/dashboard/schedule`, dashboard project overview and schedule. The
+  screens show a day / a week / "up next".
+- `getMobileDailyLogs` (`lib/services/daily-logs.ts:260-270`) — **every daily log in the company, all time, no
+  limit** behind `/m/logs`; then `files.in('daily_log_id', <every id>)` just to count photos (`:289-293`) — that `IN`
+  list grows with the log history; then `companies.timezone` (`:318`) and a count (`:322`) — 4 sequential.
+- `getProjects()` (`lib/services/projects.ts:39-49`) — `select('*', contact)`, no limit; `/m/projects` calls it with
+  **no status filter** (archived included); `/m/timeclock` and `/m/capture` use it for a picker that needs id + name.
+- `getContacts` (`contacts.ts:22-26`), `getSubcontractors` (`subcontractors.ts:22-25`), `getExpenses`
+  (`expenses.ts:45-50`, all company expenses on `/m/expenses`), `listSiteVisits` (`site-visits.ts:44-49`),
+  `getDailyLogs` (`daily-logs.ts:97-103`), portal photo/file lists (`portal.ts:473-488, 538-543, 714-718`),
+  `listEstimates` from the browser (`estimates-client.ts:245-251`).
+- Already bounded (the M3-05 fix, fine): `getFiles` — range 500, ordered (`files.ts:100,130-138`).
+
+**B-1e. N+1 reads:**
+- ✔ `/m/timeclock` — `Promise.all(ownSessions.map(getSessionSegments))` (`app/m/timeclock/page.tsx:54`), N queries
+  after the first batch. `SESSION_SELECT` (`lib/services/time-tracking.ts:45`) already embeds segments, so the
+  first-batch `getSessions` could return them — removes the N+1 **and** one sequential step. **Small.**
+- `/m/expenses` — one `files` read per expense (`app/m/expenses/page.tsx:155-157`); the comment says no batch
+  function exists, but `getExpenseReceiptsByExpense` is at `lib/services/expenses.ts:120`.
+- `/dashboard/projects/[id]/invoices/[invoiceId]` — `derivedInstruments.map(getPickableCosts)` (`:129`), 4 each.
+- `/portal/[projectId]/financials` — one RPC per invoice (`portal.ts:634-638`); `/portal/[projectId]/selections`
+  — up to 4 per selection (`selections.ts:464-474`).
+- `/m/projects` — `getOpenPunchCounts` fetches every open punch row to count in JS (`punch.ts:285-293`).
+- Site-visit media — one fetch per photo, in parallel (D-4).
+- Photo capture — 5 round trips per photo, 3 of them the same identity/profile/cap reads (G-4).
+- Dashboard B-1b.
+
+**B-1f. Data fetched only to count it** (server waste, no payload): `/m` layout `getMembers()` → `members.length`
+(`app/m/layout.tsx:90,133` ✔, on **every** `/m` request); `/m` hub and `/m/field` fetch up to 500 `files` rows
+`select('*')` → `photos.length` (`app/m/p/[projectId]/page.tsx:125,191`); hub delivery lists → damaged count
+(`:119-120`). A `count: 'exact', head: true` query does each.
+
+### B-2. `/m` field routes (53 pages + layout)
+
+**The `/m` layout** (`app/m/layout.tsx`, every `/m` request): 5 round trips, depth 3 —
+Auth `getUser` (`:79`, cached for the page) → `profiles` (`:96`) ∥ `getMembers` + `getUnreadCount` (started `:90-91`)
+→ `companies.name` (`:113`). Embedding `companies(name)` in the profile select drops a step; B-1f drops a list read.
+
+| route | RT (page) | depth | not-parallel but independent | N+1 | unbounded | key note |
+| --- | --- | --- | --- | --- | --- | --- |
+| **/m/timeclock** | 7+N | 3 | 0 | **y** `:54` | y | B-1e; `profiles` read 3× per request; client effect adds 2 sequential browser reads (`timeclock-screen.tsx:206`) |
+| /m/timeclock/switch | 4 | 2 | 0 | n | y (`getProjects`) | |
+| **/m/logs** | 8–9 | **7** | 1 (`:49`→`:57`) | n | **y** | **deepest chain of the field routes** (B-1d) |
+| /m/logs/new | 3 | 1 | 0 | n | y (`getMembers`, repeats layout) | presence RPC on mount |
+| /m/logs/[logId] | 5 | 2 | 0 | n | n | profile read twice |
+| **/m/capture** | 1 | 1 | 0 | per-photo writes | y (`getProjects` `*` for a picker) | the cost is the upload path (G-4) |
+| **/m/projects** | 7 (9 "Mine") | 3 | 0 | punch counts | **y** (all projects incl. archived) | `get_my_member_id` RPC up to 3× |
+| **/m/schedule** | 10 | 6 | 3 inside `getCalendarEvents` | n | **y** | B-1d; `getMembers` repeats layout |
+| **/m/p/[projectId]/schedule** | 8 → ~19 | ~6 | 1 (`:153`→`:158`) + 2 | n | **y** | `getMobileCriticalPath` loads CP data **even when the project is not on Critical Path** (~9 wasted queries; `lib/critical-path/load.ts:53,62,115`) |
+| /m/p/[projectId] (hub) | 15 | 5 | 2 | n | **y** | B-1f; calendar unbounded |
+| **/m/p/[projectId]/overview** | 5 | **1** | 0 — `Promise.all` at `:245` ✅ | n | n | **the model to copy**; residual: a second `projects` read for the site address |
+| **/m/p/[projectId]/photos** | 7 | 4 | 2 (`:67`→`:72`, `:72`→`:102`) | n | 500 × `*` | signs up to **1500** paths per render; **every search pause / chip tap re-runs all 7** (`photo-search.tsx:53-62` → `router.replace`) |
+| /m/p/[projectId]/photos/[fileId] | 6–8 | 3–5 | 0 | n | 500 × `*` | C-4a: whole gallery per photo, per swipe |
+| /m/p/[projectId]/punch | 7–8 | 5 | 2 | n | **y** (`punch.ts:165-170`) | |
+| /m/p/[projectId]/punch/[itemId] | 7 | 4 | 1 | n | n | |
+| /m/p/[projectId]/punch/new | 6–7 | 3 | 1 | n | y | `getMembers` repeats layout |
+| /m/p/[projectId]/punch/lists/new | 4–5 | 3 | 1 | n | y | every item `*` loaded to read list names |
+| /m/field | 11 | 3 | 0 | n | **y** | B-1f |
+| /m/expenses | 6+N | 3 | 1 | **y** | **y** | B-1e |
+| /m/notifications | 2 | 2 | 1 | n | n (limit 100, ordered) | |
+| /m/account, /m/settings | 7 | 3 | 0–1 | n | n | 4 `profiles` reads each |
+| /m/contacts, /m/subs, /m/team | 3 | 1 | 0 | n | y | |
+| /m/contacts/[contactId] | 5 | 3 | 2 | n | n | |
+| /m/subs/[subId], /m/team/[memberId] | 4 | 2–3 | 1–2 | n | n | |
+| `…/edit` (contacts, subs, team) | 2–3 | 2–3 | 1 | n | n | |
+| /m/site-visits | 4 | 3 | 1 | n | **y** | |
+| /m/site-visits/[id] | 7 | 4 | 1 | **y, client** (D-4) | n | uncached `auth.getUser()` `:23` |
+| /m/site-visits/[id]/photos/[fileId]/markup | 7–8 | 7–8 | 0 | n | n | all sequential, uncached `getUser` (`lib/site-visits/markup-page.ts:33`) |
+| /m/site-visits/new | 3 | 3 | 1 | n | y | |
+| /m/p/[projectId]/changes | 5 | 2–3 | 1 | n | n | |
+| /m/p/[projectId]/changes/[coId] | 10 | 5 | 2 | n | n | |
+| /m/p/[projectId]/changes/new | 2–5 | 2 | 1 | n | n | |
+| /m/p/[projectId]/contacts, /team, /signouts | 4–5 | 1–2 | 0 | n | n | |
+| /m/p/[projectId]/deliveries | 4 | 2 | 0 | n | y | client mount fetch adds 3 sequential browser reads |
+| /m/p/[projectId]/deliveries/check-in | 4 | 1 | 0 | n | y | |
+| /m/p/[projectId]/files | 4 | 2 | 0 | n | 500 × `*` | |
+| /m/p/[projectId]/safety, /safety/new | 3–4 | 1–2 | 0–1 | n | y | |
+| /m/p/[projectId]/selections | 9 | 4 | 1 | n | **B-1c** | |
+| /m/p/[projectId]/signouts/new, /[signoutId] | 6–10 | 2–4 | 0–1 | n | n | `companies` read twice in one `Promise.all` (`material-signouts.ts:227,229`) |
+| /m/p/[projectId]/photos/[fileId]/markup | 3 | 3 | 1 | n | n | |
+| /m/offline | 0 server | — | — | n | n | client page, one read on mount |
+| /m, /m/[...missing] | 0 | — | — | — | — | redirect / notFound |
+
+Correctness notes found in passing (not performance; recorded so they are not lost): `/m` hub and `/m/field` count
+damaged **orderless deliveries twice** (`getProjectDeliveries` already includes them — `deliveries.ts:170`, then
+`[...withPo, ...orderless]` at `app/m/p/[projectId]/page.tsx:167`); `app/m/subs/[subId]/page.tsx:96` comment says
+`getSubcontractor` filters `is_deleted` — it does not (`subcontractors.ts:74-81`); `app/m/settings/page.tsx:45-50`
+comment says the layout selects `company_id` only — it also selects `role` (`app/m/layout.tsx:104`). **Unverified by
+me; agent-reported.**
+
+### B-3. Dashboard, estimates, portal
+
+**Layouts, per request:** `app/dashboard/layout.tsx` **9** (1 Auth + 8 DB, ~3 deep; `profiles` and `companies` each
+read twice inside it — `:37` & `members.ts:87`; `:84` & `company.ts:113`). `app/dashboard/projects/[id]/layout.tsx`
++2 (`getProject` cached ∥ `profiles.role`). `app/portal/layout.tsx` 2 sequential (uncached `getUser` `:73` →
+`profiles`). `app/portal/[projectId]/layout.tsx` 6 sequential (identity: Auth `getUser` again + profiles + RPC →
+branding `:331` → projects `:337` — branding and projects are independent). So **every
+`/dashboard/projects/[id]/*` request starts at ~11 layout round trips, other `/dashboard/*` at ~9, `/portal/[projectId]/*`
+at ~8 (3 of them Auth)** — plus middleware's 1–2 batches on `/dashboard` (E).
+
+| route | RT (page) | notes |
+| --- | --- | --- |
+| **/dashboard** (home) | Owner ~21 + **N × 19–33**; crew ~16 | B-1b; B-1d calendar; `getDashboardData` 9 queries ~8 deep (`dashboard.ts:51,61,74,83,90,100`), `getPortfolioRevisedContract` 4 independent-but-sequential (`contract-value.ts:582,595,602,615`) |
+| /dashboard/projects | ~11 + N RPC + **N × 19–33** | B-1b; RPC per project `:97` |
+| /dashboard/projects/new | 3 | |
+| **projects/[id]** (overview) | ~23, ~5 deep | `Promise.all` at `:101` ✅; 4th `profiles` read `:72`; `companies` `.maybeSingle()` with no filter `:126` |
+| projects/[id]/budget | **~46** (Owner/Admin) | 11 services in one `Promise.all` (`:142`) ✅, but inside them `expenses` ~5×, `invoices` ~6×, `projects` 4× more, signed COs 3×; RPC `:451` could join the batch |
+| projects/[id]/schedule | ~23, ~9 deep (+recompute) | `tasks` read 4×, `inspections` 2×, deps 2×, `projects` 3×; `loadPendingEdits` `:68` and `loadCriticalPathData` `:77` independent but sequential |
+| projects/[id]/critical-path | ~18 (+recompute) | recompute updates each task in a loop (`lib/critical-path/recompute.ts:109-116`) |
+| projects/[id]/photos | 5, 2 deep | one signing call ≤1500 paths ✅ |
+| projects/[id]/invoices | ≤24 | B-1c `invoices.ts:469` |
+| projects/[id]/invoices/[invoiceId] | ~40 + 4/instrument | 8 independent reads in a row (`:71,112,156,163,170,181,188,190`); B-1e |
+| projects/[id]/payments | ~22 | |
+| projects/[id]/profitability | 25–39 | |
+| projects/[id]/lien-releases | 12 | |
+| projects/[id]/changes, /[coId] | 8, ~12 | |
+| projects/[id]/contacts, /contracts, /deliveries, /files, /punch, /selections, /team | 4–9 | selections: B-1c |
+| projects/[id]/selections/[selectionId] | ~23 | `getProjectSelections` runs twice (7 queries each) |
+| projects/[id]/chat | 2 + client fetch after mount | |
+| projects/[id]/files/* | 2–5 | |
+| projects/[id]/costs | 0 (redirect) | layouts still run (~11) — unverified whether before the redirect |
+| /dashboard/estimates | 4 + client `listEstimates` (`select('*')`, no limit) | |
+| estimates/new | 2 + same client list | |
+| **estimates/[id]** | 9–14, **all sequential** (`:20,23,39,46,58,64,67,72`), then ~8 more **from the browser after hydration** (`estimate-builder.tsx:154-161`) | client-side waterfall after a server waterfall; also the heaviest JS route (324 KB) |
+| estimates/[id]/proposal | 11 | |
+| /dashboard/schedule | ~11 | B-1d |
+| /dashboard/timeclock | 8 | repeats the layout's open session / member / company |
+| /dashboard/timeclock/timesheets | 11 | `/dashboard/timesheets` redirects here — the layout runs **twice** across the two requests |
+| timeclock/timesheets/[sessionId] | ~10 | |
+| /dashboard/field-ops/** (25 pages) | 2–11 | mostly one independent pair run in sequence each; `daily-logs.ts:185-190` `.limit(1000)` ordered by non-unique `log_date` only |
+| /dashboard/{catalog,contacts,subcontractors,team,expenses,settings,site-visits,notifications,billing,trial,account}/** | not read route-by-route | ⚠️ **residual — outside the read set** (see H) |
+| **/portal/[projectId]** | 6–7 page + 8 layout ≈ **14–15, 3 Auth** | identity and projects re-read on purpose (`:40-44` comment) — but uncached, so really re-queried |
+| /portal/[projectId]/files | ~16 | two separate signing calls; lists unbounded |
+| /portal/[projectId]/financials | ~11 + N | B-1e |
+| /portal/[projectId]/selections | ~13 + ≤4/selection | B-1e, B-1c |
+| /portal | 5–6 | |
 
 **`.limit()` without `.order()`** — 44 `.limit(` calls in code; **15 have no `.order()` in the statement.** None
 is a performance problem; per the S165 rule they are correctness questions. Read individually:
@@ -131,7 +315,69 @@ is a performance problem; per the S165 rule they are correctness questions. Read
 
 ### C-1. First Load JS per route (`next build`)
 
-_(build numbers: see C-1 table below once the build completes)_
+**How it was taken.** `npm run build` in `apps/web` on ref `918f8654` (application code = `main` @ `91fa32e1`),
+Next 14.2.35, with `NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:1` and a dummy anon key, so **no prerender could reach
+any database** (no `.env.local` exists in this checkout; the log shows no connection errors). First attempt died of a
+JavaScript heap OOM in the lint/type-check stage (the background wrapper reported exit 0; the build's own line read
+`BUILD_EXIT=1` — log kept as `build-attempt1-oom.log` in the session scratchpad). Re-run with
+`NODE_OPTIONS=--max-old-space-size=4096`: **`BUILD_EXIT=0`**, `✓ Compiled successfully`, 170 app pages + 112 API routes.
+
+⚠️ **Next's printed "First Load JS" under-counts every route under a layout with client code**: it leaves out the
+layout's chunks. `/m/contacts` prints **97 kB**, but its layout (`/m/layout`) loads 18 chunks the page entry does not
+list. So the table below is recomputed from `.next/app-build-manifest.json`: the **union** of the root layout +
+each intermediate layout + the page's chunks, each file gzipped with Node `zlib` (level 6). Vercel serves Brotli, so
+bytes on the wire are somewhat smaller; **compare these numbers with each other, not with a network trace.** Size is
+not time — parse/execute cost on a mid-range phone is the timing half's.
+
+| route | Next prints | **real first-load JS (gz, incl. layouts)** | chunks |
+| --- | --- | --- | --- |
+| `/` (marketing) | 96.7 kB | 95 KB | 7 |
+| `/sign-in` | 159 kB | 156 KB | 10 |
+| **`/m/timeclock`** | 209 kB | **232 KB** | 22 |
+| `/m/timeclock/switch` | 212 kB | 234 KB | 22 |
+| **`/m/logs`** | 204 kB | **229 KB** | 21 |
+| `/m/logs/new` | 209 kB | 234 KB | 21 |
+| `/m/logs/[logId]` | 208 kB | 231 KB | 21 |
+| **`/m/capture`** | 200 kB | **231 KB** | 20 |
+| **`/m/p/[projectId]/photos`** | 205 kB | **234 KB** | 21 |
+| `/m/p/[projectId]/photos/[fileId]` | 204 kB | 233 KB | 21 |
+| **`/m/schedule`** | 197 kB | **238 KB** | 23 |
+| `/m/p/[projectId]/schedule` | 204 kB | 245 KB | 24 |
+| `/m/p/[projectId]` (hub) | 206 kB | 238 KB | 23 |
+| `/m/p/[projectId]/overview` | 158 kB | 226 KB | 20 |
+| `/m/projects` | 195 kB | 227 KB | 20 |
+| `/m/p/[projectId]/punch` | 158 kB | 226 KB | 20 |
+| `/m/p/[projectId]/punch/[itemId]` | 203 kB | 232 KB | 21 |
+| `/m/contacts` | **97 kB** | **226 KB** | 20 |
+| `/dashboard` | 112 kB | 248 KB | 24 |
+| `/dashboard/projects/[id]` | 237 kB | 276 KB | 31 |
+| `/dashboard/projects/[id]/schedule` | 215 kB | 270 KB | 28 |
+| `/dashboard/projects/[id]/photos` | 201 kB | 244 KB | 23 |
+| `/dashboard/estimates/[id]` (largest) | 299 kB | **324 KB** | 29 |
+| `/dashboard/timesheets` | 87.9 kB | 233 KB | 21 |
+| `/portal/[projectId]` | 87.9 kB | 138 KB | 11 |
+| `/portal/[projectId]/files` | 206 kB | 213 KB | 18 |
+
+All `/m` pages: **226–248 KB**. All `/dashboard` pages: **233–324 KB**. Full per-route list (170 rows):
+`firstload-union.tsv` in the session scratchpad — not committed (generated, reproducible from the build).
+Middleware bundle: 93.6 kB (Next's figure).
+
+**C-1a. ⚠️ The `/m` weight is the SHELL, not the screens.** The root layout + `/m` layout alone are **226 KB gz in
+19 files**; every field page adds only **0–19 KB** on top. What the shell carries (largest chunks, gz):
+
+| KB | chunk | what it is (fingerprinted by content) |
+| --- | --- | --- |
+| 52 + 31 | `1dd3208c…`, `1528…` | React / Next runtime (the 87.8 kB "shared by all"; root layout total 86 KB) |
+| **41 + 12** | `5422…`, `75504863…` | **the browser Supabase client** — `createBrowserClient`, `GoTrueClient`, and **`RealtimeClient` (Phoenix websocket)** |
+| **35** | `3437…` | **the whole i18n message catalog, English AND Spanish, every area** (`lib/i18n/messages.ts:2-9` imports all 8 areas; `en` `:72`, `es` `:127`) — 130 KB raw |
+| ≤9 each | others | shell, offline sync, nav, file sheet (C-2b), geolocation helper (`5964…`, timeclock only) |
+
+So **~88 KB of the 140 KB the `/m` shell adds over the framework is two things**: the Supabase browser client
+(on every `/m` page: `app/m/mobile-shell.tsx:24` imports `@/lib/supabase-browser` directly, and again via
+`app/m/offline-sync.tsx:12-13` → `lib/services/files-client.ts:1` — verified) and a two-language catalog of which a user reads one. Fix shapes, for Josh to rule: ship one language's
+catalog per user (≈ −17 KB, small change, risk: a missed key renders its id); load the Supabase browser client /
+offline-sync lazily after first paint (larger change, risk: offline queue replay timing). **Bytes only — whether
+226 KB is "slow" on a mid-range phone on LTE is a timing-half question.**
 
 ### C-2. Heavy libraries — mostly handled well
 
