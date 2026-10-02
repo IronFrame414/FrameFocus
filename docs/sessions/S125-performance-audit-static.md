@@ -137,14 +137,100 @@ _(in progress)_
 
 ## F — Caching and revalidation
 
-_(in progress)_
+**`staleTimes` is not in `next.config.js`** (confirmed; Next 14.2 defaults apply). **Settled at S121; not
+evaluated, not proposed.** Any proposal to disable the router cache is rejected by ruling.
 
-## G — Blank screens
+| mechanism | where (this ref) |
+| --- | --- |
+| `export const dynamic = 'force-dynamic'`, pages | `app/m/notifications/page.tsx:31`, `app/dashboard/notifications/page.tsx:23`, `app/dashboard/settings/page.tsx:58`, `app/dashboard/settings/accounting/page.tsx:31`, `app/resubscribe/page.tsx:19` |
+| `force-dynamic`, route handlers | `app/onboarding/complete/route.ts:10`, seven `app/api/quickbooks/*/route.ts` |
+| `revalidate`, `fetchCache`, `unstable_cache`, `revalidateTag` | **none** |
+| `revalidatePath` | `app/dashboard/team/[id]/actions.ts:88,89,99,194`; `lib/services/profile-self.ts:52,53,76,77` |
+| React `cache()` (per-request dedupe) | `lib/supabase-server.ts:25` `createClient`, `:68` `getRequestUser`; `lib/services/projects.ts:63` `getProject`; `lib/i18n/server.ts:12` `getMyLanguage` |
 
-**There is not one `loading.tsx` in the app.** `find apps/web/app -name loading.tsx` → **0**, against **169**
+**F-1. Per-request reads repeated between a layout and its page, NOT wrapped in `cache()`** — each costs its round
+trips again in the same render:
+- _(Caller counts = `page.tsx` files containing the call, `grep -rl` on this ref.)_
+- `getMyMember` (`lib/services/members.ts:82` — `profiles` then `company_members`, **two sequential queries**):
+  `app/dashboard/layout.tsx:33` **and** 18 dashboard pages / 6 `/m` pages.
+- `getCompanyTimeSettings` (`lib/services/company.ts:139` → `:107`): dashboard layout `:34` **and** 17 dashboard /
+  13 `/m` pages.
+- `getOpenSession` (`lib/services/time-tracking.ts:53`): dashboard layout `:32` **and** 1 dashboard / 4 `/m` pages.
+- `getMembers` (`members.ts:24`): `/m` layout `app/m/layout.tsx:90` **and** 7 `/m` / 12 dashboard pages
+  (e.g. `app/m/p/[projectId]/page.tsx:130`, `app/m/p/[projectId]/schedule/page.tsx:67`).
+- The caller's **`profiles` row** is read by: the `/m` layout inline (`app/m/layout.tsx:96`, already selecting
+  `language` and `role`), `getMyLanguage` (`lib/i18n/server.ts:16`, cached — but a *separate* read from the
+  layout's), `getMyProfile` (`lib/services/profiles.ts:37`, 23 `/m` pages, not cached), and `getMyMember`'s own read
+  (`members.ts:86`).
+- Portal: `getUser` twice (`app/portal/layout.tsx:73` and `lib/services/portal.ts:173`) and `profiles` twice
+  (`portal/layout.tsx:81`, `portal.ts:176`) per request.
+
+Fix shape: wrap these in React `cache()` the way `getRequestUser`/`getProject` already are (`cache()` is
+per-request, so no cross-user risk — the reasoning at `lib/supabase-server.ts:60-67` applies). Small; the risk is
+a helper that is called with *different arguments* expecting fresh reads within one render (argument-keyed, so safe)
+or after a write in the same request (Server Actions — check each).
+
+**F-2. No cross-request caching exists.** Data that changes rarely — company name and time settings re-read by
+every layout on every navigation and `router.refresh()`; the catalog; `/m/capture`'s active-project list
+(`app/m/capture/page.tsx:29`) — is fetched fresh each time. `unstable_cache` keyed on company id with
+`revalidateTag` on write would remove those reads. ⚠️ Medium-risk: a cache keyed wrongly is a cross-tenant leak, and
+RLS does not run inside a cached function the way it does per request — any such cache must be built with the
+service role **and** an explicit company filter, or not at all. Josh's decision.
+
+**F-3. The marketing pages are already static.** `/`, `/pricing`, `/privacy`, `/terms`, `/contact` read no
+cookies/headers/Supabase and are outside the middleware matcher; the root layout (`app/layout.tsx:99-109`) forces
+nothing dynamic. Nothing found.
+
+## G — Blank screens ⚠️ the adoption section
+
+**G-1. There is not one `loading.tsx` in the app.** `find apps/web/app -name loading.tsx` → **0**, against **169**
 `page.tsx` and **6** `layout.tsx` (`app/layout.tsx`, `app/dashboard/layout.tsx`,
 `app/dashboard/projects/[id]/layout.tsx`, `app/m/layout.tsx`, `app/portal/layout.tsx`,
-`app/portal/[projectId]/layout.tsx`). _(Suspense, pending indicators and optimistic updates: in progress.)_
+`app/portal/[projectId]/layout.tsx`).
+
+**G-2. No page streams.** `<Suspense` appears twice: `app/m/mobile-shell.tsx:572-574` (`fallback={null}`, only
+because `NavPending` calls `useSearchParams()`; it covers no content) and `app/invite/accept/page.tsx:6-14`
+("Loading invitation…" — the only real loading fallback in the app). No skeleton or spinner component exists; several
+comments reject spinners deliberately (e.g. `app/m/capture/page.tsx:26`, `app/m/mobile-ui.tsx:100`).
+
+So in Next 14 every soft navigation **keeps the old screen on display, frozen, until the entire new server render
+— layout reads plus every sequential page read — has finished.** First loads show nothing until the same point.
+
+**G-3. What signals that a tap registered:**
+- **`/m`, `<Link>` taps only:** `NavPending` (`app/m/nav-pending.tsx`) — a 3 px pulsing bar (`:89`) set by a
+  document click listener on same-origin `/m` anchors (`:46-71`), cleared on route change (`:42-44`), 15 s give-up
+  (`:34`). The persistent shell (`app/m/layout.tsx:131-142` → `MobileShell`) keeps header/tab bar/FAB up; the header
+  *title* stays the old page's until the new page renders (`SetMobileHeader`).
+- **`/m`, `router.push()` from code: nothing.** Skipped *deliberately* (`nav-pending.tsx:29-31`): *"each of those
+  screens already shows its own busy state on the button that caused it."* **That premise is false on the busiest
+  screens** — see G-4: the busy state is cleared *before* the push.
+- **Dashboard and portal: nothing at all.** `app/dashboard/dashboard-shell.tsx` and `app/portal/portal-shell.tsx`
+  have no pending/progress code; project tabs (`app/dashboard/projects/[id]/project-header.tsx:188,244,285`) and
+  portal tabs (`app/portal/[projectId]/portal-tabs.tsx:64`) give no feedback. `useTransition` appears in 9 dashboard
+  components, several discarding `isPending` (`[, startTransition]`).
+
+**G-4. The crew mutations: none is optimistic except photo capture, and most re-enable the button before the
+screen catches up.** No `useOptimistic` anywhere.
+
+| mutation | mechanism (round trips) | after success | the gap |
+| --- | --- | --- | --- |
+| **Clock in** `app/m/timeclock/timeclock-screen.tsx:231-286` | GPS first, up to 10 s (`lib/gps.ts:40`, awaited `:239`); then supabase-js `clockIn` (`lib/services/time-tracking-client.ts:98-155`): `rpc get_my_role` `:107` → session insert `:118` → segment insert `:137` — **3 sequential** | `router.push('/m/p/{id}')` `:283` + `router.refresh()` `:285` | **`setBusy(false)` at `:270` runs before the push** — button reads "Clock in", enabled, while the hub (layout + 3 sequential page steps) renders, with **no bar**. A second tap is stopped only by the DB unique index `idx_time_clock_sessions_one_open_per_member` (`supabase/migrations/20260710130000_module6_6a_time_tracking.sql:126`) — the user sees a raw error |
+| **Clock out** `timeclock-screen.tsx:478-543` | `endSegmentAt` (`time-tracking-client.ts:170+`) then session update — sequential | `router.refresh()` `:542` | `setBusy(false)` `:534` first; the screen still says "on the clock" until the refresh lands |
+| **Switch job / break** `app/m/timeclock/switch/switch-screen.tsx:130-157` | `switchSegment` (`time-tracking-client.ts:212-251`): end → read `session_id` `:224` → insert `:242` — **3 sequential** | push `/m/timeclock` + refresh `:155-156`, no bar | `setBusy(false)` `:150` first |
+| Offline clock in/out `timeclock-screen.tsx:252-262, 497-519` | local queue | renders queued state | ✅ optimistic |
+| **Photo capture** `app/m/capture-store.tsx:189-226` → `capture-screen.tsx:79-145` | held in IndexedDB first; then per photo `uploadFile` (`lib/services/files-client.ts`): `getUser` `:202`, profiles `:205`, cap check `:217`, storage upload `:241`, files insert `:269/:288` — **5 round trips per photo, photos one at a time** (`capture-screen.tsx:160-161`) | no refresh | ✅ **the best path in the app**: thumbnail + per-row held/uploading/failed (`:349-352`), double-fire guard (`:189-196`). Cost: 4 of the 5 round trips per photo are the same identity/profile/cap reads repeated |
+| **Punch create** `app/m/p/[projectId]/punch/new/punch-form.tsx:137-254` | API route `/api/punch-items` (`lib/services/punch-client.ts:140`) | "again" mode stays (`:236-251`); "return" mode push + refresh `:252-253`, no bar | `setBusy(false)` `:200` first, title not cleared → **a second tap can create a duplicate item** |
+| **Punch complete / verify** `punch/[itemId]/punch-actions.tsx:114-144` | supabase-js: `myMemberId()` then update (`punch-client.ts:237,241` / `:276,283`) | `router.refresh()` `:127`, `:143` | `setBusy(false)` `:122`/`:138` first; old "open" state with an enabled Complete button stays visible |
+| **Daily log create** `app/m/logs/new/log-form.tsx:129-232` | `createDailyLog` (`lib/services/daily-logs-client.ts:62,66,73` — insert, crew, subs: sequential) → `setDailyLogMaterialNeeds` `:219` → **per photo, sequential** `uploadDailyLogPhoto` `:224-229` | "submitted" card `:242-286`; "Done" push + refresh `:280-281`, no bar | busy held through the chain ✅, but one "Submitting" label over N uploads with no per-photo progress |
+| **Daily log closeout edits** `components/field/daily-log-closeout-view.tsx:41-48` | client service | `router.refresh()` `:47` — **even on failure** | `setBusy(null)` `:45` first |
+
+**Every `router.refresh()` re-runs the whole `/m` layout plus the page**: middleware (`getClaims`, lock cookie), the
+layout's `getRequestUser` — an **Auth-server `getUser()` round trip** (`lib/supabase-server.ts:68-74`, deduped per
+request by `cache()` but never skipped) — `profiles` (`app/m/layout.tsx:96`, with `getMembers` and `getUnreadCount` already started in parallel at `:90-91`), then `companies` (`:112-113`) — **3 sequential steps before the page's own reads begin**. `getMembers`,
+`getUnreadCount` (`:90-91, 112-121`).
+
+Verified by reading on this ref (not taken on the agent's word): `timeclock-screen.tsx:270/283/285`,
+`nav-pending.tsx:29-31`, `supabase-server.ts:25,68-74`, `members.ts:82-90` (no `cache()`), `punch-form.tsx:200/252`.
 
 ## H — Route inventory, ranked by field use
 
