@@ -1899,3 +1899,29 @@ made. Repeated 5× on the same build: **2 ✘** (:171 stale preview; :168 `selec
 - **Part 6 is NOT merged.** It is not mergeable until m29 is on production (S180 condition 3), and that waits on the ruling.
 - Expected values for the verification, already captured from rebuild-test: ledger `…2128, …2129`; CHECK count 1, md5 `bac8720e…`, contains
   `schedule_changed`; email types `schedule_change, schedule_change_client`; rows outside 0.
+
+### R2.12 — Josh's rulings on R2.11 (2026-10-02), and the superset proof
+
+- **Q1 — A, with a condition** [Josh]: stop rule 2 applies, because this is a CHECK on a pre-existing column (Q8's line: a constraint created with
+  its own new column has no existing rows; one over a pre-existing column still stops). ⚠️ **The proof to proceed is NOT the row count**, which is a
+  point-in-time measurement. It is that the new list is a **STRICT SUPERSET** of the old, read from the LIVE constraint definitions, not the file.
+  An omitted old value would pass a 0-rows check today, then fail at runtime when an app path writes it.
+- **Q2 — A** [Josh]: m29 accepted. Plan row 9's "none" was wrong when written: a new notification type implies a constraint change. ⚠️ **Going
+  forward: a migration a part's plan did not list is a PLAN CHANGE, said in plain text in the chat at the moment it is added**, not at merge time.
+
+**The superset proof** (`pg_get_constraintdef`; OLD = PRODUCTION live via `wd6` linked `jwkcknyuyvcwcdeskrmz`; NEW = rebuild-test live, where
+m29 is applied; checkout read back `nmyphyhmfttxkdoposvf`; 1 constraint row each):
+
+| value | OLD (prod) | NEW (rebuild-test) |
+| --- | --- | --- |
+| mention, assignment, incident, signed, reminders_exhausted, discrepancy, timesheet_ready, daily_log_missing, still_clocked_in, contract_signed, punch_assigned, low_stock, trial_warning, selection_approved, selection_denied, po_item_missing, qb_sync_blocked, schema_drift, site_visit_recorded | yes (19) | yes (19) |
+| **schedule_changed** | — | **yes** |
+
+- OLD **19** values, NEW **20**. **Old values missing from new: 0. Added: exactly 1, `schedule_changed`.** No duplicates in either. NEW (live) = the
+  migration file's list, as a set.
+- **And the app side** (the runtime failure Josh named comes from a WRITE): the `NotificationType` union (`lib/notify/notify.ts:76-129`) = **20**
+  values, the same set as NEW. App writes that the CHECK refuses: **0**. CHECK values the app never names: **0**. Corroborated by an independent
+  `grep -c "| '"` = 20. ⚠️ A first parse of the union was WRONG (it cut at a `;` inside a comment: 13 values, and it reported `schedule_changed`
+  as unnamed, which is false since that line is in the union). Discarded, not counted; re-cut at the union's real terminator, with the control
+  above.
+- **Condition met. Proceeding:** dry run (exactly one file), push, verify, merge.
