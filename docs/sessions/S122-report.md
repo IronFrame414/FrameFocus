@@ -2140,3 +2140,5 @@ Built so far, **without touching the database** (`main`'s merge run `36944879271
   `waiting for getByTestId('tpl-has-tasks')`. Restored, `cmp` 0, tree == HEAD. (The first U1 build is NOT counted: the race reddened an earlier test,
   so U1's own test never ran.)
 - Clean rebuild: Part 8 + every CP / portal-CP / schedule spec, one worker → **28 passed**.
+
+- **Pre-CI** (`80075c68`): type-check 0 (0/5 cached); lint 0 (no new warning); unit **167 / 2,281** (0 cached). **CI requested** (base `48f7cf01` = `origin/main`; 0 runs in progress or queued). m31 is on rebuild-test.
