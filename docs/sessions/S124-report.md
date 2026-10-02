@@ -539,3 +539,51 @@ call.
   `segment_type`** (work ↔ break) shifts paid hours while the day stays approved, so QuickBooks would not be
   told. Week-sheet edits go through `edit_time_segment`, which always reopens. Candidate `#1-s124qb`.
 - Sandbox harness `test/s124-qb-time-activity.live.ts` is written and **BLOCKED on the sandbox keys**.
+- **rebuild-test (after `main` CI `37066867156` finished at 22:15Z):** dry run, **exactly one** file
+  (`20262135000000_s124_qb_time_activity_push.sql`), push exit 0. Types: 12567 → 12627 (**+60, `qb_employee_map`
+  only**). By object:
+  - trigger `AFTER UPDATE OF status ON public.time_clock_sessions … qb_enqueue_time_activity()`;
+  - function md5 `ace126d1…`, `authenticated` EXECUTE false;
+  - RLS on, with policies `insert_owner:a, select_owner_admin:r, update_owner:w`;
+  - indexes `one_per_employee`, `one_per_member`, `company_id`, pkey;
+  - 0 map rows, 0 `time_activity` queue rows.
+- **Live `s124-qb-time-enqueue.live.ts` 5/5**, counted with the service role:
+  - switch OFF → approval queues `[]`;
+  - ON → `['time_activity:create:queued']`;
+  - ⚠️ **no backfill:** the day approved while OFF is still `[]` after ON;
+  - a stored id → `['time_activity:update:queued']`;
+  - approved → approved adds nothing.
+  - afterAll: switch OFF and 0 fixture queue rows, both read back.
+- **Trigger sabotages:** the original was committed first (`4ed7e85a`,
+  `S124-sabotage-originals/qb_enqueue_time_activity/`).
+  - A, the gate removed → **✘ 2** (OFF queues, and the no-backfill case);
+  - B, always `create` → **✘ 1** (stored id → update);
+  - each RESTORE read back md5 `ace126d1…`, 0 rows, 0 companies on, 5/5.
+  - **Stated, not hidden:** a sabotage that fires on non-transitions would be **vacuous** against queue rows,
+    because `qb_enqueue` dedups to the live row. It was not run.
+- **Censuses earned their keep:** after the types were regenerated, `s187-qb-link-census` and
+  `deletion-census` both went red on `qb_employee_map`. It now sits in `QB_LINK_EXEMPT` (realm-scoped, like the
+  vendor map; the handler filters on `ctx.conn.realmId`) and in the trial-deletion walk before `company_members`.
+  Unit **174 / 2345** exit 0, `next build` exit 0.
+- Sandbox re-checked at ~22:20Z: **still blocked** (*"QuickBooks is not configured on this deployment
+  (QBO_CLIENT_ID / QBO_CLIENT_SECRET)"*). The refusal controls still pass.
+
+### ⚠️ PARTS 1 + 3: STOPPED, UNMERGED, NOT ON PRODUCTION. Written state.
+
+**Why:** Part 3 must be proved in the sandbox (prompt + stop rule 3), and Part 1 is the code Part 3 proves. A
+part ships whole or not at all. Everything that does not need Intuit is done and proved:
+- `feature/s124-p1-push` at `9e08c3dc`, rebased on `main` `81fe1efc`;
+- migration `20262135` is **on rebuild-test only**;
+- CI `37071996311` was requested; its result is recorded below.
+
+**What finishes it:**
+1. Josh puts the sandbox Development keys in `apps/web/.env.local` (1.6).
+2. Run `npx vitest run --config test/live.vitest.config.ts s124-qb-sandbox-gate`. It must show 3/3 and print
+   *"Sandbox Company US cc64 … sandbox 200, production 4xx"*.
+3. Run `s124-qb-time-activity.live.ts`: create, edit, split+add, null-id-but-exists, and retry after 8,
+   **counted from QuickBooks**. It deletes its sandbox entries afterwards.
+4. Sabotage it (no marker lookup; stored id ignored). The duplicate count must reach 2.
+5. Then the production section for `20262135` (one file, verify by object), then merge.
+
+**Nothing on production can push a time entry today.** Production has the switch (Part 2), defaulting OFF, but
+no enqueue trigger and no handler. Its `time_activity:create` arm still answers terminal.
