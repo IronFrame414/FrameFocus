@@ -33,6 +33,8 @@ let linked: SupabaseClient;
 let control: SupabaseClient;
 let companyId = '';
 let projectId = '';
+/** A CP-ON project with data, linked to ANOTHER contact: the full-access client is a stranger to it. */
+let strangerProjectId = '';
 const task = { A: '', B: '' };
 
 const must = (label: string, error: { message: string } | null) => {
@@ -135,10 +137,48 @@ beforeAll(async () => {
   expect(second).toMatchObject({ status: 'computed', projectedFinish: '2027-01-12' });
   const { count } = await admin.from('project_finish_history').select('id', { count: 'exact', head: true }).eq('project_id', projectId).eq('previous_finish', '2027-01-08');
   expect(count, 'a REAL history row with the old finish exists — the thing the client must never see').toBe(1);
+
+  // The STRANGER fixture: CP on, computed, linked to a DIFFERENT client contact.
+  const { data: other } = await admin
+    .from('contacts')
+    .select('id')
+    .eq('company_id', companyId)
+    .eq('is_deleted', false)
+    .neq('id', l.contact_id)
+    .order('id', { ascending: true })
+    .limit(1)
+    .single();
+  const { data: sp, error: spErr } = await admin
+    .from('projects')
+    .insert({
+      company_id: companyId,
+      contact_id: (other as { id: string }).id,
+      name: `${MARKER} stranger`,
+      status: 'active',
+      project_number: `PRJ-${MARKER}-X`,
+      project_internal_seq: (seqRow!.project_internal_seq as number) + 9501,
+      start_date: '2027-01-04',
+    })
+    .select('id')
+    .single();
+  must('stranger project', spErr);
+  strangerProjectId = sp!.id as string;
+  const { data: pc } = await admin.from('project_contacts').select('id').eq('project_id', strangerProjectId).eq('contact_id', l.contact_id);
+  expect(pc ?? [], 'the linked client has NO project_contacts row on the stranger project').toHaveLength(0);
+  must(
+    'stranger task',
+    (await admin.from('tasks').insert({ company_id: companyId, project_id: strangerProjectId, title: `${MARKER} X`, duration_days: 2 })).error
+  );
+  must(
+    'stranger cp on',
+    (await admin.from('project_schedule_settings').insert({ company_id: companyId, project_id: strangerProjectId, critical_path_enabled: true })).error
+  );
+  expect(await recomputeProject(db, strangerProjectId, { cause: { kind: 'enabled' }, now })).toMatchObject({ status: 'computed', projectedFinish: '2027-01-05' });
 }, 300_000);
 
 afterAll(async () => {
   if (projectId) await purge(projectId);
+  if (strangerProjectId) await purge(strangerProjectId);
   const { count } = await admin.from('projects').select('id', { count: 'exact', head: true }).like('name', `${MARKER}%`);
   expect(count ?? 0).toBe(0);
 }, 300_000);
@@ -167,6 +207,19 @@ describe('client_critical_path — the linked client on a Critical Path project'
 });
 
 describe('the controls', () => {
+  it('⚠️ THE STRANGER: the FULL-ACCESS client on a CP-ON project linked to someone else → 0 rows (only the LINK check refuses this)', async () => {
+    // Positive half: the data exists and is computed, and the client's access IS full.
+    const { data: s } = await admin.from('project_schedule_settings').select('projected_finish').eq('project_id', strangerProjectId).single();
+    expect((s as { projected_finish: string | null }).projected_finish).toBe('2027-01-05');
+    expect((await linked.rpc('my_client_access_level')).data).toBe('full');
+    expect((await view(linked, projectId)).length, 'they DO read their own CP project').toBe(2);
+    expect(await view(linked, strangerProjectId)).toHaveLength(0);
+  });
+
+  // NOTE [S122 Part 7, sabotage L]: the unlinked client below is refused by
+  // client_has_full_access() too (a client with no contact has access 'none'),
+  // so this test stayed GREEN with the link check removed. It proves a
+  // contact-less stranger reads nothing; THE STRANGER test above proves the link.
   it('⚠️ UNLINKED client, same company, on the CP-ON project where the data exists → 0 rows', async () => {
     expect((await view(linked, projectId)).length, 'the positive half, so the 0 below is not vacuous').toBe(2);
     expect(await view(control, projectId)).toHaveLength(0);
