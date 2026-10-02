@@ -1994,3 +1994,17 @@ Built so far, **without touching the database** (`main`'s merge run `36944879271
 | D7-3 | The disclaimer is Part 6's email sentence exactly (*"…these dates are for planning purposes…"*) | the spec's §7 wording *"these dates **and figures**…"* | The resume prompt: "keep it identical in Part 7". The email is on production; one string beats two drifting ones. Josh can change the one constant. |
 | D7-4 | Task **status** is not in the CP view | including it, as `client_schedule` does | The spec: "task titles only". |
 | D7-5 | The client's projected finish is whatever was last computed (the engine never runs on a client request) | recomputing on the client's read | Running the engine on a client request is the thing stop rule 8 guards. Staff reads and the recompute cron (`/api/cron/critical-path-recompute`) refresh it. |
+
+### R3.2 — Part 7: the CP-off regression control, run and sabotaged (rebuild-test; `main` run `36944879271` on `bacf1bb8` green first: 690 passed, 0 flaky)
+
+- **Clean: 4/4.** Fixture `eaf0e25b` read back CP OFF; the linked client gets rows whose sorted keys EQUAL today's 7 and whose values EQUAL the
+  service role's own projection, in order; the unlinked client (same company, contact NULL) gets 0.
+- **Sabotage** (`client_schedule.sabotage.sql`, from the copy committed in `46b35cbf` BEFORE the drop): DROP + CREATE with one added column; read
+  back `result = TABLE(…, status text, duration_days integer)`. → **2 ✘**: the closed key set and the value equality, both naming
+  `duration_days`. (S164's ARM 8b, `not.toContain('description'/'assignee_id')`, would have stayed green.)
+- **Restore. ⚠️ A finding, fixed before calling it restored:** the first RESTORE matched the definition, comment, result type, secdef and
+  volatility, but **the ACL had 4 grantees, not 15**. A re-created function gets only the CURRENT default privileges, so 11 EXECUTE grants
+  (dashboard_user, supabase_admin, authenticator, pgbouncer, …) were gone. Nothing was extra. The RESTORE script was corrected **in the repo first**
+  (`2b3db2d3`, then `…` re-grant in baseline order), then re-applied: **all 6 baseline values byte-equal**, the ACL text included.
+  ⚠️ **Generalized:** any sabotage that DROPs a function must restore its full ACL, not just the definition. The committed RESTORE does.
+- After the restore: regression control **4/4**; `s164-m9-read-arms.live.ts` **35/35**.
