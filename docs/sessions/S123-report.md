@@ -122,3 +122,28 @@ rows remain in the trash and the triggers have already marked the project for re
   difference: **a schedule save on a Critical Path project in production WILL email every email-only assignee who ticked "notify of changes",
   and the client if that box was ticked.** The off switch, if you want one before CP goes live, is `EMAIL_SEND_ENABLED=false` in Vercel — but
   that stops **all** mail (invoices, proposals, invites), not only Critical Path's.
+
+**Production cross-check** (read-only, scratch workdir linked `jwkcknyuyvcwcdeskrmz`): `md5(pg_get_functiondef)` of `client_schedule` =
+`22d6e0814a6bbdd8791f354dbbd0153f`, `client_critical_path` = `ac958d4fde68d96d9ac0904192024f53` — **both identical to rebuild-test** (so 1.4a holds
+for production too; my earlier "= production's, per S122" is now measured, not cited).
+
+### 1.6 — Housekeeping: branches (measured against `origin/main` `b7e6b7fe`, after `git fetch --prune`). **Nothing deleted in Phase 1.**
+
+| branch (local + `origin/`, same SHA each) | SHA | `merge-base --is-ancestor … origin/main` | proof / note |
+| --- | --- | --- | --- |
+| `feature/s122-p1-schema` | `582cbd3f` | **MERGED** | ancestor of main |
+| `feature/s122-p2-engine` | `e4537e93` | **MERGED** | ancestor |
+| `feature/s122-p3-line-sheet` | `bc0f0a91` | **MERGED** | ancestor |
+| `feature/s122-p4-cp-tab` | `bd8005d5` | **MERGED** | ancestor |
+| `feature/s122-p5-approvals` | `c30f80ae` | **MERGED** | ancestor |
+| `feature/s122-p6-notify` | `d25bf6b4` | **MERGED** | ancestor |
+| `feature/s122-p7-portal` | `1330a5c7` | **MERGED** | ancestor |
+| `feature/s122-p8-templates` | `cf421938` | **MERGED** | ancestor |
+| `feature/s122-p9-mobile` | `20e0f6c4` | not an ancestor (2 ahead) | the 2 commits are the close-out file + this prompt; `git cherry feature/s123-cp-closeout feature/s122-p9-mobile` → both **`-`** (patch-identical to `a10f05b1`, `ddfc6781` on this branch). Everything else is on main (Part 9 merged `8cd52cec`). |
+| `feature/s122-critical-path` | `d8571e28` | not an ancestor (16 ahead) | 16 `[Docs]` commits, touching ONLY `docs/sessions/S122-report.md` and `docs/specs/S122-SPEC.md` (merge-base `4785835c`). For both files, every distinct line of the branch's version exists in `origin/main`'s (`comm -23` of sorted-unique lines → **0** missing, each file). The report was carried forward part to part, as S122 recorded. |
+| `feature/s114-c5-multi-upload` | `6409738e` | not an ancestor (1 ahead) | **REAL UNMERGED CODE** — *"S114 C-5 restored on its own branch (revert of 39d4a493)"*, 17 files under `apps/web` (+620/−127). Not S122's. **Keep.** |
+| `feature/s123-cp-closeout` | (this branch) | — | in use |
+
+### ⚠️ END OF PHASE 1
+Supabase CLI: the checkout's link read back **`nmyphyhmfttxkdoposvf`** (rebuild-test) after every production read; the scratch workdirs were
+deleted. Nothing built; no migration; no deletion.
