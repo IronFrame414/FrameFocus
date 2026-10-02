@@ -2125,3 +2125,18 @@ Built so far, **without touching the database** (`main`'s merge run `36944879271
   | (T3) | the stamp's editor check removed | **1**: the foreman test. Received `404 "That template was not found…"`: **RLS on the templates stopped the foreman before any write**, a second line of defence, with the task/dependency guards behind it |
 
   `templates.ts` restored (`cmp` 0, == HEAD). Clean: **25/25**.
+
+### R4.3 — Part 8 UI proofs (production build, rebuild-test)
+
+- **e2e `desktop-critical-path-templates-s122.spec.ts`**, first run **4/4**: the owner saves the source network from the tab (notice; DB 2 phases / 2 tasks
+  / 1 link); the owner stamps it onto an empty project with Mon 4 Jan 2027 (A Jan 4–6, B Jan 7–8, the tab shows *Fri 8 Jan 2027*); ⚠️ on a project with
+  1 task the tab reads *"This project already has 1 task; stamping would mix two plans. Stamp onto a project with no tasks."* and offers **no Stamp
+  button**; a PM sees the stamp area but no Save.
+- ⚠️ **A race in my test, found by the first sabotage build:** the stamp test went red under (U1) and again on the clean rebuild. It waited for "2
+  tasks exist", which arrives BEFORE the stamp's link and recompute, and once read A dated (by another read, most likely a Next prefetch running
+  `ensureScheduleFresh` after the start-date write marked the project dirty) with B still undated. Harmless to the product: the stamp's own
+  recompute writes every date. The test now waits for the WHOLE stamp (every task dated, plus the `template` history row). Same build: **20/20** over 5 repeats.
+- **Sabotage (U1)** (the card drops the has-tasks notice and shows the stamp form): tests 1–3 ✓ … **✘ the refusal test** at
+  `waiting for getByTestId('tpl-has-tasks')`. Restored, `cmp` 0, tree == HEAD. (The first U1 build is NOT counted: the race reddened an earlier test,
+  so U1's own test never ran.)
+- Clean rebuild: Part 8 + every CP / portal-CP / schedule spec, one worker → **28 passed**.
