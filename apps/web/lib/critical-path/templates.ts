@@ -18,14 +18,13 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@framefocus/shared/types/database';
 import { recomputeProject, type RecomputeOutcome } from './recompute';
+import { alreadyHasTasks } from './template-words';
+
+export { alreadyHasTasks };
 
 type Db = SupabaseClient<Database>;
 export type TemplateError = { ok: false; status: number; error: string; cause: string };
 
-/** The refusal sentence (Q14-A wording), shared by the route and its test. */
-export function alreadyHasTasks(n: number): string {
-  return `This project already has ${n} ${n === 1 ? 'task' : 'tasks'}; stamping would mix two plans. Stamp onto a project with no tasks.`;
-}
 
 // ── SAVE ─────────────────────────────────────────────────────────────────────
 
