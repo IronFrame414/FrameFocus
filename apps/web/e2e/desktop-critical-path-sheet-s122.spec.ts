@@ -123,6 +123,11 @@ async function finish() {
 }
 
 async function openB(page: Page) {
+  // [S122 Part 6] Wait for the PREVIOUS sheet to close first: the save now also
+  // notifies (after the dates are written), so "the DB has the date" no longer
+  // means "the UI's save returned". Without this, the visibility check below was
+  // satisfied by the still-open old sheet (measured: 2 of 5 red on one build).
+  await expect(page.getByTestId('cp-fields')).toHaveCount(0, { timeout: 20_000 });
   await page.getByRole('button', { name: new RegExp(`${MARKER} B`) }).first().click();
   await expect(page.getByTestId('cp-fields')).toBeVisible();
 }

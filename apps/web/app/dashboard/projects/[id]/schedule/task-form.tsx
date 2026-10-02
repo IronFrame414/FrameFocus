@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { useConfirm } from '@/components/confirm/confirm-provider';
+import { useAlert, useConfirm } from '@/components/confirm/confirm-provider';
 import type { Phase, Task, TaskPriority, TaskStatus } from '@/lib/services/tasks-client';
 import {
   createTask,
@@ -20,6 +20,8 @@ import {
   type CriticalPathFieldValues,
 } from '@/components/schedule/critical-path-fields';
 import { saveCriticalPathTask } from '@/lib/critical-path/save-client';
+import { anyUntold, untoldNotice } from '@/lib/critical-path/untold';
+import { UNTOLD_WORDS_EN } from '@/lib/critical-path/notify-text';
 
 interface TaskFormProps {
   projectId: string;
@@ -70,6 +72,7 @@ export function TaskForm({
   onCancel,
 }: TaskFormProps) {
   const confirm = useConfirm();
+  const alert = useAlert();
   const [title, setTitle] = useState(editing?.title ?? '');
   const [description, setDescription] = useState(editing?.description ?? '');
   const [phaseId, setPhaseId] = useState(editing?.phase_id ?? '');
@@ -160,6 +163,8 @@ export function TaskForm({
     setBusy(true);
     setError(null);
     const r = await saveCriticalPathTask(projectId, editing.id, { start_constraint: null, constraint_date: null });
+    // [S122 Part 6] A release recomputes and notifies like any save: the saver is told who could not be.
+    if (r.ok && anyUntold(r.untold)) await alert(untoldNotice(r.untold, UNTOLD_WORDS_EN));
     if (r.ok) onDone();
     else {
       setError(r.error);
@@ -298,6 +303,11 @@ export function TaskForm({
         ? { assignees: assigneeIds.map((id) => ({ member_id: id, notify_changes: notify[id] ?? false })) }
         : {}),
     });
+    if (result.ok && anyUntold(result.untold)) {
+      // [S122 Part 6, ruling 11] Never silently dropped: said to the saver now
+      // (and left in their notifications). The same notice every apply path shows.
+      await alert(untoldNotice(result.untold, UNTOLD_WORDS_EN));
+    }
     if (result.ok) onDone();
     else {
       setError(result.error);

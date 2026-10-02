@@ -15,7 +15,7 @@ import { createClient } from '@/lib/supabase-server';
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
 import { getMyMember } from '@/lib/services/members';
 import { loadCriticalPathData } from '@/lib/critical-path/load';
-import { applyCriticalPathSave, readCriticalPathTask } from '@/lib/critical-path/save';
+import { applyCriticalPathSave, readCriticalPathTask, untoldOf } from '@/lib/critical-path/save';
 
 // S122 Part 4 — A DATE GESTURE ON A TASK (the calendar drag, the schedule
 // sheet's dates, the Gantt's end handle), translated for Critical Path
@@ -121,5 +121,6 @@ export async function POST(
     body
   );
   if (!r.ok) return json(r.status, r.error, r.cause);
-  return NextResponse.json({ ...answer, saved: true, held: r.held });
+  // `untold` [S122 Part 6]: a drag tells the saver who could not be told, as the sheet does.
+  return NextResponse.json({ ...answer, saved: true, held: r.held, untold: untoldOf(r.recompute) });
 }

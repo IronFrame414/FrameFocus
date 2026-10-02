@@ -1620,3 +1620,325 @@ switch exists.
   - rows **0**
 
   **Section 5: MATCH ×14.**
+
+### R.18 — Part 5 MERGED → `main` `a955dac5`
+
+- Merge commit `a955dac5`; `HEAD^{tree}` `42776fb2…` = branch head `c30f80ae^{tree}`. Pushed.
+- S180: (1) CI `36904560184` green on `f8a5a918`, base `2ae40542` = `origin/main` re-fetched; tree-identity exemption: `git diff --name-only
+  f8a5a918 c30f80ae` → `docs/sessions/S122-report.md` only; the code-path diff `--quiet` exit 0. (2) The numbers above. (3) `…28` on production,
+  MATCH ×14, **applied before the merge**.
+- **Stop rule 9 is held by both the database and the code:** the m26 Q12 guard refuses the write, and the save path holds it instead. That is
+  proven by the load-bearing live test and sabotage (l).
+- `main`'s merge run follows. **Part 6 starts on `feature/s122-p6-notify` from `a955dac5`.**
+
+## RESUME 2 — 2026-10-01, after the second Codespace restart (~17:25 ET; prompt `docs/sessions/S122-resume-prompt.md` at `998a4a39`)
+
+### R2.1 — First action
+
+- `ListAgents`: **no other Claude Code session is live** on this machine. Stop rule 12 does not fire.
+
+### R2.2 — Refs, by `git fetch --prune` (exit 0)
+
+- `origin/main` = **`a955dac5`**, *"[S122] Merge feature/s122-p5-approvals: Part 5 (held schedule changes) …"*. `a955dac5` is an
+  ancestor of `origin/main` (exit 0), so stop rule 7 does not fire.
+- On `feature/s122-p6-notify` at **`998a4a39`** (the resume prompt), on top of `cfc4adb6` (the five-line live-test fix), `e342a60b`,
+  `3b97459b`. `origin/feature/s122-p6-notify` is the same. Working tree clean: **the fix the restart left uncommitted is committed and pushed.**
+- **Report:** one file, `docs/sessions/S122-report.md`, already on this branch (last touched by `cb5d342b`). Nothing to bring forward.
+  It had **no Part 6 entry** before this one.
+
+### R2.3 — Is migration 29 on PRODUCTION? **NO.** Verified by object
+
+Method: one read-only `select` (`scratchpad/m29-state.sql`), run with `npx supabase db query --linked -f`. **First on rebuild-test as the
+positive control** (the checkout, `nmyphyhmfttxkdoposvf`), then on production through a **scratch workdir** linked to `jwkcknyuyvcwcdeskrmz`
+(`WD REF` read back), so the checkout never left rebuild-test (read back `nmyphyhmfttxkdoposvf` before and after). The workdir was deleted after.
+
+| probe | rebuild-test (control) | **PRODUCTION** `jwkcknyuyvcwcdeskrmz` |
+| --- | --- | --- |
+| ledger ≥ `20262128000000` | `…2128, …2129` | **`…2128` only** |
+| control: `task_schedule_edits` (m28) exists | 1 | 1 |
+| m29: `notifications_type_check` contains `schedule_changed` | 1 | **0** |
+| m29: `email_types` rows `schedule_change`, `schedule_change_client` (of 2) | 2 | **0** |
+| `notifications` rows outside the NEW check list (stop rule 2 pre-check) | 0 | **0** |
+
+**`20262129000000_s122_cp_notify_types.sql` is NOT applied to production. The ledger and the objects agree.** Stop rule 13 does not fire:
+migration 29 is on rebuild-test only. (A first run of the probe errored on my own quoting, a `", "` that Postgres read as an identifier; exit 1,
+no result, not counted. Fixed and re-run as above.)
+
+The stop rule 2 pre-check already holds on production today: **0** rows would fail the superset CHECK. It is re-read immediately before
+the push in the Part 6 production section.
+
+### R2.4 — Part 6 live test `s122-cp-notify.live.ts`, FIRST RUN: **8/8 GREEN** (ref `632ea05d`, rebuild-test)
+
+- Before the run: **0** CI runs in progress or queued (`gh run list`, exit 0, 0 lines), so nothing else was writing rebuild-test.
+- ⚠️ **Clock skew, measured, because the email-log counts filter on a timestamp taken from the Codespace clock** while `created_at` is the
+  database's. `select now()` on rebuild-test returned `21:34:06.788Z`, inside the local bracket `21:34:04.498Z` → `21:34:07.160Z`. So the database
+  clock is at most **~0.37 s behind** the Codespace (and at most ~2.3 s ahead). Every timestamp the test takes is followed by seconds of setup or
+  save work before the rows it counts are written, so the filter cannot drop a row this change wrote. The negative counts are not passing
+  through a window that excludes them.
+- `npm run test:live -- test/s122-cp-notify.live.ts` → **exit 0; Test Files 1 passed; Tests 8 passed (8)**; 15.7 s. Independent tally: the
+  file has 8 `it` blocks (lines 204, 224, 230, 241, 249, 256, 261, 269). `assertRebuildTest()` guards the target; `afterAll` asserts **0**
+  leftover `S122CPN` projects and passed.
+- What the 8 assert (the Owner extends T 3 → 5 working days; finish Wed 6 → **Fri 8 Jan 2027**):
+  - first computation (`enabled`): finish 6 Jan; **0** client emails (there was no previous finish).
+  - the change lands, `held: false`; T = Jan 4–8.
+  - crew (a login, notify on): **1** in-app row, body `S122CPN T: Mon 4 Jan – Fri 8 Jan 2027`.
+  - email-only member (a sub, no login): **1** `schedule_change` email row, `failed` by the forced send gate (the attempt is proven;
+    no real mailbox reached), `member_id` = that member.
+  - unreachable member: **named** in the outcome; the saver gets **1** "Not everyone could be told" row; `inApp 1, emailed 0`.
+  - CONTROL: PM (notify off) **0**; the Owner (the saver) **0** about their own change.
+  - client: **1** `schedule_change_client` email, subject `S122CPN notify: projected finish Fri 8 Jan 2027`.
+  - TIME (`ensureScheduleFresh` a week later): the dates **do** move (T start → Jan 11), and in-app, sub email and client email counts are
+    **unchanged**.
+- Part 6's "who is told" behaviour is now **proven green on rebuild-test.** Its sabotages are not run yet; they come next, before CI.
+
+### R2.5 — Part 6 FINDING: "shown to the saver" held on ONE of four apply paths. Fixed (`02842c40`)
+
+Plan row 9 says an unreachable assignee is **"returned to the saver and shown"**. Read on `c573fee6`, every path that APPLIES a Critical
+Path change, by its call sites (`grep` for `saveCriticalPathTask`, `moveCalendarEvent`, `/critical-path/edits/`, `applyCriticalPathSave`):
+
+| path | surface | route | told at save time, before |
+| --- | --- | --- | --- |
+| the line sheet's save | desktop | `…/tasks/[taskId]` | **yes** (it read `recompute.notified` client-side) |
+| the sheet's one-action **release** (Q19) | desktop | `…/tasks/[taskId]` | **no**: `handleRelease` ignored it |
+| a **drag** | desktop CP tab, scheduling calendar, **/m day view** | `…/tasks/[taskId]/move` | **no**: the confirm response was `{ ...answer, saved, held }` |
+| an **approval** | desktop CP tab | `…/edits/[editId]` | **no**: `decideScheduleEdit` returned `{ ok: true }` |
+
+The in-app "Not everyone could be told" row was written on every path (the notify layer does it), so nobody was **silently dropped**. But
+the immediate notice depended on the gesture, and **/m's only Critical Path edit is a drag**, so a mobile saver never saw it. That breaks
+PARITY [S122]: one feature, both surfaces, the same behaviour.
+
+**Fix: one shape, one reader, one sentence** (`lib/critical-path/notify-text.ts`). `Untold = { names, client }`; `untoldFrom` / `untoldOf`
+(server, `save.ts`) → every route returns `untold`; `parseUntold` (client, defensive); `untoldNotice(u, words)`. All three routes, all
+five UI call sites (sheet, release, CP-tab drag, calendar drag, /m drag) and the approve button use them. /m passes its `t()` words
+(`sched.cp.untold*`, en + es); the English words are asserted equal to desktop's. `notify.ts`'s report row uses the same list
+(`untoldList`), so the duplicated `'the client (no email on file)'` string is gone. `tsc` **0**.
+
+**Existing tests overturned (S157 sweep):** `grep` for `decideScheduleEdit`, `saveCriticalPathTask`, `moveCalendarEvent`, the route paths and
+`toEqual({ ok: true })` across `test/` and `e2e/` → two hits, both `s122-cp-held.live.ts` (approve :385, reject :421). The superseded
+`expect(d).toEqual({ ok: true });` is quoted in place. The new assertion states the whole shape, `{ ok: true, untold: { names: [], client: false } }`
+(nobody there chose to be told), not a loosened partial match. No hit in e2e.
+
+**Proofs** (rebuild-test; ref = the commit carrying them):
+- Unit `s122-cp-notify-text.test.ts`: **8/8** (4 before + 4 new: shape, defensive read of 7 junk inputs, the notice, /m parity).
+  - Sabotage **(q)** /m's English title drifts from desktop → **1 ✘** (the parity test). Restored, `cmp` 0.
+  - Sabotage **(r)** `parseUntold` trusts a non-array / truthy junk → **1 ✘** (the defensive read). Restored, `cmp` 0; both files == HEAD.
+- Live `s122-cp-notify.live.ts`: **9/9** (8 + 1). The Owner's change → `untoldOf` = `{ names: [<the unreachable member>], client: false }`.
+  NEW: crew holds T 5 → 6, the Owner approves → `{ ok: true, untold: { names: [<them>], client: false } }`; T = 6 days, due **Mon 11 Jan**;
+  the Owner (the approver) gets **1** report row.
+  - Sabotage **(s)** the approval drops `untold` → **1 ✘**, exactly the approval test. Restored, `cmp` 0, `held.ts` == HEAD.
+- Live `s122-cp-held.live.ts` (Part 5) with the stated shape: **25/25**.
+- ⚠️ **Not yet proven: the routes' JSON and the dialog itself.** The live tests call the service layer, so a sabotaged route line would stay green.
+  An e2e is next.
+
+### R2.6 — Part 6 UI proofs: the notice on every path, in a real browser (production build, rebuild-test, ref `b422c0cd`)
+
+Method, each run: `next build` exit **0** ("Compiled successfully" ×1); `next start` the **sole** listener on :3000 (PID read with `ss`, stopped by
+PID, never `pkill`); `--workers=1`; 0 CI runs in progress. Every save is read back with the service role, so a dialog over a save that never
+landed would fail.
+
+- **e2e `critical-path-untold-s122.spec.ts`** (NEW). The project starts on the first Monday ≥ 2 days out (UTC), so /m reaches it in a few steps.
+  T(3) has one assignee: an **unreachable** member of company A (no login, no live sub email; picked in a stable order) with notify on. The
+  client box is off.
+  1. **Desktop, Critical Path tab:** drag T's END → the confirm names *"Changes the DURATION: 3 working days → 5 working days."* → accept →
+     **`alert-dialog`** *"Saved — but not everyone could be told"* / *"No login and no email on file: <them>."* → OK; DB duration 5, due START+4.
+  2. **/m at 402px, touch:** step to START, hold, drag MOVE +2 days → confirm → accept → **the same notice**; DB start = constraint = START+2.
+  3. **Desktop, approval:** a pending edit (submitted by the foreman, `{duration_days: 4}`) → the Owner approves in the tab → **the same notice**;
+     DB duration 4, status `approved`.
+  - **First run: 3 passed** (42.9 s).
+- **Sabotages** (one build each, because the serial spec skips what follows a red; each restored, `cmp` 0, the file == HEAD):
+
+  | # | sabotage | result |
+  | --- | --- | --- |
+  | (t) | the MOVE route drops `untold` | **✘ test 1**, at `waiting for getByTestId('alert-dialog')` (and on the retry); 2, 3 skipped |
+  | (u) | /m's day view drops the notice | test 1 ✓, **✘ test 2** at the alert; 3 did not run |
+  | (v) | the APPROVE route drops `untold` | tests 1, 2 ✓, **✘ test 3** at the alert |
+
+  Each red is on exactly its own path. So the drag's route, /m's own UI line and the approval's route are each load-bearing.
+- **Clean rebuild after the three restores** (tree == HEAD `b422c0cd`, `git diff --quiet` 0): **3 passed**.
+- **Regression**, same build, one worker: `desktop-critical-path-held`, `-sheet`, `-tab` (S122), `desktop-schedule-s121`, `m-schedule-s121` →
+  **16 passed**, exit 0, 16 ✓ in the log (Part 5's figure was 16).
+- **Residual, stated (no sabotage covers these lines):**
+  - the **save route's** `untold` line (`…/tasks/[taskId]`; the live test calls the service layer, not the route);
+  - the sheet's two notice lines (**save** and **release**);
+  - the **scheduling-calendar** drag's notice line.
+
+  All of them call the same `untoldOf` / `parseUntold` / `anyUntold` / `untoldNotice` that the proven paths call, and the calendar shares the move
+  route proven by (t). But no test drives these particular lines.
+
+### R2.7 — Part 6's NEGATIVES, each sabotaged (live `s122-cp-notify.live.ts`, rebuild-test, ref `595ad753`)
+
+The Part 6 commits recorded only the unit sabotage (p). None of the live test's negatives had been sabotaged. One negative was **missing
+outright: 6-A's "only if the box was ticked"**. The live test ran only with the box on, so nothing proved an unticked box sends nothing.
+
+- **Added:** box OFF; the Owner extends T 6 → 7; the finish **does** move; **0** client emails. Control: the crew member **is** told (1). The box is
+  then turned back ON and read back `true`, so the TIME test after it cannot pass for the box's sake. Live: **10/10**.
+- **Sabotages**, one at a time (`scratchpad/sab-notify.js`, each anchor matched exactly once; restored, `cmp` 0; `notify.ts` == HEAD after all five):
+
+  | # | sabotage in `lib/critical-path/notify.ts` | ✘ |
+  | --- | --- | --- |
+  | (w) | `.eq('notify_changes', true)` removed: everyone on the task is told | **2**: the PM control; the outcome counts |
+  | (x) | the saver is no longer skipped | **2**: the Owner control; the outcome counts |
+  | (y) | the `time` short-circuit removed | **1**: TIME passing tells nobody |
+  | (z) | no previous finish treated as a move (a made-up previous finish, used in the email too, so the red is a SEND, not a crash) | **1**: first computation, 0 client emails |
+  | (n) | the client box ignored | **1**: the new box-off test |
+
+  Each red is on the test that names that rule.
+
+### R2.8 — Part 6: the /m guard caught my first fix; split; every proof re-run on `2792d3a3`; pre-CI; CI requested
+
+- **The first full unit run was RED: 1 of 2,278** (`s110-m-i18n-guard`: *"lib/critical-path/notify-text.ts: 3 hard-coded strings, allowed 0"*).
+  My R2.5 fix made /m's day view import `notify-text.ts`, which put desktop's English words in /m's graph. /m system text is translated
+  [S110 H, RULED]. **Not fixed by adding a `PENDING` allowance.** Fixed by structure: the shape and logic moved to
+  **`lib/critical-path/untold.ts`, which holds no words** (`untoldNotice(u, words)` now REQUIRES its words). The English stays in
+  `notify-text.ts` (`UNTOLD_WORDS_EN`) for desktop and the server; /m passes `t()`.
+  - The guard's reach, measured with a throwaway probe (deleted; tree clean): `untold.ts` **YES**, `notify-text.ts` **no**, `day-view.tsx` YES.
+    So the guard now **scans** `untold.ts` and passes it at 0 strings. The pass is not vacuous.
+- **Re-run on `2792d3a3`** (all on rebuild-test; 0 CI runs in progress):
+  - live `s122-cp-notify` **10/10**; live `s122-cp-held` **25/25**.
+  - `next build` exit 0; `next start` sole listener (PID by `ss`, stopped by PID). e2e, one worker, `--retries=0`: `critical-path-untold-s122`
+    + the three S122 CP specs + `desktop-schedule-s121` + `m-schedule-s121` → **19 passed**, exit 0, 19 ✓ in the log (3 + 16).
+- **Pre-CI** (`2792d3a3`, each `cmd > log; echo $?`, `--force`):
+  - type-check **0** (5/5 tasks, **0 cached**)
+  - lint **0** (0 cached; 5 warnings, all pre-existing, none in a Part 6 file)
+  - unit **0**: **166 files / 2,278 tests passed**, 0 cached
+- **Base:** `git fetch --prune` exit 0; `origin/main` = `a955dac5` and is an ancestor of HEAD (exit 0). `main`'s run after the Part 5 merge,
+  **`36909234235`**: **completed, success**. 0 runs in progress or queued, so this branch run has rebuild-test to itself.
+- **CI requested** by this commit (no `[skip ci]`).
+
+### R2.10 — Part 7 constraint, received 2026-10-01 during Part 6's CI (before any Part 7 work)
+
+Context: `client_schedule(p_project_id)` (`20261019000000_m9_client_read_arms.sql:231-260`, SECURITY DEFINER SQL) **already** returns task-level
+`id, project_id, phase_name, title, start_date, due_date, status` to a linked client on **any** project, Critical Path on or off.
+
+- **Extending it is suspect:** any field added to its shape reaches every client on every project the moment it lands, including projects
+  where Critical Path is OFF. That is stop rule 8's failure arriving through the back door, and a test that looks only at a Critical Path
+  project would not see it.
+- ⚠️ **REQUIRED CONTROL, written BEFORE touching any client read path:** a linked client on a project with Critical Path **OFF** sees exactly
+  what they see today. The test must state the same shape and the same fields, with nothing added. It is a regression test with its own sabotage
+  (a field added to the CP-off shape → red).
+- **Decision rule:** if extending `client_schedule` cannot satisfy that control cleanly, Part 7 uses a **separate narrowed read path**
+  (plan row 10's `client_critical_path(project)`), not an extension.
+
+**R2.10 addendum: two more required proofs for Part 7** (received the same evening):
+
+1. **A clean function is not a clean payload.** `client_critical_path` can return exactly what it declares while the portal page still ships
+   float, if the page also calls the engine or another service and the result is serialized. That is the `#136` class exactly: one read path
+   gated, the leak arriving through another. ⚠️ **The PAYLOAD proof is a separate, required test.** Read what the linked client's page actually
+   serializes (`page.content()` / `self.__next_f`, as `e2e/desktop-payload.spec.ts` does), not what the function returns.
+   - It finds 0 float values, 0 critical flags, 0 assignee names, 0 durations, 0 finish-history dates.
+   - A positive control in the same payload: the projected finish and a phase name ARE present, so the test cannot pass on an empty page.
+   - Its own sabotage: the page passes one engine field (e.g. `totalFloat`) to its component → red.
+2. **Both halves on a Critical-Path-ON project.** Beyond the CP-off control for `client_schedule` and the CP-off 0-rows check for the new
+   function: the **unlinked** client (`josh+qa-client@worthprop.com`, same company A, `contact_id` NULL) on a **CP-ON** project where the data
+   exists → **0 rows** from `client_critical_path`. Only the link check stands between the data and a stranger, and per S164 the control half is
+   the fragile one. Its own sabotage: the link check removed from the function → red. The linked client on the same project gets rows (the
+   positive half), so the 0 is not vacuous.
+
+**R2.10, second addendum: the import check is TRANSITIVE.** A route file is thin: it imports a component, the component imports the service, and
+the engine can arrive two hops down. ⚠️ **Walk the import graph from `app/portal/[projectId]/**`, server and client files both.** It must reach
+none of `packages/shared/utils/critical-path.ts`, `lib/critical-path/load.ts`, `lib/critical-path/recompute.ts`.
+- The built CLIENT bundle alone is insufficient: the #136 leak is a Server Component computing float and serializing it into the RSC payload, and
+  that code never ships as client JS.
+- Reuse the existing walker (`mReachableFiles()`, `test/support/m-i18n-scan.ts`), generalized to a root; do not write a second one.
+- **Control:** the same walk from the desktop Critical Path tab DOES reach the engine.
+- **Sabotage:** the portal page imports `computeCriticalPath` → red.
+
+### R2.9 — The SHEET's notice calls: coverage, sabotages, and a race Part 6 exposed
+
+**CI `36933641338`** on `e8e80e9b`: **green** (Lint & Type Check, E2E). That run predates the commits below, so it is **not** the merge's evidence:
+`apps/` changed after it, and the tree-identity exemption cannot apply.
+
+**Did an existing test cover the sheet's two notice calls (save, release)? NO.** `grep` for `alert-dialog`, `alert-ok`, *"not everyone could
+be told"*, *"No login and no email"*, `untold` across `e2e/` and `test/` → no hit outside Part 6's own files. `desktop-critical-path-sheet-s122`
+saves and releases, but its fixture has no assignee with notify on, and it never asserts a notice. **Either call could have been deleted with
+nothing going red.** And the sheet was the path the notice existed on before today, so it is the one a refactor would most plausibly drop.
+That was backwards from where the risk sits; corrected:
+
+- `critical-path-untold-s122.spec.ts` + 2 tests (`783651aa`): **sheet SAVE** (duration 4 → 5 → the notice; DB 5) and **sheet RELEASE** (the
+  not-before pin the /m drag left → the notice; DB constraint null, start = START). First run (production build of `cedf4d66`): **5 passed**.
+- **Sabotages**, one build each:
+
+  | # | sabotage in `task-form.tsx` | result |
+  | --- | --- | --- |
+  | (t2) | the SAVE's notice call removed | 1–3 ✓, **✘ test 4** at `waiting for getByTestId('alert-dialog')`; 5 did not run |
+  | (t3) | the RELEASE's notice call removed | 1–4 ✓, **✘ test 5** at the alert |
+
+  Each was restored, `cmp` 0; tree == HEAD.
+- **Remaining stated gaps** (as agreed): the save route's `untold` field, and the scheduling-calendar's notice call.
+
+**A race Part 6 exposed** (found in the clean regression run, not by the new tests). The first full set on the clean `cedf4d66` build: **20 passed,
+1 failed**: `desktop-critical-path-sheet-s122` at :171, the preview reading *"from **Fri 8 Jan**"*, i.e. the finish from BEFORE the save just
+made. Repeated 5× on the same build: **2 ✘** (:171 stale preview; :168 `selectOption` timeout).
+- **Mechanism:** the spec polls the DB for the saved date, then `openB` clicks the row and checks `cp-fields` is visible. Part 6 (`3b97459b`)
+  runs `notifyScheduleChange` inside the save request **after** the dates are written. So the DB has the date before the response returns,
+  and the visibility check was satisfied by the **still-open previous sheet**, which then closed under the test.
+- **Fix (test synchronization, no assertion loosened):** `openB` first waits for any open sheet to close (`cp-fields` count 0, 20 s), the
+  honest signal that the UI save returned. Same build, repeated **10×: 10 passed**.
+- Full set after the fix (spec-only change, so the same build is valid): **21 passed**, exit 0, 21 ✓ (5 untold + 16 regression).
+- ⚠️ **For Josh (a product note, not a defect):** Part 6 put the notifications in the save's request path. A save now returns only after the
+  in-app rows are written and the emails are attempted, one per assignee who chose it. With many email-only assignees, the sheet stays busy
+  longer. It matches how the repo's other notify paths work, but it is a latency choice.
+
+- **CI requested again** on the commit after `4663b533` (pre-CI `4663b533`: type-check 0, lint 0, unit 166 / 2,278, 0 cached; base `origin/main` = `a955dac5`; 0 runs in progress or queued). This run is the merge evidence.
+
+### R2.11 — Part 6 CI green; production section 6 STOPPED at the pre-check (stop rule 2; migration absent from plan row 9)
+
+- **CI `36939682013`** on `6c8cf937` (base `a955dac5` = `origin/main`; 0 other runs): **green**. Unit **166 / 2,278**; e2e **689 passed, 24 skipped,
+  1 flaky, 0 failed** (44.2 m). The flaky one is `m-photos.spec.ts:539` (photo viewer, derivative fallback), passed on retry, outside every
+  Part 6 path. Recorded, not counted as a Part 6 red.
+- **Tree identity:** HEAD = `6c8cf937` = the CI-tested commit; tree clean. Workdir `wd6`: all **292** migrations, `cmp` 0 each, m29 last;
+  linked to production (`WD REF=jwkcknyuyvcwcdeskrmz`); checkout read back `nmyphyhmfttxkdoposvf`.
+- **Pre-check, PRODUCTION** (read-only): ledger from `…2128` = `20262128000000` only; m28 control 1; m29 CHECK 0; m29 email types 0 of 2;
+  `notifications` rows outside the NEW CHECK list **0**.
+- ⚠️ **STOPPED before the dry run. Nothing was pushed to production.**
+  1. **Stop rule 2, read literally:** m29 DROPs and re-ADDs `notifications_type_check`, which re-validates every existing production
+     `notifications` row. It is a strict superset (every old value + `schedule_changed`), and **0** production rows fall outside it, so it cannot
+     fail. But it IS a constraint added over existing production rows, and the rule leaves that call to Josh.
+  2. **Plan row 9 says Part 6 has NO migration.** m29 (`3b97459b`) came in during the build: the registry half the notifications need. Without
+     it, in-app rows fail the CHECK at runtime and email logs fail the `email_types` FK. No earlier report entry surfaces the plan↔build gap.
+- **Part 6 is NOT merged.** It is not mergeable until m29 is on production (S180 condition 3), and that waits on the ruling.
+- Expected values for the verification, already captured from rebuild-test: ledger `…2128, …2129`; CHECK count 1, md5 `bac8720e…`, contains
+  `schedule_changed`; email types `schedule_change, schedule_change_client`; rows outside 0.
+
+### R2.12 — Josh's rulings on R2.11 (2026-10-02), and the superset proof
+
+- **Q1 — A, with a condition** [Josh]: stop rule 2 applies, because this is a CHECK on a pre-existing column (Q8's line: a constraint created with
+  its own new column has no existing rows; one over a pre-existing column still stops). ⚠️ **The proof to proceed is NOT the row count**, which is a
+  point-in-time measurement. It is that the new list is a **STRICT SUPERSET** of the old, read from the LIVE constraint definitions, not the file.
+  An omitted old value would pass a 0-rows check today, then fail at runtime when an app path writes it.
+- **Q2 — A** [Josh]: m29 accepted. Plan row 9's "none" was wrong when written: a new notification type implies a constraint change. ⚠️ **Going
+  forward: a migration a part's plan did not list is a PLAN CHANGE, said in plain text in the chat at the moment it is added**, not at merge time.
+
+**The superset proof** (`pg_get_constraintdef`; OLD = PRODUCTION live via `wd6` linked `jwkcknyuyvcwcdeskrmz`; NEW = rebuild-test live, where
+m29 is applied; checkout read back `nmyphyhmfttxkdoposvf`; 1 constraint row each):
+
+| value | OLD (prod) | NEW (rebuild-test) |
+| --- | --- | --- |
+| mention, assignment, incident, signed, reminders_exhausted, discrepancy, timesheet_ready, daily_log_missing, still_clocked_in, contract_signed, punch_assigned, low_stock, trial_warning, selection_approved, selection_denied, po_item_missing, qb_sync_blocked, schema_drift, site_visit_recorded | yes (19) | yes (19) |
+| **schedule_changed** | — | **yes** |
+
+- OLD **19** values, NEW **20**. **Old values missing from new: 0. Added: exactly 1, `schedule_changed`.** No duplicates in either. NEW (live) = the
+  migration file's list, as a set.
+- **And the app side** (the runtime failure Josh named comes from a WRITE): the `NotificationType` union (`lib/notify/notify.ts:76-129`) = **20**
+  values, the same set as NEW. App writes that the CHECK refuses: **0**. CHECK values the app never names: **0**. Corroborated by an independent
+  `grep -c "| '"` = 20. ⚠️ A first parse of the union was WRONG (it cut at a `;` inside a comment: 13 values, and it reported `schedule_changed`
+  as unnamed, which is false since that line is in the union). Discarded, not counted; re-cut at the union's real terminator, with the control
+  above.
+- **Condition met. Proceeding:** dry run (exactly one file), push, verify, merge.
+
+#### Part 6 PRODUCTION section 6: `20262129000000_s122_cp_notify_types` — **MATCH ×6**
+
+- Superset condition met first (R2.12). **Dry run:** *"• 20262129000000_s122_cp_notify_types.sql"*, **exactly one** (1 bullet; no seeds, no roles).
+  **Push:** exit 0, *"Applying migration 20262129000000_s122_cp_notify_types.sql..."*.
+- **Verification:** the same read-only file on both databases, then `diff` → **exit 0, every line identical** (6 lines):
+
+  | object | expected (rebuild-test) | PRODUCTION |
+  | --- | --- | --- |
+  | ledger ≥ `…2128` | `…2128, …2129` | `…2128, …2129` |
+  | `notifications_type_check` count | 1 | 1 |
+  | CHECK md5 | `bac8720e…` | `bac8720e…` |
+  | CHECK contains `schedule_changed` | true | true |
+  | `email_types` new rows | `schedule_change, schedule_change_client` | same |
+  | `notifications` rows outside the CHECK | 0 | 0 |
+
+  Plus: the full production CHECK definition == rebuild-test's (byte-equal). Workdir `wd6` deleted; checkout read back `nmyphyhmfttxkdoposvf`.

@@ -21,6 +21,7 @@ import { computeCriticalPath } from '@framefocus/shared/utils/critical-path';
 import { planWriteThrough } from '@framefocus/shared/utils/critical-path-writes';
 import { companyToday } from '@framefocus/shared/utils/dates';
 import { CP_SETTINGS_COLUMNS, loadCriticalPathData, type CpSettings } from './load';
+import { NOTHING_SENT, notifyScheduleChange, type ScheduleNotifyOutcome } from './notify';
 
 export type CpCauseKind =
   | 'task'
@@ -50,6 +51,8 @@ export type RecomputeOutcome =
       historyWritten: boolean;
       cycle: string[] | null;
       error: string | null;
+      /** [S122 Part 6] Who was told, and who could not be. */
+      notified: ScheduleNotifyOutcome;
     }
   | { status: 'failed'; error: string };
 
@@ -138,6 +141,25 @@ export async function recomputeProject(
     historyWritten = true;
   }
 
+  // 5. [S122 Part 6] Tell the assignees who chose it, and the client if ticked.
+  // After everything is written; a notification failure never fails the save.
+  let notified: ScheduleNotifyOutcome = NOTHING_SENT;
+  if (writes.length > 0 || previousFinish !== projectedFinish) {
+    try {
+      notified = await notifyScheduleChange(admin, {
+        companyId,
+        projectId,
+        changedTaskIds: writes.map((w) => w.id),
+        savedByMemberId: opts.savedByMemberId ?? null,
+        previousFinish,
+        newFinish: projectedFinish,
+        causeKind: cause.kind,
+      });
+    } catch (e) {
+      console.error(`[recompute] notify ${projectId}: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+
   return {
     status: 'computed',
     previousFinish,
@@ -146,6 +168,7 @@ export async function recomputeProject(
     historyWritten,
     cycle: result.cycle,
     error: result.error,
+    notified,
   };
 }
 

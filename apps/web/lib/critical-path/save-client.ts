@@ -1,4 +1,5 @@
 import type { CriticalPathTaskSave } from '@framefocus/shared/validation/critical-path';
+import { parseUntold, type Untold } from './untold';
 
 // S122 Part 3 — the line sheet's one save path on a Critical Path project.
 // The route writes as the caller (RLS + the Q12 guard decide), then the engine
@@ -9,7 +10,7 @@ export async function saveCriticalPathTask(
   projectId: string,
   taskId: string,
   body: CriticalPathTaskSave
-): Promise<{ ok: true; held: boolean } | { ok: false; error: string }> {
+): Promise<{ ok: true; held: boolean; untold: Untold } | { ok: false; error: string }> {
   let res: Response;
   try {
     res = await fetch(`/api/projects/${projectId}/critical-path/tasks/${taskId}`, {
@@ -22,8 +23,9 @@ export async function saveCriticalPathTask(
   }
   if (res.ok) {
     // `held` [S122 Part 5]: the change waits for approval and moved no date.
-    const j = (await res.json().catch(() => ({}))) as { held?: unknown };
-    return { ok: true, held: j.held === true };
+    const j = (await res.json().catch(() => ({}))) as { held?: unknown; untold?: unknown };
+    // [S122 Part 6] Who chose to be told and could not be reached — the saver is told.
+    return { ok: true, held: j.held === true, untold: parseUntold(j.untold) };
   }
   let message = `The save failed (${res.status}).`;
   try {

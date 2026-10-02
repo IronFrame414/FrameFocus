@@ -22,13 +22,15 @@ import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase-browser';
-import { useConfirm } from '@/components/confirm/confirm-provider';
+import { useAlert, useConfirm } from '@/components/confirm/confirm-provider';
 import { Gantt, ganttGroupsFromRollups, type GanttGroup } from '@/components/schedule/gantt';
 import { pinLabel } from '@/components/schedule/critical-path-fields';
 import { rollupPhases, type Phase, type Task } from '@/lib/services/tasks-shared';
 import { moveCalendarEvent } from '@/lib/services/schedule-client';
 import type { CpSettings } from '@/lib/critical-path/load';
 import { pendingConsequence, type PendingEdit } from '@/lib/critical-path/pending';
+import { anyUntold, parseUntold, untoldNotice } from '@/lib/critical-path/untold';
+import { UNTOLD_WORDS_EN } from '@/lib/critical-path/notify-text';
 import { WEATHER_ICONS, WEATHER_ICON_KEYS, weatherGlyph, type WeatherIcon } from '@/lib/critical-path/weather';
 import { computeCriticalPath, type CpInput, type CpResult } from '@framefocus/shared/utils/critical-path';
 import {
@@ -135,6 +137,7 @@ export function CriticalPathTab({
 }) {
   const router = useRouter();
   const confirm = useConfirm();
+  const alert = useAlert();
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -186,7 +189,11 @@ export function CriticalPathTab({
     );
     if (r.cancelled) return;
     if (!r.success) setError(r.error ?? 'The change was not saved.');
-    else router.refresh();
+    else {
+      // [S122 Part 6] The same notice the sheet shows: who chose to be told and could not be.
+      if (r.untold && anyUntold(r.untold)) await alert(untoldNotice(r.untold, UNTOLD_WORDS_EN));
+      router.refresh();
+    }
   }
 
   // ── 6. The float table, least float first ──
@@ -609,12 +616,14 @@ function PendingStrip({
   myMemberId: string | null;
 }) {
   const router = useRouter();
+  const alert = useAlert();
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   async function decide(editId: string, decision: 'approve' | 'reject' | 'withdraw') {
     setBusy(editId);
     setError(null);
+    let untold = parseUntold(null);
     try {
       const res = await fetch(`/api/projects/${projectId}/critical-path/edits/${editId}`, {
         method: 'POST',
@@ -627,12 +636,15 @@ function PendingStrip({
         setBusy(null);
         return;
       }
+      untold = parseUntold(((await res.json().catch(() => ({}))) as { untold?: unknown }).untold);
     } catch {
       setError('The decision did not reach the server.');
       setBusy(null);
       return;
     }
     setBusy(null);
+    // [S122 Part 6] An approval applies the change: the approver sees who could not be told.
+    if (anyUntold(untold)) await alert(untoldNotice(untold, UNTOLD_WORDS_EN));
     router.refresh();
   }
 

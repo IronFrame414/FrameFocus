@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase-browser';
 import { applied, DISCARDED } from '@/lib/services/mutation-result';
+import { parseUntold, type Untold } from '@/lib/critical-path/untold';
 import type {
   CalendarEvent,
   GeneralKind,
@@ -203,7 +204,7 @@ export async function moveCalendarEvent(
   end: string,
   /** [S122 Part 4] Asks the user before a Critical Path move is saved. */
   confirm?: (arg: { message: string; title?: string; confirmLabel?: string; held?: boolean }) => Promise<boolean>
-): Promise<{ success: boolean; error?: string; cancelled?: boolean; held?: boolean }> {
+): Promise<{ success: boolean; error?: string; cancelled?: boolean; held?: boolean; untold?: Untold }> {
   if (end < start) return { success: false, error: 'A bar cannot end before it starts.' };
   if (e.source === 'task') {
     // [S122 Part 4, Q19] On a Critical Path project a drag is TRANSLATED (a move
@@ -254,7 +255,7 @@ async function criticalPathMove(
   start: string,
   end: string,
   confirm?: (arg: { message: string; title?: string; confirmLabel?: string; held?: boolean }) => Promise<boolean>
-): Promise<'not_cp' | { success: boolean; error?: string; cancelled?: boolean; held?: boolean }> {
+): Promise<'not_cp' | { success: boolean; error?: string; cancelled?: boolean; held?: boolean; untold?: Untold }> {
   const got = await postMove(projectId, taskId, { to: { start, end }, confirm: false });
   if (!got.ok) return { success: false, error: got.error };
   const preview = got.answer;
@@ -279,7 +280,8 @@ async function criticalPathMove(
   if (!ok) return { success: false, cancelled: true };
   const saved = await postMove(projectId, taskId, { to: { start, end }, confirm: true });
   if (!saved.ok) return { success: false, error: saved.error };
-  return { success: true, held: preview.held };
+  // [S122 Part 6] Who chose to be told and could not be — every caller shows it, as the sheet does.
+  return { success: true, held: preview.held, untold: parseUntold((saved.answer as { untold?: unknown }).untold) };
 }
 
 /** [S121 5-D] Member ids assigned to a project (live rows). */

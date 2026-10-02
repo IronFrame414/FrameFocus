@@ -17,7 +17,8 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@framefocus/shared/types/database';
 import { heldScheduleChangesSchema } from '@framefocus/shared/validation/critical-path';
-import { applyCriticalPathSave, type CpSaveError } from './save';
+import { NOBODY_UNTOLD, type Untold } from './untold';
+import { applyCriticalPathSave, untoldOf, type CpSaveError } from './save';
 
 export type HeldDecision = 'approve' | 'reject' | 'withdraw';
 
@@ -27,7 +28,7 @@ export async function decideScheduleEdit(
   ctx: { projectId: string; editId: string; userId: string; myMemberId: string | null },
   decision: HeldDecision,
   note: string | null
-): Promise<{ ok: true } | CpSaveError> {
+): Promise<{ ok: true; untold: Untold } | CpSaveError> {
   const edit = await supabase
     .from('task_schedule_edits')
     .select('id, project_id, company_id, task_id, status, changes, submitted_by_member_id')
@@ -42,6 +43,7 @@ export async function decideScheduleEdit(
     return { ok: false, status: 409, error: 'This change has already been decided.', cause: `edit ${ctx.editId} is ${edit.data.status}` };
   }
 
+  let untold: Untold = NOBODY_UNTOLD;
   if (decision === 'approve') {
     const editor = await supabase.rpc('critical_path_schedule_editor', { p_project_id: ctx.projectId });
     if (editor.error) return { ok: false, status: 500, error: 'Could not check who may decide.', cause: `editor rpc: ${editor.error.message}` };
@@ -78,6 +80,8 @@ export async function decideScheduleEdit(
       // Cannot happen for an editor; refuse loudly rather than mark it approved.
       return { ok: false, status: 500, error: 'The change was held again instead of applied.', cause: 'approve: apply returned held' };
     }
+    // [S122 Part 6] The approver applied it, so the approver is told who could not be.
+    untold = untoldOf(applied.recompute);
   }
 
   const status = decision === 'approve' ? 'approved' : decision === 'reject' ? 'rejected' : 'withdrawn';
@@ -94,5 +98,5 @@ export async function decideScheduleEdit(
   if (!u.data || u.data.length === 0) {
     return { ok: false, status: 403, error: 'You cannot decide this change.', cause: `decide ${decision} matched 0 rows` };
   }
-  return { ok: true };
+  return { ok: true, untold };
 }

@@ -5,7 +5,7 @@ import { criticalPathTaskSaveSchema } from '@framefocus/shared/validation/critic
 import { createClient } from '@/lib/supabase-server';
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
 import { getMyMember } from '@/lib/services/members';
-import { applyCriticalPathSave, readCriticalPathTask } from '@/lib/critical-path/save';
+import { applyCriticalPathSave, readCriticalPathTask, untoldOf } from '@/lib/critical-path/save';
 
 // S122 Part 3 — SAVE ONE TASK OF A CRITICAL PATH PROJECT (the line sheet),
 // then recompute. The mechanism — who may write, what is written, when the
@@ -53,5 +53,6 @@ export async function POST(
   );
   if (!r.ok) return json(r.status, r.error, r.cause);
   // `held`: the caller's schedule change is waiting for approval (Part 5).
-  return NextResponse.json({ ok: true, held: r.held, recompute: r.recompute });
+  // `untold` [Part 6]: who chose to be told and could not be — the saver is shown it.
+  return NextResponse.json({ ok: true, held: r.held, recompute: r.recompute, untold: untoldOf(r.recompute) });
 }

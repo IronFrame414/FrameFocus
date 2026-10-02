@@ -337,6 +337,11 @@ export type EmailType =
   // PO module R-L4 — the vendor-facing purchase order. `email_types` row lands
   // in 20261047000000, SAME commit as this line (both halves or neither).
   | 'purchase_order'
+  // S122 Part 6 — Critical Path: an assignee with NO login who chose to be told
+  // (ruling 11), and the client when the projected finish moves (6-A). Rows in
+  // 20262129000000, SAME commit as these lines (both halves or neither).
+  | 'schedule_change'
+  | 'schedule_change_client'
   // ── P1/P2 [S160] — the emails SUPABASE AUTH composes ─────────────────────
   // Rows land in 20261009000000, in the SAME commit as these lines. The rule
   // this union has been bitten by twice (`mention`, then nearly `invite`) is
