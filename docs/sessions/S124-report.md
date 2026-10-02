@@ -12,6 +12,10 @@ Branch `feature/s124-qb-timesheets` (from `c732f55e`, the S124 prompt commit). `
 
 # PHASE 1 — ASSESS
 
+## 1.1 — `origin/main` = `91fa32e1fa7c9efad4244446d53a80f9a617fb62`
+*"[S123] Merge feature/s123-final-report: the S123 final report in docs/sessions/S123-report.md [skip ci]"* (`git fetch --prune`, exit 0).
+The S124 prompt matches it.
+
 ## 1.2 — `QBO_ENVIRONMENT`: ⚠️ THE PRODUCTION HOST ANSWERED. The deployed app talks to LIVE books.
 
 **Ref:** production Supabase `jwkcknyuyvcwcdeskrmz`, read through a scratch workdir (`wd-prod`, ref read back);
@@ -62,3 +66,251 @@ drain. That re-check is the likely source of most of October's 236 metered reads
 session's to prove). **I touched neither row.** Josh's action: link the client to the existing QuickBooks customer
 "Mary Ellen", or rename it. Once that is resolved, **the purchase will post to live books.**
 
+## 1.3 — The scaffolding, measured by object
+
+**Refs:** code at `c732f55e` (= `origin/main` `91fa32e1` plus the two prompt commits, which are docs only). Schema
+**on production `jwkcknyuyvcwcdeskrmz`**.
+
+| claim | measured | verdict |
+| --- | --- | --- |
+| `qb_sync_queue` is durable, dependency-ordered, per-company, with backoff and an 8-attempt ceiling | `queue.ts`: `MAX_ATTEMPTS = 8`; `backoffUntil` = min(30s·2^n, 6h) plus 0–30s jitter; `claimDue` filters on `company_id`, oldest first, releasing a dependant only once its `depends_on_id` is `pushed`, and terminating it if that dependency is `failed_terminal`. `idx_qb_sync_queue_one_live_per_entity_op` allows one live row per (entity, op). Production CHECKs: `status ∈ {queued, in_flight, pushed, failed_transient, failed_terminal}`, `operation ∈ {create, update, void}`, `entity_type` includes **`time_activity`** | TRUE |
+| the worker drains every 5 minutes | `apps/web/vercel.json`: `/api/cron/qb-sync` at `*/5 * * * *`. Production only: crons run only on the production deployment | TRUE |
+| `RECORD_TABLE_FOR_ENTITY` omits `time_activity` | `worker.ts`: invoice, bill, purchase, bill_payment, expense_payment, payment, refund. **No `time_activity`** | TRUE |
+| `QbEntityType` / `QbOperation` | `queue.ts`: `time_activity` is present; `QbOperation = 'create' \| 'update' \| 'void'` | TRUE |
+| what the worker does with a `time_activity` row today | `entities.ts` `handleQueueRow`: only `time_activity:create` exists, and it returns **terminal**: *"Time export to QuickBooks is Module 6 payroll, not the 7G connector."* `time_activity:update` falls to `default` → terminal. **No code path today can write a TimeActivity** | — |
+| `time_clock_sessions` carries `qb_push_status`, `qb_time_activity_id`, `qb_synced_at` | all three present on production. `qb_push_status` is NOT NULL, defaults `not_pushed`, CHECK `{not_pushed, queued, pushed, failed}` | TRUE |
+| they are always null | production: **25 sessions; `qb_time_activity_id` non-null 0; `qb_synced_at` non-null 0; `qb_push_status ≠ 'not_pushed'` 0** | TRUE: 0 of 25 |
+| S148 fixed the trigger so the service role can write them | production `enforce_time_clock_sessions_column_scope` md5 `ac6b89afda6f75bc7911f75f2309c31f`, which contains `IF auth.uid() IS NULL THEN` → **true** | TRUE |
+
+**⚠️ THREE SCOPE FINDINGS the prompt and spec do not mention:**
+
+1. **The QuickBooks link is per SESSION, but the spec's cases are per SEGMENT.** `qb_time_activity_id` sits on
+   `time_clock_sessions`, one row per clock-in. `time_segments` (`session_id, segment_type, project_id, task_id,
+   segment_start, segment_end, …`) has no QuickBooks column. On production there are 48 live segments across 25
+   sessions: work 31, break 9, shop 6, material_run 2. *"A split → one updates, one is created"* assumes one
+   TimeActivity per segment, which the schema cannot hold today. → **Q1.**
+2. **Nothing maps a crew member to a QuickBooks Employee.** A TimeActivity needs an `EmployeeRef` (or a
+   `VendorRef`). There is no `qb_employee_*` column on `company_members`, `profiles` or anywhere else (production
+   `information_schema`). → **Q2.**
+3. **Worth Properties appears to run QuickBooks Payroll.** Its chart holds *"Direct Deposit Payable"*,
+   *"Payroll Liabilities"*, *"Federal Taxes (941/943/944)"*, *"Federal Unemployment (940)"* and *"FL
+   Unemployment Tax"*. If an employee is set to pay from timesheets, **a pushed TimeActivity can become a
+   paycheck.** That raises the stakes on stop rules 3, 4 and 5. I cannot see the payroll settings, because
+   they are not in the accounting API. → **Q3.**
+
+## 1.4 — ⚠️ STRANDED: approved and never pushed (production, by object)
+
+| `status` | rows | clock_in range | hours (raw clock_out − clock_in) | `qb_time_activity_id` |
+| --- | --- | --- | --- | --- |
+| **`approved`** | **9** | **2026-09-29 → 2026-09-30** (last clock-out 2026-09-30 20:01:53Z) | **51.65** | 0 |
+| `pending` | 10 (3 still open) | 2026-10-01 → 2026-10-02 | 29.89 (closed only) | 0 |
+| `null` (Owner's own sessions, which are never approved, §8) | 6 | 2026-08-09 → 2026-09-30 | 60.70 | 0 |
+
+All 25 belong to **Worth Properties**, and none is soft-deleted. The 9 approved rows cover 3 members and were
+approved between 2026-09-30 10:00:49Z and 2026-10-01 13:48:09Z. The hours are raw session durations; paid hours
+(breaks out) are lower. **Under the no-backfill rule none of these will ever push** unless Josh asks for them
+separately. The 10 pending rows will push only if they are approved after the toggle is turned on. → **Q5.**
+
+## 1.5 — The two rounding rules: where each lives, and why they cannot reach each other
+
+⚠️ **CORRECTION TO THE PROMPT AND SPEC:** invoicing rounds up to the **HALF** hour, not the quarter hour.
+`roundUpToHalfHour()` is at `packages/shared/utils/invoice-derivation.ts:186`, applied once per person per day in
+`groupSelectedHours()` (`:207`, *"This is the ONLY place the rounding rule lives"*). `7g1-spec.md:399` says
+the same: *"rounded UP to the HALF hour; payroll exports actual logged time."*
+
+- **Invoicing rule:** `packages/shared/utils/invoice-derivation.ts` (`roundUpToHalfHour`, `groupSelectedHours`).
+  Its only import is `roundMoney` from `./estimate-totals`.
+- **Payroll rule:** `packages/shared/utils/time-tracking.ts` (`paidHours`, `paidHoursPerSession`). This is session
+  duration minus *unpaid* break minutes, with no rounding at all. **It imports nothing.**
+- Neither file imports the other, and `time-tracking.ts` has no imports at all, so nothing in the invoicing
+  module can be pulled in through it. Part 1 will hold that property with a test that fails if the payroll push
+  module or `time-tracking.ts` ever imports `invoice-derivation` (or `roundUpToHalfHour`), plus a value test: a
+  7h10m paid day must push as 7h10m, not 7.5. Both get sabotaged (stop rule 6).
+
+## 1.6 — The sandbox: how it is obtained and connected, and what proves you are in it
+
+- **It already exists.** context104 §2 records Intuit app "EZ Contractor Binder", sandbox company **`Sandbox
+  Company US cc64`**, realm **`9341457813274121`**. Its *development* keys are in `apps/web/.env.local` as
+  `QBO_CLIENT_ID`/`QBO_CLIENT_SECRET` with `QBO_ENVIRONMENT` ≠ `production` (S108 report §env, 7g build log).
+  ⚠️ I cannot confirm the file still holds them: `.env.local` is behind a deny rule, and I did not read it.
+- **rebuild-test's fixture tenant is connected to it.** MCP (`nmyphyhmfttxkdoposvf`): *Sabal Point
+  Construction*, `connected`, realm `9341457813274121`, connected 2026-09-06, last metered read 2026-09-09, 1,211
+  queue rows. **No cron drains rebuild-test** (Vercel crons hit production only), so its queue moves only when a
+  harness in this Codespace runs the worker.
+- **The proving route:** live harnesses in the Codespace, using the rebuild-test database, the sandbox keys and
+  `qboApiBase('sandbox')`. Production keys never enter it.
+- **What proves you are in it, checked by the harness before ANY write, and refusing on any mismatch:** (1)
+  `qboEnvironment() === 'sandbox'`; (2) the connected realm is exactly `9341457813274121`; (3) a
+  `companyinfo` read on the sandbox host returns 200 with `CompanyName` starting `Sandbox Company`; (4) the same
+  token on the production host does NOT return 200 (the inverse of 1.2's control). The existing live guard
+  already refuses a production Supabase key.
+- **Unproven until Phase 3:** that the sandbox refresh token is still valid (last used 2026-09-09; Intuit's
+  inactivity limit is 100 days). If it is dead, Josh reconnects Sabal Point to the sandbox once from a local dev
+  server. That is a click, and I would say so.
+
+## 1.7 — Housekeeping (nothing deleted)
+
+`git fetch --prune`, then `merge-base --is-ancestor` against `origin/main` `91fa32e1`:
+
+| branch | status |
+| --- | --- |
+| `feature/s123-cp-closeout`, `-d1-client-schedule`, `-d2-disclaimer`, `-d3-background`, `-d4-stamp` (local and origin) | **MERGED**, safe to delete when Josh says |
+| `feature/s123-final-report` | UNMERGED +2: the S124 prompt and spec commits only (`401c4690`, `c732f55e`, docs) |
+| `feature/s124-qb-timesheets` | this session |
+| `feature/s114-c5-multi-upload` | UNMERGED +1. **Not touched, per the prompt.** |
+
+---
+
+# PHASE 2 — PLAN
+
+## ⚠️ Every point at which a QuickBooks WRITE could occur, and what stops it reaching live books
+
+| # | write | where | what prevents it reaching Worth Properties' books |
+| --- | --- | --- | --- |
+| W1 | `POST /timeactivity` (create) | new `time_activity:create` handler, run by the production cron every 5 min | (a) **enqueue gate:** the DB trigger enqueues only when `companies.qb_time_export_enabled = true`, a column that ships **DEFAULT false** and is read back from production after the migration (9 → 0 rows true); (b) **exit gate:** the worker re-reads the toggle per row and terminates the row (*"Not sent: QuickBooks time export is off."*) if it is off; (c) a member with no Employee mapping parks and is never sent |
+| W2 | `POST /timeactivity` with `Id` + `SyncToken`, `sparse: true` (update) | new `time_activity:update` handler | the same gates (a)–(c). Issued only when `qb_time_activity_id` is stored, never a create |
+| W3 | delete of a TimeActivity | **NOT BUILT** unless Q6 = A | — |
+| W4 | creating a QuickBooks Employee | **NEVER BUILT.** Mapping picks existing Employees only | — |
+| W5 | the sandbox proofs | Codespace harness, rebuild-test + sandbox keys | the four-point "am I in the sandbox" check in 1.6 runs before each harness's first write and throws on any mismatch, and that check is sabotaged to prove it fires |
+| W6 | CI | unit tests stub `fetch`; no QuickBooks credentials exist in CI | unchanged |
+
+After merge, production holds the code. **The only thing that turns W1/W2 on for Worth Properties is the
+toggle, which only an Owner can flip (Q4) and which I will not flip** (stop rule 3).
+
+## Part 0 — the email pacing fix (no migration, about 1 hour)
+
+`lib/critical-path/notify.ts` `deliverScheduleNotify` → `send()` calls `sendEmail` back-to-back. The change: one
+pacer per delivery that starts sends no closer than **500 ms apart** (≤ 2/s), with the clock and sleep
+injectable. The deadline check already in `send()` runs after the wait, so a paced-out send near the limit still
+logs `not_sent` rather than vanishing. **Test:** a fake `sendEmail` records start times for 5 email recipients,
+and the test asserts every gap is ≥ 500 ms. **Sabotage:** delete the wait, which must go red. Residual, stated:
+Resend's limit is per account, so another send path (for example the warming cron) in the same second can still
+collide. Pacing this path does not pace the others. One CI run, merge, then Part 1.
+
+## Part 2 BEFORE Part 1 — the toggle is the gate, so it has to exist before anything can enqueue
+
+⚠️ **A proposed change to the prompt's order (0, 1, 2, 3 → 0, 2, 1, 3).** If Part 1 merged first, the only thing
+between production and live books would be "no trigger yet". Shipping the toggle first means Part 1's trigger is
+born gated. → **Q7.**
+
+**Migration `20262134000000_s124_qb_time_export_toggle.sql`:** `companies.qb_time_export_enabled boolean NOT
+NULL DEFAULT false`, plus `qb_time_export_enabled_at timestamptz` and `qb_time_export_enabled_by uuid` (when it
+was last turned on, which is the no-backfill boundary). Writes are guarded by the companies column-scope
+trigger to whoever Q4 names. ⚠️ **Stop rule 2 flag:** `NOT NULL DEFAULT false` sets every existing company
+to false in the same statement, so it cannot fail on existing rows and cannot default anyone ON. I am treating
+that as *not* a constraint over existing rows, but saying so rather than deciding it quietly. → part of **Q7.**
+**UI:** a switch on Settings → Accounting with fixed text: *"On: approved timesheets from now on are sent to
+QuickBooks as time entries. Hours approved before you turn this on are NOT sent. Off: stops sending new hours.
+Entries already in QuickBooks stay there. Turning this off does not remove or undo them."*
+**Proof:** read back on production, **0 companies with `qb_time_export_enabled = true`**, and the column default
+read from `information_schema`, not from rows. Sabotage: a migration copy with `DEFAULT true` must turn the
+default test red. Size: about half a day.
+
+## Part 1 — push approved timesheets through the existing queue
+
+**Migration `20262135000000_s124_qb_time_activity_push.sql`:**
+- `qb_employee_map (company_id, realm_id, member_id, qb_employee_id, …standard columns)`, realm-scoped like
+  `qb_vendor_map`. Mapping is Q2's.
+- `AFTER UPDATE` trigger on `time_clock_sessions`: when `status` becomes `'approved'`, the toggle is on, the
+  company is connected and the session is not deleted, call `qb_enqueue('time_activity', id, 'update' if
+  qb_time_activity_id is not null else 'create')`. `approve_member_week` and the single approve both write
+  `status`, so the trigger covers both. **Nothing else enqueues**: no sweep and no cron, so nothing reaches
+  history (stop rule 10).
+- Adds `time_activity` to `RECORD_TABLE_FOR_ENTITY` (→ `time_clock_sessions`) and the queue-row status mirror.
+
+**Code:** `entities.ts` gets `time_activity:create` / `:update`, replacing the terminal arm, whose message is
+quoted in place in the test. The body is `NameOf: Employee`, `EmployeeRef` from the map, `TxnDate` = company-tz
+date of `clock_in`, `BillableStatus: NotBillable`, **no HourlyRate**, hours from `paidHours()` (actual time,
+minute resolution: Q8), and `Description` carrying a marker `EZCB session <uuid>` (Q9). **Before any create**,
+the handler queries QuickBooks for a TimeActivity on that date for that employee carrying the marker. If one
+exists, it adopts its Id and switches to an update. That closes the "id null but the entry exists" shape (one
+metered read per create).
+**Size:** 1–1.5 days with the sandbox proofs.
+
+## Part 3 — the re-push (no new migration beyond Part 1's; proofs in sandbox)
+
+Under Q1 = A (one entry per session), every case maps to **at most one create per session, ever**:
+
+| case | what happens | proof (sandbox, by object, with counts read back from QuickBooks) |
+| --- | --- | --- |
+| edit an approved segment | the reopen trigger returns the day to `pending`; re-approval → **update** of the stored Id | QuickBooks TimeActivity count for (employee, date) stays 1; Hours changes; SyncToken +1 |
+| split (S121) | total hours unchanged; re-approval → **update** (a no-op on hours) | count stays 1 |
+| add a segment | re-approval → **update** with the new total | count stays 1 |
+| re-approval, push never succeeded (`queued` / `failed_transient`) | the one-live-row index returns the existing row; no second row | queue rows for the session = 1 |
+| re-approval after `failed_terminal` (8 attempts) | a new row is allowed; it is a create only if the id is still null, and the marker lookup runs first | count ≤ 1 |
+| ⚠️ **id null but the entry EXISTS in QuickBooks** (the half-synced create) | the marker lookup finds it, stores the Id and issues an **update**, not a create | made by hand in sandbox: create the entry, null our id, re-approve → count stays **1** |
+
+Sabotage for each case: disable the marker lookup, or force `create`. The duplicate count must go to 2 (red),
+then the code is restored and read back.
+
+## Stop-rule map
+
+1 production verification row ≠ expectation · 2 the NOT NULL DEFAULT question above · 3 W1–W5 table ·
+4 Q2/Q4/Q6 (payroll authority) · 5 the Part 3 table · 6 §1.5 import and value tests · 7 one file per dry run
+(Part 2's, then Part 1's) · 9 the Part 2 read-back · 10 trigger-only enqueue · 11 cleared (1.2) · 12 cleared.
+
+---
+
+## ⚠️ QUESTIONS FOR JOSH — Phase 3 waits on these
+
+**Q1. [ASK-1] One QuickBooks time entry per DAY (session), or one per PROJECT SEGMENT?**
+A) One per session: paid hours for the day, no customer/job on the entry. This uses the columns that already
+exist. Edits, splits and adds all become an update to the same entry, so a create happens once per day at most.
+QuickBooks gets payroll hours, not job costing (FrameFocus keeps job cost).
+B) One per segment: each work segment tagged to the project's QuickBooks customer. This needs new columns on
+`time_segments` and creates per split or add. Break and paid-break time has no segment to land on. A customer
+stuck on a name conflict (like "Mary Ellen" today) would hold a person's payroll hours hostage.
+**My recommendation: A.** It is payroll, it has the fewest ways to make a duplicate, and payroll never waits on a
+customer.
+
+**Q2. [ASK-2] How does a crew member become a QuickBooks Employee?**
+A) A mapping screen (Settings → Accounting) lists the QuickBooks Employees (one metered read) beside each
+member, and someone picks a match. An unmapped member's approved day **parks** with *"Choose the QuickBooks
+employee for {name}"* and is not sent. FrameFocus never creates an Employee.
+B) Auto-match by name, and park on no match or a tie.
+**My recommendation: A.** Matching by name in payroll books is a guess, and a wrong guess pays the wrong person.
+
+**Q3. [ASK-3] Does Worth Properties pay hourly staff from QuickBooks timesheets (QuickBooks Payroll "use time
+entries")?** Its chart has the payroll accounts. If yes, a pushed entry can become a paycheck. That makes Q6 and
+the toggle text matter more, and you may want the first live day watched.
+Options: A) yes B) no C) not sure. **My recommendation:** check one employee's payroll settings in QuickBooks
+before you turn the toggle on. The build does not depend on the answer.
+
+**Q4. [ASK-4] Who may flip the toggle and edit the employee mapping?**
+A) **Owner only** (like connecting QuickBooks). B) Owner and Admin.
+**My recommendation: A.** Timesheets are payroll, and payroll is money out, which the Admin Role Principle
+keeps for the Owner (stop rule 4).
+
+**Q5. [ASK-5] The no-backfill boundary: what counts as "from now on"?**
+A) **The approval time.** Any approval made after the toggle is turned on is pushed, including re-approving an
+older day that was edited. B) The work date: only sessions that clocked in on or after the day the toggle was
+turned on. A late approval of yesterday's work is then never sent.
+**My recommendation: A.** It is your own wording ("approvals from that moment forward"), and B silently drops
+real hours. Under A, the 9 stranded approved days (1.4, 51.65 raw hours, Sept 29–30) still never push unless one
+is edited and re-approved. Do you want anything done about them, or about the 10 pending days?
+
+**Q6. [ASK-6] A pushed day is later deleted (soft delete) or edited and left unapproved. What happens in
+QuickBooks?**
+A) Delete the QuickBooks entry automatically. B) **Leave QuickBooks alone and show "changed after sending,
+QuickBooks not updated" on the timesheet and in the Accounting queue,** so a person fixes it.
+**My recommendation: B.** If payroll already ran on that entry, an automatic delete rewrites paid history.
+Re-approval still issues an update under both options.
+
+**Q7. [ASK-7] Two procedure changes, both mine to propose and yours to rule:**
+(a) Order **0 → 2 → 1 → 3**, so the toggle exists before anything can enqueue; and (b) treat `ADD COLUMN …
+NOT NULL DEFAULT false` as not a stop-rule-2 constraint (it cannot fail on, or turn on, any existing row).
+A) yes to both B) keep the prompt's order and stop at the column for a ruling. **My recommendation: A.**
+
+**Q8. [ASK-8] Resolution of "actual logged time".** QuickBooks takes whole hours plus whole minutes.
+A) Round paid time to the **nearest minute** (7h10m29s → 7h10m). B) Truncate to the minute.
+**My recommendation: A.** Either way it is at most 30 seconds per day and nowhere near the invoice's half-hour
+rule. The test will pin it.
+
+**Q9. [ASK-9] May each QuickBooks time entry carry a visible note `EZCB session <id>` in its Description?**
+That marker is what lets a retry find an entry it already created, rather than creating a second one.
+A) yes B) no: then the null-id-but-exists case can only be caught by matching (employee, date, hours), which is
+weaker. **My recommendation: A.**
+
+**Not a question, for your list:** production queue rows `78fdd275…` (customer "Mary Ellen", parked on a
+QuickBooks name conflict since 2026-10-01) and `18159383…` (a purchase waiting on it). Once you link or rename
+that customer in Settings → Accounting, **the purchase will post to your real books.**
