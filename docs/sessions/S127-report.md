@@ -894,3 +894,36 @@ Local production build first: `/m` feedback, double-tap, clock-out-task and logs
 day-clock-edit and lists **16/16**; tsc 0; build 0; unit **181 / 2,402**; the P-5 guard **3/3**. One rebase conflict
 (an import line in `timesheets/page.tsx`, where 4c and P-5 each added an import) was resolved by keeping both.
 **Order kept as ruled: P-2 before 4d.**
+
+## P-3: finished from the stopped WIP, on `feature/s127-p3-thumb-proxy-v2` `15169355` (stacked on 4d). Not merged yet
+
+- Started from the earlier half's `0c9f69db` (route + service), cherry-picked onto the current code. **What the WIP
+  lacked, now done:** (a) its `export const THUMB_CACHE_CONTROL` in `route.ts` would have failed `next build` (the 4e
+  trap). The contract moved to `lib/photos/thumb-proxy.ts`. (b) **Every** response is private: 200 `private,
+  max-age=604800, immutable`; 401 and 404 `private, no-store`. (c) `X-Thumb-Source` (thumb | derivative | original)
+  labels what was served, so the three S111 e2e classify **proxy responses** (direct storage image requests are still
+  watched, so a regression to signed URLs would show). (d) `/m` A-23l now asserts the tile is the proxy, versioned by
+  this markup's fingerprint, serving the **derivative's** pixels, never the original (superseded lines quoted). (e)
+  The `/m` filmstrip's S112 3c saving survives: the old `thumbUrl !== displayUrl` test cannot see a server-side
+  fallback, so the tab's local derivative now wins whenever it exists.
+- **Proofs so far:** unit **5/5** (the contract, every response's header, caller-only auth, the stable/versioned URL,
+  no thumbnail signing). **Sabotage:** header → `public`: **red**; restored md5 `800c02fb…`. New e2e: the header read
+  off **real** responses, **another company's Owner holding the exact URL → 404** (`private, no-store`, no source
+  header, not the bytes), no session → refused. tsc 0; build 0; unit **183 / 2,430**. **Local e2e and CI are next,
+  after 4d.**
+- The trash reader keeps signed thumbnails on purpose: the proxy 404s a trashed file.
+
+## P-8 and P-9: NOT BUILT this session, with the reasons
+
+- **P-8 (upload queue, full resolution kept):** a device-side thumbnail, a persistent full-resolution queue, and an
+  indicator that says *"keep the app open"* (iOS has no background sync). It touches every capture surface and the
+  offline queue. That is a spec-and-session item, not a tail. **Not started.** The pieces it would build on exist
+  (`useUploadBatches`, the offline queue, held-photo listing).
+- **P-9 (cross-request cache of rarely-changing data): RECOMMEND NOT BUILDING, as scoped.** The candidate reads are one
+  primary-key read of `companies` per layout render. The columns are written **client-side**
+  (`lib/services/company-client.ts`, the browser client), so a server cache could be invalidated only by adding a
+  server round trip to every settings save. And every other writer (SQL, triggers, the QuickBooks routes) would leave
+  it stale. Stale `breaks_paid` or `ot_threshold_hours` changes what payroll screens compute. The saving is small and
+  the failure is a payroll display that is wrong without saying so, on top of the cross-tenant risk the brief names.
+  **Josh's call** if he wants it anyway. The safe shape is the service role, `company_id` in the key, a short TTL, and
+  invalidation from a server route that the settings forms call.
