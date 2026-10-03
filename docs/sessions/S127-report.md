@@ -818,3 +818,24 @@ Read from rebuild-test's catalog, where the same file is applied and verified:
   `| grep -v '^docs/' | wc -l` → **0**. `[skip ci]`.
 - **4d's gate is open:** 4a is merged, and its restore is proven by `desktop-photo-trash-s127.spec.ts` (desktop and `/m`
   restore, each counted by the service role; crew refused), green in that run.
+
+## 5a FIX + 4c: CI `37121504124` started (12:01Z) on `3c33742f`, stacked on `main` `7f6627fe`
+
+**Proven locally first (production build, rebuild-test), and the reason the order changed:**
+- **Live `s127-client-photo-share` 13/13.** The control fired: the foreman's own write was refused with *"client_visible
+  is Owner/Admin only."*, flag still false. **Total map, judged by the service role:** owner, admin, foreman → shared
+  (linked + `client_visible`); PM, crew → **403** (not the log's author); PE, client, sub → **404** (the log isn't
+  visible to them). The crew member's own photo on their own log → shared. The author with someone else's photo →
+  403. Another project → 409. A photo already on another log → 409, and it stays there. **Sabotage** (author/uploader
+  arm off): **3 red**; restored md5 `4015a8bc…` read back.
+- **e2e `log-client-photo-s127`, as the FOREMAN, through the UI:** (1) a `/m` log with a client photo → the row is on
+  the log and `client_visible`, counted by the service role; (2) the share route forced to 500 → the done screen
+  **says so** and the photo stays internal. **Sabotage** (5a's original caller-client write put back, rebuilt): (1)
+  **red, 0 rows shared**; restored md5 `f361d47a…`.
+- ⚠️ **What that sabotage run exposed, also fixed:** under it, the done screen showed **no error at all**. The form
+  sets its error and then swaps itself for the done screen, which never rendered the error. So on `/m` a failed log
+  photo (old) or a client photo that wasn't shared (5a) **looked exactly like a sent one**. The done screen now carries
+  the error (`m-log-done-error`), and the wording is true in both failure modes: *"A client-facing photo is NOT visible
+  to the client: …"* (en + es).
+- Local `next start`: 5 chromium + **45** `/m` specs green (`m-logs`, `m-capture`, `s116-c5-desktop-log`,
+  `desktop-clock-location-s127`, the new spec). Unit **179 / 2,382**. **0** fixture rows left behind.
