@@ -1,8 +1,6 @@
-import { getOpenSession, getSessions, getSessionSegments } from '@/lib/services/time-tracking';
+import { getMySegmentsSince, getOpenSession } from '@/lib/services/time-tracking';
 import { getProjects } from '@/lib/services/projects';
-import { getMyMember } from '@/lib/services/members';
 import { getMyProfile } from '@/lib/services/profiles';
-import type { TimeSegment } from '@/lib/services/time-tracking';
 import { TimeclockScreen, type PickerProject } from './timeclock-screen';
 
 // M6M §4.5 / §4.5a / §4.12.1 — M-5 · Timeclock. Tab slot 2; sign-in lands here
@@ -35,26 +33,20 @@ export default async function MobileTimeclockPage() {
   const todayStart = new Date();
   todayStart.setHours(0, 0, 0, 0);
 
-  const [openSession, projects, todaySessions, me, profile] = await Promise.all([
+  // Today's segments (§4.5's list): the caller's OWN sessions only — RLS shows
+  // a supervisor their subordinates' rows too, and M-5's list is about the
+  // caller's own day, not the crew's. [S127 P-4, finding 8] ONE read, scoped to
+  // the caller's member in the query, replacing a filter-in-JS plus one segment
+  // read per session (an N+1).
+  const [openSession, projects, todaySegments, profile] = await Promise.all([
     getOpenSession(),
     getProjects({ status: 'active' }),
-    getSessions({ from: todayStart.toISOString() }),
-    getMyMember(),
+    getMySegmentsSince(todayStart.toISOString()),
     // The role rides to the client so an OFFLINE clock-in can queue the right
     // approval status without an rpc it cannot make: owner sessions carry NO
     // approval state (6A §8), everyone else defaults to 'pending'.
     getMyProfile(),
   ]);
-
-  // Today's segments (§4.5's list): the caller's OWN sessions only. getSessions
-  // is RLS-scoped, but the rank ladder shows a supervisor their subordinates'
-  // rows too — and M-5's list is about the caller's own day, not the crew's.
-  const ownSessions = todaySessions.filter((s) => me && s.member_id === me.id);
-
-  const segmentLists = await Promise.all(ownSessions.map((s) => getSessionSegments(s.id)));
-  const todaySegments: TimeSegment[] = segmentLists
-    .flat()
-    .sort((a, b) => (a.segment_start < b.segment_start ? -1 : 1));
 
   const picker: PickerProject[] = projects.map((p) => ({
     id: p.id,

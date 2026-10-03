@@ -1,3 +1,4 @@
+import { cache } from 'react';
 import { createClient, getRequestUser } from '@/lib/supabase-server';
 import type { Database } from '@framefocus/shared/types/database';
 
@@ -79,7 +80,9 @@ export async function getMember(id: string): Promise<CompanyMember | null> {
  * The caller's own member row (via profiles.user_id = auth.uid()).
  * Mirrors the SQL helper get_my_member_id().
  */
-export async function getMyMember(): Promise<CompanyMember | null> {
+// [S127 P-4, finding 10] Per-request memo (React `cache`), like `getProject`: the
+// layout and the page each asked for this, and each paid a round trip.
+export const getMyMember = cache(async (): Promise<CompanyMember | null> => {
   const supabase = await createClient();
   const user = await getRequestUser();
   if (!user) return null;
@@ -100,7 +103,7 @@ export async function getMyMember(): Promise<CompanyMember | null> {
     .maybeSingle();
 
   return (data as CompanyMember | null) ?? null;
-}
+});
 
 /**
  * The `profiles` row behind a member, for the M-40 edit form. [S121]

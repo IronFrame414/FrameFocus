@@ -58,6 +58,8 @@ export const en = {
   // ── /m/logs ──
   'field.logs.title': 'Logs',
   'field.logs.thisWeek': '{n} this week',
+  // [S127 P-4] The bounded feed's next page.
+  'field.logs.showOlder': 'Show older logs',
   'field.logs.thisProject': 'This project',
   'field.logs.empty': 'No daily logs yet.',
   'field.logs.today': 'Today',
@@ -319,6 +321,7 @@ export const es: Record<keyof typeof en, string> = {
   'field.log.submit': 'Enviar reporte',
   'field.logs.title': 'Reportes',
   'field.logs.thisWeek': '{n} esta semana',
+  'field.logs.showOlder': 'Ver registros anteriores',
   'field.logs.thisProject': 'Este proyecto',
   'field.logs.empty': 'Todavía no hay reportes diarios.',
   'field.logs.today': 'Hoy',

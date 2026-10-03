@@ -1,3 +1,4 @@
+import { cache } from 'react';
 import { createClient } from '@/lib/supabase-server';
 import type { Database } from '@framefocus/shared/types/database';
 import {
@@ -50,7 +51,9 @@ const SESSION_SELECT = '*, segments:time_segments(*)';
  * Scoped to the caller's member explicitly — a supervisor sees every company
  * session via RLS, so an unscoped "open session" query would match teammates.
  */
-export async function getOpenSession(): Promise<SessionWithSegments | null> {
+// [S127 P-4, finding 10] Per-request memo (React `cache`), like `getProject`: the
+// layout and the page each asked for this, and each paid a round trip.
+export const getOpenSession = cache(async (): Promise<SessionWithSegments | null> => {
   const supabase = await createClient();
 
   const { data: myMemberId } = await supabase.rpc('get_my_member_id');
@@ -67,7 +70,7 @@ export async function getOpenSession(): Promise<SessionWithSegments | null> {
 
   if (error || !data) return null;
   return data as unknown as SessionWithSegments;
-}
+});
 
 /**
  * Single session by id, WITH segments. Does NOT filter is_deleted — a
@@ -226,6 +229,37 @@ export async function getSessionDetail(id: string): Promise<SessionDetail | null
 }
 
 /** Segments of a session, ordered chronologically. */
+/**
+ * [S127 P-4, finding 8] The caller's OWN segments on sessions clocked in since
+ * `fromIso`, in ONE read (sessions with their segments embedded), ordered by
+ * segment_start.
+ *
+ * SUPERSEDED on `/m/timeclock`: `getSessions({ from })` (every session RLS shows
+ * the caller — a supervisor sees their crew's too), filtered to the caller in
+ * JS, then `getSessionSegments()` once PER session — an N+1 on the screen every
+ * crew member opens twice a day.
+ */
+export async function getMySegmentsSince(fromIso: string): Promise<TimeSegment[]> {
+  const supabase = await createClient();
+
+  const { data: myMemberId } = await supabase.rpc('get_my_member_id');
+  if (!myMemberId) return [];
+
+  const { data, error } = await supabase
+    .from('time_clock_sessions')
+    .select('id, segments:time_segments(*)')
+    .eq('member_id', myMemberId)
+    .eq('is_deleted', false)
+    .gte('clock_in', fromIso)
+    .order('clock_in', { ascending: true });
+
+  if (error || !data) return [];
+  return (data as unknown as { segments: TimeSegment[] }[])
+    .flatMap((s) => s.segments ?? [])
+    .filter((seg) => !seg.is_deleted)
+    .sort((a, b) => (a.segment_start < b.segment_start ? -1 : a.segment_start > b.segment_start ? 1 : 0));
+}
+
 export async function getSessionSegments(sessionId: string): Promise<TimeSegment[]> {
   const supabase = await createClient();
 
