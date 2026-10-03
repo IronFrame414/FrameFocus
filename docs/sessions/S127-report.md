@@ -1,7 +1,75 @@
 # S127 — report (unattended; research → plan → build)
 
-> Lead sections (WHAT JOSH DOES, 1.4a, RULINGS NEEDED, PLAN) are written at the top once phase 2 lands.
-> Until then this file grows from the bottom, one finding per commit.
+> **The lead sections below were written after the sixth timeout and are kept current at the end.** The body
+> grows from the bottom, one finding per commit. Merge and production facts are in the body, by section.
+
+## WHAT JOSH DOES WHEN HE'S BACK
+
+1. **Reconnect rebuild-test's Sabal Point to the QuickBooks SANDBOX** (it unblocks S124 Parts 1 + 3, still stopped on
+   `feature/s124-p1-push`):
+   1. In the Codespace terminal, run exactly: `cd /workspaces/FrameFocus && bash scripts/e2e-preflight.sh`
+      (it starts ONE dev server on port 3000, against rebuild-test, and says so).
+   2. In the browser, open **`http://localhost:3000/sign-in`**. If that does not load (a Codespace opened in a
+      browser cannot reach `localhost`), use the forwarded address from the **Ports** tab, port 3000.
+   3. Sign in as **Sabal Point Construction's Owner**, `josh+test50@worthprop.com`.
+   4. Go to **Settings → Accounting** (`/dashboard/settings/accounting`) and click **Connect QuickBooks**.
+   5. On Intuit's screen, choose **"Sandbox Company US cc64"** (realm `9341457813274121`). **Not** any real
+      company.
+   6. ⚠️ If Intuit sends you to `http://localhost:3000/api/quickbooks/callback?…` and the page does not load, copy
+      that address, replace `http://localhost:3000` with the forwarded address from step 2, and press Enter. (The
+      app registered `localhost` with Intuit; the server still sends `localhost`, so the exchange matches.)
+   7. **It worked if** the Accounting screen says **Connected**, and offers to turn the timesheet switch back on.
+      That is item 1's reconnect offer, because the switch turned itself off at `needs_reauth`.
+   8. **If not, check:** the address you finished on is `/api/quickbooks/callback` with no `error=` in it; you chose
+      the cc64 company; you were signed in as the Owner (Admin cannot connect). Then tell the next session. It
+      reads the connection status from rebuild-test, never the tokens.
+2. **The floating bottom bar (5b): a real iPhone at 402 px.** On `/m`, open a daily log's close-out, tap a **date**
+   field, pick a date, dismiss the picker, and see whether a white band appears under the tab bar. If it does, the
+   cause in 1.4d is confirmed and the fix written there can be built.
+3. **"It asks permission every time" (B-2): on the same iPhone,** Settings → Apps → Safari → Location → **Allow**,
+   and Privacy & Security → Location Services → Safari Websites → **While Using the App**. Then clock in twice from
+   the home-screen app and say whether it still asks. No app change can make iOS remember it (1.4e).
+4. **Item 2 (member removal) is built, proven and NOT merged, by your ruling #11.** It's on
+   `feature/s127-member-removal` `fe131aca`, with CI green. Merge it yourself if you agree. It carries no migration,
+   and `get_my_company_id()` is untouched.
+5. **Rule on the questions under "WHAT JOSH MUST RULE"** below.
+6. **`feature/s114-c5-multi-upload`:** the revert reason still holds (item 8). Discarding it is yours.
+
+## 1.4a — MEMBER REMOVAL: ⛔ CONFIRMED
+
+**Deactivating a member on `/m` ("Inactive") left them full company access at their role, with no time limit,
+including a fresh sign-in.** Desktop team-page removal cut everything. **Production: 0 people in the exposed state
+(latent).** **The fix is built and proven on `feature/s127-member-removal` `fe131aca` (CI `37087311433` green). NOT
+MERGED, by ruling #11.** Full evidence is under "1.4a" and "Item 2" in the body.
+
+## WHAT JOSH MUST RULE
+
+- **R-1 (`#3-share`): a public photo link serves the photo's CURRENT marked-up version.** If markup is edited after
+  sharing, the public image changes with it; a link made before any markup keeps the unmarked original. A) keep it
+  live (as built); B) freeze a copy at share time (a stored snapshot per link). *Recommend B* if links go to
+  outsiders in disputes, since the preview then stays the truth; A is fine if links are only quick sends.
+- **R-2 (`#1-share`): add a database check binding `share_path` to its own photo** (defence in depth; the app
+  already refuses a foreign path). A) a small migration; B) leave it to the app. *Recommend A.*
+- **R-3 (5a, taken on my reading): a log's author makes their client-facing slot photos visible to the client
+  without Owner/Admin approval.** That is how the fix works (ruling #4's dedicated slot). A) keep; B) require
+  Owner/Admin approval before a client sees them (a different feature). *Recommend A.*
+- **R-4 (`#2-share`, pre-existing): the desktop Photos grid shows the client-visibility toggle to every staff role,
+  but the database lets only Owner/Admin change it,** so a PM's toggle fails. A) show it to Owner/Admin only; B) widen
+  the database. *Recommend A.*
+- **R-5 (P-9): cross-request caching of company settings.** *Recommend not building* (body, "P-8 and P-9"): the
+  saving is small, and a stale setting changes payroll screens without saying so.
+- **R-6 (P-7): send only the active language's dictionary to `/m`** (about −17 KB gz per page, ~8%). A) build it as
+  its own item; B) leave it.
+- **R-7 (Q-D, from phase 2): deleting a subcontractor whose directory row is linked to a login keeps that login.**
+  Same class as 1.4a, another screen. A) route it through the same removal mechanism; B) leave it.
+
+## THE PLAN, AND EVERY DEVIATION
+
+The phase 2 plan is under "PHASE 2" below. Deviations, each with its reason in the body: the train order after the
+timeout (5a + 6 first: migration order and a green CI already in hand; 4a + 4b together, since 4b is built on 4a);
+**the 5a fix inserted after 5a merged** (a live defect, found and fixed with 0 rows affected); P-5 rode with P-2 (P-2
+is built on it); P-3 finished from its WIP after the train; P-7 measured, not built; P-8 not started; P-9 recommended
+against.
 
 ---
 
