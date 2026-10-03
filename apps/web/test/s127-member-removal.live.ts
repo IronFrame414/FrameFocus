@@ -11,6 +11,7 @@ import {
   URL_,
 } from './live-session';
 import { softDeleteTeamMember } from '@/lib/services/team';
+import { setTeamMemberLoginActive } from '@/lib/team/team-access';
 
 // ============================================================================
 // S127 1.4a / § 2 — DOES REMOVING A MEMBER CUT THEIR DATA ACCESS?
@@ -54,7 +55,7 @@ const STAMP = Date.now();
 const MARK = `S127MR-${STAMP}`;
 
 interface Subject {
-  label: 'P' | 'M';
+  label: 'P' | 'M' | 'X';
   email: string;
   userId: string;
   profileId: string;
@@ -79,9 +80,10 @@ let objectPath = '';
 const freshPaths: string[] = []; // one per probe, each requested exactly once
 let coProjectId = '';
 let owner: SupabaseClient;
+let ownerUserId = '';
 const results: Record<string, Probe> = {};
 
-async function makeSubject(label: 'P' | 'M'): Promise<Subject> {
+async function makeSubject(label: 'P' | 'M' | 'X'): Promise<Subject> {
   const email = `s127-member-removal-${label.toLowerCase()}+${STAMP}@example.com`;
   const { data, error } = await admin.auth.admin.createUser({
     email,
@@ -154,6 +156,9 @@ async function probe(s: Subject, phase: string): Promise<Probe> {
 beforeAll(async () => {
   assertRebuildTest();
   owner = await sessionFor(OWNER_EMAIL);
+  const { data: ou } = await owner.auth.getUser();
+  if (!ou.user) throw new Error('owner session has no user');
+  ownerUserId = ou.user.id;
 
   // A real object, proven present by LISTING its folder with the service role.
   const { data: f, error: fErr } = await admin
@@ -164,7 +169,7 @@ beforeAll(async () => {
     .not('project_id', 'is', null)
     .like('mime_type', 'image/%')
     .order('created_at', { ascending: true })
-    .limit(40);
+    .limit(80);
   if (fErr) throw new Error(fErr.message);
   for (const row of f ?? []) {
     const path = (row as { file_path: string }).file_path;
@@ -174,10 +179,10 @@ beforeAll(async () => {
     if ((listed ?? []).some((o) => o.name === name)) {
       if (!objectPath) objectPath = path;
       else freshPaths.push(path);
-      if (freshPaths.length >= 4) break;
+      if (freshPaths.length >= 8) break;
     }
   }
-  if (freshPaths.length < 4) throw new Error(`only ${freshPaths.length} fresh objects listed`);
+  if (freshPaths.length < 8) throw new Error(`only ${freshPaths.length} fresh objects listed`);
   if (!objectPath) throw new Error('no listed image object in the QA tenant');
 
   // The project with the most signed change orders — ordered, so the pick is stable.
@@ -199,6 +204,7 @@ beforeAll(async () => {
 
   await makeSubject('P');
   await makeSubject('M');
+  await makeSubject('X');
 });
 
 afterAll(async () => {
@@ -264,25 +270,78 @@ describe('S127 1.4a — member removal and a still-valid token', () => {
     expect(p.fnRows).toBe(0);
   });
 
-  it('M — /m "Inactive" (company_members only): the old token loses all four', async () => {
+  it('M — /m "Inactive" through the item 2 mechanism: the old token loses all four, and the next login', async () => {
     const s = subjects.find((x) => x.label === 'M')!;
-    // Exactly the form's write, through the Owner's session — no profile write, no ban.
-    const { data: upd, error } = await owner
-      .from('company_members')
-      .update({ is_deleted: true })
-      .eq('id', s.memberId)
-      .select('id');
-    expect(error).toBeNull();
-    expect((upd ?? []).length).toBe(1);
+    // Exactly what the form now does: the login half through the shared
+    // mechanism (Owner's client, service role for the ban only), then the
+    // roster half's own write.
+    const outcome = await setTeamMemberLoginActive(owner, admin, ownerUserId, s.memberId, false);
+    expect(outcome).toEqual({ ok: true, changed: true });
+    await owner.from('company_members').update({ is_deleted: true }).eq('id', s.memberId);
     const { data: m } = await admin.from('company_members').select('is_deleted').eq('id', s.memberId).single();
     const { data: prof } = await admin.from('profiles').select('is_deleted').eq('id', s.profileId).single();
     expect(m?.is_deleted).toBe(true);
-    expect(prof?.is_deleted).toBe(false); // the state under test: member-only
+    expect(prof?.is_deleted).toBe(true);
 
     const p = await probe(s, 'after');
     const relogin = await freshSignIn(s.email);
     console.log(`[s127-mr] M relogin=${relogin}`);
-    // CONTROL that must fire: the member-scoped helper does see the removal.
+    expect(p.memberId).toBeNull();
+    // The secure expectation:
+    expect(relogin).toBe(false);
+    expect(p.companyId).toBeNull();
+    expect(p.read).toBe(0);
+    expect(p.write).toBe(0);
+    // ⚠️ NOT `downloadBytes`: the object this same token already fetched is
+    // served again after removal (measured S127: 147191 bytes on P, whose
+    // fresh object, signed URL, read, write and function are ALL refused).
+    // That is a cached response for bytes the person already holds, not the
+    // policy admitting them; the cross-tenant control shows it is per-token.
+    // Recorded as a residual in S127-report 1.4a. The policy is judged on an
+    // object this token has never requested.
+    expect(p.freshBytes).toBe(0);
+    expect(p.signedUrl).toBe(false);
+    expect(p.fnRows).toBe(0);
+  });
+
+  it('M — "Active" again restores the person: access and sign-in come back', async () => {
+    const s = subjects.find((x) => x.label === 'M')!;
+    const outcome = await setTeamMemberLoginActive(owner, admin, ownerUserId, s.memberId, true);
+    expect(outcome).toEqual({ ok: true, changed: true });
+    await owner.from('company_members').update({ is_deleted: false }).eq('id', s.memberId);
+    const relogin = await freshSignIn(s.email);
+    console.log(`[s127-mr] M restored relogin=${relogin}`);
+    expect(relogin).toBe(true);
+    // A NEW session: the old token's refresh was revoked by the ban.
+    const fresh = createSupabaseClient(URL_, ANON, { auth: { autoRefreshToken: false, persistSession: false } });
+    const { error: signErr } = await fresh.auth.signInWithPassword({ email: s.email, password: TEST_PASSWORD });
+    expect(signErr).toBeNull();
+    s.client = fresh;
+    const p = await probe(s, 'restored');
+    expect(p.companyId).toBe(COMPANY_ID);
+    expect(p.memberId).toBe(s.memberId);
+    expect(p.read).toBeGreaterThan(0);
+    expect(p.write).toBe(1);
+  });
+
+  // ⚠️ RESIDUAL, NOT FIXED BY ITEM 2 — `it.fails` ON PURPOSE. A RAW member-only
+  // write (an Owner/Admin PATCHing `company_members.is_deleted` through the API,
+  // the pre-item-2 form's write) still leaves full access, because
+  // `get_my_company_id()` reads `profiles`. Item 2 removes the SCREEN that made
+  // it; the database-layer defence is proposed in S127-report, not built
+  // (ruling #11 fences that function). When that lands, these secure
+  // expectations pass, `it.fails` turns red, and `.fails` must be removed.
+  it.fails('X — RESIDUAL: a raw member-only write still cuts nothing', async () => {
+    const s = subjects.find((x) => x.label === 'X')!;
+    const { data: upd } = await owner
+      .from('company_members')
+      .update({ is_deleted: true })
+      .eq('id', s.memberId)
+      .select('id');
+    expect((upd ?? []).length).toBe(1);
+    const p = await probe(s, 'after');
+    const relogin = await freshSignIn(s.email);
+    console.log(`[s127-mr] X relogin=${relogin}`);
     expect(p.memberId).toBeNull();
     // The secure expectation:
     expect(relogin).toBe(false);

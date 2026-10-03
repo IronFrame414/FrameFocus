@@ -7,6 +7,7 @@ import {
   updateMemberProfile,
   type WriteOutcome,
 } from '@/lib/services/members-client';
+import { setTeamMemberLoginActiveAction } from '@/lib/team/team-access-actions';
 import { ColourPicker } from '@/components/schedule/colour-picker';
 import { useT } from '@/components/i18n/language-provider';
 import type { MsgKey, T } from '@/lib/i18n/messages';
@@ -137,12 +138,29 @@ export function TeamEditForm({ member }: { member: TeamEditable }) {
     // BOTH WRITES ARE ATTEMPTED, ALWAYS, and neither is conditional on the
     // other. Short-circuiting on the first refusal would hide the state of the
     // second, which is the thing the user needs to know.
+    // ⚠️ [S127 item 2] A member WITH A LOGIN is deactivated by removing the
+    // login — the same `softDeleteTeamMember()` desktop Remove uses — FIRST.
+    // The old member-only write left the person full company access (S127
+    // 1.4a: `get_my_company_id()` reads profiles, never company_members). If
+    // that fails, the roster half does NOT flip `is_deleted`: a member hidden
+    // from the pickers while their login still works is the exact state this
+    // closes. A member with no login has nothing to cut; for them the action
+    // is a no-op and the roster write stays the whole change.
+    const wantInactive = active === 'inactive';
+    const statusChanged = wantInactive !== member.is_deleted;
+    let accessNote: string | null = null;
+    if (statusChanged && member.profile_id !== null) {
+      const access = await setTeamMemberLoginActiveAction(member.id, !wantInactive);
+      if (!access.ok) accessNote = t('directory.team.errorAccess', { error: access.error });
+    }
+
     const roster = await updateMember(member.id, {
       display_name: displayName.trim(),
       member_type: (memberType ?? member.member_type) as 'crew' | 'subcontractor',
       // [S121 5-G] Crew only — a sub's colour is its trade's, never stored.
       ...(memberType === 'subcontractor' ? {} : { schedule_color: scheduleColor }),
-      is_deleted: active === 'inactive',
+      // Unchanged when the login half was refused (above).
+      is_deleted: accessNote === null ? wantInactive : member.is_deleted,
     });
 
     const profile = await updateMemberProfile(member.profile_id, {
@@ -154,9 +172,11 @@ export function TeamEditForm({ member }: { member: TeamEditable }) {
 
     setBusy(false);
 
-    const problems = [halfNote('roster', roster, t), halfNote('profile', profile, t)].filter(
-      (n): n is string => n !== null
-    );
+    const problems = [
+      accessNote,
+      halfNote('roster', roster, t),
+      halfNote('profile', profile, t),
+    ].filter((n): n is string => n !== null);
 
     if (problems.length > 0) {
       // ⚠️ NOT A ROLLBACK. Whatever landed stays landed (the A-67b precedent);

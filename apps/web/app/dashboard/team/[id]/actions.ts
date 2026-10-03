@@ -8,6 +8,7 @@ import { verifyCurrentPassword } from '@/lib/auth/verify-current-password';
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
 import { resetTeamMemberPassword } from '@/lib/services/team-reset';
 import { getStripe } from '@/lib/stripe';
+import { assertCanEditTeamMember } from '@/lib/team/team-edit-rules';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import {
@@ -48,23 +49,9 @@ function assertIsTeamMember<T>(target: T | null): T {
   return target;
 }
 
-function assertCanEdit(callerRole: string, callerProfileId: string, targetProfileId: string, targetRole: string) {
-  if (callerProfileId === targetProfileId) {
-    // Backstop for the UI pointer in page.tsx: your own name is edited on the
-    // Account page (/dashboard/account), never here. Blocking self-edit in Team
-    // keeps a single save path for your name (parity ruling S122).
-    throw new Error('Edit your own name from your Account page, not from Team.');
-  }
-  if (callerRole === 'owner') return;
-  if (callerRole === 'admin') {
-    // [S111 Q11] owner, admin AND project_executive — OWNER_ONLY_GRANT_ROLES.
-    if (isOwnerOnlyGrant(targetRole)) {
-      throw new Error('Admins cannot edit Owners, Admins or Project Executives');
-    }
-    return;
-  }
-  throw new Error('Insufficient permissions');
-}
+// [S127] The rule moved to lib/team/team-edit-rules.ts, unchanged, because
+// `/m` Team's Active/Inactive now removes and restores through it too.
+const assertCanEdit = assertCanEditTeamMember;
 
 export async function updateTeamMemberAction(
   targetId: string,
