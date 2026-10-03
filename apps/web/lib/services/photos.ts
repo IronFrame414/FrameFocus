@@ -421,3 +421,56 @@ export async function getUploaderNames(userIds: string[]): Promise<Map<string, s
   }
   return names;
 }
+
+// ============================================================================
+// S127 item 4a — THE PHOTO TRASH. One reader for desktop and /m (PARITY).
+//
+// ⚠️ "Soft delete, recoverable" was FALSE from the user's side: a trashed photo
+// appeared only in the Files tab's Trash on desktop — not on the Photos tab, and
+// nowhere on /m — so for most people a soft delete and a hard delete looked
+// identical. S127 1.4b counted 7 photos in that state on production. This is
+// the trash the bulk-delete ruling (A-1a-i) requires to exist FIRST.
+//
+// ⚠️ Soft delete is enforced in THIS layer, not RLS (RLS does not filter
+// `is_deleted`). The row set is the Photos view's own (PHOTO_VIEW_FILTER), so
+// what was deleted from the Photos view is what comes back to it.
+// ⚠️ BOUNDED AND ORDERED BY THE COLUMN IT IS BOUNDED ON: most recently deleted
+// first (`deleted_at`, `id` as the tiebreak), at most PHOTO_TRASH_LIMIT.
+// ============================================================================
+
+export const PHOTO_TRASH_LIMIT = 200;
+
+export interface TrashedPhoto {
+  id: string;
+  file_name: string;
+  deleted_at: string | null;
+  created_at: string | null;
+  /** The stored thumbnail, else the original — the object is kept until purge. */
+  thumbUrl: string | null;
+}
+
+export async function getPhotoTrash(projectId: string): Promise<TrashedPhoto[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from('files')
+    .select('id, file_name, file_path, markup_data, created_at, deleted_at')
+    .eq('project_id', projectId)
+    .eq('is_deleted', true)
+    .or(PHOTO_VIEW_FILTER)
+    .order('deleted_at', { ascending: false, nullsFirst: false })
+    .order('id', { ascending: false })
+    .limit(PHOTO_TRASH_LIMIT);
+  if (error || !data) return [];
+
+  const rows = data as Array<Pick<FileRecord, 'id' | 'file_name' | 'file_path' | 'markup_data' | 'created_at' | 'deleted_at'>>;
+  const paths: string[] = [];
+  for (const r of rows) paths.push(r.file_path, thumbPathFor(r.file_path, r.markup_data));
+  const urls = await getSignedUrls(paths);
+  return rows.map((r) => ({
+    id: r.id,
+    file_name: r.file_name,
+    deleted_at: r.deleted_at,
+    created_at: r.created_at,
+    thumbUrl: urls.get(thumbPathFor(r.file_path, r.markup_data)) ?? urls.get(r.file_path) ?? null,
+  }));
+}
