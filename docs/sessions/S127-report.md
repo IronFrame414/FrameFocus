@@ -119,3 +119,56 @@ Production (`jwkcknyuyvcwcdeskrmz`), read-only:
   does. Merging it would overwrite or duplicate the proven S116 code in 10 files. **Branch left untouched.** Its useful
   remainder is the step-2 `multiple` attributes on 4 inputs, which is `#181` and should be built fresh from `main`.
   **Discarding it stays Josh's call.**
+
+## 1.4a — ⛔ CONFIRMED: deactivating a member on `/m` cuts NOTHING. Removing them from the desktop team page cuts everything.
+
+**Instrument:** `apps/web/test/s127-member-removal.live.ts` (branch `feature/s127-member-removal`, `2d8895c7`), run 4× on
+rebuild-test `nmyphyhmfttxkdoposvf`. The live guard decoded the key's own `ref`. Two throwaway users were adopted as
+**Admin** into the QA tenant (Sabal Point Construction, `03bb903f`). Each signed in **before** removal, and the **same
+client, same JWT,** probed before and after. Writes were made **without returning rows** and **counted with the service
+role** by a unique marker. Storage was judged on an object the token had **never requested**.
+
+| probe (same token) | before (control) | **P** — desktop team page `softDeleteTeamMember()` (real function, Owner's session): profile deleted + 876000h ban | **M** — `/m` "Inactive": `company_members.is_deleted = true` only, the form's exact write through the Owner's session |
+| --- | --- | --- | --- |
+| `get_my_company_id()` | company A | **NULL** | ⛔ **company A** |
+| `get_my_member_id()` | the member | NULL | NULL *(the control that must fire: it did)* |
+| read `projects` | 17 | **0** | ⛔ **17** |
+| write `contacts` (service-role count) | 1 | **0** | ⛔ **1** |
+| download a never-requested object | > 0 | **0** | ⛔ **2,163,602 bytes** |
+| `createSignedUrl` | yes | **refused** | ⛔ **issued** |
+| `get_approved_change_order_summaries()` (SECURITY DEFINER) | 6 rows | **0** | ⛔ **6 rows** |
+| a brand-new password sign-in | — | **refused** | ⛔ **succeeds** |
+
+The final run (`mr4.log`): **3 passed, 1 failed**. The failure is M, by design: the test states the secure expectation.
+Cleanup left **0** marker contacts, and both subjects were removed.
+**Cross-tenant control** (Ridgeline's Owner downloading the same object): **0 bytes**. The storage policy can refuse.
+
+**What it means:**
+- **The M path is real and shipped.** `/m/team/[memberId]` → Edit (`data-testid="m-member-edit"`, Owner/Admin only)
+  → Active/Inactive → `updateMember()` (`lib/services/members-client.ts:92`). It writes `company_members` and nothing
+  else. `get_my_company_id()` (baseline, never redefined) reads only `profiles`. Every company-wide RLS arm, every
+  storage policy, and every function gated on it **never sees the deactivation**. The person keeps full company access
+  at their role, **with no time limit**: they are not banned, so their sessions refresh and they can sign in again.
+  An Admin can do this to anyone, including another Admin or the Owner (`company_members_update_authorized`).
+- **The only thing M cuts is assignment-scoped access** (`get_my_member_id()` → NULL). An Owner or Admin keeps
+  everything; a foreman or crew member keeps every company-wide policy.
+- **Is it live on production? Latent, not live, today.** Read-only query on `jwkcknyuyvcwcdeskrmz`: every
+  deactivated person (3, all Worth Properties: crew, admin, project executive) has `profiles.is_deleted = true` **and**
+  an active ban, so all three went through the safe path. **0 people are member-only deactivated with a live login.**
+  The screen that produces the state ships today, so the next person deactivated on `/m` would keep access.
+- **A second path that cuts nothing:** deleting a **subcontractor** whose directory row is linked to a login
+  (`deleteSubcontractor`, `subcontractors-client.ts:46`) writes only `subcontractors.is_deleted`. It doesn't touch the
+  member row, the profile or the ban.
+- **Already known as `#1-s109`** (`TECH_DEBT.md:848`, *"latent, 0 reverse ghosts on production at S109"*), and
+  `20261710000000` records the `/m` toggle as *"NOT COVERED, BY RULING (ASK-160.B)"*. ⚠️ What S109 did not establish
+  is the **consequence**: it filed this as a sync gap, but it is an access gap. This probe is the first test of what a
+  member-only-deactivated person can still do.
+- **Residual in P (low):** the object the token **had already downloaded** before removal was served again afterwards
+  (147,191 bytes). Its fresh object, signed URL, read, write and function were all refused, and the cross-tenant control
+  was refused, so this is a cached response keyed to that token for bytes the person already holds, not the policy
+  admitting them. Recorded, not fixed.
+- **The consequence for 16b:** the desktop team-page removal **does** cut access immediately in the database, because
+  `get_my_company_id()` returns NULL on the very next request whatever the token says. So 16b is **not killed by P**.
+  But M shows the database, not the Auth-server call, is what protects data; an Auth-server `getUser()` does not
+  catch M either (the user isn't banned). **16b stays deferred as ruled.** It is not in this session, and its own
+  session must take M's fix as a precondition.
