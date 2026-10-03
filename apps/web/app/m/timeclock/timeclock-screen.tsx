@@ -267,11 +267,23 @@ function ClockInForm({
       gps_in: gps,
     });
 
-    setBusy(false);
     if (!result.success) {
-      setError(result.error ?? t('field.clock.inFailed'));
+      // [S127 P-1] A second tap: the first one clocked in. Say so in the
+      // user's language and re-read, so this screen becomes the on-the-clock
+      // view showing the REAL open session (which may be on another job — so
+      // no redirect to the job tapped here).
+      if (result.code === 'already_clocked_in') {
+        setError(t('field.clock.alreadyIn'));
+        router.refresh();
+      } else {
+        setError(result.error ?? t('field.clock.inFailed'));
+      }
+      setBusy(false);
       return;
     }
+    // ⚠️ [S127 P-1] BUSY STAYS ON through the navigation below. The old order
+    // cleared it first, leaving the button live until the hub arrived — the
+    // window in which the second tap happened.
 
     // D-12 as restated by §4.5a — THE REDIRECT FOLLOWS THE TYPE (A-7f).
     // A project type lands on that project's hub. A projectless type has no

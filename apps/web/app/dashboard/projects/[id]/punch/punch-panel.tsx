@@ -2,6 +2,7 @@
 
 import { supervisesProjectWork } from '@framefocus/shared/constants/roles';
 import { useState } from 'react';
+import { useRequestId } from '@/lib/idempotency/use-request-id';
 import { useAssigneePicker } from '@/lib/assignee-picker';
 import { useRouter } from 'next/navigation';
 import { useConfirm } from '@/components/confirm/confirm-provider';
@@ -92,6 +93,8 @@ export function PunchPanel({
   // `itemAssignee` is gone: the selection now lives in the shared hook, so the
   // partition and the switch-clears-the-pick rule cannot drift from mobile's.
   const picker = useAssigneePicker(members, assignedMemberIds);
+  // [S127 P-1] Shared with /m: one id per intended item.
+  const itemRequest = useRequestId();
   const [itemRefPhoto, setItemRefPhoto] = useState('');
   const [itemNeedsPhoto, setItemNeedsPhoto] = useState(true);
   const [itemNeedsVerify, setItemNeedsVerify] = useState(true);
@@ -120,7 +123,9 @@ export function PunchPanel({
       return;
     }
     await run(async () => {
+      // [S127 P-1] Same id until it lands — a second click cannot duplicate.
       const r = await createPunchItem({
+        id: itemRequest.current(),
         punch_list_id: listId,
         project_id: projectId,
         title: itemTitle.trim(),
@@ -133,6 +138,7 @@ export function PunchPanel({
         requires_verification: canForeman ? itemNeedsVerify : true,
       });
       if (r.success) {
+        itemRequest.renew();
         setItemTitle('');
         setItemLocation('');
         setItemTrade('');

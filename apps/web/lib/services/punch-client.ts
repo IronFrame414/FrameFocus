@@ -115,6 +115,8 @@ export async function deletePunchList(
  * `recalculateChangeOrderTotalsPrivileged` and s118's A-55 note.
  */
 export async function createPunchItem(item: {
+  /** [S127 P-1] The idempotency key from `useRequestId()`; sent as the row's id. */
+  id?: string;
   punch_list_id: string;
   project_id: string;
   title: string;

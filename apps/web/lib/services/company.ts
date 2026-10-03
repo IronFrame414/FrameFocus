@@ -1,3 +1,4 @@
+import { cache } from 'react';
 import { createClient, getRequestUser } from '@/lib/supabase-server';
 import type { Database } from '@framefocus/shared/types/database';
 import {
@@ -136,7 +137,9 @@ export interface CompanyTimeSettings {
  * source for every screen that formats wall-clock times, computes week/day
  * boundaries, or derives paid hours / OT (Module 6A).
  */
-export async function getCompanyTimeSettings(): Promise<CompanyTimeSettings> {
+// [S127 P-4, finding 10] Per-request memo (React `cache`), like `getProject`: the
+// layout and the page each asked for this, and each paid a round trip.
+export const getCompanyTimeSettings = cache(async (): Promise<CompanyTimeSettings> => {
   const row = await getTimeTrackingSettings();
   if (!row) {
     return {
@@ -156,7 +159,7 @@ export async function getCompanyTimeSettings(): Promise<CompanyTimeSettings> {
     },
     gpsClockMode: row.gps_clock_mode,
   };
-}
+});
 
 /**
  * The caller's company timezone (companies.timezone, migration 20260719000000).

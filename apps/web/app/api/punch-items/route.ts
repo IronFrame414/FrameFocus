@@ -52,7 +52,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: parsed.error.errors[0].message }, { status: 400 });
   }
 
-  const result = await insertPunchItemAsCaller(supabase, parsed.data);
+  const result = await insertPunchItemAsCaller(supabase, parsed.data, user.id);
   if (!result.success) {
     // A policy refusal is 403 and says so. CLAUDE.md: an auth/permission
     // failure never falls through to a "not found" path, and the real cause is
@@ -73,7 +73,8 @@ export async function POST(request: NextRequest) {
   // ── §3b / §13.3 — notify the assignee. Best-effort from here down: the item
   // exists and is the business event; failing to announce it must not undo it.
   let assignment = { notified: false, emailOnly: null as string | null, unreachableName: null as string | null };
-  if (parsed.data.assignee_id) {
+  // [S127 P-1] A replayed request (a second tap) was announced the first time.
+  if (parsed.data.assignee_id && !result.replayed) {
     try {
       assignment = await notifyPunchAssigned(getSupabaseAdmin(), {
         companyId: profile.company_id,

@@ -237,7 +237,20 @@ export interface MobileLogFeed {
   rows: MobileLogRow[];
   /** §4.6's app-bar figure — `{n} this week`. */
   thisWeek: number;
+  /** [S127 P-4] More logs exist past `rows` — the screen offers "Show older". */
+  hasMore: boolean;
 }
+
+/**
+ * [S127 P-4, finding 5] How many logs `/m/logs` reads at a time.
+ *
+ * ⚠️ THE TIME BOMB. The feed used to read EVERY daily log the company had ever
+ * written, then an `IN` list of all their ids to count photos — fine on today's
+ * data, unusable in a year, and growing with company age, not with what the
+ * screen shows. Bounded now, newest first, with a "Show older" step.
+ */
+export const LOG_FEED_PAGE = 50;
+export const LOG_FEED_MAX = 500;
 
 /** Monday-start week containing `today`, as an ISO date string. */
 function weekStart(todayIso: string): string {
@@ -254,21 +267,31 @@ export async function getMobileDailyLogs(filters?: {
   projectId?: string | null;
   /** Company day, so "this week" is not computed in UTC. */
   today?: string;
+  /** [S127 P-4] How many rows to show; clamped to [LOG_FEED_PAGE, LOG_FEED_MAX]. */
+  limit?: number;
 }): Promise<MobileLogFeed> {
   const supabase = await createClient();
+  const limit = Math.min(Math.max(filters?.limit ?? LOG_FEED_PAGE, LOG_FEED_PAGE), LOG_FEED_MAX);
 
+  // ⚠️ BOUNDED AND ORDERED BY WHAT IT IS BOUNDED ON (S165): newest log_date
+  // first, then created_at, then `id` as the unique tiebreak so a page edge is
+  // stable. One extra row says whether there is more without a count query.
   let query = supabase
     .from('daily_logs')
     .select('id, log_date, work_performed, project_id, office_reviewed_at, author:company_members!daily_logs_author_member_id_fkey(display_name), project:projects(name, project_number)')
     .eq('is_deleted', false)
     .order('log_date', { ascending: false })
-    .order('created_at', { ascending: false });
+    .order('created_at', { ascending: false })
+    .order('id', { ascending: false })
+    .limit(limit + 1);
 
   if (filters?.mineMemberId) query = query.eq('author_member_id', filters.mineMemberId);
   if (filters?.projectId) query = query.eq('project_id', filters.projectId);
 
-  const { data, error } = await query;
-  if (error || !data) return { rows: [], thisWeek: 0 };
+  const { data: fetched, error } = await query;
+  if (error || !fetched) return { rows: [], thisWeek: 0, hasMore: false };
+  const hasMore = fetched.length > limit;
+  const data = fetched.slice(0, limit);
 
   type Raw = {
     id: string;
@@ -325,5 +348,5 @@ export async function getMobileDailyLogs(filters?: {
     .eq('is_deleted', false)
     .gte('log_date', start);
 
-  return { rows, thisWeek: weekCount ?? 0 };
+  return { rows, thisWeek: weekCount ?? 0, hasMore };
 }

@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { createPunchItem, createPunchList } from '@/lib/services/punch-client';
 import { useAssigneePicker } from '@/lib/assignee-picker';
+import { useRequestId } from '@/lib/idempotency/use-request-id';
 import type { PunchItemPriority } from '@/lib/services/punch-client';
 import { SetMobileHeader } from '../../../../mobile-header';
 import {
@@ -129,6 +130,8 @@ export function PunchItemForm({
   // which is not decoration: on "save and add another" the screen does not
   // navigate, so without it a successful save and a dead button look identical.
   const [savedCount, setSavedCount] = useState(0);
+  // [S127 P-1] One id per intended item — see lib/idempotency/use-request-id.ts.
+  const request = useRequestId();
 
 
   const listChosen = listId !== null && (listId !== NEW_LIST || newListName.trim().length > 0);
@@ -179,8 +182,11 @@ export function PunchItemForm({
       setNewListName('');
     }
 
-    // WRITE 2 — the item.
+    // WRITE 2 — the item. [S127 P-1] `request.current()` is THIS item's id
+    // until it lands: a second tap resends it and the server answers with the
+    // first row instead of a duplicate.
     const result = await createPunchItem({
+      id: request.current(),
       punch_list_id: targetListId,
       project_id: projectId,
       title: title.trim(),
@@ -196,8 +202,8 @@ export function PunchItemForm({
       setError(result.error ?? t('photos.punchForm.createFailed'));
       return;
     }
-
-    setBusy(false);
+    // Landed: the next item is a different item.
+    request.renew();
 
     // =====================================================================
     // D-64 [S121, Josh] — SAVE AND ADD ANOTHER
@@ -245,10 +251,15 @@ export function PunchItemForm({
       setTitle('');
       setDescription('');
       setSavedCount((n) => n + 1);
+      setBusy(false);
       // The list stays SELECTED, so the next item needs no decision at all.
       return;
     }
 
+    // ⚠️ [S127 P-1] BUSY STAYS ON until the list screen replaces this one. The
+    // old order cleared it first, and the title was still filled in — so the
+    // button was live, with the same item in it, for as long as the next
+    // screen took to arrive. That window was the duplicate.
     router.push(`/m/p/${projectId}/punch`);
     router.refresh();
   }

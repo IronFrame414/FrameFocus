@@ -5,6 +5,9 @@ import type { Database } from '@framefocus/shared/types/database';
 import { scheduleColor } from '@framefocus/shared/utils/schedule-colors';
 import { liveAssignees, TASK_ASSIGNEES_EMBED } from '@/lib/tasks/assignees';
 import { taskEvents } from '@/lib/schedule/task-events';
+import { addDays } from '@/lib/schedule/drag';
+import { getCompanyTimeSettings } from '@/lib/services/company';
+import { companyToday } from '@framefocus/shared/utils/dates';
 
 type ScheduleEntryRow = Database['public']['Tables']['schedule_entries']['Row'];
 type InspectionRow = Database['public']['Tables']['inspections']['Row'];
@@ -85,6 +88,8 @@ export async function getScheduleEntries(filters?: {
   projectId?: string;
   from?: string;
   to?: string;
+  /** [S127 P-4] Entries OVERLAPPING [from, to] (a multi-day entry started before `from` counts). */
+  overlap?: { from: string; to: string };
 }): Promise<ScheduleEntry[]> {
   const supabase = await createClient();
 
@@ -97,13 +102,22 @@ export async function getScheduleEntries(filters?: {
   if (filters?.projectId) query = query.eq('project_id', filters.projectId);
   if (filters?.from) query = query.gte('entry_date', filters.from);
   if (filters?.to) query = query.lte('entry_date', filters.to);
+  if (filters?.overlap) {
+    query = query
+      .lte('entry_date', filters.overlap.to)
+      .or(`end_date.gte.${filters.overlap.from},and(end_date.is.null,entry_date.gte.${filters.overlap.from})`);
+  }
 
   const { data, error } = await query;
   if (error) return [];
   return (data ?? []) as unknown as ScheduleEntry[];
 }
 
-export async function getInspections(projectId?: string): Promise<Inspection[]> {
+export async function getInspections(
+  projectId?: string,
+  /** [S127 P-4] Only inspections scheduled inside [from, to]. */
+  window?: { from: string; to: string }
+): Promise<Inspection[]> {
   const supabase = await createClient();
 
   let query = supabase
@@ -113,6 +127,7 @@ export async function getInspections(projectId?: string): Promise<Inspection[]> 
     .order('scheduled_date', { ascending: true, nullsFirst: false });
 
   if (projectId) query = query.eq('project_id', projectId);
+  if (window) query = query.gte('scheduled_date', window.from).lte('scheduled_date', window.to);
 
   const { data, error } = await query;
   if (error) return [];
@@ -126,12 +141,33 @@ export async function getInspections(projectId?: string): Promise<Inspection[]> 
  * filtered to self (5B §9 interpretation: in-project task list/Gantt show all,
  * calendars are own-only for crew).
  */
+/**
+ * [S127 P-4, finding 7] The COMPANY-WIDE calendar's reach: a year back, two
+ * ahead. ⚠️ THE TIME BOMB: with no project to bound it, this read every task,
+ * entry and inspection the company had ever scheduled — fine today, unusable in
+ * a year, growing with company age rather than with what the screen shows.
+ * A PROJECT calendar is NOT windowed: it is bounded by its project, and its
+ * Gantt and day view need the whole job. Navigating the company day view past
+ * the window shows nothing there — stated in S127-report.
+ */
+export const COMPANY_CALENDAR_PAST_DAYS = 365;
+export const COMPANY_CALENDAR_FUTURE_DAYS = 730;
+
 export async function getCalendarEvents(options: {
   projectId?: string;
   ownMemberId?: string; // set for crew: filters task + general events to self
 }): Promise<CalendarEvent[]> {
   const supabase = await createClient();
   const events: CalendarEvent[] = [];
+
+  let window: { from: string; to: string } | undefined;
+  if (!options.projectId) {
+    const today = companyToday((await getCompanyTimeSettings()).timezone);
+    window = {
+      from: addDays(today, -COMPANY_CALENDAR_PAST_DAYS),
+      to: addDays(today, COMPANY_CALENDAR_FUTURE_DAYS),
+    };
+  }
 
   // Source 1: dated tasks — [S121 5-C] ONE EVENT PER ASSIGNEE (Q20).
   // SUPERSEDED: one event per task from the single `assignee:company_members`
@@ -145,8 +181,21 @@ export async function getCalendarEvents(options: {
     .eq('is_deleted', false)
     .eq('is_scheduled', true);
   if (options.projectId) taskQuery = taskQuery.eq('project_id', options.projectId);
+  if (window) {
+    // Tasks OVERLAPPING the window; an undated end counts as still open.
+    taskQuery = taskQuery
+      .or(`start_date.is.null,start_date.lte.${window.to}`)
+      .or(`due_date.is.null,due_date.gte.${window.from}`);
+  }
 
-  const { data: tasks } = await taskQuery;
+  // [S127 P-4, finding 7] The four sources were read ONE AFTER ANOTHER; they do
+  // not depend on each other, so they are read together.
+  const [{ data: tasks }, entries, inspections, expiring] = await Promise.all([
+    taskQuery,
+    getScheduleEntries({ projectId: options.projectId, overlap: window }),
+    getInspections(options.projectId, window),
+    !options.projectId && !options.ownMemberId ? getExpiringCompliance() : Promise.resolve([]),
+  ]);
   // ⚠️ The crew self-filter and the one-bar-per-person expansion live in ONE
   // pure function (lib/schedule/task-events.ts), tested arm by arm.
   events.push(
@@ -169,7 +218,6 @@ export async function getCalendarEvents(options: {
   );
 
   // Source 2: general schedule entries (RLS already limits crew to own)
-  const entries = await getScheduleEntries({ projectId: options.projectId });
   for (const e of entries) {
     if (options.ownMemberId && e.member_id !== options.ownMemberId) continue;
     const trade = tradeOf(e.member);
@@ -202,7 +250,6 @@ export async function getCalendarEvents(options: {
   }
 
   // Source 3: dated inspections — job-level events, no member row
-  const inspections = await getInspections(options.projectId);
   for (const i of inspections) {
     if (!i.scheduled_date) continue;
     events.push({
@@ -236,7 +283,6 @@ export async function getCalendarEvents(options: {
   // returns an empty list and no compliance events appear — the floor, not a
   // filter written here.
   if (!options.projectId && !options.ownMemberId) {
-    const expiring = await getExpiringCompliance();
     for (const doc of expiring) {
       if (!doc.expiration_date) continue; // NULL never alerts (W-9 rule)
       events.push({

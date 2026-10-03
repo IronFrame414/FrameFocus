@@ -1,3 +1,4 @@
+import { cache } from 'react';
 import { createClient, getRequestUser } from '@/lib/supabase-server';
 
 /**
@@ -34,7 +35,9 @@ export type MyProfile = {
   language: 'en' | 'es';
 };
 
-export async function getMyProfile(): Promise<MyProfile | null> {
+// [S127 P-4, finding 10] Per-request memo (React `cache`), like `getProject`: the
+// layout and the page each asked for this, and each paid a round trip.
+export const getMyProfile = cache(async (): Promise<MyProfile | null> => {
   const supabase = await createClient();
 
   const user = await getRequestUser();
@@ -48,4 +51,4 @@ export async function getMyProfile(): Promise<MyProfile | null> {
     .maybeSingle();
 
   return (data as MyProfile | null) ?? null;
-}
+});

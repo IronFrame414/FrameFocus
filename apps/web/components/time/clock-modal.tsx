@@ -194,11 +194,18 @@ export function ClockModal({
       },
       gps_in: gps,
     });
-    setBusy(false);
     if (!res.success) {
+      setBusy(false);
+      // [S127 P-1] A second click: the first clocked in. Close onto the real
+      // state rather than showing the constraint text.
+      if (res.code === 'already_clocked_in') {
+        onDone({});
+        return;
+      }
       setError(res.error ?? 'Failed to clock in.');
       return;
     }
+    // Busy stays on until the parent replaces this modal [S127 P-1].
     onDone({});
   }
 

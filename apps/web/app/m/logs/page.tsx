@@ -1,4 +1,5 @@
-import { getMobileDailyLogs } from '@/lib/services/daily-logs';
+import Link from 'next/link';
+import { getMobileDailyLogs, LOG_FEED_MAX, LOG_FEED_PAGE } from '@/lib/services/daily-logs';
 import { getMyMember } from '@/lib/services/members';
 import { getProject } from '@/lib/services/projects';
 import { getCompanyTimeSettings } from '@/lib/services/company';
@@ -37,7 +38,7 @@ import { getMobileT } from '@/lib/i18n/server';
 export default async function MobileLogsPage({
   searchParams,
 }: {
-  searchParams: { filter?: string; project?: string };
+  searchParams: { filter?: string; project?: string; shown?: string };
 }) {
   const projectId = /^[0-9a-f-]{36}$/.test(searchParams.project ?? '')
     ? searchParams.project!
@@ -65,11 +66,19 @@ export default async function MobileLogsPage({
   // tomorrow. "This week" has the same edge.
   const today = companyToday(timeSettings.timezone);
 
+  // [S127 P-4] Bounded: LOG_FEED_PAGE at a time, "Show older" adds a page.
+  const shown = Number.parseInt(searchParams.shown ?? '', 10);
+  const limit = Number.isFinite(shown) ? shown : LOG_FEED_PAGE;
   const feed = await getMobileDailyLogs({
     mineMemberId: active === 'mine' ? (myMember?.id ?? null) : null,
     projectId: active === 'project' ? projectId : null,
     today,
+    limit,
   });
+  const olderParams = new URLSearchParams();
+  if (projectId) olderParams.set('project', projectId);
+  if (active) olderParams.set('filter', active);
+  olderParams.set('shown', String(Math.min(feed.rows.length + LOG_FEED_PAGE, LOG_FEED_MAX)));
 
   // A-13e — "This project" appears ONLY when a project is in context. The chip
   // set is built from that condition rather than rendered-then-hidden, so a
@@ -93,6 +102,16 @@ export default async function MobileLogsPage({
       <FilterChips chips={chips} active={active} basePath={basePath} param="filter" t={t} />
 
       <LogRows rows={feed.rows} projectId={projectId} />
+
+      {feed.hasMore && feed.rows.length < LOG_FEED_MAX ? (
+        <Link
+          href={`/m/logs?${olderParams.toString()}`}
+          data-testid="m-logs-older"
+          className="mt-[14px] flex min-h-[48px] w-full items-center justify-center rounded-[14px] border border-m6m-border text-[15px] font-semibold text-m6m-blue"
+        >
+          {t('field.logs.showOlder')}
+        </Link>
+      ) : null}
     </div>
   );
 }
