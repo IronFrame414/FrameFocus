@@ -142,10 +142,20 @@ test.describe('M-8 · gallery', () => {
     // the wire proves the absence directly — a DOM assertion could only ever
     // sample for it and would miss a fast swap.
     // ------------------------------------------------------------------
+    // [S127 P-3] Tiles load through the thumbnail PROXY
+    // (`/api/photos/{id}/thumb?v=…`), so this photo is recognised by its id and
+    // what was served by `X-Thumb-Source`; direct storage requests by its file
+    // name are still watched. _Superseded, quoted:_ only
+    // `if (u.includes('m6mp-annotated')) requested.push(u);` (URLs by file name).
     const requested: string[] = [];
+    const proxied: string[] = [];
     page.on('request', (r) => {
       const u = r.url();
       if (u.includes('m6mp-annotated')) requested.push(u);
+    });
+    page.on('response', (res) => {
+      if (res.url().includes(`/api/photos/${px.annotated.id}/thumb`))
+        proxied.push(res.headers()['x-thumb-source'] ?? 'unlabelled');
     });
 
     await page.goto(gallery());
@@ -154,11 +164,14 @@ test.describe('M-8 · gallery', () => {
       timeout: 15_000,
     });
 
-    expect(requested.length).toBeGreaterThan(0);
-    // Every request for this photo was for the DERIVATIVE. The original's own
-    // path was never fetched.
+    expect(requested.length + proxied.length).toBeGreaterThan(0);
+    // Every request for this photo was for the DERIVATIVE (or its stored
+    // thumbnail). The original's own bytes were never served.
     for (const u of requested) {
       expect(u, 'the unannotated original was requested').toContain('.markup.jpg');
+    }
+    for (const source of proxied) {
+      expect(['thumb', 'derivative'], 'the proxy served the unannotated original').toContain(source);
     }
 
     // ...and the pixels on screen are the derivative's.
@@ -172,7 +185,9 @@ test.describe('M-8 · gallery', () => {
     // HALF TWO — the placeholder HOLDS while an image is still arriving.
     // The route never resolves, so the tile stays in its pending state.
     // ------------------------------------------------------------------
-    const stalled = page.route('**/m6mp-plain*', () => {
+    // [S127 P-3] The plain photo's tile is its proxy URL. _Superseded, quoted:_
+    // `page.route('**/m6mp-plain*', …)` (its storage file name).
+    const stalled = page.route(`**/api/photos/${px.plain.id}/thumb*`, () => {
       /* deliberately never resolved */
     });
     await stalled;
@@ -185,7 +200,7 @@ test.describe('M-8 · gallery', () => {
     await expect(p.getByTestId('m-tile-placeholder')).toBeVisible();
     await expect(p.getByTestId('m-tile-image')).toHaveAttribute('data-state', 'pending');
     await expect(p.getByTestId('m-tile-image')).toHaveCSS('opacity', '0');
-    await page.unroute('**/m6mp-plain*');
+    await page.unroute(`**/api/photos/${px.plain.id}/thumb*`);
   });
 
   test('A-22 · a photo with no link column renders NO badge', async ({ page }) => {
@@ -862,10 +877,19 @@ test.describe('the markup save', () => {
     const src = await tile(page, target.id)
       .getByTestId('m-tile-image')
       .getAttribute('src');
-    expect(src).toContain('/storage/v1/object/sign/project-files/');
-    expect(src).toContain(encodeURIComponent(COMPANY_A));
-    expect(src).toContain('token=');
-    expect(src).toMatch(/\.markup\.jpg\?|\.m[0-9a-f]{8}\.thumb\.webp\?/);
+    // [S127 P-3] The tile is the app's thumbnail PROXY, versioned by THIS
+    // markup's fingerprint, and what it serves must be the DERIVATIVE's pixels
+    // (the stored thumbnail of this markup, or the derivative itself — the ruled
+    // fallback), never the unmarked original. _Superseded, quoted:_
+    // `expect(src).toContain('/storage/v1/object/sign/project-files/');`
+    // `expect(src).toContain(encodeURIComponent(COMPANY_A));`
+    // `expect(src).toContain('token=');`
+    // `expect(src).toMatch(/\.markup\.jpg\?|\.m[0-9a-f]{8}\.thumb\.webp\?/);`
+    expect(src).toMatch(new RegExp(`^/api/photos/${target.id}/thumb\\?v=[0-9a-f]{8}$`));
+    const served = await page.request.get(src!);
+    expect(served.status()).toBe(200);
+    expect(served.headers()['cache-control']).toContain('private');
+    expect(['thumb', 'derivative']).toContain(served.headers()['x-thumb-source']);
 
     // Reset so the fixture's other assertions are unaffected by ordering.
     // [S111 D] Read the markup first: its thumbnail's name is derived from it.
