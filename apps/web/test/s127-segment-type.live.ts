@@ -129,7 +129,9 @@ async function closedDay(type: string, approved: boolean, day = DAY, note: strin
       project_id: type === 'work' ? projectId : null,
       segment_start: T(`${h}:00`, day),
       segment_end: T(`${h}:50`, day),
-      note,
+      // An ENDED non-break segment must carry a note (time_segments_note_on_end_check),
+      // so every fixture has one: a retype to shop/work must not trip it.
+      note: note ?? 'S127ST fixture',
     })
     .select('id')
     .single();
