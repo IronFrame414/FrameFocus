@@ -45,9 +45,10 @@ const MOVE_OUT: Record<CompanyRole, boolean> = {
   client: false,
   subcontractor: false,
 };
-/** Row REACH on an invoices-category file (the UPDATE policies), so a refused
- *  move by a role that HAS reach is the new arm, not RLS. Contracts and change
- *  orders: Owner/Admin only. */
+/** Row REACH on an invoices-category file (UPDATE + SELECT policies), so a
+ *  refused move by a role that HAS reach is the new arm, not RLS. The PM's
+ *  fixture hangs off an invoice the PM authored (see pmInvoice). Contracts and
+ *  change orders: Owner/Admin only. */
 const REACH_INVOICE: Record<CompanyRole, boolean> = {
   owner: true,
   admin: true,
@@ -64,16 +65,24 @@ let companyId = '';
 const tempAssignments: string[] = [];
 const revived: { id: string; deleted_at: string | null }[] = [];
 let n = 0;
+/** An invoice the PM AUTHORED. A PM reaches an invoices file only through
+ *  one (files_select_non_client: invoice_id -> author_member_id = me; an UPDATE
+ *  must also pass SELECT), so the PM's invoices fixtures hang off it. Without
+ *  it the PM is refused by RLS and the arm is never met. */
+let pmInvoice: { id: string; project_id: string } | null = null;
 
-async function image(category: string): Promise<string> {
+async function image(category: string, forRole?: CompanyRole): Promise<string> {
+  const viaPmInvoice = category === 'invoices' && forRole === 'project_manager';
+  const project = viaPmInvoice ? pmInvoice!.project_id : PROJECT;
   const id = crypto.randomUUID();
   const { error } = await admin.from('files').insert({
     id,
     company_id: companyId,
-    project_id: PROJECT,
+    project_id: project,
     category,
+    ...(viaPmInvoice ? { invoice_id: pmInvoice!.id } : {}),
     file_name: `${MARK}-${n}.png`,
-    file_path: `${companyId}/${PROJECT}/${MARK}-${n++}.png`,
+    file_path: `${companyId}/${project}/${MARK}-${n++}.png`,
     file_size: 68,
     mime_type: 'image/png',
   });
@@ -141,6 +150,22 @@ beforeAll(async () => {
       if (error) throw new Error(`assign ${role}: ${error.message}`);
       tempAssignments.push(a!.id as string);
     }
+    if (role === 'project_manager') {
+      // Scoped to what the fixture depends on (authored by THIS PM, live),
+      // and ordered.
+      const { data: inv, error } = await admin
+        .from('invoices')
+        .select('id, project_id')
+        .eq('author_member_id', m!.id)
+        .eq('company_id', companyId)
+        .eq('is_deleted', false)
+        .order('created_at', { ascending: true })
+        .order('id', { ascending: true })
+        .limit(1)
+        .single();
+      if (error || !inv) throw new Error(`no invoice authored by the PM: ${error?.message}`);
+      pmInvoice = inv as { id: string; project_id: string };
+    }
   }
   for (const role of Object.keys(IDENTITY) as CompanyRole[])
     session[role] = await sessionFor(IDENTITY[role]);
@@ -166,7 +191,7 @@ for (const category of MONEY) {
   describe(`MOVE OUT of ${category} — DB gate, TOTAL map`, () => {
     forEveryRole(MOVE_OUT, (role, allowed) => {
       it(`${role}: ${allowed ? 'moves' : `refused; still ${category}`}`, async () => {
-        const id = await image(category);
+        const id = await image(category, role);
         const { error } = await session[role]
           .from('files')
           .update({ category: 'other' })
@@ -184,7 +209,7 @@ for (const category of MONEY) {
 describe('REACH CONTROL — invoices: a refused PM/PE move is the new arm, not RLS', () => {
   forEveryRole(REACH_INVOICE, (role, reach) => {
     it(`${role}: a tag write on an invoices image ${reach ? 'lands' : 'is refused'}`, async () => {
-      const id = await image('invoices');
+      const id = await image('invoices', role);
       await session[role]
         .from('files')
         .update({ tags: [`${MARK}-reach`] })
@@ -194,7 +219,7 @@ describe('REACH CONTROL — invoices: a refused PM/PE move is the new arm, not R
   });
   it('PM and PE are refused BY THE ARM: 42501 and its message', async () => {
     for (const role of ['project_manager', 'project_executive'] as CompanyRole[]) {
-      const id = await image('invoices');
+      const id = await image('invoices', role);
       const { error } = await session[role]
         .from('files')
         .update({ category: 'photos' })
@@ -208,7 +233,7 @@ describe('REACH CONTROL — invoices: a refused PM/PE move is the new arm, not R
 describe('THE TWO-STEP ROUTE — image under invoices: move to photos, then share', () => {
   for (const role of ['project_manager', 'project_executive'] as CompanyRole[]) {
     it(`${role}: fails AT THE MOVE; the share that follows changes nothing`, async () => {
-      const id = await image('invoices');
+      const id = await image('invoices', role);
       const move = await session[role].from('files').update({ category: 'photos' }).eq('id', id);
       expect(move.error?.code).toBe('42501');
       expect((await row(id)).category).toBe('invoices');
