@@ -887,3 +887,10 @@ Read from rebuild-test's catalog, where the same file is applied and verified:
 - ⚠️ **What this means live:** an Owner or Admin can now make a public link to one photo from the desktop single view.
   The link is listed under **Public photo links** (reached from the Photos tab), and one click revokes it. **No link
   exists until someone makes one.**
+
+## P-5 + P-2: CI `37126944240` started (13:39Z) on `3679dcd8`, stacked on `main` `aff79789`
+
+Local production build first: `/m` feedback, double-tap, clock-out-task and logs specs **25/25**; desktop punch,
+day-clock-edit and lists **16/16**; tsc 0; build 0; unit **181 / 2,402**; the P-5 guard **3/3**. One rebase conflict
+(an import line in `timesheets/page.tsx`, where 4c and P-5 each added an import) was resolved by keeping both.
+**Order kept as ruled: P-2 before 4d.**
