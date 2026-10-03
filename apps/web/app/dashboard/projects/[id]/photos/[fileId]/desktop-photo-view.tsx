@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { markupHref } from '@/lib/markup/return-to';
+import { ShareLinkButton } from './share-link-dialog';
 import {
   cardStyle,
   color,
@@ -20,6 +21,8 @@ export interface DesktopViewPhoto {
   /** Already formatted by lib/photos/format-taken.ts — the /m words. */
   taken: string;
   by: string;
+  /** [S127 4e] Marked up, derivative missing — nothing marked-up to share yet. */
+  shareBlocked: boolean;
 }
 
 /**
@@ -31,10 +34,12 @@ export function DesktopPhotoView({
   projectId,
   photos,
   initialIndex,
+  canShare = false,
 }: {
   projectId: string;
   photos: DesktopViewPhoto[];
   initialIndex: number;
+  canShare?: boolean;
 }) {
   const [index, setIndex] = useState(initialIndex);
   const photo = photos[index];
@@ -98,6 +103,7 @@ export function DesktopPhotoView({
         >
           Next →
         </button>
+        {canShare ? <ShareLinkButton photo={photo} /> : null}
         <Link
           href={markupHref(projectId, photo.id, 'photos')}
           // Its href changes with every previous/next, and a production

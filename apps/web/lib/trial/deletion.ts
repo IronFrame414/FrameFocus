@@ -416,6 +416,8 @@ export const COMPANY_TABLES: string[] = [
   // file_categories sits between files and projects: files reference it
   // (files_category_fkey) and its per-job rows reference projects (20261039).
   // [S118 item 14] the rename log references projects.
+  // [S127 item 4e] public share links (→ files) and their view log (→ links).
+  'photo_share_link_views', 'photo_share_links',
   'files', 'file_categories', 'project_name_history', 'projects',
   // contacts_dedupe_log (20261265000000) — append-only audit of the one-time
   // email dedupe; company-scoped, walked before contacts [S103].

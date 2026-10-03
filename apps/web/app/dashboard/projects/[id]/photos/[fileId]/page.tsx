@@ -41,7 +41,13 @@ export default async function DesktopPhotoPage({
     hasMarkup: p.hasMarkup,
     taken: formatTakenAt(p.created_at, locale),
     by: p.created_by ? (names.get(p.created_by) ?? '—') : '—',
+    // [S127 4e] Marked up but no derivative yet: there is no marked-up image to
+    // share, and the preview would show the original — so sharing is blocked.
+    shareBlocked: p.hasMarkup && p.derivativeMissing,
   }));
 
-  return <DesktopPhotoView projectId={params.id} photos={photos} initialIndex={index} />;
+  // [S127 4e] Owner/Admin may create a public link (RLS is the real gate).
+  const canShare = profile?.role === 'owner' || profile?.role === 'admin';
+
+  return <DesktopPhotoView projectId={params.id} photos={photos} initialIndex={index} canShare={canShare} />;
 }
