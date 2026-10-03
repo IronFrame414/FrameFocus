@@ -46,3 +46,28 @@ export function canDeletePhoto(role: string | null | undefined): boolean {
 export function canTrashFile(role: string | null | undefined): boolean {
   return canDeletePhoto(role);
 }
+
+// ============================================================================
+// [S127 item 4d, A-1a — RULED Josh, 2026-10-02, option A] BULK actions on a
+// SELECTION of photos: OWNER AND ADMIN ONLY.
+//
+// ⚠️ NARROWER THAN `canDeletePhoto` ON PURPOSE, recorded so it is not relaxed:
+// construction photos are EVIDENCE (concealed conditions, water intrusion,
+// defective work), and a checkbox column puts "select all → delete" one mis-tap
+// from the photos that matter in a dispute two years later. A PM or PE still
+// deletes ONE photo from its view; the multi-select delete is Owner/Admin.
+// It stays a SOFT delete, and the trash (4a) is where it comes back from.
+//
+// "Show to client" is the same two roles because the DATABASE says so:
+// `enforce_files_column_scope` raises "client_visible is Owner/Admin only." for
+// everyone else, so no screen offers it to a role it would refuse.
+// ============================================================================
+export const PHOTO_BULK_ROLES: readonly string[] = ['owner', 'admin'];
+
+export function canBulkDeletePhotos(role: string | null | undefined): boolean {
+  return typeof role === 'string' && PHOTO_BULK_ROLES.includes(role);
+}
+
+export function canSharePhotosWithClient(role: string | null | undefined): boolean {
+  return typeof role === 'string' && PHOTO_BULK_ROLES.includes(role);
+}

@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { useLazySrc } from '@/lib/photos/use-lazy-src';
-import { softDeleteFile } from '@/lib/services/files-client';
+import { setPhotosClientVisible, trashPhotos } from '@/lib/photos/bulk-actions';
 import { shareFailureNote, shareImages, shareSupported } from '@/lib/share-image';
 import type { MarkupData } from '@framefocus/shared/types/markup';
 import {
@@ -80,16 +80,21 @@ const DAYS_PER_PAGE = 4;
 export function PhotoGrid({
   photos,
   projectId,
-  canDelete,
+  canBulkDelete,
+  canShareWithClient,
 }: {
   photos: GridPhoto[];
   projectId: string;
   /**
-   * A-25d — "the UI must not offer an action the DB will reject."
-   * `files_delete_owner_admin` restricts deletion to Owner/Admin, so every
-   * other role gets no Delete control at all rather than one that errors.
+   * [S127 4d, A-1a — RULED] BULK delete is OWNER/ADMIN ONLY
+   * (`canBulkDeletePhotos`): narrower than one-photo delete on purpose, because
+   * a selection puts many photos one mis-tap from the Trash. _Superseded,
+   * quoted:_ "A-25d — `files_delete_owner_admin` restricts deletion to
+   * Owner/Admin" — the prop was `canDelete` (`canDeletePhoto`, four roles).
    */
-  canDelete: boolean;
+  canBulkDelete: boolean;
+  /** [S127 4d, A-1b] "Show to client" — Owner/Admin, as the database allows. */
+  canShareWithClient: boolean;
 }) {
   const t = useT();
   const [visibleDays, setVisibleDays] = useState(DAYS_PER_PAGE);
@@ -153,7 +158,8 @@ export function PhotoGrid({
           onCancel={() => setSelection(null)}
           photos={photos}
           selection={selection}
-          canDelete={canDelete}
+          canBulkDelete={canBulkDelete}
+          canShareWithClient={canShareWithClient}
         />
       ) : (
         <div className="flex justify-end px-[18px] pt-[10px]">
@@ -419,19 +425,22 @@ function SelectionBar({
   onCancel,
   photos,
   selection,
-  canDelete,
+  canBulkDelete,
+  canShareWithClient,
 }: {
   count: number;
   onCancel: () => void;
   photos: GridPhoto[];
   selection: Set<string>;
-  canDelete: boolean;
+  canBulkDelete: boolean;
+  canShareWithClient: boolean;
 }) {
   const router = useRouter();
   const t = useT();
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
+  const [confirmingClient, setConfirmingClient] = useState(false);
   // [S112 R1] Built exports, kept for the life of this bar. A share whose
   // activation expired during the rebuilds ('not-allowed') succeeds on the
   // next tap without rebuilding anything.
@@ -442,13 +451,32 @@ function SelectionBar({
   async function remove() {
     setBusy(true);
     // Soft delete — the trash-bin pattern, never a hard delete (CLAUDE.md).
-    // Acts on THE SELECTED SET, which is what A-22e asserts.
-    const results = await Promise.all(chosen.map((p) => softDeleteFile(p.id)));
-    const failed = results.filter((r) => !r.success).length;
+    // Acts on THE SELECTED SET, which is what A-22e asserts. [S127 4d] Through
+    // the shared bulk module desktop uses too.
+    const outcome = await trashPhotos(chosen.map((p) => p.id));
+    const failed = outcome.total - outcome.done;
     setBusy(false);
     setConfirming(false);
     if (failed > 0) {
       setNote(t('photos.grid.deleteFailed', { failed, total: chosen.length }));
+      return;
+    }
+    onCancel();
+    router.refresh();
+  }
+
+  async function showToClient() {
+    setBusy(true);
+    const outcome = await setPhotosClientVisible(
+      chosen.map((p) => p.id),
+      true
+    );
+    setBusy(false);
+    setConfirmingClient(false);
+    if (outcome.done < outcome.total) {
+      setNote(
+        t('photos.grid.clientFailed', { failed: outcome.total - outcome.done, total: outcome.total })
+      );
       return;
     }
     onCancel();
@@ -533,8 +561,19 @@ function SelectionBar({
       >
         {busy && !confirming ? t('photos.grid.preparing') : t('photos.grid.share')}
       </button>
-      {/* Absent entirely for a role the DB would refuse (A-25d). */}
-      {canDelete ? (
+      {canShareWithClient ? (
+        <button
+          type="button"
+          data-testid="m-bulk-client"
+          disabled={busy || count === 0}
+          onClick={() => setConfirmingClient(true)}
+          className="flex min-h-[44px] items-center rounded-full border border-m6m-border px-[14px] text-[14px] font-semibold text-m6m-navy disabled:opacity-40"
+        >
+          {t('photos.grid.showToClient')}
+        </button>
+      ) : null}
+      {/* Absent entirely for a role not allowed it (A-25d; S127 4d: Owner/Admin). */}
+      {canBulkDelete ? (
         <button
           type="button"
           data-testid="m-bulk-delete"
@@ -567,6 +606,7 @@ function SelectionBar({
               ? t('photos.grid.deleteOne', { n: count })
               : t('photos.grid.deleteMany', { n: count })}
           </p>
+          <p className="mt-[4px] text-[13px] text-m6m-muted">{t('photos.grid.deleteToTrash')}</p>
           <div className="mt-[10px] flex gap-[8px]">
             <button
               type="button"
@@ -584,6 +624,42 @@ function SelectionBar({
               className="flex min-h-[44px] flex-1 items-center justify-center rounded-[12px] border border-m6m-border text-[15px] font-semibold text-m6m-navy"
             >
               {t('photos.grid.keep')}
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {/* [S127 4d] Show to client CONFIRMS FIRST, and says who will not see them. */}
+      {confirmingClient ? (
+        <div
+          data-testid="m-bulk-client-confirm"
+          role="dialog"
+          aria-label={t('photos.grid.showToClient')}
+          className="absolute inset-x-[18px] top-full z-50 mt-[6px] rounded-[14px] border border-m6m-border bg-m6m-card p-[14px] shadow-lg"
+        >
+          <p className="text-[15px] font-semibold text-m6m-navy">
+            {count === 1
+              ? t('photos.grid.clientConfirmOne', { n: count })
+              : t('photos.grid.clientConfirmMany', { n: count })}
+          </p>
+          <p className="mt-[4px] text-[13px] text-m6m-muted">{t('photos.grid.clientCaveat')}</p>
+          <div className="mt-[10px] flex gap-[8px]">
+            <button
+              type="button"
+              data-testid="m-bulk-client-confirm-yes"
+              onClick={showToClient}
+              disabled={busy}
+              className="flex min-h-[44px] flex-1 items-center justify-center rounded-[12px] bg-m6m-blue text-[15px] font-bold text-white disabled:opacity-60"
+            >
+              {busy ? t('photos.grid.sharing') : t('photos.grid.show')}
+            </button>
+            <button
+              type="button"
+              data-testid="m-bulk-client-confirm-no"
+              onClick={() => setConfirmingClient(false)}
+              className="flex min-h-[44px] flex-1 items-center justify-center rounded-[12px] border border-m6m-border text-[15px] font-semibold text-m6m-navy"
+            >
+              {t('photos.grid.cancel')}
             </button>
           </div>
         </div>

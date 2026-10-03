@@ -107,6 +107,17 @@ export const en = {
   'photos.grid.deleteMany': 'Delete {n} photos?',
   'photos.grid.deleting': 'Deleting…',
   'photos.grid.keep': 'Keep',
+  // [S127 4d] Bulk delete states where the photos go; bulk "show to client"
+  // states who will and will not see them, before it runs.
+  'photos.grid.deleteToTrash': 'They go to Trash, where they can be restored (Photos → Trash).',
+  'photos.grid.showToClient': 'Show to client',
+  'photos.grid.clientConfirmOne': 'Show {n} photo in the client portal?',
+  'photos.grid.clientConfirmMany': 'Show {n} photos in the client portal?',
+  'photos.grid.clientCaveat':
+    'Only a client with full portal access sees them; a documents-only client sees nothing. A marked-up photo shows its markup.',
+  'photos.grid.show': 'Show',
+  'photos.grid.sharing': 'Sharing…',
+  'photos.grid.clientFailed': '{failed} of {total} could not be shown to the client.',
   'photos.search.label': 'Search photos',
   'photos.search.close': 'Close search',
   'photos.day.today': 'TODAY',
@@ -348,6 +359,16 @@ export const es: Record<keyof typeof en, string> = {
   'photos.grid.deleteMany': '¿Borrar {n} fotos?',
   'photos.grid.deleting': 'Borrando…',
   'photos.grid.keep': 'Conservar',
+  'photos.grid.deleteToTrash':
+    'Van a la Papelera, donde se pueden restaurar (Fotos → Papelera).',
+  'photos.grid.showToClient': 'Mostrar al cliente',
+  'photos.grid.clientConfirmOne': '¿Mostrar {n} foto en el portal del cliente?',
+  'photos.grid.clientConfirmMany': '¿Mostrar {n} fotos en el portal del cliente?',
+  'photos.grid.clientCaveat':
+    'Solo las ve un cliente con acceso completo al portal; un cliente con acceso solo a documentos no ve nada. Una foto con marcas muestra sus marcas.',
+  'photos.grid.show': 'Mostrar',
+  'photos.grid.sharing': 'Compartiendo…',
+  'photos.grid.clientFailed': '{failed} de {total} no se pudieron mostrar al cliente.',
   'photos.search.label': 'Buscar fotos',
   'photos.search.close': 'Cerrar búsqueda',
   'photos.day.today': 'HOY',

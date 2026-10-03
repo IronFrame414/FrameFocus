@@ -1,5 +1,9 @@
 import Link from 'next/link';
-import { canDeletePhoto } from '@/lib/photos/delete-permission';
+import {
+  canBulkDeletePhotos,
+  canDeletePhoto,
+  canSharePhotosWithClient,
+} from '@/lib/photos/delete-permission';
 import { getProjectPhotos } from '@/lib/services/photos';
 import { getMyProfile } from '@/lib/services/profiles';
 import { getCompanyTimeSettings } from '@/lib/services/company';
@@ -8,6 +12,7 @@ import { cardStyle, color, font, microLabelStyle } from '@/lib/theme';
 import PhotoVisibilityToggle from './photo-visibility-toggle';
 import { AddPhotosButton } from './add-photos-button';
 import { GridThumb } from './grid-thumb';
+import { PhotoSelectionProvider, SelectablePhotoTile } from './photo-selection';
 
 // Redesign 6.2 — the desktop gallery: A SURFACING JOB, NOT A BUILD. The data
 // derivation is the SAME `getProjectPhotos()` the mobile gallery uses (lib —
@@ -85,6 +90,10 @@ export default async function ProjectPhotosPage({
   const days = [...byDay.keys()].sort((a, b) => b.localeCompare(a));
 
   const base = `/dashboard/projects/${params.id}/photos`;
+  // [S127 4d, A-1] Multi-select is Owner/Admin (RULED A-1a; client_visible is
+  // Owner/Admin in the database). Every other role gets the grid unchanged.
+  const canBulkDelete = canBulkDeletePhotos(profile?.role);
+  const canShareWithClient = canSharePhotosWithClient(profile?.role);
 
   return (
     <div>
@@ -147,6 +156,12 @@ export default async function ProjectPhotosPage({
         })}
       </div>
 
+      <PhotoSelectionProvider
+        enabled={filtered.length > 0 && (canBulkDelete || canShareWithClient)}
+        canBulkDelete={canBulkDelete}
+        canShareWithClient={canShareWithClient}
+        trashHref={`${base}/trash`}
+      >
       {filtered.length === 0 ? (
         <div style={{ ...cardStyle, padding: '48px', textAlign: 'center', color: color.muted }}>
           No photos{active ? ' under this filter' : ' yet'}. Photos land here from uploads, daily
@@ -166,6 +181,7 @@ export default async function ProjectPhotosPage({
               }}
             >
               {byDay.get(day)!.map((p) => (
+                <SelectablePhotoTile key={p.id} id={p.id}>
                 <Link
                   key={p.id}
                   // [S122 0-B-5] ?from=photos — the markup screen's back link returns here.
@@ -208,11 +224,13 @@ export default async function ProjectPhotosPage({
                     <PhotoVisibilityToggle fileId={p.id} initial={Boolean(p.client_visible)} />
                   )}
                 </Link>
+                </SelectablePhotoTile>
               ))}
             </div>
           </div>
         ))
       )}
+      </PhotoSelectionProvider>
     </div>
   );
 }

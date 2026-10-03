@@ -12,7 +12,11 @@ import { PhotoSearch } from './photo-search';
 import { getMobileT, getMyLanguage } from '@/lib/i18n/server';
 import { dateLocale } from '@/lib/i18n/dates';
 import type { T } from '@/lib/i18n/messages';
-import { canDeletePhoto } from '@/lib/photos/delete-permission';
+import {
+  canBulkDeletePhotos,
+  canDeletePhoto,
+  canSharePhotosWithClient,
+} from '@/lib/photos/delete-permission';
 
 // M6M §4.8 — M-8 · Project photos, the gallery.
 //
@@ -196,7 +200,12 @@ export default async function ProjectPhotosPage({
         </div>
       </div>
 
-      <PhotoGrid photos={rows} projectId={params.projectId} canDelete={canDelete} />
+      <PhotoGrid
+        photos={rows}
+        projectId={params.projectId}
+        canBulkDelete={canBulkDeletePhotos(profile?.role)}
+        canShareWithClient={canSharePhotosWithClient(profile?.role)}
+      />
     </div>
   );
 }
