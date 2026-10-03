@@ -419,3 +419,65 @@ errors in the 6 converted files; reverting restored `tsc` exit 0.
   of it. That is the constant being honest about its own scope, not a permission decision.
 - **Scope at S112:** 7 of 124 unit test files matched a hand-enumeration shape; 6 were permission
   decisions and were converted (10 maps). The commands are in `docs/sessions/S112-overnight-2.md`.
+
+---
+
+## CI speed: measure first; coverage is never the price — **RULED [Josh, 2026-10-03, S127]**
+
+> [Josh, 2026-10-03] *"what can be done to speed this up without losing any quality or content?"* … *"these items
+> should also be added to the instructions for cc at the repo level"*
+
+### The measure-first rule
+
+**This project does not optimise on a guess.** The 2026-09-29 performance diagnosis was exactly that mistake, made
+from dev-mode compile times. Before any CI change, break a real run down: **total wall time; setup/teardown vs test
+execution; the slowest specs; peak database connections.** Then state which number came from a finished run's
+**logs** (the jobs API step times; Playwright's per-test durations and timestamps) and which from an **instrumented**
+run (e.g. sampling `pg_stat_activity` on rebuild-test while the run executes). Never present one as the other.
+
+### The S127 baseline (run `37130101549`, 4d, green, 2026-10-03)
+
+| measure | value | source |
+| --- | --- | --- |
+| run wall | ~36 min (14:34:51 → 15:10:40Z) | jobs API |
+| everything but Playwright (checkout, `npm ci`, browsers, production build, lint/type/unit in parallel) | ~3 min | jobs API |
+| Playwright step | **32.7 min** | jobs API |
+| inside tests (sum of 727 reported durations) | **28.1 min** (~2.3 s/test) | log |
+| outside tests (hooks, fixtures, gaps) | **4.5 min**, of which **3.2** are the two S111 thumbnail fixtures (serial thumbnail generation) | log timestamps |
+| slowest files | `m-writes` 2.6, `desktop-photos-thumbnails-s111` 2.6 (2.3 of it fixture), `desktop-chat-poll` 1.7, `m-destinations` 1.5, `desktop-trial-screens` 1.3 min; a long tail after | log |
+| DB connections | see the S127 report § "Part 2.2": partial window 37–40 of 60 (authenticator pool 21); a full-run sample on `37132765461` | instrumented |
+
+**Reading:** the time is **test execution, serial**, not setup or teardown. No single spec dominates. The lever is
+running tests concurrently, and that is exactly what the ruling below forbids until fixtures are isolated.
+
+### Why `workers: 1` — recorded so it is not raised blind
+
+`ci.yml` (*"UN-SHARDED, DELIBERATELY … [Josh, S134]"*) and TECH_DEBT **#150** (option D chosen). Cause: **CI #201**.
+Under S133's four shards, a change order written by `m-co-recalc-route.spec.ts` on one shard was read by
+`desktop-payload.spec.ts:175`'s **assert-absence** on another. Sharding and `workers > 1` **both** introduce that
+intra-DB concurrency. **The blocker is #149:** the pinned e2e fixtures are hand-curated on rebuild-test and
+reproducible from no script. #150 rated plain namespacing **"Breaks"**: 13 spec files carry literal fixture UUIDs.
+
+### ❌ REJECTED: a subset of tests on branches, the full suite only on `main`
+
+**Not evaluated again.** The `main` run is skipped by tree identity (the S180 merge rule), so a subset on the branch
+means the full suite never runs on that code, and nothing would catch what the subset missed.
+
+### The ranked backlog (its own item, never started mid-queue)
+
+Invasive CI work needs its own serial CI runs to prove, on the one database. **Never start it while feature work
+is in flight.**
+1. **Reproducible seed (#149) → per-worker namespaced fixtures → `workers > 1`.** Every test creates its own company
+   and users under a worker-unique prefix; the 13 literal UUIDs go; every assert-absence/count test is checked
+   against concurrent writers. **Prove the test count is identical before and after** (same tests, same
+   assertions). Four workers is roughly a quarter of the wall time, and it kills the fixture-collision red class.
+2. **CI gets its own database: one per run, or a second Supabase project.** The root cause of BOTH red classes
+   (fixture collision; connection exhaustion on a run that had the DB to itself), and the reason a migration cannot
+   be applied while CI runs and database work queues behind 35–50-minute runs.
+3. **Shard across jobs, ONLY after (2).** Without separate databases the shards collide (CI #201). With them, ~40
+   minutes becomes roughly 10.
+4. **Codespace stability.** Report the idle timeout and machine size and what changing them costs; **Josh decides.**
+
+**The runner:** `ubuntu-latest` (standard). A larger runner buys little **while `workers: 1` holds**: a serial
+suite against a remote DB waits on network and database, not CPU. **Re-assess after (1), not before.**
+

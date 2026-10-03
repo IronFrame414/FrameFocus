@@ -126,6 +126,22 @@ its migration errors real users). Only the approval round-trip changed; **applyi
 production is still Josh's action**, so a migration-bearing branch cannot merge until he has. Full
 text: [`rules.md`](docs/claude/rules.md).
 
+### CI speed: measure first; coverage is never the price — **RULED [Josh, 2026-10-03, S127]**
+
+**Never optimise CI on a guess** (the 2026-09-29 performance diagnosis was one). Break a run down before changing
+it: wall time, setup vs test execution, the slowest specs, peak DB connections, and say which number came from
+logs and which from instrumentation. Baseline (S127, run `37130101549`): **32.7 of ~36 min is the Playwright
+step; 28.1 min of that is inside tests** (727, ~2.3 s each), 4.5 min hooks/setup (3.2 of it the S111 thumbnail
+fixtures). **`workers: 1` is a ruling, not an accident** (`ci.yml`, TECH_DEBT #150, CI #201): every speedup that
+runs tests concurrently against the one rebuild-test DB reintroduces assert-absence/count collisions.
+- ❌ **REJECTED, do not re-propose: a test SUBSET on branches with the full suite only on `main`.** The `main`
+  run is skipped by tree identity, so nothing would ever catch what the subset missed.
+- **The ranked backlog, in order:** (1) a reproducible e2e seed (#149) + per-worker namespaced fixtures, then
+  `workers > 1`, test count proven identical before/after; (2) CI's own database (one per run, or a second
+  project) — the root of both red classes; (3) shard across jobs, **only after (2)**; (4) Codespace idle
+  timeout / machine size (Josh decides). A bigger runner buys little while `workers: 1` holds; re-assess after (1).
+Full text: [`rules.md`](docs/claude/rules.md).
+
 ### Questions are asked in plain text, never the interactive picker — **MANDATORY [Josh, S180]**
 
 Every question to Josh goes in the FINAL message of a turn, as plain text, then the turn ends. Never
