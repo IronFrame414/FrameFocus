@@ -3,6 +3,7 @@
 import { supervisesProjectWork } from '@framefocus/shared/constants/roles';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
+import { usePendingNavigation } from '@/lib/navigation/pending-navigation';
 import { Image as ImageIcon } from 'lucide-react';
 import { completePunchItem, verifyPunchItem } from '@/lib/services/punch-client';
 import { uploadFile } from '@/lib/services/files-client';
@@ -80,6 +81,7 @@ export function PunchActions({
   const online = useOnline();
 
   const [busy, setBusy] = useState(false);
+  const nav = usePendingNavigation();
   const [error, setError] = useState<string | null>(null);
   const [photoId, setPhotoId] = useState<string | null>(item.completion_photo_file_id);
   const [uploading, setUploading] = useState(false);
@@ -124,7 +126,9 @@ export function PunchActions({
       setError(result.error ?? t('photos.punch.completeFailed'));
       return;
     }
-    router.refresh();
+    // [S127 P-2] The button reads `nav.isPending` too, so it stays busy until
+    // the refreshed item has landed — not live on the stale one.
+    nav.navigate(null);
   }
 
   async function verify() {
@@ -140,7 +144,9 @@ export function PunchActions({
       setError(result.error ?? t('photos.punch.verifyFailed'));
       return;
     }
-    router.refresh();
+    // [S127 P-2] The button reads `nav.isPending` too, so it stays busy until
+    // the refreshed item has landed — not live on the stale one.
+    nav.navigate(null);
   }
 
   return (
@@ -219,7 +225,7 @@ export function PunchActions({
             // would explain nothing, and the notice above already says what is
             // needed.
             disabled={!online}
-            busy={busy}
+            busy={busy || nav.isPending}
             testId="m-punch-complete"
           />
           {needsPhoto ? (
@@ -239,7 +245,7 @@ export function PunchActions({
               busyLabel={t('photos.punch.verifying')}
               onClick={verify}
               disabled={!online || wouldBeSelfVerify}
-              busy={busy}
+              busy={busy || nav.isPending}
               testId="m-punch-verify"
             />
             {wouldBeSelfVerify ? (

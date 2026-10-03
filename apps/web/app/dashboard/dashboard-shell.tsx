@@ -1,4 +1,6 @@
 'use client';
+import { Suspense } from 'react';
+import { NavPending } from '@/components/navigation/nav-pending';
 import { createClient } from '@/lib/supabase-browser';
 import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -448,7 +450,14 @@ export function DashboardShell({
             userRole={userRole}
           />
         </header>
-        <main className="flex-1 bg-[#f4f6fa] px-[30px] py-[26px]">{children}</main>
+        <main className="flex-1 bg-[#f4f6fa] px-[30px] py-[26px]">
+          {/* [S127 P-2] The dashboard had NO navigation feedback (S125 finding
+              2). The same bar /m uses; fixed to the window's top edge. */}
+          <Suspense fallback={null}>
+            <NavPending prefix="/dashboard" placement="fixed" testId="nav-pending" />
+          </Suspense>
+          {children}
+        </main>
       </div>
       {/* ND-33 / A-C24 — the chat launcher and panel mount ONCE, here, so they
           render on every /dashboard route including the ones that have nothing

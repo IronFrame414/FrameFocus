@@ -2,6 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
+import { usePendingNavigation } from '@/lib/navigation/pending-navigation';
 import type { SessionWithSegments, TimeSegment } from '@/lib/services/time-tracking';
 import {
   listPickerTasks,
@@ -90,6 +91,7 @@ export function SwitchScreen({
   const [note, setNote] = useState('');
   const [completion, setCompletion] = useState<Completion | null>(null);
   const [busy, setBusy] = useState(false);
+  const nav = usePendingNavigation();
   const [error, setError] = useState<string | null>(null);
 
   const closingKey = TYPE_KEY[openSegment.segment_type];
@@ -147,13 +149,14 @@ export function SwitchScreen({
       },
     });
 
-    setBusy(false);
     if (!result.success) {
+      setBusy(false);
       setError(result.error ?? t('field.switch.failed'));
       return;
     }
-    router.push('/m/timeclock');
-    router.refresh();
+    // [S127 P-2] Busy stays on, and the bar shows, until the timeclock screen
+    // has replaced this one; this screen unmounts on arrival.
+    nav.navigate('/m/timeclock');
   }
 
   const nowLabel = hhmm(new Date().toISOString());
