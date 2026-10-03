@@ -1623,6 +1623,74 @@ export type Database = {
         }
         Relationships: []
       }
+      company_holiday_rules: {
+        Row: {
+          company_id: string
+          created_at: string
+          created_by: string | null
+          day: number | null
+          deleted_at: string | null
+          enabled: boolean
+          id: string
+          is_deleted: boolean
+          kind: string
+          month: number
+          name: string
+          offset_days: number
+          ordinal: number | null
+          rule_key: string
+          updated_at: string
+          updated_by: string | null
+          weekday: number | null
+        }
+        Insert: {
+          company_id?: string
+          created_at?: string
+          created_by?: string | null
+          day?: number | null
+          deleted_at?: string | null
+          enabled: boolean
+          id?: string
+          is_deleted?: boolean
+          kind: string
+          month: number
+          name: string
+          offset_days?: number
+          ordinal?: number | null
+          rule_key: string
+          updated_at?: string
+          updated_by?: string | null
+          weekday?: number | null
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          created_by?: string | null
+          day?: number | null
+          deleted_at?: string | null
+          enabled?: boolean
+          id?: string
+          is_deleted?: boolean
+          kind?: string
+          month?: number
+          name?: string
+          offset_days?: number
+          ordinal?: number | null
+          rule_key?: string
+          updated_at?: string
+          updated_by?: string | null
+          weekday?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "company_holiday_rules_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       company_holidays: {
         Row: {
           company_id: string
@@ -12291,6 +12359,10 @@ export type Database = {
         Returns: string
       }
       schema_fingerprint: { Args: never; Returns: Json }
+      seed_company_holiday_rules: {
+        Args: { p_company_id: string; p_enabled: boolean }
+        Returns: undefined
+      }
       seed_default_tags: { Args: { p_company_id: string }; Returns: undefined }
       seed_file_categories: {
         Args: { p_company_id: string }
