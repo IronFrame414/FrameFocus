@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
-import { createClient } from '@/lib/supabase-server';
+import { createClient, getRequestUser } from '@/lib/supabase-server';
 import { getProject } from '@/lib/services/projects';
 import { getDailyLog } from '@/lib/services/daily-logs';
 import { getMembers, getMyMember } from '@/lib/services/members';
@@ -18,9 +18,7 @@ export default async function EditDailyLogPage({
   params: { projectId: string; logId: string };
 }) {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getRequestUser();
   if (!user) redirect('/sign-in');
 
   const { data: profile } = await supabase

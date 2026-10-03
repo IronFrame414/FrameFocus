@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase-server';
+import { createClient, getRequestUser } from '@/lib/supabase-server';
 import { redirect } from 'next/navigation';
 import { getProjects } from '@/lib/services/projects';
 import { getCompanyTimeSettings } from '@/lib/services/company';
@@ -17,9 +17,7 @@ export default async function NewExpensePage({
 }) {
   const supabase = await createClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getRequestUser();
   if (!user) redirect('/sign-in');
 
   // Role feeds the photo-requirement exemption (Owner/Admin, presentation-only).

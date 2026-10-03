@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase-server';
+import { createClient, getRequestUser } from '@/lib/supabase-server';
 import { getSubscription } from '@/lib/services/billing';
 import { redirect } from 'next/navigation';
 import { PlanSelection } from './plan-selection';
@@ -6,9 +6,7 @@ import { brand } from '@/lib/brand';
 
 export default async function PlansPage() {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getRequestUser();
 
   if (!user) redirect('/sign-in');
 

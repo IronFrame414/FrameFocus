@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase-server';
+import { createClient, getRequestUser } from '@/lib/supabase-server';
 import { redirect } from 'next/navigation';
 import {
   getReleasesForProject,
@@ -32,9 +32,7 @@ export default async function LienReleasesPage({
   const { id } = await params;
   const supabase = await createClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getRequestUser();
   if (!user) redirect('/sign-in');
 
   const { data: profile } = await supabase

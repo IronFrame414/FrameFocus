@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase-server';
+import { createClient, getRequestUser } from '@/lib/supabase-server';
 import UploadForm from './upload-form';
 
 export default async function UploadFilePage({ params }: { params: Promise<{ id: string }> }) {
@@ -8,9 +8,7 @@ export default async function UploadFilePage({ params }: { params: Promise<{ id:
   // Owner/Admin" for everyone else — the role decides which sentence renders;
   // RLS enforces the rule underneath either way.
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getRequestUser();
   let canEmptyTrash = false;
   if (user) {
     const { data: profile } = await supabase

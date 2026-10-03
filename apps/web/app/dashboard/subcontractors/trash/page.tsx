@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { createClient } from '@/lib/supabase-server';
+import { createClient, getRequestUser } from '@/lib/supabase-server';
 import { getDeletedSubcontractors } from '@/lib/services/subcontractors';
 import SubcontractorTrashRow from './trash-row';
 import { editsSubDirectory } from '@framefocus/shared/constants/roles';
@@ -18,9 +18,7 @@ import { editsSubDirectory } from '@framefocus/shared/constants/roles';
 export default async function SubcontractorsTrashPage() {
   const supabase = await createClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getRequestUser();
   if (!user) redirect('/sign-in');
 
   const { data: profile } = await supabase

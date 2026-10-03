@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase-server';
+import { createClient, getRequestUser } from '@/lib/supabase-server';
 import { redirect } from 'next/navigation';
 import { getCompanySettingsBundle } from '@/lib/services/company';
 import { SettingsForm } from './settings-form';
@@ -117,9 +117,7 @@ export default async function SettingsPage({
 }) {
   const supabase = await createClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getRequestUser();
   if (!user) redirect('/sign-in');
 
   // Check role — only owner and admin can access settings.

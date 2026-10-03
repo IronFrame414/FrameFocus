@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { createClient } from '@/lib/supabase-server';
+import { createClient, getRequestUser } from '@/lib/supabase-server';
 import { getFiles } from '@/lib/services/files';
 import TrashRow from './trash-row';
 import { canTrashFile } from '@/lib/photos/delete-permission';
@@ -14,9 +14,7 @@ export default async function ProjectFilesTrashPage({
   const { id: projectId } = await params;
 
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getRequestUser();
   if (!user) redirect('/sign-in');
 
   const { data: profile } = await supabase

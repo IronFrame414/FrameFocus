@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { createClient } from '@/lib/supabase-server';
+import { createClient, getRequestUser } from '@/lib/supabase-server';
 import { redirect } from 'next/navigation';
 import { getTeamMember, getCompanyAdmins } from '@/lib/services/team';
 import { getMemberBurden, getMemberRates } from '@/lib/services/pay-rates';
@@ -12,9 +12,7 @@ import { ScheduleColourSection } from './schedule-colour-section';
 export default async function TeamMemberEditPage({ params }: { params: { id: string } }) {
   const supabase = await createClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getRequestUser();
   if (!user) redirect('/sign-in');
 
   const { data: caller } = await supabase

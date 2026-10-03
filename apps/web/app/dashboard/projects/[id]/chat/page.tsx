@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase-server';
+import { createClient, getRequestUser } from '@/lib/supabase-server';
 import { redirect } from 'next/navigation';
 import { ChatTab } from '@/components/chat/chat-tab';
 
@@ -28,9 +28,7 @@ import { ChatTab } from '@/components/chat/chat-tab';
 export default async function ProjectChatPage({ params }: { params: { id: string } }) {
   const supabase = await createClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getRequestUser();
   if (!user) redirect('/sign-in');
 
   const { data: profile } = await supabase

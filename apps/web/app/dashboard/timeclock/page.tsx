@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase-server';
+import { createClient, getRequestUser } from '@/lib/supabase-server';
 import { redirect } from 'next/navigation';
 import { getOpenSession } from '@/lib/services/time-tracking';
 import { getProjects } from '@/lib/services/projects';
@@ -18,9 +18,7 @@ import { TimeclockClient } from './timeclock-client';
 export default async function TimeclockPage() {
   const supabase = await createClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getRequestUser();
   if (!user) redirect('/sign-in');
 
   const { data: profile } = await supabase

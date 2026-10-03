@@ -4,7 +4,7 @@ import { closeoutFromLog, isDailyLogOffice } from '@/lib/daily-logs/closeout';
 import { UserText } from '@/components/i18n/user-text';
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
-import { createClient } from '@/lib/supabase-server';
+import { createClient, getRequestUser } from '@/lib/supabase-server';
 import { getProject } from '@/lib/services/projects';
 import {
   getDailyLog,
@@ -52,9 +52,7 @@ export default async function DailyLogDetailPage({
   params: { projectId: string; logId: string };
 }) {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getRequestUser();
   if (!user) redirect('/sign-in');
 
   const { data: profile } = await supabase

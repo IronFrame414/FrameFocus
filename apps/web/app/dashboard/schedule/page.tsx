@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase-server';
+import { createClient, getRequestUser } from '@/lib/supabase-server';
 import { getCalendarEvents, getScheduleJobChoices } from '@/lib/services/schedule';
 import { getMembers, getMyMember } from '@/lib/services/members';
 import { canSchedule } from '@/lib/schedule/authority';
@@ -16,9 +16,7 @@ import { cardStyle, color, h2Style } from '@/lib/theme';
  */
 export default async function SchedulePage() {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getRequestUser();
 
   const { data: profile } = await supabase
     .from('profiles')

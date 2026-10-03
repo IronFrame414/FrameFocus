@@ -1,13 +1,11 @@
-import { createClient } from '@/lib/supabase-server';
+import { createClient, getRequestUser } from '@/lib/supabase-server';
 import { redirect } from 'next/navigation';
 import { getAllTags } from '@/lib/services/tag-options';
 import { TagsManager } from './tags-manager';
 
 export default async function TagsSettingsPage() {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getRequestUser();
   if (!user) redirect('/sign-in');
 
   // Owner/admin only — matches settings page pattern

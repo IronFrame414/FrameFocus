@@ -1,5 +1,5 @@
 import { notFound, redirect } from 'next/navigation';
-import { createClient } from '@/lib/supabase-server';
+import { createClient, getRequestUser } from '@/lib/supabase-server';
 import {
   getAllowanceBudgetLines,
   getProjectSelections,
@@ -20,9 +20,7 @@ import { SelectionSheet } from './selection-sheet';
  */
 export default async function SelectionSheetPage({ params }: { params: { id: string; selectionId: string } }) {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getRequestUser();
   if (!user) redirect('/sign-in');
   const { data: profile } = await supabase
     .from('profiles')

@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase-server';
+import { createClient, getRequestUser } from '@/lib/supabase-server';
 import { seesProjectMoney } from '@framefocus/shared/constants/roles';
 import { redirect } from 'next/navigation';
 import { redactCo } from '@/lib/co-redaction';
@@ -15,9 +15,7 @@ import { ChangesPanel } from './changes-panel';
 export default async function ProjectChangesPage({ params }: { params: { id: string } }) {
   const supabase = await createClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getRequestUser();
   if (!user) redirect('/sign-in');
 
   const { data: profile } = await supabase

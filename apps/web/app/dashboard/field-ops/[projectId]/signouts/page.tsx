@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
-import { createClient } from '@/lib/supabase-server';
+import { getRequestUser } from '@/lib/supabase-server';
 import { getProject } from '@/lib/services/projects';
 import { getMaterialSignouts, getSignoutViewer, signoutToday } from '@/lib/services/material-signouts';
 import { FieldTabs } from '@/components/field/field-tabs';
@@ -11,10 +11,7 @@ import { SignoutList } from '@/components/material-signouts/signout-list';
 // and the record are the SAME components /m renders (PARITY).
 
 export default async function ProjectSignoutsPage({ params }: { params: { projectId: string } }) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getRequestUser();
   if (!user) redirect('/sign-in');
 
   const project = await getProject(params.projectId);

@@ -1,5 +1,5 @@
 import { managesProjectOperations } from '@framefocus/shared/constants/roles';
-import { createClient } from '@/lib/supabase-server';
+import { createClient, getRequestUser } from '@/lib/supabase-server';
 import { redirect } from 'next/navigation';
 import { getProjectAssignments } from '@/lib/services/project-assignments';
 import { getMembers } from '@/lib/services/members';
@@ -8,9 +8,7 @@ import { TeamPanel } from './team-panel';
 export default async function ProjectTeamPage({ params }: { params: { id: string } }) {
   const supabase = await createClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getRequestUser();
   if (!user) redirect('/sign-in');
 
   const { data: profile } = await supabase

@@ -1,5 +1,5 @@
 import { supervisesProjectWork } from '@framefocus/shared/constants/roles';
-import { createClient } from '@/lib/supabase-server';
+import { createClient, getRequestUser } from '@/lib/supabase-server';
 import { redirect } from 'next/navigation';
 import { getExpenses } from '@/lib/services/expenses';
 import { getExpenseReceiptsByExpense } from '@/lib/services/expenses';
@@ -21,9 +21,7 @@ import { SIGNED_URL_TTL_SECONDS } from '@/lib/services/signed-url-ttl';
 export default async function ExpensesPage() {
   const supabase = await createClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getRequestUser();
   if (!user) redirect('/sign-in');
 
   const { data: profile } = await supabase

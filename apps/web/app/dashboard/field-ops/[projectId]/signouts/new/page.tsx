@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
-import { createClient } from '@/lib/supabase-server';
+import { getRequestUser } from '@/lib/supabase-server';
 import { loadNewSignout } from '@/lib/services/material-signouts';
 import { FieldTabs } from '@/components/field/field-tabs';
 import { SignoutNewForm } from '@/components/material-signouts/signout-new-form';
@@ -8,10 +8,7 @@ import { SignoutNewForm } from '@/components/material-signouts/signout-new-form'
 // S118 item 11 — a new sign-out on the desktop. Same form as /m.
 
 export default async function NewSignoutPage({ params }: { params: { projectId: string } }) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getRequestUser();
   if (!user) redirect('/sign-in');
 
   const data = await loadNewSignout(params.projectId);
