@@ -6725,6 +6725,117 @@ export type Database = {
           },
         ]
       }
+      photo_share_link_views: {
+        Row: {
+          company_id: string
+          id: string
+          link_id: string
+          user_agent: string | null
+          viewed_at: string
+        }
+        Insert: {
+          company_id: string
+          id?: string
+          link_id: string
+          user_agent?: string | null
+          viewed_at?: string
+        }
+        Update: {
+          company_id?: string
+          id?: string
+          link_id?: string
+          user_agent?: string | null
+          viewed_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "photo_share_link_views_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "photo_share_link_views_link_id_fkey"
+            columns: ["link_id"]
+            isOneToOne: false
+            referencedRelation: "photo_share_links"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      photo_share_links: {
+        Row: {
+          company_id: string
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          expires_at: string
+          file_id: string
+          id: string
+          is_deleted: boolean
+          last_viewed_at: string | null
+          revoked_at: string | null
+          revoked_by: string | null
+          share_path: string
+          token_hash: string
+          updated_at: string
+          updated_by: string | null
+          view_count: number
+        }
+        Insert: {
+          company_id?: string
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          expires_at?: string
+          file_id: string
+          id?: string
+          is_deleted?: boolean
+          last_viewed_at?: string | null
+          revoked_at?: string | null
+          revoked_by?: string | null
+          share_path: string
+          token_hash: string
+          updated_at?: string
+          updated_by?: string | null
+          view_count?: number
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          expires_at?: string
+          file_id?: string
+          id?: string
+          is_deleted?: boolean
+          last_viewed_at?: string | null
+          revoked_at?: string | null
+          revoked_by?: string | null
+          share_path?: string
+          token_hash?: string
+          updated_at?: string
+          updated_by?: string | null
+          view_count?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "photo_share_links_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "photo_share_links_file_id_fkey"
+            columns: ["file_id"]
+            isOneToOne: false
+            referencedRelation: "files"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       platform_admins: {
         Row: {
           created_at: string | null
