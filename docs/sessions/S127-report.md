@@ -849,3 +849,25 @@ Read from rebuild-test's catalog, where the same file is applied and verified:
   (≈12:40Z). Production had **0** logs and **0** photos created in that window when last read (10:00Z → 10:4xZ). It is
   re-read below.
 - **Re-read at 12:37:44Z (production): 0 daily logs and 0 files created since 10:00Z.** Nobody hit the defect.
+
+## 4e: two more defects found before ship, both fixed. CI `37123905145` started (12:45Z) on `1658a215`
+
+1. **`next build` failed on 4e as built:** *"PHOTO_LINKS_LIMIT is not a valid Page export field"*. The earlier half
+   recorded unit + lint for 4e, never a build. Fixed by un-exporting it (it had no importer); the build exits 0.
+2. ⚠️ **THE PAYLOAD GATE FIRED, as designed.** Run on a local production build, the payload e2e went red with
+   `public payload leaks: supabase.co`. The page rendered the logo from `companies.logo_url`, which is
+   `https://<project>.supabase.co/storage/v1/object/public/company-logos/<company uuid>/logo.png`. The logo is ruled
+   in; its **storage URL** is not. It gives a stranger the storage host and the company's id. **Fix:** the logo is
+   streamed through the app like the photo (`/share/p/[token]/logo`, `private, no-store`, dead the moment the link is
+   revoked), its path re-derived from `logo_url` and **bound to the link's own company** (`logoStoragePath`: another
+   company's logo, a climbing path or another bucket → no logo). The payload contract is still exactly 3 fields;
+   `logoUrl` now carries the app's path. **That red run is the payload proof's control: the probe can fail, and it
+   failed on the real leak.**
+- Also: my foreign-`share_path` negative left its own row behind, which the PM test then counted (expected 0, got 1).
+  It now deletes its row in `finally`.
+- **Local `next start`:** `share-link-s127` + the photo specs **16/16**. Company A has a logo, so the logo branch ran:
+  200, `private, no-store`, an image. **0** links and **0** views left. Unit **180 / 2,397**; lint clean.
+- **Stated residual (not a gate):** a link serves the derivative's **current** bytes. If the photo's markup is edited
+  after sharing, the public image changes with it; and a link made before any markup keeps serving the unmarked
+  original. The pre-confirm preview shows what is public **at creation**. Filed as `#3-share` for a ruling: freeze a
+  copy at share time, or keep it live.
