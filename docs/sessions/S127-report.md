@@ -635,3 +635,14 @@ The brief: *4b + 4e, then 4a, 4c, 5a, 6.* **I am shipping 5a + 6 first, then 4a 
 3. **4b cannot go before 4a.** 4b is built on 4a's commits. And § 8 rule 2 forbids stacking migration work (4e) with
    work that carries none (4a, 4b). So the photo stack ships as **4a + 4b** (two deep, no migration), then **4e** alone.
 - **P-5 rides with P-2.** The brief does not name P-5, but P-2 is built on it. Both carry no migration, two deep.
+
+## Production, 5a (`20262134300000`) ✅ MATCH 4/4
+
+- **Pre-state re-read** (matches 04:46Z): latest migration `20262134200000`; 2 companies (H&H `cp_used false`, Worth
+  Properties `cp_used true`); 2 daily logs; 0 projects dirty; 0 `company_holidays`; dirty-marker md5 `460edf02…`, ACL
+  `{postgres=X, service_role=X, supabase_auth_admin=X}`; no `company_holiday_rules`; no `client_photo_skip_reason`.
+- **Section:** scratch workdir = `origin/main`'s 301 migrations + the 5a file taken from the tested head `b143b57d`
+  (`cmp` 0); linked to `jwkcknyuyvcwcdeskrmz` (ref read back); the checkout stayed on `nmyphyhmfttxkdoposvf`. Dry run →
+  **exactly** `20262134300000_s127_daily_log_client_photo.sql`. Push exit 0.
+- **By object:** history row 1 ✅ · column `text / nullable / no default` ✅ · CHECK = NULL or exactly
+  `inspection_day, weather, no_site_access, no_visible_progress` ✅ · **0** non-null of **2** logs ✅.
