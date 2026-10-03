@@ -34,6 +34,10 @@
    and `get_my_company_id()` is untouched.
 5. **Rule on the questions under "WHAT JOSH MUST RULE"** below.
 6. **`feature/s114-c5-multi-upload`:** the revert reason still holds (item 8). Discarding it is yours.
+7. **Codespace (Part 2.6):** idle timeout is already **240 min, GitHub's maximum**. Decide whether long unattended
+   sessions should run somewhere without a Codespace idle timer.
+8. **The untracked root file `ci-convenstions.md`** (not in git, not this session's): delete it or commit it. The
+   standing CI guidance now lives in `CLAUDE.md` + `docs/claude/rules.md`.
 
 ## 1.4a — MEMBER REMOVAL: ⛔ CONFIRMED
 
@@ -53,9 +57,12 @@ MERGED, by ruling #11.** Full evidence is under "1.4a" and "Item 2" in the body.
 - **R-3 (5a, taken on my reading): a log's author makes their client-facing slot photos visible to the client
   without Owner/Admin approval.** That is how the fix works (ruling #4's dedicated slot). A) keep; B) require
   Owner/Admin approval before a client sees them (a different feature). *Recommend A.*
-- **R-4 (`#2-share`, pre-existing): the desktop Photos grid shows the client-visibility toggle to every staff role,
-  but the database lets only Owner/Admin change it,** so a PM's toggle fails. A) show it to Owner/Admin only; B) widen
-  the database. *Recommend A.*
+- ~~R-4~~ **RULED [Josh, 2026-10-03] and BUILT, merged in 4d `c1bfd059`:** single share O/A/PE/PM (DB widened for
+  PM/PE on photos, migration `20262134600000` on production), bulk share O/A/PE, deletes unchanged; toggles drawn
+  for exactly those roles.
+- **R-8 (taken on my reading in that ruling): the PM/PE widening covers PHOTOS only** (an image, not contracts, COs
+  or invoices, judged on the row's prior state). A) keep; B) let PM/PE share any file they can edit. *Recommend A*:
+  the ruling spoke of photos, and documents carry money.
 - **R-5 (P-9): cross-request caching of company settings.** *Recommend not building* (body, "P-8 and P-9"): the
   saving is small, and a stale setting changes payroll screens without saying so.
 - **R-6 (P-7): send only the active language's dictionary to `/m`** (about −17 KB gz per page, ~8%). A) build it as
@@ -69,7 +76,9 @@ The phase 2 plan is under "PHASE 2" below. Deviations, each with its reason in t
 timeout (5a + 6 first: migration order and a green CI already in hand; 4a + 4b together, since 4b is built on 4a);
 **the 5a fix inserted after 5a merged** (a live defect, found and fixed with 0 rows affected); P-5 rode with P-2 (P-2
 is built on it); P-3 finished from its WIP after the train; P-7 measured, not built; P-8 not started; P-9 recommended
-against.
+against. **After Josh's 2026-10-03 message:** 4d was held, the permission ruling folded in with its own migration and
+proofs, and it was merged on its OWN CI run (`37132765461`), not the superseded one; Part 2 measured and written into
+`CLAUDE.md` + `docs/claude/rules.md`.
 
 ---
 
