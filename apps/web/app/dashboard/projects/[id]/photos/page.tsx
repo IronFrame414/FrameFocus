@@ -95,6 +95,16 @@ export default async function ProjectPhotosPage({
         {/* [S111 Q16] Staff only: files_insert_non_client refuses a client, and a
             subcontractor never reaches /dashboard. */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          {/* [S127 4e] Every active public link, with one-click revoke. */}
+          {profile && (profile.role === 'owner' || profile.role === 'admin') && (
+            <Link
+              href="/dashboard/photo-links"
+              data-testid="photo-links-link"
+              style={{ color: color.primary, fontSize: '13px', textDecoration: 'none' }}
+            >
+              Share links
+            </Link>
+          )}
           {/* [S127 4a] The trash this tab never had — for the roles that may
               trash and restore a photo (canDeletePhoto), as the database says. */}
           {profile && canDeletePhoto(profile.role) && (
