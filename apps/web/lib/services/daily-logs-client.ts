@@ -268,12 +268,34 @@ export async function linkClientFacingLogPhoto(
   fileId: string,
   logId: string
 ): Promise<{ success: boolean; error?: string }> {
-  const supabase = createClient();
-  const link = { daily_log_id: logId, client_visible: true } as unknown as Database['public']['Tables']['files']['Update'];
-  const { data, error } = await supabase.from('files').update(link).eq('id', fileId).select('id');
-  if (error) return { success: false, error: error.message };
-  if (!applied(data)) return { success: false, error: DISCARDED };
-  return { success: true };
+  // [S127 5a, fixed after merge] Through the shared server mechanism. The
+  // superseded caller-client write — `update({ daily_log_id: logId,
+  // client_visible: true })` — was refused for every role but Owner/Admin by
+  // `enforce_files_column_scope` (lib/daily-logs/client-photo-share.ts).
+  return markLogPhotoClientFacing(fileId, logId);
+}
+
+/**
+ * [S127 5a] Link a photo to a log AND make it client-facing, through
+ * `/api/daily-logs/client-photo` — the ONE mechanism every surface uses (the
+ * desktop retry queue, /m online, the /m offline queue).
+ */
+export async function markLogPhotoClientFacing(
+  fileId: string,
+  logId: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const res = await fetch('/api/daily-logs/client-photo', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fileId, logId }),
+    });
+    if (res.ok) return { success: true };
+    const body = (await res.json().catch(() => ({}))) as { error?: string };
+    return { success: false, error: body.error ?? `The photo was not shared with the client (${res.status}).` };
+  } catch {
+    return { success: false, error: 'The photo was not shared with the client. Check your connection.' };
+  }
 }
 
 export async function uploadClientFacingLogPhoto(
@@ -283,11 +305,10 @@ export async function uploadClientFacingLogPhoto(
 ): Promise<{ success: boolean; id?: string; error?: string }> {
   const up = await uploadDailyLogPhoto(file, projectId, logId);
   if (!up.success || !up.id) return up;
-  const supabase = createClient();
-  const flag = { client_visible: true } as unknown as Database['public']['Tables']['files']['Update'];
-  const { data, error } = await supabase.from('files').update(flag).eq('id', up.id).select('id');
-  if (error) return { success: false, id: up.id, error: `Photo saved but not shared with the client: ${error.message}` };
-  if (!applied(data)) return { success: false, id: up.id, error: `Photo saved but not shared with the client: ${DISCARDED}` };
+  // [S127 5a, fixed after merge] Superseded: a caller-client
+  // `update({ client_visible: true })`, refused for every role but Owner/Admin.
+  const shared = await markLogPhotoClientFacing(up.id, logId);
+  if (!shared.success) return { success: false, id: up.id, error: `Photo saved but not shared with the client: ${shared.error}` };
   return up;
 }
 

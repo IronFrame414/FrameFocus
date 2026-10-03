@@ -11,6 +11,7 @@ import {
 } from 'react';
 import { createClient } from '@/lib/supabase-browser';
 import { uploadFile } from '@/lib/services/files-client';
+import { markLogPhotoClientFacing } from '@/lib/services/daily-logs-client';
 import { uploadSiteVisitPhoto, uploadVoiceNote } from '@/lib/services/site-visits-client';
 import { OfflineQueue, type EnqueueInput, type QueueEntry } from '@/lib/offline/queue';
 import { IdbStorage } from '@/lib/offline/idb-storage';
@@ -69,12 +70,19 @@ async function uploadQueuedPhoto(payload: {
   });
   if (!uploaded.success || !uploaded.id) return uploaded;
 
-  if (payload.daily_log_id) {
+  if (payload.daily_log_id && payload.client_visible) {
+    // [S127 5a, fixed after merge] A client-facing log photo: linked AND
+    // shared by the ONE server mechanism. Superseded: the same caller-client
+    // update carrying `client_visible: true`, which `enforce_files_column_scope`
+    // refused for every role but Owner/Admin. A replay is idempotent: the route
+    // sets the same two values again.
+    const shared = await markLogPhotoClientFacing(uploaded.id, payload.daily_log_id);
+    if (!shared.success) return { success: false, error: shared.error };
+  } else if (payload.daily_log_id) {
     const supabase = createClient();
     const { error } = await supabase
       .from('files')
-      // [S127 5a] A client-facing log photo is shared in the SAME write.
-      .update({ daily_log_id: payload.daily_log_id, ...(payload.client_visible ? { client_visible: true } : {}) } as never)
+      .update({ daily_log_id: payload.daily_log_id } as never)
       .eq('id', uploaded.id);
     if (error) return { success: false, error: error.message };
   }
