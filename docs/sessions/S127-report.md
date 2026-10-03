@@ -756,3 +756,25 @@ client-visible.** If Josh wants client photos approved by Owner/Admin first, tha
 role**, but the database refuses `client_visible` to everyone except Owner and Admin. So a PM's or foreman's toggle on
 a tile fails. It is the same render-vs-database gap as the 5a defect, in older code. Filed as **`#2-share`**, not
 fixed (outside the plan).
+
+## P-7 (bundle weight): MEASURED, and the brief's premise is mostly false for `/m`
+
+**Instrument:** `next build` on `main` `965b3f21` (exit 0), then `.next/app-build-manifest.json` per route, each chunk
+gzipped and summed. **The `/m` layout is 226 KB gz** (18 chunks), the same number S125 measured. Field pages:
+`/m/timeclock` 206, `/m/timeclock/switch` 208, `/m/logs/new` 206, `/m/p/[id]/photos` 201 KB gz.
+
+**What is in it:** React DOM 52 KB · the Supabase client 41 + 12 KB · the Next runtime 31 KB · ⚠️ **the i18n
+dictionary, ENGLISH AND SPANISH TOGETHER, 35 KB** (chunk `3437`: `LanguageProvider` plus every area's `en` and `es`
+maps; `field.clock` ×44 and `photos.grid` ×34 keys) · the rest small.
+
+**What is NOT in it:** `heic2any` (332 KB gz chunk), `@react-pdf/renderer` (262 KB), `pdfjs-dist` (108 KB). Each is
+already a separate, lazily loaded chunk (`heic2any` and `pdfjs` are dynamic `import()`). Every `pdf-lib` and all but one
+`@react-pdf` importer are **server-only** services. The one client importer is
+`dashboard/estimates/[id]/proposal/pdf-preview.tsx`, on the route that uses it. The Gantt is ~570 hand-written lines
+with no library.
+
+⇒ **The heavy-library fix the brief describes has nothing to do on `/m`.** The one real `/m` target is **sending only
+the active language's dictionary** (about −17 KB gz per page, roughly 8%). That touches `useT()` and every `/m` screen,
+and it is a change to how every string loads. **Not built this session.** It is proposed, with the measurement, for
+its own item. The heaviest desktop route is `/dashboard/estimates/[id]` at 300 KB first load. It is not a field
+screen, so it ranks low by the brief's own rule.
