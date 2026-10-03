@@ -17,6 +17,7 @@
 // (timesheets/[sessionId]). That page still exists for direct links; the queue
 // no longer sends anyone there.
 
+import { GpsLine } from '@/components/time/gps-line';
 import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ModalSheet } from '@/components/sheet/modal-sheet';
@@ -306,6 +307,9 @@ export function WeekSheet({
                   {s.status === 'approved' && s.approverName ? (
                     <span style={{ fontSize: '11px', color: color.faint }}>by {s.approverName}</span>
                   ) : null}
+                  {/* [S127 4c] Nothing renders for a capture never attempted. */}
+                  <GpsLine label="In" gps={s.gpsIn} testId="ts-sheet-gps-in" />
+                  <GpsLine label="Out" gps={s.gpsOut} testId="ts-sheet-gps-out" />
                   <span style={{ flex: 1 }} />
                   {canApprove && s.status === 'pending' ? (
                     <button

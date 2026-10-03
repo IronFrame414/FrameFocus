@@ -300,6 +300,19 @@ export function LogForm({
             {t('field.needs.offlineDropped')}
           </p>
         ) : null}
+        {/* [S127 5a, fixed after merge] A photo that did not land — or a client
+            photo that was not shared — is SAID here. The form's own error line
+            is gone once this screen replaces it, so before this a failed photo
+            looked exactly like a sent one. */}
+        {error ? (
+          <p
+            data-testid="m-log-done-error"
+            role="alert"
+            className="mt-[10px] rounded-[10px] border border-m6m-danger-border bg-[#fdf1f0] px-[12px] py-[8px] text-[13px] font-semibold text-m6m-danger"
+          >
+            {error}
+          </p>
+        ) : null}
         {done.hazard && projectId ? (
           <Link
             // D-29 — a BLANK 7e pre-filled with project (the route segment)

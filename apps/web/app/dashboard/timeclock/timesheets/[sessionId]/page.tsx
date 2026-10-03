@@ -14,6 +14,7 @@ import {
   paidHoursPerSession,
   sessionDurationHours,
 } from '@framefocus/shared/utils/time-tracking';
+import { describeGps } from '@framefocus/shared/utils/gps-display';
 import { DayDetailClient } from './day-detail-client';
 
 /**
@@ -143,6 +144,9 @@ export default async function TimesheetDetailPage({
         // the day-detail KPI a supervisor approves from.
         hasGpsIn: hasCoordinates(detail.gps_in),
         hasGpsOut: hasCoordinates(detail.gps_out),
+        // [S127 4c] The whole record, in words: fix / failure REASON / nothing.
+        gpsIn: describeGps(detail.gps_in),
+        gpsOut: describeGps(detail.gps_out),
         approverName: detail.approver?.display_name ?? null,
       }}
       segments={detail.segments}

@@ -75,3 +75,37 @@ describe('S127 5a — offline, the client-facing flag rides the queued photo', (
     expect(buildPhotoEntry(base).payload).not.toHaveProperty('client_visible');
   });
 });
+
+describe('S127 5a (fixed after merge) — ONE mechanism sets the flag, on every surface', () => {
+  // `client_visible` is Owner/Admin only in the database, so a caller-client
+  // write of it fails for the foremen and crew who write logs. The live proof is
+  // test/s127-client-photo-share.live.ts; this pins that no surface goes back
+  // to writing the flag itself.
+  const src = (p: string) => readFileSync(fileURLToPath(new URL(p, import.meta.url)), 'utf8');
+  const CLIENT = src('../lib/services/daily-logs-client.ts');
+  const OFFLINE = src('../app/m/offline-sync.tsx');
+  const code = (s: string) => s.replace(/\/\/[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, '');
+
+  it('the desktop link and the /m online upload both go through markLogPhotoClientFacing', () => {
+    const body = (name: string) => {
+      const at = CLIENT.indexOf(`export async function ${name}(`);
+      return code(CLIENT.slice(at, CLIENT.indexOf('\n}\n', at)));
+    };
+    expect(body('linkClientFacingLogPhoto')).toContain('markLogPhotoClientFacing(');
+    expect(body('uploadClientFacingLogPhoto')).toContain('markLogPhotoClientFacing(');
+    expect(body('markLogPhotoClientFacing')).toContain("'/api/daily-logs/client-photo'");
+  });
+
+  it('the /m offline queue goes through it too', () => {
+    expect(code(OFFLINE)).toContain('markLogPhotoClientFacing(uploaded.id, payload.daily_log_id)');
+  });
+
+  it('no client code writes client_visible = true through its own client', () => {
+    for (const [name, s] of [
+      ['daily-logs-client.ts', CLIENT],
+      ['offline-sync.tsx', OFFLINE],
+    ] as const) {
+      expect(code(s), name).not.toMatch(/client_visible:\s*true/);
+    }
+  });
+});

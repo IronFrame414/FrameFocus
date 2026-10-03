@@ -5,6 +5,8 @@
 // reconciliation footer sums REAL data and surfaces any gap between the
 // segment chain and the clocked session rather than hiding it.
 
+import type { GpsDisplay } from '@framefocus/shared/utils/gps-display';
+import { GpsLine } from '@/components/time/gps-line';
 import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -56,6 +58,9 @@ interface DayDetailClientProps {
     status: SessionApprovalStatus;
     hasGpsIn: boolean;
     hasGpsOut: boolean;
+    /** [S127 4c] null = capture never attempted; renders nothing. */
+    gpsIn: GpsDisplay | null;
+    gpsOut: GpsDisplay | null;
     approverName: string | null;
   };
   segments: TimeSegment[];
@@ -379,12 +384,23 @@ export function DayDetailClient({
         />
         <KpiCard label="Paid Hours" value={fmtHours(hours.paid)} caption="derived" />
         <KpiCard label="Worked (job cost)" value={fmtHours(hours.worked)} caption="derived" />
-        <KpiCard
-          label="GPS"
-          value={session.hasGpsIn ? 'On site' : '—'}
-          caption={session.hasGpsIn ? 'from clock-in fix' : 'location not captured'}
-        />
+        {/* [S127 4c] SUPERSEDED: a "GPS" KPI reading "On site" whenever the
+            clock-in had coordinates. A fix is where the DEVICE was — no project
+            carries a coordinate, so "on site" was never something this could
+            know — and the clock-out record and every failure reason were
+            dropped. The location card below says what the record says. */}
       </div>
+
+      {session.gpsIn || session.gpsOut ? (
+        <div
+          data-testid="ts-day-location"
+          style={{ ...cardStyle, padding: '12px 20px', marginBottom: '16px', display: 'flex', gap: '24px', flexWrap: 'wrap' }}
+        >
+          <span style={microLabelStyle}>Location</span>
+          <GpsLine label="In" gps={session.gpsIn} testId="ts-day-gps-in" />
+          <GpsLine label="Out" gps={session.gpsOut} testId="ts-day-gps-out" />
+        </div>
+      ) : null}
 
       {/* Segments card */}
       <div style={{ ...cardStyle, overflow: 'hidden', marginBottom: '0' }}>
