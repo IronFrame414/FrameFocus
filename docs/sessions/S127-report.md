@@ -1075,3 +1075,28 @@ Pre-state, read-only: latest `20262134500000`; function md5 `6b1c44e8…`; files
 trigger `O`. **After the push:** (1) a history row; (2) md5 **`ec55121d75be49b48c42eb2162b08cf6`** (= rebuild-test);
 (3) ACL identical to the captured production ACL; (4) `files_column_scope` enabled `O`; (5) files **390**,
 `client_visible` **0**, deleted **7**, all unchanged (a function replace changes no row).
+
+## Part 2.2 (measured) and 2.6 (Codespace), and Part 3 (done)
+
+- **2.2, from LOGS of run `37130101549`** (jobs API + Playwright's per-test durations and timestamps): wall ~36 min;
+  everything but Playwright ~3 min (`npm ci` 0.6, browsers 0.5, production build 1.8); **Playwright step 32.7 min**;
+  **inside tests 28.1 min** (727 lines, ~2.3 s each); **outside tests 4.5 min**, of which **3.2** are the two S111
+  thumbnail fixtures generating thumbnails serially. Slowest files: `m-writes` 2.64 (51 tests),
+  `desktop-photos-thumbnails-s111` 2.64 (**2.31 of it fixture**), `desktop-chat-poll` 1.68, `m-destinations` 1.52,
+  `desktop-trial-screens` 1.33, `m-photos-thumbnails-s111` 1.09 (0.85 fixture), `m-photos` 0.99, `m-details` 0.98,
+  `m-sections` 0.81, `m-capture` 0.75, then a tail under 0.65 min each. ⇒ **The time is test execution, serial. Setup
+  and teardown are not the cost** (one targeted exception: the thumbnail fixtures, ~3 min).
+- **2.2, INSTRUMENTED** (`pg_stat_activity` on rebuild-test every 15 s, read-only): on `37130101549` it covered **only
+  the last ~7 minutes** (15:03:58 → 15:10:36Z, 26 samples): **37–40 of `max_connections` 60**, authenticator pool
+  steady at 21, storage ≤ 4, active ≤ 9. A **full-run** sample of `37132765461` is recorded below when it ends.
+  Connection exhaustion was not observed in this window. **One run cannot kill or confirm the hypothesis.**
+- **2.6:** this Codespace is **4 cores / 16 GB / 32 GB**; `idle_timeout_minutes` **240 (GitHub's maximum)**;
+  retention 30 days. **The idle timeout cannot be raised further.** A larger machine would not change it. If an
+  unattended agent's work does not count as activity, a 4-hour window would explain six timeouts in four days. That
+  is likely, not verified. **Josh decides:** run long unattended sessions where no Codespace idle timer applies, or
+  keep the 4-hour window with commit-and-push after every step (as now).
+- **Part 3, done:** operative form in `CLAUDE.md` ("CI speed: measure first; coverage is never the price"), full
+  text, baseline, the `workers: 1` history, the REJECTED subset option with its reason, and the ranked backlog in
+  `docs/claude/rules.md`. Where they lived before: `ci.yml` comments; `OPEN-WORK-BUNDLE.md` § 8 (a session bundle);
+  and an **untracked** root file `ci-convenstions.md`. That one is not in git and not this session's; **left
+  untouched**, and Josh can delete or keep it.
