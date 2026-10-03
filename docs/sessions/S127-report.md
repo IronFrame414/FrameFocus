@@ -374,3 +374,41 @@ it caps the queue more than the code does. **If the road runs out, items stop wh
 
 **For Josh:** merge it yourself if you agree. It carries no migration. The live test is the regression guard: its X
 case flips red the day the database layer lands, as designed.
+
+## Build state while CI run `37087311433` (item 2's branch) holds rebuild-test (02:10Z)
+
+**Every branch below is pushed, and every commit carries `[skip ci]`:** two branch runs on the one shared database
+collide, and a migration must not land on rebuild-test while a run uses it (§ 10). **Nothing is merged yet.** Each
+branch gets its CI run in turn, and migration-bearing branches get theirs only after their migration is on
+rebuild-test.
+
+| branch | item | migration | state |
+| --- | --- | --- | --- |
+| `feature/s127-member-removal` `fe131aca` | 2 | 0 | ✅ built + proven; CI running; **not to be merged (ruling #11)** |
+| `feature/s127-qb-auto-off` `390b22f5` | 1 | `20262134100000` | code + unit 7/7 + live harness written; **migration not yet applied** |
+| `feature/s127-segment-type` `bc420c0b` | 7 | `20262134200000` | original captured (`12a51ec1`); migration, service and live harness written; **not yet applied** |
+| `feature/s127-p1-defects` `4975d6e3` | P-1 (+ P-6 `27e40270`) | 0 | unit 8/8, 2 sabotages red, e2e written |
+| `feature/s127-p4-queries` `6c4f16e2` | P-4 | 0 | unit 7/7, 4 sabotages red |
+| `feature/s127-p5-request-user` `1701cebd` | P-5 (16a) | 0 | 79 pages; guard 3/3; sabotage red |
+| `feature/s127-clock-location` `17ff1b52` | 4c (B-1) | 0 | unit 4/4, sabotage red, e2e written |
+| `feature/s127-photo-trash` `fdb64300` | 4a | 0 | unit 2/2, sabotage red, e2e written |
+
+**Decisions taken on my own reading, recorded per the prompt:**
+- **Migration numbering:** items 1 and 7 are numbered `20262134100000` and `20262134200000`, between S124 Part 2
+  (`…134…`) and Part 1 (`…135…`, rebuild-test only). Production therefore takes them in order, and Part 1 still
+  applies in order after them. Only rebuild-test needs `--include-all` for these files. **Production order is item 1,
+  then item 7.**
+- **Item 1's notification is written by the trigger in SQL** (in-app row, no push). That makes every path that can
+  disconnect (route, Intuit's redirect, a script) tell the Owner without remembering to. Owner-only by recipient
+  query: `profiles.role = 'owner'`.
+- **Item 7 counts only changes to or from `break`** (the only type paid hours read). A crew member's own API retype of
+  an approved break is **refused** (42501), not reopened: their status write is forbidden by the session column scope,
+  as their clock times already are on a closed day.
+- **P-4 finding 7:** only the **company-wide** calendar is windowed (−365 / +730 days). Project calendars keep the
+  whole job, because the Gantt and the project day view need it. ⚠️ Visible consequence: navigating the company day
+  view beyond the window shows nothing there. I also confirmed on rebuild-test (read-only) that two `.or()` filters
+  combine with AND.
+- **P-5:** scripted, one exact 3-line pattern per page, 79/79 matched. 10 pages dropped a client they no longer used.
+  `eslint` and `tsc` are clean.
+- **4c:** the day page's "GPS: On site" KPI was **false by construction** (no project has a coordinate), so it is
+  replaced, not kept.
