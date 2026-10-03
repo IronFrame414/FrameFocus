@@ -29,10 +29,10 @@
 3. **"It asks permission every time" (B-2): on the same iPhone,** Settings → Apps → Safari → Location → **Allow**,
    and Privacy & Security → Location Services → Safari Websites → **While Using the App**. Then clock in twice from
    the home-screen app and say whether it still asks. No app change can make iOS remember it (1.4e).
-4. **Item 2 (member removal) is built, proven and NOT merged, by your ruling #11.** It's on
-   `feature/s127-member-removal` `fe131aca`, with CI green. Merge it yourself if you agree. It carries no migration,
-   and `get_my_company_id()` is untouched.
-5. **Rule on the questions under "WHAT JOSH MUST RULE"** below.
+4. **Merge item 2 yourself (you said MERGE).** It is `feature/s127-member-removal` `fe131aca`, CI green, no migration,
+   `get_my_company_id()` untouched. ⚠️ It was cut from a `main` of 2026-10-03 ~01:00Z, so rebase it or let CI run
+   on the merge. Once merged, TECH_DEBT `#184` (R-7) is unblocked.
+5. **Rule on R-8** under "WHAT JOSH MUST RULE" below (R-1 to R-7 are ruled).
 6. **`feature/s114-c5-multi-upload`:** the revert reason still holds (item 8). Discarding it is yours.
 7. **Codespace (Part 2.6):** idle timeout is already **240 min, GitHub's maximum**. Decide whether long unattended
    sessions should run somewhere without a Codespace idle timer.
@@ -48,27 +48,25 @@ MERGED, by ruling #11.** Full evidence is under "1.4a" and "Item 2" in the body.
 
 ## WHAT JOSH MUST RULE
 
-- **R-1 (`#3-share`): a public photo link serves the photo's CURRENT marked-up version.** If markup is edited after
-  sharing, the public image changes with it; a link made before any markup keeps the unmarked original. A) keep it
-  live (as built); B) freeze a copy at share time (a stored snapshot per link). *Recommend B* if links go to
-  outsiders in disputes, since the preview then stays the truth; A is fine if links are only quick sends.
-- **R-2 (`#1-share`): add a database check binding `share_path` to its own photo** (defence in depth; the app
-  already refuses a foreign path). A) a small migration; B) leave it to the app. *Recommend A.*
-- **R-3 (5a, taken on my reading): a log's author makes their client-facing slot photos visible to the client
-  without Owner/Admin approval.** That is how the fix works (ruling #4's dedicated slot). A) keep; B) require
-  Owner/Admin approval before a client sees them (a different feature). *Recommend A.*
-- ~~R-4~~ **RULED [Josh, 2026-10-03] and BUILT, merged in 4d `c1bfd059`:** single share O/A/PE/PM (DB widened for
-  PM/PE on photos, migration `20262134600000` on production), bulk share O/A/PE, deletes unchanged; toggles drawn
-  for exactly those roles.
-- **R-8 (taken on my reading in that ruling): the PM/PE widening covers PHOTOS only** (an image, not contracts, COs
-  or invoices, judged on the row's prior state). A) keep; B) let PM/PE share any file they can edit. *Recommend A*:
-  the ruling spoke of photos, and documents carry money.
-- **R-5 (P-9): cross-request caching of company settings.** *Recommend not building* (body, "P-8 and P-9"): the
-  saving is small, and a stale setting changes payroll screens without saying so.
-- **R-6 (P-7): send only the active language's dictionary to `/m`** (about −17 KB gz per page, ~8%). A) build it as
-  its own item; B) leave it.
-- **R-7 (Q-D, from phase 2): deleting a subcontractor whose directory row is linked to a login keeps that login.**
-  Same class as 1.4a, another screen. A) route it through the same removal mechanism; B) leave it.
+**Josh ruled R-1 to R-7 at 10:53 ET on 2026-10-03.** They reached this session late (the relay's omission, as
+stated). Recorded here as ruled:
+- **R-1 = A, keep the public link LIVE** (it serves the photo's current markup). Nothing built; recorded as known
+  and ruled in **TECH_DEBT `#182`** so nobody "fixes" it.
+- **R-2 = A, BUILD the database check** binding `share_path` to its own photo. One migration, this session, after P-3
+  (body: "R-2").
+- **R-3 = A, keep:** a log's author publishes their own client-facing slot photos without approval. No work.
+- **R-4:** ruled separately the same day and built in 4d (`c1bfd059`).
+- **R-5 = A, do NOT build P-9.**
+- **R-6 = A, the single-language dictionary is QUEUED** as its own item, after the estimates-editor build:
+  **TECH_DEBT `#183`**. Not this session.
+- **R-7 = A, route subcontractor deletion through item 2's removal mechanism.** QUEUED and GATED on Josh merging
+  item 2: **TECH_DEBT `#184`**. Not this session.
+- **Item 2:** Josh merges it himself. Untouched by this session.
+
+**Still open:**
+- **R-8 (my reading inside the 2026-10-03 permission ruling): the PM/PE share widening covers PHOTOS only** (an
+  image, not contracts, COs or invoices, judged on the row's prior state). A) keep; B) let PM/PE share any file they
+  can edit. *Recommend A:* the ruling spoke of photos, and documents carry money.
 
 ## THE PLAN, AND EVERY DEVIATION
 

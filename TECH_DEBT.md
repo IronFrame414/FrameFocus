@@ -12,8 +12,10 @@
 > register) is the assignment authority, unchanged from CLAUDE.md's rule that *main's file is the
 > authority*. **Numbers are IMMUTABLE — never reused, reassigned, or compacted — and they span all
 > THREE files.** The next free number is **one above the highest number appearing in ANY of the
-> three files**. The highest currently allocated is **#181** (in this file — S121, 2026-09-30, converted from
-> `#1-s121lo` when `feature/s121-p78-leftovers` landed), so the next free number is **#182**. _Superseded, quoted:
+> three files**. The highest currently allocated is **#184** (in this file — S127, 2026-10-03, `#182`–`#184` filed
+> from Josh's 2026-10-03 rulings R-1, R-6, R-7), so the next free number is **#185**. _Superseded, quoted:
+> "The highest currently allocated is **#181** (in this file — S121, 2026-09-30, converted from `#1-s121lo` when
+> `feature/s121-p78-leftovers` landed), so the next free number is **#182**." _Earlier superseded, quoted:
 > "The highest currently allocated is **#180** (in this file — S119, `#175`–`#180`, 2026-09-29,
 > converted from `#1-s119a`–`#5-s119a` plus `#180` filed at landing when `feature/s119-profile-insert-floor`
 > landed), so the next free number is **#181**."_ _Earlier superseded, quoted: "The highest currently allocated is **#174** (in this file — S118, `#173`–`#174`, 2026-09-29,
@@ -2479,3 +2481,32 @@ When opening a new item:
 1. Use the next sequential number after the highest one in the file (open or closed).
 2. Add to the appropriate category in `Open Tech Debt`.
 3. If the item depends on or relates to other items, reference them by number — those references will resolve correctly forever because numbers are stable.
+
+## `#182` — ⚠️ KNOWN AND RULED, DO NOT "FIX": a public photo link serves the photo's CURRENT markup [Josh, S127 R-1 = A, 2026-10-03]
+
+**Behaviour:** a public share link (`/share/p/[token]`, S127 item 4e) stores `share_path` = the photo's original,
+or its `.markup.jpg` derivative when markup existed at creation, and streams **whatever bytes are at that path on
+each request**. So if the markup is edited after sharing, the public image changes with it; and a link made before
+any markup keeps serving the unmarked original. The pre-confirm preview shows what is public **at creation**.
+**RULED: keep it live, as built.** Josh chose this over freezing a snapshot per link, having been told the preview
+stops being the truth if the markup is edited afterward. **Owed work: none.** Recorded so nobody "fixes" it into a
+snapshot without a new ruling.
+
+## `#183` — Send `/m` only the ACTIVE language's dictionary [Josh, S127 R-6 = A, 2026-10-03] — QUEUED
+
+**Measured (S127 P-7, `next build` on `main` `965b3f21`):** the `/m` layout is 226 KB gz, and **35 KB of it is the i18n
+dictionary with English AND Spanish together** (the chunk carrying `LanguageProvider` and every area's `en` + `es`).
+Sending only the active language saves about 17 KB gz per page (~8%). It touches `useT()` and how every `/m` string
+loads. **Queued as its own item, explicitly AFTER the estimates-editor build.** The heavy libraries the S125 brief
+suspected (`heic2any`, `@react-pdf/renderer`, `pdfjs-dist`) are already lazy or server-only: nothing to do there.
+
+## `#184` — Route subcontractor deletion through the member-removal mechanism [Josh, S127 R-7 = A, 2026-10-03] — QUEUED, GATED
+
+**The gap (S127 Q-D):** deleting a subcontractor whose directory row is linked to a login
+(`deleteSubcontractor`, `subcontractors-client.ts`) writes only `subcontractors.is_deleted`. The login, its profile
+and its company access remain. Same class as S127 1.4a (`/m` "Inactive" cut nothing). **Fix:** route it through the
+ONE removal mechanism item 2 built (`setTeamMemberLoginActive` / `softDeleteTeamMember`, `lib/team/`), with the
+same live probe (read, write without returning rows, never-requested storage object, signed URL, definer function,
+fresh sign-in). **⚠️ GATED: not until Josh merges item 2 (`feature/s127-member-removal`); it IS that mechanism.**
+Its own item.
+
