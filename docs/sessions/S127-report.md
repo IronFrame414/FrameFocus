@@ -1126,3 +1126,16 @@ trigger `O`. **After the push:** (1) a history row; (2) md5 **`ec55121d75be49b48
 - ⚠️ **What this means live:** a PM or PE can now show or hide a **photo** to the client from the grid or the
   daily-log page. PE also gets the multi-select "Show to client". Bulk delete stays Owner/Admin. Foreman and crew no
   longer see a toggle the database refused them.
+
+## ✅ P-3 MERGED: `182b069c`. No migration.
+
+- CI **`37135702156` green** on the tested head `6dec1749`: unit **2,449**; e2e **731 passed, 0 failed** (0 `✘`).
+  The CI log shows the proof cases ran: desktop *"thumbs 80, originals 0, renders 0"*; `/m` the same; *"other
+  company's owner: 404"*; *"no session: 401"*.
+- Before CI, on a local production build: A-23s reworked for the proxy (it identified requests by file name; under the
+  proxy it saw none). **Sabotage** (proxy serves the original first, rebuilt): desktop red with *"originals 80"*, A-23s
+  red with *"the proxy served the unannotated original"*; route restored, md5 `bd91e448…`.
+- **Tree-identity proof:** `git diff --name-only 6dec1749 182b069c` → `TECH_DEBT.md`, `docs/sessions/S127-report.md`.
+  Outside `docs/` and root `*.md`: **0**.
+- ⚠️ **What this means live:** a tile's URL is now stable, so the browser keeps thumbnails (7 days, its own cache
+  only). A markup edit changes the URL. The first visit costs the same; repeat visits stop re-downloading the grid.
