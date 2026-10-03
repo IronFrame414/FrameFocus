@@ -9,7 +9,7 @@ import { PhotoLinkRows, type PhotoLinkRow } from './photo-link-rows';
 // bites" — this list is not optional and not a later enhancement. Owner/Admin
 // (the RLS on photo_share_links). Bounded and ordered by what it is bounded on.
 
-export const PHOTO_LINKS_LIMIT = 200;
+const PHOTO_LINKS_LIMIT = 200;
 
 export default async function PhotoLinksPage() {
   const profile = await getMyProfile();
