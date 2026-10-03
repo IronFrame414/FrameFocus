@@ -1162,3 +1162,31 @@ Pre-state, read-only: latest `20262134600000`; `with_check` md5 `f5b0625d…`; `
 on the table. **After the push:** (1) a history row; (2) `with_check` md5 **`fa91727d7a3a5ed24790f1d66da3b869`**
 (= rebuild-test); (3) the policy is still `INSERT`, `{authenticated}`, PERMISSIVE, no USING; (4) still **3** policies on
 the table; (5) `photo_share_links` still **0** rows.
+
+## ✅ R-2 MERGED: `1904258e`. Migration `20262134700000` on PRODUCTION: MATCH 5/5
+
+- CI **`37139018665` green** on the tested head `48332c04`: unit **2,449**; e2e **731 passed, 0 failed** (0 `✘`), with
+  all 4 `share-link-s127` cases.
+- **Production:** workdir = `main` `182b069c` + the file from `48332c04` (`cmp` 0); dry run → exactly that file.
+  **Against the stated expectations:** history row ✅ · `with_check` md5 `fa91727d…` ✅ · INSERT / `{authenticated}`
+  / PERMISSIVE / no USING ✅ · 3 policies on the table ✅ · 0 links ✅.
+- **Tree-identity proof:** `git diff --name-only 48332c04 1904258e` → `docs/sessions/S127-report.md`; outside
+  `docs/` and root `*.md`: **0**.
+
+---
+
+# CLOSE-OUT (2026-10-03 ~18:00Z)
+
+**Merged to `main` this session, in order:** items 1 + 7 (`5f05476a`) · P-1 + P-6 + P-4 (`574d9aef`) · 5a + 6
+(`965b3f21`) · 4a + 4b (`7f6627fe`) · 5a fix + 4c (`879e869f`) · 4e (`aff79789`) · P-5 + P-2 (`78eeeb30`) · 4d + the
+photo-permission ruling (`c1bfd059`) · P-3 (`182b069c`) · R-2 (`1904258e`).
+**On production, verified by object:** `20262134100000` … `20262134700000` (seven S127 migrations).
+**Not merged, by design:** item 2 `feature/s127-member-removal` `fe131aca` (Josh merges it himself).
+**Branches left behind whose content is ON `main` by another route (not deleted; deleting is Josh's call):**
+`s127-p3-thumb-proxy` `0c9f69db` (the stopped WIP; finished as `-v2`, merged); `s127-p5-request-user` `fba72d87`
+and `s127-photo-trash` `5f5014ce` (pre-rebase heads; merged through their stacks); `s127-photo-share-perms`
+`f725d8c5` (the capture commit, carried into 4d).
+**Not built, with reasons in the body:** P-7 (measured; queued as `#183`), P-8 (not started), P-9 (R-5: not to be
+built), `#184` (gated on item 2), Part 2.3–2.6 (the ranked backlog in `CLAUDE.md` / `docs/claude/rules.md`).
+**CLI:** the checkout is linked to rebuild-test `nmyphyhmfttxkdoposvf`, read back. The production workdir was a
+scratch directory only. No local server is left running (port 3000 free, read back).
