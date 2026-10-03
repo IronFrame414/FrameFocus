@@ -126,7 +126,12 @@ export type NotificationType =
   // S122 Part 6 — a Critical Path change moved a task an assignee chose to be
   // told about (ruling 11); also the saver's "not everyone could be told".
   // CHECK value in 20262129000000, SAME commit (both halves or neither).
-  | 'schedule_changed';
+  | 'schedule_changed'
+  // S127 item 1 — the QuickBooks time-export switch turned ITSELF off (a
+  // disconnect). OWNER ONLY. Written by `enforce_companies_qb_time_export()` in
+  // the same transaction as the flip (CHECK value in 20262134100000, same
+  // commit), so notify() never sends it: in-app only, no push.
+  | 'qb_time_export_auto_off';
 
 export interface NotifyParams {
   admin: SupabaseClient<Database>;

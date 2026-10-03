@@ -11,18 +11,28 @@
  * and `enforce_companies_qb_time_export` refuses one in the database.
  *
  * Renders nothing while QuickBooks is not connected — the database refuses to
- * turn it on then, and a disconnect turns it off.
+ * turn it on then, and a disconnect turns it off — EXCEPT [S127 item 1] the
+ * "turned itself off" notice, which matters most exactly then: it names WHEN
+ * and WHY (`qb_time_export_auto_off_*`), so "Off" is never mistaken for a
+ * human's choice. It stays until a human turns the switch back on.
  */
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { TIME_EXPORT_COPY } from '@/lib/quickbooks/time-export-copy';
+import {
+  TIME_EXPORT_COPY,
+  timeExportAutoOffNotice,
+  type TimeExportAutoOffReason,
+} from '@/lib/quickbooks/time-export-copy';
 import { badgeStyle, cardStyle, color, h2Style, primaryButtonStyle, secondaryButtonStyle } from '@/lib/theme';
 
 export interface TimeExportSettingsProps {
   connected: boolean;
   enabled: boolean;
   enabledAt: string | null;
+  /** [S127 item 1] When and why the switch turned itself off; null if it did not. */
+  autoOffAt: string | null;
+  autoOffReason: TimeExportAutoOffReason | null;
   isOwner: boolean;
 }
 
@@ -37,12 +47,46 @@ function formatWhen(value: string | null): string {
   });
 }
 
-export function TimeExportSettings({ connected, enabled, enabledAt, isOwner }: TimeExportSettingsProps) {
+export function TimeExportSettings({
+  connected,
+  enabled,
+  enabledAt,
+  autoOffAt,
+  autoOffReason,
+  isOwner,
+}: TimeExportSettingsProps) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  if (!connected) return null;
+  const autoOff =
+    !enabled && autoOffAt && autoOffReason ? (
+      <p
+        style={{ color: color.warning, fontSize: '0.875rem', fontWeight: 600, margin: '0.5rem 0 0' }}
+        role="status"
+        data-testid="qb-time-export-auto-off"
+      >
+        {timeExportAutoOffNotice(autoOffReason, formatWhen(autoOffAt))}
+      </p>
+    ) : null;
+
+  if (!connected) {
+    if (!autoOff) return null;
+    return (
+      <section style={{ ...cardStyle, padding: '1.25rem' }} data-testid="qb-time-export">
+        <h2 style={{ ...h2Style, margin: 0 }}>
+          {TIME_EXPORT_COPY.title}{' '}
+          <span
+            style={{ ...badgeStyle, backgroundColor: color.neutralBadgeBg, color: color.neutralBadgeText }}
+            data-testid="qb-time-export-state"
+          >
+            Off
+          </span>
+        </h2>
+        {autoOff}
+      </section>
+    );
+  }
 
   async function setEnabled(next: boolean) {
     if (next && !window.confirm(TIME_EXPORT_COPY.confirmOn)) return;
@@ -87,6 +131,7 @@ export function TimeExportSettings({ connected, enabled, enabledAt, isOwner }: T
       {enabled && enabledAt ? (
         <p style={p}>Turned on {formatWhen(enabledAt)}. Days approved since then are sent.</p>
       ) : null}
+      {autoOff}
       <p style={p}>{TIME_EXPORT_COPY.what}</p>
       <p style={{ ...p, color: color.warning, fontWeight: 600 }}>{TIME_EXPORT_COPY.payroll}</p>
       <p style={p}>{TIME_EXPORT_COPY.noBackfill}</p>
