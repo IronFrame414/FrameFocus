@@ -646,3 +646,17 @@ The brief: *4b + 4e, then 4a, 4c, 5a, 6.* **I am shipping 5a + 6 first, then 4a 
   **exactly** `20262134300000_s127_daily_log_client_photo.sql`. Push exit 0.
 - **By object:** history row 1 ✅ · column `text / nullable / no default` ✅ · CHECK = NULL or exactly
   `inspection_day, weather, no_site_access, no_visible_progress` ✅ · **0** non-null of **2** logs ✅.
+
+## Production, 6 (`20262134400000`): expectations, re-stated in full BEFORE the push
+
+(The earlier statement stands; the md5s are now written out from rebuild-test.)
+1. History row present.
+2. `company_holiday_rules`: **14 rows = 2 companies × 7**; each company exactly 7 distinct `rule_key`s.
+3. **Worth Properties (`dc4da2a7…`): 7 of 7 `enabled = false`. H&H (`31c7afc0…`): 7 of 7 `enabled = true`.**
+4. **0** projects with `needs_recompute = true` (unchanged from 0).
+5. `mark_schedule_dirty_from_row` md5 **`6904c5731f2e8917a400cd764cac302d`**, ACL unchanged
+   `{postgres=X/postgres,service_role=X/postgres,supabase_auth_admin=X/postgres}`.
+6. `seed_company_holiday_rules` md5 `c75374946397dcdd9b9fd1adf18d1755`; `enforce_company_holiday_rules_scope` md5
+   `4a9d05a97b1312a683ef7d2614f026bf` (= rebuild-test).
+7. RLS on; **2 policies**; **4 user triggers** on the table; `companies_seed_holiday_rules` on `companies`.
+8. `company_holidays` unchanged: **0** rows.
