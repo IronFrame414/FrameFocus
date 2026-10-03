@@ -1000,3 +1000,55 @@ day-clock-edit and lists **16/16**; tsc 0; build 0; unit **181 / 2,402**; the P-
 
 - CI **`37126944240` green** on the tested head `3679dcd8`: unit **2,402**; e2e **723 passed, 0 failed** (0 `✘`).
 - **Tree-identity proof:** `git diff --name-only 3679dcd8 78eeeb30` → `docs/sessions/S127-report.md`; non-docs **0**.
+
+## ⚠️ RULING [Josh, 2026-10-03 10:58–11:01]: photo client-visibility permissions, folded into 4d BEFORE its merge
+
+**Receipt confirmed in chat before acting.** At that moment: P-5 + P-2 merged (`78eeeb30`); 4d built, its CI
+`37130101549` running; P-3 finished on a branch, not CI'd. **4d was not merged. That run tests superseded code and
+will not be used to merge, green or red.** A red there does not count toward stop rule 5 on the new code.
+
+| action | UI gate (what is DRAWN) | DB gate (what is WRITTEN) |
+| --- | --- | --- |
+| SINGLE share | O, A, PE, PM — `canSharePhotoWithClient` (new) | O, A **+ PM, PE on a photo**: `enforce_files_column_scope`, migration `20262134600000` |
+| BULK share | O, A, PE — `canSharePhotosWithClient` (widened) | the same rows as single share: the DB cannot tell one write from many |
+| SINGLE delete | O, A, PM, PE — `canDeletePhoto` (unchanged) | O, A, PM, PE — `20262030000000` (unchanged) |
+| BULK delete | O, A — `canBulkDeletePhotos` (unchanged, A-1a) | the same rows as single delete |
+
+**Bulk share and bulk delete differ on purpose: sharing is reversible, deleting is destructive.** The bulk rows'
+narrower lists can only be enforced by the UI gate, because a bulk action is N single writes. That is stated, not
+hidden, and the live harness proves the DB gate each bulk write actually meets.
+
+- **Migration `20262134600000`** (one file): replaces only the `client_visible` arm. The trash and recategorise arms
+  are byte-identical to the original, captured from both databases first (md5 `6b1c44e8…`, identical; committed with
+  RESTORE `919f1d7a`). **Narrowed on my reading:** the PM/PE widening applies to a **photo** (an image, not
+  contracts, COs or invoices), judged on `OLD`, so a document relabelled as an image in the same write cannot ride
+  it. INSERT is unchanged.
+- **UI:** the desktop grid's single toggle is now drawn for the four roles only (it was every staff role, and a
+  foreman's or crew member's toggle was refused). The daily-log detail page had the same gap, so it got the same
+  gate; other roles see a read-only "shared" badge.
+- **Proofs so far (no database needed):** unit maps for all four rows, **50/50** with s115. **Four sabotages, one per
+  rule:** single share drops PM → 1 red; bulk share adds PM → 2 red; bulk delete adds PE → 3 red; single delete
+  drops PE → 3 red. Each restored; md5 `1c80f665…` read back.
+- **Waiting on rebuild-test:** the migration section, the live DB total maps (`s127-photo-perms.live.ts`: four maps,
+  every role, no returned rows, service-role verdicts, plus PM non-image/contract/relabel controls), DB sabotages,
+  the e2e (PE: Select + "Show to client", no Trash; crew: no toggle; a PM's toggle lands, counted), then 4d's own CI.
+
+## Part 2 (CI speed), from the same message
+
+- **2.1 Runner:** both jobs run on **`ubuntu-latest`** (standard GitHub-hosted; for a private repo, 2 vCPU / 7 GB).
+  E2E `timeout-minutes: 75`; Playwright `workers: 1` in CI and `retries: 2`. A larger runner costs about twice the
+  per-minute rate per doubling of cores (GitHub's published Linux pricing; to be confirmed on the billing page).
+  **Expected saving: small while `workers: 1` holds.** A serial suite against a remote database waits on network and
+  database, not CPU; the build step would gain. **This conclusion holds only while the cap holds. Re-state it after
+  2.3.** Not changed.
+- **Why `workers: 1`: it is a RULING, recorded in place.** `ci.yml` (*"UN-SHARDED, DELIBERATELY … [Josh, S134]"*) and
+  TECH_DEBT **#150**, option D chosen. Cause: **CI #201**. Under S133's 4 shards, a change order created by
+  `m-co-recalc-route.spec.ts` on one shard was read by `desktop-payload.spec.ts:175`'s **assert-absence** on another.
+  *"The only two speedups available, sharding and `workers > 1`, BOTH introduce that same intra-DB concurrency …
+  `workers: 1` is load-bearing."* **What blocked the safe fixes: #149.** The pinned e2e fixtures are hand-curated on
+  rebuild-test and reproducible from no script. **#150 rated namespacing "Breaks":** 13 spec files carry literal
+  fixture UUIDs. ⇒ **2.3 must first close #149 (a reproducible seed), replace the literal UUIDs, and cover every
+  assert-absence/count test. Only then can the cap be raised, with the test count proven identical before and after.**
+- **2.2:** being taken from run `37130101549`. Wall time, setup/test split and the slowest specs come **from its
+  logs**. Database connections come **from an instrumented sampler** (`pg_stat_activity` every 15 s, read-only)
+  running during that same run. Each number is labelled with its source below when it lands.
