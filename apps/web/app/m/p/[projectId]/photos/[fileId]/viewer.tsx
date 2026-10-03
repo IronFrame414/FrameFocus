@@ -1,5 +1,6 @@
 'use client';
 
+import { formatTakenAt } from '@/lib/photos/format-taken';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useCallback, useMemo, useRef, useState } from 'react';
@@ -377,16 +378,12 @@ export function PhotoViewer({
   // [S112 audit F4] Superseded note, quoted: "Date formatting, not copy — stays
   // as is (the locale is the shared date rule)." No ruling kept dates English;
   // Spanish readers saw "Aug 25, 2026, 9:06 PM". The words follow the reader.
-  const takenText = useMemo(() => {
-    if (!photo.takenAt) return '—';
-    return new Date(photo.takenAt).toLocaleString(dateLocale(uiLang), {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: 'numeric',
-      minute: '2-digit',
-    });
-  }, [photo.takenAt, uiLang]);
+  // [S127 4b] The formatter MOVED to lib/photos/format-taken.ts, unchanged, so
+  // the desktop single view shows the same words (PARITY).
+  const takenText = useMemo(
+    () => formatTakenAt(photo.takenAt, dateLocale(uiLang)),
+    [photo.takenAt, uiLang]
+  );
 
   return (
     <div className="flex min-h-full flex-col bg-m6m-canvas text-white">

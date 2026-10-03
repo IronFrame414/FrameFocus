@@ -8,7 +8,6 @@ import { cardStyle, color, font, microLabelStyle } from '@/lib/theme';
 import PhotoVisibilityToggle from './photo-visibility-toggle';
 import { AddPhotosButton } from './add-photos-button';
 import { GridThumb } from './grid-thumb';
-import { markupHref } from '@/lib/markup/return-to';
 
 // Redesign 6.2 — the desktop gallery: A SURFACING JOB, NOT A BUILD. The data
 // derivation is the SAME `getProjectPhotos()` the mobile gallery uses (lib —
@@ -160,7 +159,9 @@ export default async function ProjectPhotosPage({
                 <Link
                   key={p.id}
                   // [S122 0-B-5] ?from=photos — the markup screen's back link returns here.
-                  href={markupHref(params.id, p.id, 'photos')}
+                  // [S127 4b, A-2] VIEW first; markup is a button on the view.
+                  // SUPERSEDED: href={markupHref(params.id, p.id, 'photos')}.
+                  href={`${base}/${p.id}`}
                   // H-5 [S115] — one prefetch PER TILE ran the middleware for a
                   // 249 B payload with no page data; none now.
                   prefetch={false}
