@@ -13,6 +13,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase-browser';
+import { StandardHolidaysSettings, type StandardHolidayRow } from './standard-holidays-settings';
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const DEFAULT = [1, 2, 3, 4, 5];
@@ -39,7 +40,16 @@ const button: React.CSSProperties = {
   cursor: 'pointer',
 };
 
-export function WorkCalendarSettings({ calendar, holidays }: { calendar: WorkCalendarRow | null; holidays: HolidayRow[] }) {
+export function WorkCalendarSettings({
+  calendar,
+  holidays,
+  standardHolidays = [],
+}: {
+  calendar: WorkCalendarRow | null;
+  holidays: HolidayRow[];
+  /** [S127 item 6] The seven rules, this year's dates resolved on the server. */
+  standardHolidays?: StandardHolidayRow[];
+}) {
   const router = useRouter();
   const [days, setDays] = useState<number[]>(calendar?.work_days ?? DEFAULT);
   const [date, setDate] = useState('');
@@ -119,6 +129,11 @@ export function WorkCalendarSettings({ calendar, holidays }: { calendar: WorkCal
       </button>
 
       <h3 style={{ fontSize: '1rem', fontWeight: 600, margin: '1.5rem 0 0.25rem' }}>Holidays</h3>
+      {/* [S127 item 6] Part 1 — the seven standard holidays, as yearly RULES. */}
+      <StandardHolidaysSettings rows={standardHolidays} canEdit />
+      {/* Part 2 — one-off closures (a hurricane day, a site shutdown), UNCHANGED.
+          Holidays entered by hand before S127 stay here; nothing migrated them. */}
+      <h4 style={{ fontSize: '0.875rem', fontWeight: 600, margin: '1rem 0 0.25rem' }}>Other closures</h4>
       {holidays.length === 0 ? (
         <p style={{ fontSize: '0.8125rem', color: '#6b7280' }}>No holidays.</p>
       ) : (
