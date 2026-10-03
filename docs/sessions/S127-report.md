@@ -412,3 +412,111 @@ rebuild-test.
   `eslint` and `tsc` are clean.
 - **4c:** the day page's "GPS: On site" KPI was **false by construction** (no project has a coordinate), so it is
   replaced, not kept.
+
+## Item 2 — CI `37087311433`: ✅ GREEN (01:45 → ~02:25Z, alone on rebuild-test)
+
+Unit **171 files** passed; e2e **705 passed, 24 skipped, 0 failed** (36.2 m). **Not merged** (ruling #11). The branch is
+`feature/s127-member-removal` `fe131aca`, ready for Josh.
+
+## ⚠️ Josh's Q-E ruling arrived mid-build (22:20 ET), and item 1 was changed to match it
+
+*"needs_reauth turns the switch OFF and notifies the Owner … when the connection is restored, the Owner gets a prompt
+OFFERING to turn it back on … The offer is an offer … MUST STATE THAT TURNING IT BACK ON SENDS NOTHING THAT WAS MISSED
+… Offer it only when the switch turned ITSELF off … Owner only … No repeat noise."*
+
+What I built for it (`051a23c8`, on top of the earlier item 1 commits):
+- The trigger now treats `needs_reauth` like `disconnected` and `revoked`: it turns the switch off, records
+  `connection_needs_reauth` with the from-state, and sends one Owner notification. The reason CHECK lists those three
+  values.
+- **A flap produces one off-event:** once the switch is off, `OLD.qb_time_export_enabled` is false, so nothing records
+  or sends again. Proved live: connected→needs_reauth→connected→needs_reauth→connected adds **0** rows after the first,
+  and `auto_off_at` keeps its first value.
+- **A reconnect never turns the switch on, and it leaves the record in place,** so the Accounting screen can show the
+  **Owner** (and only the Owner) the offer: *"QuickBooks is connected again. Sending approved timesheets turned itself
+  off on <date> because <cause>. It is still off. N days approved while it was off were NOT sent and will not be sent —
+  turning it back on sends only days approved from now on. Enter those hours in QuickBooks yourself if you need them
+  there."* N comes from `time_clock_sessions` approved since `auto_off_at`. The one click is the existing Owner-only
+  "Turn it back on" button, through the S124 route and its confirm. **A switch a human turned off has no record, so it
+  gets no offer.**
+- The reconnect offer is **on screen only, with no second notification.** The off-event already notified the Owner and
+  links to that screen, and the ruling asks for no repeat noise.
+
+## Item 1 — on rebuild-test: ✅ (not yet merged; it waits for CI and production)
+
+- **Section (rebuild-test):** workdir = the branch's migrations + Part 1's `20262135` (so the local history matches the
+  remote). `--include-all` dry run → **exactly** `20262134100000_s127_qb_time_export_auto_off.sql`. Before the push the
+  live function was confirmed at the S124 captured md5 `57240739…`.
+- **Verified by object:** 3 nullable columns with no default; `companies_qb_time_export_auto_off_reason_check` (3
+  values) + `…_complete_check`; `notifications_type_check` **21 values = the live 20 + `qb_time_export_auto_off`, all
+  known (a superset)**; 0 companies with an auto-off record; history row present.
+- `database.ts`: **+9 lines, only this migration's.** The generator also emitted 60 lines for Part 1's `qb_employee_map`
+  (rebuild-test only), and those were **excluded**.
+- **Live `s127-qb-auto-off.live.ts`: 6/6.**
+  - **Owner-only by service-role row count:** after a revoke, `owner: 1` and every other role `0` (a total role map,
+    10 profiles).
+  - **Already off → disconnected: 0 new rows, counted both ways** (the total is unchanged, and rows since t0 = 0).
+  - A client cannot forge or clear the record (Owner session).
+  - A human turn-on clears the record.
+  - needs_reauth + flap, as above.
+  - disconnected → reason `connection_disconnected`.
+  - Restored exactly; 0 rows left.
+- **Sabotages:**
+  - (A) notify arm removed → **3 red**.
+  - (B) already-off guard removed → **3 red** (including the already-off test).
+  - Both restored. ⚠️ **The first restore failed silently:** the file's leading `--` comment was parsed by the CLI as a
+    flag. **The md5 read-back caught it** ("restored" = the sabotage md5). It was restored from the bare definition and
+    read back identical. RESTORE now says to use `-f`.
+- ⚠️ **3 unit reds I pushed, and fixed:**
+  1. `brand-literals`: "FrameFocus" (the pre-rebrand name) in the copy and in the trigger's notification text, now
+     `brand.name` / "EZ Contractor Binder". The function was re-applied on rebuild-test from the corrected migration,
+     md5 **`65284c5d…`**, and the originals were re-captured.
+  2. The `s123-still-clocked-in` producer census gains this migration, with its statement.
+  3. S124's rendered-copy check is de-duplicated (the title now renders on two branches; the superseded line is quoted).
+
+  They reached CI run `37090127411` because I pushed before the full unit run finished. **That run is red by my mistake;
+  its e2e half still reports.** The fixed head is re-pushed when it ends (it cannot be cancelled, and two runs on one
+  database collide).
+
+## Item 7 — on rebuild-test: ✅ (stacked on item 1; not yet merged)
+
+- **Section:** original `reopen_session_on_segment_hours` captured first (md5 `27f18f28…`, identical on both databases,
+  committed `12a51ec1` with RESTORE). Dry run → **exactly** `20262134200000_s127_segment_type_reopen.sql`.
+- **Verified by object:** md5 `044157b9…`, the type arm present, ACL unchanged, trigger enabled, history row present.
+- **Live `s127-segment-type.live.ts`: 13/13.** (The first run was 8 red on a FIXTURE mistake: an ended non-break segment
+  needs a note, `time_segments_note_on_end_check`. Fixed and re-run.)
+  - **Total role map, break → shop on an approved crew day, judged by the service role:** owner, admin, PE, PM and
+    foreman → type `shop`, day `pending`. Client, sub and crew (another member's day: RLS-filtered) → type `break`, day
+    still `approved`.
+  - break → work (with a job) by a PM reopens.
+  - **Controls:** shop → travel keeps the day approved (the write landed); a note-only change keeps it approved; a
+    pending day stays pending.
+  - **Self:** the crew member's own approved break is refused with **42501** *"This day is approved. Ask a supervisor to
+    change a break."*, type and approval unchanged.
+- **Regression:** `s122-session-clock-edit.live.ts` + `s121-time-edits.live.ts` **64/64** (the live clock flow and the
+  sheet's own reopen are unchanged).
+- **Sabotages:** (i) the type arm removed → **7 red**; (ii) the self refusal removed → **1 red**. Both restored with
+  `-f`, md5 `044157b9…` read back each time.
+- **Ruling #9:** production has **0** affected approved days (1.4c), so there is nothing to correct and nothing was.
+
+## Built since, all on pushed branches with `[skip ci]`, waiting their turn on CI (02:51Z)
+
+| branch | item | migration | proofs so far |
+| --- | --- | --- | --- |
+| `feature/s127-daily-log-client-photo` `3a316a2c` | 5a | `20262134300000` (a new nullable column) | unit 5/5, gate sabotage red; S118 e2e inverted in place; all three upload paths (online, desktop retry, offline queue) set `client_visible` |
+| `feature/s127-holidays` `f4619a2d` | 6 | `20262134400000` (a new table, seeded; dirty-marker extended in place, original captured, md5 `460edf02…` on both databases) | unit 18/18 (year resolution incl. last-Monday / 4th-Thursday / day-after; seed parity with code; the consequence wording); e2e written |
+| `feature/s127-share-link` `c16c6e9d` (on 4b) | 4e | `20262134500000` (two new tables) | unit 4/4 (token, payload contract = 3 fields, page and image source); **payload e2e written (a cookie-less fetch of the page's BYTES)** |
+
+All eight earlier branches were re-checked locally: `tsc` 0 and the full unit suite green on each. The one exception,
+`s127-photo-trash`, had a hard-coded string caught by the `/m` i18n guard; it is fixed (`562b2ef4`).
+
+**Decisions on my own reading (4e, 5a, 6):**
+- **4e:** **Owner/Admin** create, list, revoke and extend public links. Bulk share/delete is Owner/Admin by ruling, and
+  this is the most outward-facing act in the viewer. **The token is stored as a sha256 hash** (stricter than the
+  `/sign-co` and `/bid` precedents, which store plain tokens). **A photo with markup but no derivative cannot be
+  shared:** the preview would show the original, so it is blocked rather than publishing something the preview did
+  not show.
+- **5a:** the client-photo gate applies to **sending a new log**. Editing a log written before S127 is not blocked,
+  because those logs had no such field.
+- **6:** Q-B as stated. Worth Properties (Critical Path used) is seeded **off**. H&H and every new company are seeded
+  **on**, since they have no Critical Path dates to move. The resolved dates span the project's start year (or this
+  year) minus one, through ten years ahead.
