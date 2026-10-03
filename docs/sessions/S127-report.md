@@ -673,3 +673,9 @@ The brief: *4b + 4e, then 4a, 4c, 5a, 6.* **I am shipping 5a + 6 first, then 4a 
 - ⚠️ **What this means live:** a daily log on either surface can no longer be SENT without at least one client-facing
   photo or a stated reason. Editing a pre-S127 log is not blocked. Worth Properties' holidays are all OFF (its Critical
   Path job is not re-dated); H&H's are all ON (it has no Critical Path dates to move).
+
+## 4a + 4b: CI `37116585932` started (10:29Z) on `292d7164`
+
+`feature/s127-photo-viewer` rebased onto `main` `965b3f21` (clean, 4 commits; force-pushed with a lease on the old head
+`63dfd789`). Local first, on that tree: `tsc` exit 0 (0 lines) · `next lint` exit 0 · unit **178 files / 2,375 tests**
+exit 0. No migration.
