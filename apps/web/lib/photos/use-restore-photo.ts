@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { restoreFile } from '@/lib/services/files-client';
+import { DISCARDED } from '@/lib/services/mutation-result';
 
 /**
  * S127 item 4a — restoring a trashed photo, ONE mechanism for desktop and /m
@@ -26,7 +27,9 @@ export function useRestorePhoto(): {
     const result = await restoreFile(fileId);
     setBusyId(null);
     if (!result.success) {
-      setError(result.error ?? 'Restore failed.');
+      // The SCREEN words the failure (each surface's own copy, /m in t()); the
+      // hook passes the cause through, or DISCARDED when there is none.
+      setError(result.error ?? DISCARDED);
       return false;
     }
     router.refresh();
