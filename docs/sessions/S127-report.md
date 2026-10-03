@@ -520,3 +520,30 @@ All eight earlier branches were re-checked locally: `tsc` 0 and the full unit su
 - **6:** Q-B as stated. Worth Properties (Critical Path used) is seeded **off**. H&H and every new company are seeded
   **on**, since they have no Critical Path dates to move. The resolved dates span the project's start year (or this
   year) minus one, through ten years ahead.
+
+## Production sections for items 1 and 7: expectations STATED BEFORE THE QUERIES (written 03:10Z)
+
+**Pre-state, read-only on `jwkcknyuyvcwcdeskrmz` at 03:05Z (it matched what S124 left):**
+`enforce_companies_qb_time_export` md5 `57240739631328c1215351024c4f4a43`; `reopen_session_on_segment_hours` md5
+`27f18f288f62a006e12d033b5005741e`; `notifications_type_check` 20 values; companies: H&H `disconnected / switch off`,
+Worth Properties `connected / switch off`; latest migration `20262134000000`. Dry run from a workdir of `main` + item
+1's file: **exactly** `20262134100000_s127_qb_time_export_auto_off.sql`.
+
+**Item 1, expected after the push:**
+1. `schema_migrations` has `20262134100000`.
+2. `companies.qb_time_export_auto_off_at` (timestamptz), `_reason` (text) and `_from_state` (text) exist, all nullable,
+   no default.
+3. `companies_qb_time_export_auto_off_reason_check` allows exactly `connection_disconnected`, `connection_revoked`,
+   `connection_needs_reauth`; `companies_qb_time_export_auto_off_complete_check` is present.
+4. `notifications_type_check` has 21 values, all known (the 20 + `qb_time_export_auto_off`).
+5. `enforce_companies_qb_time_export` md5 **`65284c5df44f2980c736df045cc869ed`** (= rebuild-test).
+6. 0 companies with an auto-off record; 0 notifications of the new type.
+7. Both switches still off; Worth Properties still `connected`, H&H still `disconnected` (the migration changes no
+   state, so nothing fires).
+
+**Item 7, expected after its push (a separate section, dry run of exactly its one file):**
+1. `schema_migrations` has `20262134200000`.
+2. `reopen_session_on_segment_hours` md5 **`044157b9a0ade061e0d56c647fffd7ab`** (= rebuild-test), same ACL.
+3. `time_segments_z_reopen_on_hours_change` present and enabled.
+4. `time_clock_sessions` by status unchanged: approved 9, pending 10, NULL 6 (the migration corrects nothing, ruling
+   #9).
