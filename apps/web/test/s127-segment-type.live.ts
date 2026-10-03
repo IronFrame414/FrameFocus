@@ -17,7 +17,7 @@
  * The live clock flow on an open session and the week sheet's own reopen are
  * S122's, re-run unchanged (s122-session-clock-edit.live.ts).
  *
- * Disposable fixture: sessions on 2020-01-20 (no real time sits there), swept
+ * Disposable fixture: sessions on 2020-01-27 (no real time sits there), swept
  * before and after; the SELF fixture sits after the crew member's latest real
  * segment, marked by its note.
  */
@@ -27,7 +27,7 @@ import type { CompanyRole } from '@framefocus/shared/types/roles';
 import { forEveryRole } from '@/test-support/role-matrix';
 import { admin, assertRebuildTest, sessionFor } from './live-session';
 
-const DAY = '2020-01-20';
+const DAY = '2020-01-27'; // not 2020-01-20: e2e/desktop-day-clock-edit-s122 sweeps that day
 const SELF_NOTE = 'S127ST-self';
 const IDENTITY: Record<CompanyRole, string> = {
   owner: 'josh+test50@worthprop.com',
