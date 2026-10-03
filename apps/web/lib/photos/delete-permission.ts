@@ -46,3 +46,57 @@ export function canDeletePhoto(role: string | null | undefined): boolean {
 export function canTrashFile(role: string | null | undefined): boolean {
   return canDeletePhoto(role);
 }
+
+// ============================================================================
+// [S127 item 4d, A-1a — RULED Josh, 2026-10-02, option A] BULK actions on a
+// SELECTION of photos: OWNER AND ADMIN ONLY.
+//
+// ⚠️ NARROWER THAN `canDeletePhoto` ON PURPOSE, recorded so it is not relaxed:
+// construction photos are EVIDENCE (concealed conditions, water intrusion,
+// defective work), and a checkbox column puts "select all → delete" one mis-tap
+// from the photos that matter in a dispute two years later. A PM or PE still
+// deletes ONE photo from its view; the multi-select delete is Owner/Admin.
+// It stays a SOFT delete, and the trash (4a) is where it comes back from.
+//
+// "Show to client": see the 2026-10-03 matrix below (superseded here).
+// ============================================================================
+export const PHOTO_BULK_ROLES: readonly string[] = ['owner', 'admin'];
+
+export function canBulkDeletePhotos(role: string | null | undefined): boolean {
+  return typeof role === 'string' && PHOTO_BULK_ROLES.includes(role);
+}
+
+// ============================================================================
+// [S127 — RULED Josh, 2026-10-03 10:58–11:01] PHOTO CLIENT-VISIBILITY. The
+// final matrix, all four rows:
+//   SINGLE share  = Owner, Admin, PE, PM   (canSharePhotoWithClient)
+//   BULK share    = Owner, Admin, PE       (canSharePhotosWithClient)
+//   SINGLE delete = Owner, Admin, PM, PE   (canDeletePhoto — unchanged)
+//   BULK delete   = Owner, Admin           (canBulkDeletePhotos — unchanged, A-1a)
+// ⚠️ Bulk share and bulk delete DIFFER ON PURPOSE: sharing is reversible,
+// deleting is destructive. Do not "tidy" them into one list.
+//
+// The DATABASE decides the rows: `enforce_files_column_scope`
+// (20262134600000) admits client_visible from Owner/Admin, and from PM/PE on a
+// photo. It cannot tell one write from many — a bulk action is N single
+// writes — so the bulk rows are enforced HERE, by not drawing the control.
+// _Superseded, quoted:_ "Show to client" is Owner/Admin because the database
+// refuses `client_visible` to everyone else — true until 20262134600000.
+// ============================================================================
+export const PHOTO_SHARE_ROLES: readonly string[] = [
+  'owner',
+  'admin',
+  'project_executive',
+  'project_manager',
+];
+export const PHOTO_BULK_SHARE_ROLES: readonly string[] = ['owner', 'admin', 'project_executive'];
+
+/** One photo's "Shared with client" toggle. */
+export function canSharePhotoWithClient(role: string | null | undefined): boolean {
+  return typeof role === 'string' && PHOTO_SHARE_ROLES.includes(role);
+}
+
+/** The multi-select "Show to client". */
+export function canSharePhotosWithClient(role: string | null | undefined): boolean {
+  return typeof role === 'string' && PHOTO_BULK_SHARE_ROLES.includes(role);
+}

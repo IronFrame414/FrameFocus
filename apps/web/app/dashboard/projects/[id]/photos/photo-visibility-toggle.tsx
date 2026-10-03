@@ -37,6 +37,7 @@ export default function PhotoVisibilityToggle({
   return (
     <button
       type="button"
+      data-testid="photo-visibility-toggle"
       onClick={toggle}
       disabled={busy}
       title={visible ? 'Visible in the client portal — click to hide' : 'Hidden from the client — click to share'}

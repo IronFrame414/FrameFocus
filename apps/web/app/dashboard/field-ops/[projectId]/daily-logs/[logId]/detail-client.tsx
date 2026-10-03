@@ -25,7 +25,15 @@ export interface GridPhoto {
   signedUrl: string | null;
 }
 
-export function PhotoGrid({ photos }: { photos: GridPhoto[] }) {
+export function PhotoGrid({
+  photos,
+  canShare,
+}: {
+  photos: GridPhoto[];
+  /** [S127, RULED 2026-10-03] canSharePhotoWithClient — the toggle is drawn
+   *  only for roles the database lets change it. */
+  canShare: boolean;
+}) {
   const [visibleFlags, setVisibleFlags] = useState<Record<string, boolean>>(
     Object.fromEntries(photos.map((p) => [p.id, p.client_visible]))
   );
@@ -69,6 +77,7 @@ export function PhotoGrid({ photos }: { photos: GridPhoto[] }) {
                 {photo.file_name}
               </div>
             )}
+            {canShare ? (
             <button
               type="button"
               title={
@@ -85,6 +94,15 @@ export function PhotoGrid({ photos }: { photos: GridPhoto[] }) {
             >
               {visibleFlags[photo.id] ? <Eye size={13} /> : <EyeOff size={13} />}
             </button>
+            ) : visibleFlags[photo.id] ? (
+              // Read-only: the state is still SAID, it just is not a control.
+              <span
+                title="Shared to client"
+                className="absolute right-1 top-1 rounded-[7px] bg-[#2f49d1] p-[5px] text-white"
+              >
+                <Eye size={13} />
+              </span>
+            ) : null}
           </div>
         ))}
         {overflow > 0 ? (
