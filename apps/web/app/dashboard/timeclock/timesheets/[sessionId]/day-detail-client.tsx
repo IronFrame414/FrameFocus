@@ -250,7 +250,9 @@ export function DayDetailClient({
     // edit_time_segment — its overlap check, completion gate, reopen and audit —
     // not a second path. SUPERSEDED: updateSegment(...), a plain client UPDATE of
     // segment_start/segment_end. Supervisors keep the attribution-only edit
-    // (hours unchanged, so nothing reopens).
+    // (hours unchanged, so nothing reopens) — [S127 item 7] EXCEPT a work ↔
+    // break change, which moves paid time: the database reopens the day and
+    // `returnedToPending` shows the same notice below.
     const res = isAdmin
       ? await editSegmentFull(editSegment.id, {
           ...attribution,
