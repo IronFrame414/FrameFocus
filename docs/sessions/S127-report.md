@@ -718,7 +718,7 @@ last log is 2026-10-02 19:41Z). **Why CI was green:** 5a's e2e chose a *reason* 
 foreman, and its unit tests pinned the payload, not the write. **The flag path was never exercised by a non-Owner.**
 That is my gap: a write path proven by the shape of its payload, not by a row.
 
-**The fix (no migration, `f…` on `feature/s127-5a-client-photo-fix`).** One server mechanism,
+**The fix (no migration, `d2a52a0e` on `feature/s127-5a-client-photo-fix`).** One server mechanism,
 `lib/daily-logs/client-photo-share.ts`, reached through `POST /api/daily-logs/client-photo` from all three paths
 (PARITY). It reads the profile, the log and the file **through the caller's RLS** first. It admits the **log's author**
 (the table's own UPDATE rule) sharing **a photo they uploaded**, on the **same project**, not already on another log.
