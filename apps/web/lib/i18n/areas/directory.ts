@@ -98,6 +98,8 @@ export const en = {
     'The roster details were not saved — you do not have permission to edit this member.',
   'directory.team.errorProfile': 'Personal details: {error}',
   'directory.team.errorRoster': 'Roster details: {error}',
+  // [S127 item 2] Active/Inactive now removes or restores the person's LOGIN.
+  'directory.team.errorAccess': 'Sign-in access was not changed: {error}',
 } as const;
 
 export const es: Record<keyof typeof en, string> = {
@@ -189,4 +191,5 @@ export const es: Record<keyof typeof en, string> = {
     'No se guardaron los datos del equipo — no tienes permiso para editar a este miembro.',
   'directory.team.errorProfile': 'Datos personales: {error}',
   'directory.team.errorRoster': 'Datos del equipo: {error}',
+  'directory.team.errorAccess': 'No se cambió el acceso para iniciar sesión: {error}',
 };
