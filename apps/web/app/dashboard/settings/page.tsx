@@ -280,6 +280,7 @@ export default async function SettingsPage({
             enabledAt={qbConnection?.timeExportEnabledAt ?? null}
             autoOffAt={qbConnection?.timeExportAutoOffAt ?? null}
             autoOffReason={qbConnection?.timeExportAutoOffReason ?? null}
+            missedDays={qbConnection?.timeExportMissedDays ?? null}
             isOwner={profile.role === 'owner'}
           />
           {/* ⚠️ RENDERS NOTHING WHEN DISCONNECTED [RULED Josh, S103]: "the GL

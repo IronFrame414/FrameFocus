@@ -22,6 +22,7 @@ import { useRouter } from 'next/navigation';
 import {
   TIME_EXPORT_COPY,
   timeExportAutoOffNotice,
+  timeExportReconnectOffer,
   type TimeExportAutoOffReason,
 } from '@/lib/quickbooks/time-export-copy';
 import { badgeStyle, cardStyle, color, h2Style, primaryButtonStyle, secondaryButtonStyle } from '@/lib/theme';
@@ -33,6 +34,8 @@ export interface TimeExportSettingsProps {
   /** [S127 item 1] When and why the switch turned itself off; null if it did not. */
   autoOffAt: string | null;
   autoOffReason: TimeExportAutoOffReason | null;
+  /** [S127 Q-E] Days approved since the auto-off — named in the reconnect offer. */
+  missedDays: number | null;
   isOwner: boolean;
 }
 
@@ -53,6 +56,7 @@ export function TimeExportSettings({
   enabledAt,
   autoOffAt,
   autoOffReason,
+  missedDays,
   isOwner,
 }: TimeExportSettingsProps) {
   const router = useRouter();
@@ -131,7 +135,20 @@ export function TimeExportSettings({
       {enabled && enabledAt ? (
         <p style={p}>Turned on {formatWhen(enabledAt)}. Days approved since then are sent.</p>
       ) : null}
-      {autoOff}
+      {/* [S127 Q-E] Connected again after it turned ITSELF off: the Owner gets
+          an OFFER (the button below is the one click; it never flips by itself),
+          stating what was missed. Everyone else sees the plain notice. */}
+      {isOwner && !enabled && autoOffAt && autoOffReason ? (
+        <p
+          style={{ ...p, color: color.warning, fontWeight: 600 }}
+          role="status"
+          data-testid="qb-time-export-reconnect-offer"
+        >
+          {timeExportReconnectOffer(autoOffReason, formatWhen(autoOffAt), missedDays ?? 0)}
+        </p>
+      ) : (
+        autoOff
+      )}
       <p style={p}>{TIME_EXPORT_COPY.what}</p>
       <p style={{ ...p, color: color.warning, fontWeight: 600 }}>{TIME_EXPORT_COPY.payroll}</p>
       <p style={p}>{TIME_EXPORT_COPY.noBackfill}</p>
@@ -146,7 +163,7 @@ export function TimeExportSettings({
           style={{ ...(enabled ? secondaryButtonStyle : primaryButtonStyle), marginTop: '1rem' }}
           data-testid="qb-time-export-toggle"
         >
-          {busy ? 'Saving…' : enabled ? 'Turn off' : 'Turn on'}
+          {busy ? 'Saving…' : enabled ? 'Turn off' : autoOffAt ? 'Turn it back on' : 'Turn on'}
         </button>
       ) : (
         <p style={{ ...p, color: color.muted }}>{TIME_EXPORT_COPY.ownerOnly}</p>

@@ -116,6 +116,7 @@ export default async function AccountingSettingsPage({
         enabledAt={connection?.timeExportEnabledAt ?? null}
         autoOffAt={connection?.timeExportAutoOffAt ?? null}
         autoOffReason={connection?.timeExportAutoOffReason ?? null}
+        missedDays={connection?.timeExportMissedDays ?? null}
         isOwner={profile.role === 'owner'}
       />
       {/* PARITY [Josh, S122] — the SAME component the Settings tab mounts.

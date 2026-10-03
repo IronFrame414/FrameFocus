@@ -54,7 +54,11 @@ async function write(patch: Partial<Row>): Promise<void> {
 }
 
 /** Auto-off notification rows for this company, per recipient role, by the service role. */
-async function rowsByRole(): Promise<{ total: number; byRole: Record<string, number>; ids: string[] }> {
+async function rowsByRole(): Promise<{
+  total: number;
+  byRole: Record<string, number>;
+  ids: string[];
+}> {
   const { data, error } = await admin
     .from('notifications')
     .select('id, recipient_profile_id')
@@ -64,10 +68,15 @@ async function rowsByRole(): Promise<{ total: number; byRole: Record<string, num
   if (error) throw new Error(error.message);
   const byRole: Record<string, number> = {};
   for (const r of data ?? []) {
-    const role = roleOf.get((r as { recipient_profile_id: string }).recipient_profile_id) ?? 'UNKNOWN';
+    const role =
+      roleOf.get((r as { recipient_profile_id: string }).recipient_profile_id) ?? 'UNKNOWN';
     byRole[role] = (byRole[role] ?? 0) + 1;
   }
-  return { total: (data ?? []).length, byRole, ids: (data ?? []).map((r) => (r as { id: string }).id) };
+  return {
+    total: (data ?? []).length,
+    byRole,
+    ids: (data ?? []).map((r) => (r as { id: string }).id),
+  };
 }
 
 beforeAll(async () => {
@@ -152,7 +161,9 @@ describe('S127 item 1 — the switch says when it turned itself off', () => {
       .eq('company_id', COMPANY_ID)
       .eq('type', TYPE)
       .gte('created_at', t0);
-    console.log(`[s127-ao] already-off: total ${rowsBefore.total} -> ${rowsAfter.total}, since t0=${since}`);
+    console.log(
+      `[s127-ao] already-off: total ${rowsBefore.total} -> ${rowsAfter.total}, since t0=${since}`
+    );
     expect(rowsAfter.total).toBe(rowsBefore.total);
     expect(since).toBe(0);
     expect(after.qb_time_export_enabled).toBe(false);
@@ -160,7 +171,7 @@ describe('S127 item 1 — the switch says when it turned itself off', () => {
     expect(after.qb_time_export_auto_off_reason).toBe(before.qb_time_export_auto_off_reason);
   });
 
-  it('a client cannot forge or clear the record (the Owner\'s own session)', async () => {
+  it("a client cannot forge or clear the record (the Owner's own session)", async () => {
     const owner = await sessionFor(OWNER_EMAIL);
     const before = await company();
     await owner
@@ -184,17 +195,58 @@ describe('S127 item 1 — the switch says when it turned itself off', () => {
     expect(on.qb_time_export_auto_off_from_state).toBeNull();
   });
 
+  it('[Q-E] ON → needs_reauth (the grant died): off, recorded, one more Owner row; a FLAP adds nothing', async () => {
+    await write({ qb_connection_state: 'connected' });
+    const owner = await sessionFor(OWNER_EMAIL);
+    await owner.from('companies').update({ qb_time_export_enabled: true }).eq('id', COMPANY_ID);
+    expect((await company()).qb_time_export_enabled).toBe(true);
+    const rowsBefore = await rowsByRole();
+    await write({ qb_connection_state: 'needs_reauth' });
+    const off = await company();
+    const rowsAfter = await rowsByRole();
+    console.log(
+      `[s127-ao] after needs_reauth ${JSON.stringify(off)} rows ${rowsBefore.total} -> ${rowsAfter.total}`
+    );
+    expect(off.qb_time_export_enabled).toBe(false);
+    expect(off.qb_time_export_auto_off_reason).toBe('connection_needs_reauth');
+    expect(off.qb_time_export_auto_off_from_state).toBe('connected');
+    expect(rowsAfter.total).toBe(rowsBefore.total + 1);
+    expect(rowsAfter.total - (rowsAfter.byRole.owner ?? 0)).toBe(0);
+
+    // The connection flaps: reconnect, die again, reconnect, die again.
+    for (const st of ['connected', 'needs_reauth', 'connected', 'needs_reauth'] as const)
+      await write({ qb_connection_state: st });
+    const flapped = await rowsByRole();
+    const afterFlap = await company();
+    console.log(`[s127-ao] after flap rows=${flapped.total}`);
+    expect(flapped.total, 'one off-event, not five').toBe(rowsAfter.total);
+    expect(afterFlap.qb_time_export_auto_off_at, 'the first event stands').toBe(
+      off.qb_time_export_auto_off_at
+    );
+
+    // [Q-E] A reconnect never turns it on, and LEAVES the record for the offer.
+    await write({ qb_connection_state: 'connected' });
+    const back = await company();
+    expect(back.qb_time_export_enabled).toBe(false);
+    expect(back.qb_time_export_auto_off_reason).toBe('connection_needs_reauth');
+  });
+
   it('ON → disconnected (in FrameFocus): recorded as connection_disconnected, and one more Owner row', async () => {
+    const owner = await sessionFor(OWNER_EMAIL);
+    await owner.from('companies').update({ qb_time_export_enabled: true }).eq('id', COMPANY_ID);
+    expect((await company()).qb_time_export_enabled).toBe(true);
     const rowsBefore = await rowsByRole();
     await write({ qb_connection_state: 'disconnected' });
     const off = await company();
     const rowsAfter = await rowsByRole();
-    console.log(`[s127-ao] after disconnect ${JSON.stringify(off)} rows ${rowsBefore.total} -> ${rowsAfter.total}`);
+    console.log(
+      `[s127-ao] after disconnect ${JSON.stringify(off)} rows ${rowsBefore.total} -> ${rowsAfter.total}`
+    );
     expect(off.qb_time_export_enabled).toBe(false);
     expect(off.qb_time_export_auto_off_reason).toBe('connection_disconnected');
     expect(off.qb_time_export_auto_off_from_state).toBe('connected');
     expect(rowsAfter.total).toBe(rowsBefore.total + 1);
-    expect(rowsAfter.byRole.owner).toBe(2);
+    expect(rowsAfter.byRole.owner).toBe(3); // revoke, needs_reauth, disconnect
     expect(rowsAfter.total - (rowsAfter.byRole.owner ?? 0)).toBe(0);
   });
 });

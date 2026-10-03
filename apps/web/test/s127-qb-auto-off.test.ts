@@ -1,7 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { TIME_EXPORT_COPY, timeExportAutoOffNotice } from '@/lib/quickbooks/time-export-copy';
+import {
+  TIME_EXPORT_COPY,
+  timeExportAutoOffNotice,
+  timeExportReconnectOffer,
+} from '@/lib/quickbooks/time-export-copy';
 import { chipFor } from '@/lib/notify/categories';
 
 // ============================================================================
@@ -54,12 +58,29 @@ describe('S127 item 1 — the migration', () => {
   });
 
   it('notifies only when the switch WAS on, and only the Owner', () => {
-    const fn = SQL.slice(SQL.indexOf('CREATE OR REPLACE FUNCTION public.enforce_companies_qb_time_export'));
-    const arm = fn.slice(fn.indexOf('IF OLD.qb_time_export_enabled THEN'), fn.indexOf('NEW.qb_time_export_enabled := false;'));
+    const fn = SQL.slice(
+      SQL.indexOf('CREATE OR REPLACE FUNCTION public.enforce_companies_qb_time_export')
+    );
+    const arm = fn.slice(
+      fn.indexOf('IF OLD.qb_time_export_enabled THEN'),
+      fn.indexOf('NEW.qb_time_export_enabled := false;')
+    );
     expect(arm).toContain('INSERT INTO public.notifications');
     expect(arm).toContain("AND p.role = 'owner'");
     expect(arm).toContain('AND p.is_deleted = false');
     expect(arm.match(/p\.role/g)).toHaveLength(1);
+  });
+
+  it('[Q-E] needs_reauth turns it off too; the reason CHECK allows exactly the three transitions', () => {
+    expect(SQL).toContain(
+      "IF NEW.qb_connection_state IN ('disconnected', 'revoked', 'needs_reauth')"
+    );
+    const check = SQL.match(/qb_time_export_auto_off_reason IN \(([^)]*)\)/)![1];
+    expect([...check.matchAll(/'([a-z_]+)'/g)].map((m) => m[1])).toEqual([
+      'connection_disconnected',
+      'connection_revoked',
+      'connection_needs_reauth',
+    ]);
   });
 });
 
@@ -72,6 +93,29 @@ describe('S127 item 1 — what the screen says', () => {
     expect(timeExportAutoOffNotice('connection_revoked', 'Oct 3, 2026, 9:15 AM')).toBe(
       'Turned off automatically when FrameFocus was disconnected from inside QuickBooks on Oct 3, 2026, ' +
         '9:15 AM. No hours are being sent. After reconnecting, turn it on again yourself.'
+    );
+  });
+
+  it('[Q-E] a dead grant (needs_reauth) is named as such', () => {
+    expect(timeExportAutoOffNotice('connection_needs_reauth', 'Oct 3, 2026, 9:15 AM')).toBe(
+      'Turned off automatically when QuickBooks stopped accepting the connection on Oct 3, 2026, 9:15 AM. ' +
+        'No hours are being sent. After reconnecting, turn it on again yourself.'
+    );
+  });
+
+  it('[Q-E] the reconnect OFFER says plainly that what was missed is not sent', () => {
+    const offer = timeExportReconnectOffer('connection_needs_reauth', 'Oct 3, 2026, 9:15 AM', 9);
+    expect(offer).toBe(
+      'QuickBooks is connected again. Sending approved timesheets turned itself off on Oct 3, 2026, 9:15 AM ' +
+        'because QuickBooks stopped accepting the connection. It is still off. 9 days approved while it was off ' +
+        'were NOT sent and will not be sent — turning it back on sends only days approved from now on. ' +
+        'Enter those hours in QuickBooks yourself if you need them there.'
+    );
+    expect(timeExportReconnectOffer('connection_disconnected', 'x', 1)).toContain(
+      '1 day approved while it was off was NOT sent'
+    );
+    expect(timeExportReconnectOffer('connection_revoked', 'x', 0)).toContain(
+      'No days were approved while it was off.'
     );
   });
 

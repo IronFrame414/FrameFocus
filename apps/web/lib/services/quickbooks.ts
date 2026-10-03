@@ -46,7 +46,12 @@ export interface QuickBooksConnection {
    * it did not, or once a human has turned it back on.
    */
   timeExportAutoOffAt: string | null;
-  timeExportAutoOffReason: 'connection_disconnected' | 'connection_revoked' | null;
+  timeExportAutoOffReason: 'connection_disconnected' | 'connection_revoked' | 'connection_needs_reauth' | null;
+  /**
+   * [S127 Q-E] Days approved since it turned itself off — never sent, and never
+   * to be sent (no backfill). Null when there is no auto-off record.
+   */
+  timeExportMissedDays: number | null;
 }
 
 export async function getQuickBooksConnection(): Promise<QuickBooksConnection | null> {
@@ -71,6 +76,21 @@ export async function getQuickBooksConnection(): Promise<QuickBooksConnection | 
     .eq('id', profile.company_id)
     .single();
   if (!data) return null;
+
+  // [S127 Q-E] The gap the reconnect offer must name. Approved days are what
+  // the switch sends; any approved after the auto-off were missed. Read as the
+  // caller (the offer is the Owner's, and the Owner reads every session).
+  let missedDays: number | null = null;
+  if (data.qb_time_export_auto_off_at) {
+    const { count } = await supabase
+      .from('time_clock_sessions')
+      .select('id', { count: 'exact', head: true })
+      .eq('company_id', profile.company_id)
+      .eq('status', 'approved')
+      .eq('is_deleted', false)
+      .gte('approved_at', data.qb_time_export_auto_off_at);
+    missedDays = count ?? 0;
+  }
 
   return {
     state: data.qb_connection_state as QuickBooksConnection['state'],
@@ -100,6 +120,7 @@ export async function getQuickBooksConnection(): Promise<QuickBooksConnection | 
     // The generator emits `string`; the CHECK allows exactly these two.
     timeExportAutoOffReason:
       data.qb_time_export_auto_off_reason as QuickBooksConnection['timeExportAutoOffReason'],
+    timeExportMissedDays: missedDays,
   };
 }
 

@@ -17,6 +17,8 @@
 --                                    (POST /api/quickbooks/disconnect)
 --        'connection_revoked'      — disconnected from inside QuickBooks
 --                                    (Intuit's redirect, GET of the same route)
+--        'connection_needs_reauth' — the grant DIED: Intuit refused the refresh
+--                                    (`invalid_grant`, lib/quickbooks/tokens.ts)
 --      Plus `_auto_off_from_state`: the connection state it left (normally
 --      'connected'; 'needs_reauth' when the grant had already died).
 --   2. An in-app notification to the OWNER ONLY [S127 prompt, item 1]: only the
@@ -32,9 +34,18 @@
 -- records nothing and notifies nobody: a notice that nothing changed teaches
 -- people to ignore the one that matters.
 --
--- ⚠️ NOT ADDED: `needs_reauth` as a new reason to turn it off. It does not turn
--- the switch off today; making it do so is a behaviour change nobody ruled
--- (S127 Q-E). Only the transitions S124 already acts on are recorded.
+-- ⚠️ `needs_reauth` NOW TURNS IT OFF TOO — RULED [Josh, S127 Q-E, 2026-10-02
+-- 22:20]: "The dead-connection case is the one this feature exists to catch —
+-- tonight's invalid_grant is exactly it — and leaving the switch on while
+-- nothing can send is the silence being fixed." S124 Part 2 turned it off only
+-- on disconnected/revoked. A connection that FLAPS produces one off-event, not
+-- ten: after the first, the switch is already off and nothing fires.
+--
+-- ⚠️ ON RECONNECT, NOTHING HERE TURNS IT BACK ON. The record is LEFT in place
+-- so the Accounting screen can OFFER the Owner a one-click path to turning it
+-- on — by hand, through the Owner-only route — stating plainly that nothing
+-- missed while it was off is sent. A human-off switch has no record and gets
+-- no offer.
 --
 -- ⚠️ REPLACES `enforce_companies_qb_time_export()` IN PLACE. Its captured
 -- original (definition, md5 57240739631328c1215351024c4f4a43, ACL, comment)
@@ -59,7 +70,7 @@ ALTER TABLE public.companies
 ALTER TABLE public.companies
   ADD CONSTRAINT companies_qb_time_export_auto_off_reason_check
   CHECK (qb_time_export_auto_off_reason IS NULL
-         OR qb_time_export_auto_off_reason IN ('connection_disconnected', 'connection_revoked'));
+         OR qb_time_export_auto_off_reason IN ('connection_disconnected', 'connection_revoked', 'connection_needs_reauth'));
 
 ALTER TABLE public.companies
   ADD CONSTRAINT companies_qb_time_export_auto_off_complete_check
@@ -70,11 +81,11 @@ COMMENT ON COLUMN public.companies.qb_time_export_auto_off_at IS
   'enforce_companies_qb_time_export() on an actual on -> off change only. NULL = it did not, or a '
   'human has since turned it back on. Never written by a client.';
 COMMENT ON COLUMN public.companies.qb_time_export_auto_off_reason IS
-  'S127 item 1. Why it turned itself off: connection_disconnected (disconnected in FrameFocus) or '
-  'connection_revoked (disconnected from inside QuickBooks).';
+  'S127 item 1. Why it turned itself off: connection_disconnected (disconnected in FrameFocus), '
+  'connection_revoked (disconnected from inside QuickBooks) or connection_needs_reauth (Intuit refused '
+  'the refresh: the connection died).';
 COMMENT ON COLUMN public.companies.qb_time_export_auto_off_from_state IS
-  'S127 item 1. The connection state it left (normally connected; needs_reauth when the grant had '
-  'already died).';
+  'S127 item 1. The connection state it left (normally connected).';
 
 -- ── 2. The notification type ────────────────────────────────────────────────
 -- ⚠️ AN ALLOWLIST REBUILT IN FULL. The 20 values below are the LIVE constraint
@@ -153,13 +164,15 @@ BEGIN
     NEW.qb_time_export_auto_off_from_state := NULL;
   END IF;
 
-  IF NEW.qb_connection_state IN ('disconnected', 'revoked')
+  -- [S127 Q-E] needs_reauth joins disconnected and revoked.
+  IF NEW.qb_connection_state IN ('disconnected', 'revoked', 'needs_reauth')
      AND OLD.qb_connection_state IS DISTINCT FROM NEW.qb_connection_state THEN
     -- [S127] Record and tell ONLY on an actual on -> off change. OLD is the
     -- truth about "was it on": NEW may already carry a client's false.
     IF OLD.qb_time_export_enabled THEN
       v_reason := CASE NEW.qb_connection_state
                     WHEN 'revoked' THEN 'connection_revoked'
+                    WHEN 'needs_reauth' THEN 'connection_needs_reauth'
                     ELSE 'connection_disconnected'
                   END;
       NEW.qb_time_export_auto_off_at := now();
@@ -173,6 +186,10 @@ BEGIN
       SELECT NEW.id, p.id, 'qb_time_export_auto_off',
              'QuickBooks time export turned itself off',
              CASE v_reason
+               WHEN 'connection_needs_reauth' THEN
+                 'Sending approved timesheets to QuickBooks was turned off because QuickBooks stopped '
+                 || 'accepting the connection — it needs to be reconnected. No hours are being sent. '
+                 || 'After reconnecting, turn it on again on Settings → Accounting.'
                WHEN 'connection_revoked' THEN
                  'Sending approved timesheets to QuickBooks was turned off because FrameFocus was '
                  || 'disconnected from inside QuickBooks. No hours are being sent. After reconnecting, '
@@ -197,5 +214,6 @@ $$;
 
 COMMENT ON FUNCTION public.enforce_companies_qb_time_export() IS
   'S124 Part 2 + S127 item 1. Owner-only switch; refuses ON while not connected; stamps ON; a '
-  'disconnect/revoke turns it OFF and, on an actual on -> off change only, records when and why '
-  '(qb_time_export_auto_off_*) and notifies the Owner only. Never turns it on; never backfills.';
+  'disconnect, revoke or dead grant (needs_reauth) turns it OFF and, on an actual on -> off change '
+  'only, records when and why (qb_time_export_auto_off_*) and notifies the Owner only. Never turns '
+  'it on; never backfills.';
