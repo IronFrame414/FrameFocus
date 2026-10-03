@@ -7,6 +7,7 @@
 // error) produces wrong dates that look authoritative — the same failure as a
 // backfilled duration (stop rule 10). No answer is better than a wrong one.
 
+import { resolveEnabledHolidays, type HolidayRuleRow } from '@framefocus/shared/utils/holiday-rules';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@framefocus/shared/types/database';
 import { calendarDayInZone, companyToday } from '@framefocus/shared/utils/dates';
@@ -45,6 +46,18 @@ export interface CpProjectData {
 
 export type CpLoad = { ok: true; data: CpProjectData } | { ok: false; error: string };
 
+/** [S127 item 6] Years the resolved standard holidays must cover. */
+export function holidayYearSpan(projectStart: string | null, today: string): { from: number; to: number } {
+  const thisYear = Number(today.slice(0, 4));
+  const startYear = projectStart ? Number(projectStart.slice(0, 4)) : thisYear;
+  return { from: Math.min(startYear, thisYear) - 1, to: thisYear + 10 };
+}
+
+/** One-offs plus resolved rules, de-duplicated and sorted. */
+export function mergeHolidays(oneOffs: readonly string[], resolved: readonly string[]): string[] {
+  return [...new Set([...oneOffs, ...resolved])].sort();
+}
+
 export async function loadCriticalPathData(
   db: SupabaseClient<Database>,
   projectId: string,
@@ -59,7 +72,7 @@ export async function loadCriticalPathData(
   if (!project.data) return { ok: false, error: 'project: not found' };
   const companyId = project.data.company_id as string;
 
-  const [company, calendar, holidays, lost, tasks, settings] = await Promise.all([
+  const [company, calendar, holidays, rules, lost, tasks, settings] = await Promise.all([
     db.from('companies').select('timezone').eq('id', companyId).maybeSingle(),
     db
       .from('company_work_calendars')
@@ -73,6 +86,13 @@ export async function loadCriticalPathData(
       .eq('company_id', companyId)
       .eq('is_deleted', false)
       .order('holiday_date', { ascending: true }),
+    // [S127 item 6] The standard holidays, as RULES — resolved per year below.
+    db
+      .from('company_holiday_rules')
+      .select('rule_key, enabled, kind, month, day, weekday, ordinal, offset_days')
+      .eq('company_id', companyId)
+      .eq('is_deleted', false)
+      .order('rule_key', { ascending: true }),
     db
       .from('project_lost_days')
       .select('start_date, end_date')
@@ -151,7 +171,19 @@ export async function loadCriticalPathData(
         dependencies,
         calendar: {
           workDays: calendar.data?.work_days ?? DEFAULT_WORK_DAYS,
-          holidays: (holidays.data ?? []).map((h) => h.holiday_date),
+          // [S127 item 6] ⚠️ THE ENGINE'S CALENDAR LOOKUP IS WHERE YEARS ARE
+          // RESOLVED — the one place that decides whether a day is worked. The
+          // standard rules resolve for every year the schedule can touch (the
+          // project's start year, or this year, minus one, through ten years on);
+          // one-offs are added unchanged.
+          holidays: mergeHolidays(
+            (holidays.data ?? []).map((h) => h.holiday_date),
+            resolveEnabledHolidays(
+              (rules.data ?? []) as HolidayRuleRow[],
+              holidayYearSpan(project.data.start_date, companyToday(timeZone, now)).from,
+              holidayYearSpan(project.data.start_date, companyToday(timeZone, now)).to
+            )
+          ),
         },
         lostDays: (lost.data ?? []).map((l) => ({ start: l.start_date, end: l.end_date })),
         projectStart: project.data.start_date,

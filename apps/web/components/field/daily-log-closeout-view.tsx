@@ -3,7 +3,12 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useT } from '@/components/i18n/language-provider';
-import { CLOSEOUT_ITEMS, type CloseoutFields, type CloseoutKey } from '@/lib/daily-logs/closeout';
+import {
+  CLOSEOUT_ITEMS,
+  type CloseoutFields,
+  type CloseoutKey,
+  CLIENT_PHOTO_SKIP_REASONS,
+} from '@/lib/daily-logs/closeout';
 import { markDailyLogReviewed, setMaterialNeedOrdered } from '@/lib/services/daily-logs-client';
 import type { DailyLogMaterialNeedRow } from '@/lib/services/daily-logs';
 
@@ -120,6 +125,19 @@ export function DailyLogCloseoutView({
               {closeout.tasks_day_after ?? ''}
             </p>
           ) : null}
+        </section>
+      ) : null}
+
+      {/* [S127 5a] A log sent without a client-facing photo says why. */}
+      {closeout.client_photo_skip_reason ? (
+        <section className={box} data-testid="log-view-client-photo-skip">
+          <p className="text-[14px]">
+            {t('field.clientPhoto.skipped', {
+              reason: t(
+                CLIENT_PHOTO_SKIP_REASONS.find((r) => r.value === closeout.client_photo_skip_reason)!.labelKey
+              ),
+            })}
+          </p>
         </section>
       ) : null}
 

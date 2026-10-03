@@ -9,6 +9,7 @@ import {
   setDailyLogSubEntries,
   listProjectDayPresence,
   uploadDailyLogPhotoFile,
+  linkClientFacingLogPhoto,
   linkDailyLogPhoto,
   generateDailyLogPdf,
   setDailyLogMaterialNeeds,
@@ -18,6 +19,7 @@ import {
 import { DailyLogCloseoutFields } from '@/components/field/daily-log-closeout-fields';
 import {
   cleanNeeds,
+  clientPhotoSatisfied,
   emptyCloseout,
   type CloseoutFields,
   type MaterialNeedInput,
@@ -90,6 +92,8 @@ export function LogForm({
   // Photos are LOG-BOUND (S87 revision): they need the log's id to link, so
   // selections queue here and upload at save — create mode has no id earlier.
   const [pendingPhotos, setPendingPhotos] = useState<File[]>([]);
+  // [S127 5a] The dedicated client-facing photos (box C), kept apart.
+  const [clientPhotos, setClientPhotos] = useState<File[]>([]);
   // [S116 F-12, #2-s180u] The photos upload through the shared queue (≤3 in
   // flight, each failure named). A log that saved with photos still missing
   // STAYS on this screen with "Retry" (only the missing ones, against the SAME
@@ -145,6 +149,12 @@ export function LogForm({
       setError('Hazard notes are required when a hazard is flagged.');
       return;
     }
+    // [S127 5a] Sending a NEW log needs a client-facing photo or a reason.
+    // Editing an older log does not: logs before S127 had no such field.
+    if (mode === 'create' && !clientPhotoSatisfied(clientPhotos.length, closeout.client_photo_skip_reason)) {
+      setError('Add at least one client-facing photo, or choose why there is none.');
+      return;
+    }
     for (const s of subs) {
       if (!s.member_id || !(s.hours >= 0)) {
         setError('Every subcontractor row needs a sub and a non-negative hours value.');
@@ -159,6 +169,7 @@ export function LogForm({
       ...closeout,
       tasks_day_after: closeout.tasks_day_after?.trim() || null,
       blockers: closeout.blockers?.trim() || null,
+      client_photo_skip_reason: clientPhotos.length > 0 ? null : closeout.client_photo_skip_reason,
       weather: fields.weather?.trim() || null,
       // #133 CLOSED [S122] — NOT `|| null` like its neighbours, and that is the
       // point. Every other field here is genuinely optional, so coercing blank
@@ -244,6 +255,23 @@ export function LogForm({
           return;
         }
       }
+      // [S127 5a] Client-facing photos: the same queue, linked AND shared.
+      if (clientPhotos.length > 0) {
+        const logIdForPhotos = targetId;
+        const out = await batches.start(
+          'client-photos',
+          clientPhotos,
+          makeAttachWorker(
+            (file) => uploadDailyLogPhotoFile(file, projectId),
+            (fileId) => linkClientFacingLogPhoto(fileId, logIdForPhotos)
+          )
+        );
+        if (hasUnfinished(out)) {
+          setSavedLogId(targetId);
+          setSaving(false);
+          return;
+        }
+      }
       await finish(targetId);
       return;
     }
@@ -263,8 +291,10 @@ export function LogForm({
 
   async function retryPhotos() {
     if (!savedLogId) return;
-    const out = await batches.retry('photos');
-    if (!hasUnfinished(out)) await finish(savedLogId);
+    // [S127 5a] Both queues; only what failed in each is retried.
+    const a = batches.items('photos').length > 0 ? await batches.retry('photos') : [];
+    const b = batches.items('client-photos').length > 0 ? await batches.retry('client-photos') : [];
+    if (!hasUnfinished(a) && !hasUnfinished(b)) await finish(savedLogId);
   }
 
   return (
@@ -341,12 +371,16 @@ export function LogForm({
           onChange={setCloseout}
           needs={needs}
           onNeedsChange={setNeeds}
+          clientPhotos={clientPhotos}
+          onClientPhotosChange={setClientPhotos}
         />
 
         <div className={card}>
           <label className={label}>Photos</label>
           <input
             type="file"
+            // [S127 5a] The log's INTERNAL photos — distinct from the client-facing slot (box C).
+            data-testid="log-photos-input"
             accept="image/*"
             multiple
             onChange={(e) => handlePhotoSelect(e.target.files)}
@@ -537,6 +571,16 @@ export function LogForm({
               busy={batches.busy('photos')}
               onRetry={() => void retryPhotos()}
               testId="log-photos-batch"
+            />
+          </div>
+        ) : null}
+        {batches.items('client-photos').length > 0 ? (
+          <div className={card}>
+            <UploadBatchList
+              items={batches.items('client-photos')}
+              busy={batches.busy('client-photos')}
+              onRetry={() => void retryPhotos()}
+              testId="log-client-photos-batch"
             />
           </div>
         ) : null}

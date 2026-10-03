@@ -8,6 +8,14 @@ import { brand } from '@/lib/brand';
 // embedded as a grid (revision, S87) — capped upstream by the PDF service to
 // bound file size; the caption notes any remainder left in Module 3.
 
+/** [S127 5a] The PDF is English; the reasons in its words. */
+const CLIENT_PHOTO_SKIP_TEXT: Record<string, string> = {
+  inspection_day: 'Inspection day',
+  weather: 'Weather',
+  no_site_access: 'No site access',
+  no_visible_progress: 'No visible progress',
+};
+
 export interface DailyLogPdfData {
   companyName: string;
   projectName: string;
@@ -36,8 +44,10 @@ export interface DailyLogPdfData {
   crew: { name: string; hours: number | null; warrantyOnly: boolean }[];
   subs: { name: string; hours: number; note: string | null }[];
   deliveries: { vendorName: string; hasExceptions: boolean }[];
-  /** Embedded images (data URIs), capped by the service. */
-  photos: { dataUri: string }[];
+  /** Embedded images (data URIs), capped by the service. [S127 5a] Client-facing first, marked. */
+  photos: { dataUri: string; clientFacing?: boolean }[];
+  /** [S127 5a] Why there is no client-facing photo; null when there is one (or before S127). */
+  clientPhotoSkipReason?: string | null;
   /** Total photos on file for the day — may exceed photos.length. */
   photoCount: number;
   generatedAt: string; // ISO
@@ -301,11 +311,19 @@ export function DailyLogDocument({ data }: { data: DailyLogPdfData }) {
           ) : (
             <View style={styles.photoGrid}>
               {data.photos.map((p, i) => (
-                // eslint-disable-next-line jsx-a11y/alt-text -- react-pdf Image has no alt prop
-                <Image key={i} style={styles.photo} src={p.dataUri} />
+                <View key={i}>
+                  {/* eslint-disable-next-line jsx-a11y/alt-text -- react-pdf Image has no alt prop */}
+                  <Image style={styles.photo} src={p.dataUri} />
+                  {p.clientFacing ? <Text style={styles.caption}>CLIENT-FACING</Text> : null}
+                </View>
               ))}
             </View>
           )}
+          {data.clientPhotoSkipReason ? (
+            <Text style={styles.body}>
+              No client-facing photo: {CLIENT_PHOTO_SKIP_TEXT[data.clientPhotoSkipReason] ?? data.clientPhotoSkipReason}
+            </Text>
+          ) : null}
           <Text style={styles.caption}>
             {data.photoCount} photo{data.photoCount === 1 ? '' : 's'} attached to this log (Module 3)
             {data.photoCount > data.photos.length

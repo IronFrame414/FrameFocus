@@ -146,6 +146,8 @@ export function buildPhotoEntry(input: {
   /** Present when the photo belongs to a queued daily log. */
   dependsOn?: string | null;
   dailyLogId?: string | null;
+  /** [S127 5a] A daily log's CLIENT-FACING photo: shared with the client on upload. */
+  clientVisible?: boolean;
 }): EnqueueInput {
   return {
     entry_id: input.entryId,
@@ -158,6 +160,7 @@ export function buildPhotoEntry(input: {
       blob: input.blob,
       file_name: input.fileName,
       daily_log_id: input.dailyLogId ?? null,
+      ...(input.clientVisible ? { client_visible: true } : {}),
     },
     captured_at: input.captured_at,
     depends_on: input.dependsOn ?? null,

@@ -368,7 +368,8 @@ export const COMPANY_TABLES: string[] = [
   // company_members (NO ACTION): walked before all three.
   'task_schedule_edits',
   'project_finish_history', 'project_schedule_settings', 'project_lost_days',
-  'company_holidays', 'company_work_calendars',
+  // [S127 item 6] company_holiday_rules is company-scoped like its siblings.
+  'company_holidays', 'company_holiday_rules', 'company_work_calendars',
   'task_assignees', 'task_dependencies', 'tasks', 'phases', 'inspections', 'schedule_entries',
   'time_session_rate_snapshots', 'time_edit_logs', 'time_segments', 'time_clock_sessions',
   // Estimates redesign children (S103): estimate_events (cascades with estimates),

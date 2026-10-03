@@ -70,11 +70,19 @@ export async function regenerateDailyLogPdf(
 
   // Photo bytes come through the caller's RLS client — a caller who cannot
   // read the files embeds nothing. Failed downloads are skipped, not fatal.
-  const embeddable = photos.filter((p) => EMBEDDABLE_MIME_TYPES.has(p.mime_type));
-  const embedded: { dataUri: string }[] = [];
+  // [S127 5a, RULED #5] The CLIENT-FACING photos (client_visible) go FIRST, so
+  // the embed cap can never push them out, and each is marked in the PDF.
+  const embeddable = photos
+    .filter((p) => EMBEDDABLE_MIME_TYPES.has(p.mime_type))
+    .sort((a, b) => Number(Boolean(b.client_visible)) - Number(Boolean(a.client_visible)));
+  const embedded: { dataUri: string; clientFacing: boolean }[] = [];
   for (const photo of embeddable.slice(0, MAX_EMBEDDED_PHOTOS)) {
     const embed = await downloadPhotoBase64(rls, BUCKET, photo);
-    if (embed) embedded.push({ dataUri: `data:${embed.mimeType};base64,${embed.base64}` });
+    if (embed)
+      embedded.push({
+        dataUri: `data:${embed.mimeType};base64,${embed.base64}`,
+        clientFacing: Boolean(photo.client_visible),
+      });
   }
 
   const hoursByMember = new Map(presence.map((p) => [p.member_id, p]));
@@ -110,6 +118,7 @@ export async function regenerateDailyLogPdf(
       orderedBy: n.ordered_at ? (n.orderer?.display_name ?? 'office') : null,
     })),
     blockers: log.blockers,
+    clientPhotoSkipReason: (log as { client_photo_skip_reason?: string | null }).client_photo_skip_reason ?? null,
     officeReviewedBy: log.office_reviewed_at ? (log.reviewer?.display_name ?? 'office') : null,
     officeReviewedAt: log.office_reviewed_at,
     crew: log.crew.map((c) => {

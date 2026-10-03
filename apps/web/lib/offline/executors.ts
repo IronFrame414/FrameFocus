@@ -30,6 +30,8 @@ export function makeExecutors(
       project_id: string;
       id: string;
       daily_log_id: string | null;
+      /** [S127 5a] Set the portal flag after upload. */
+      client_visible?: boolean;
     }) => Promise<{ success: boolean; error?: string }>;
     /** [S108 Spec A] site-visit photo/voice, through the routes. */
     uploadSiteVisitMedia?: (payload: Record<string, unknown>) => Promise<{ success: boolean; error?: string }>;
@@ -111,6 +113,7 @@ export function makeExecutors(
         project_id: string;
         id: string;
         daily_log_id: string | null;
+        client_visible?: boolean;
       };
       const result = await deps.uploadPhoto(p);
       if (!result.success) throw new Error(result.error ?? 'photo upload failed');

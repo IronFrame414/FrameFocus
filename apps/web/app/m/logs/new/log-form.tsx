@@ -8,6 +8,7 @@ import {
   createDailyLog,
   listProjectDayPresence,
   uploadDailyLogPhoto,
+  uploadClientFacingLogPhoto,
   setDailyLogMaterialNeeds,
   type DayPresence,
   type SubEntryInput,
@@ -19,6 +20,7 @@ import { useT } from '@/components/i18n/language-provider';
 import { DailyLogCloseoutFields } from '@/components/field/daily-log-closeout-fields';
 import {
   cleanNeeds,
+  clientPhotoSatisfied,
   emptyCloseout,
   type CloseoutFields,
   type MaterialNeedInput,
@@ -96,6 +98,9 @@ export function LogForm({
   const [hazard, setHazard] = useState(false);
   const [hazardNotes, setHazardNotes] = useState('');
   const [photos, setPhotos] = useState<File[]>([]);
+  // [S127 5a] The dedicated client-facing photos (box C) — kept apart from
+  // `photos`, which stay internal.
+  const [clientPhotos, setClientPhotos] = useState<File[]>([]);
   const [openRow, setOpenRow] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -124,7 +129,14 @@ export function LogForm({
     };
   }, [projectId, today]);
 
-  const ready = projectId !== null && workPerformed.trim().length > 0 && (!hazard || hazardNotes.trim());
+  const ready =
+    projectId !== null &&
+    workPerformed.trim().length > 0 &&
+    (!hazard || hazardNotes.trim()) &&
+    // [S127 5a] A client-facing photo, or a stated reason for none.
+    clientPhotoSatisfied(clientPhotos.length, closeout.client_photo_skip_reason);
+  // A photo answers the question; a stale reason is never stored beside one.
+  const skipReason = clientPhotos.length > 0 ? null : closeout.client_photo_skip_reason;
 
   async function submit() {
     if (!ready || !projectId) return;
@@ -161,6 +173,7 @@ export function LogForm({
             ...closeout,
             tasks_day_after: closeout.tasks_day_after?.trim() || null,
             blockers: closeout.blockers?.trim() || null,
+            client_photo_skip_reason: skipReason,
           },
           captured_at,
         })
@@ -176,6 +189,22 @@ export function LogForm({
             captured_at,
             dependsOn: logEntryId,
             dailyLogId: logId,
+          })
+        );
+      }
+      // [S127 5a] The client-facing photos ride the same queue, flagged.
+      for (const file of clientPhotos) {
+        await offlineSync.enqueue(
+          buildPhotoEntry({
+            entryId: crypto.randomUUID(),
+            fileId: crypto.randomUUID(),
+            projectId,
+            blob: file,
+            fileName: file.name,
+            captured_at,
+            dependsOn: logEntryId,
+            dailyLogId: logId,
+            clientVisible: true,
           })
         );
       }
@@ -204,6 +233,7 @@ export function LogForm({
         ...closeout,
         tasks_day_after: closeout.tasks_day_after?.trim() || null,
         blockers: closeout.blockers?.trim() || null,
+        client_photo_skip_reason: skipReason,
       },
       presence.map((p) => p.member_id),
       subEntries.filter((s) => s.member_id && s.hours > 0)
@@ -225,6 +255,14 @@ export function LogForm({
       const up = await uploadDailyLogPhoto(file, projectId, result.id);
       if (!up.success) {
         setError(up.error ?? t('field.log.photoFailed'));
+      }
+    }
+    // [S127 5a] Client-facing: the same upload and link, then shared with the
+    // client — a failure here is said, never left looking shared.
+    for (const file of clientPhotos) {
+      const up = await uploadClientFacingLogPhoto(file, projectId, result.id);
+      if (!up.success) {
+        setError(t('field.clientPhoto.failed', { error: up.error ?? '' }));
       }
     }
 
@@ -553,6 +591,8 @@ export function LogForm({
           onChange={setCloseout}
           needs={needs}
           onNeedsChange={setNeeds}
+          clientPhotos={clientPhotos}
+          onClientPhotosChange={setClientPhotos}
         />
       </section>
 

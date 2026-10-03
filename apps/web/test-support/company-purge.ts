@@ -63,6 +63,10 @@ export const COMPANY_CHILDREN = [
   'proposal_views',
   'lien_release_template_boxes',
   'lien_release_templates',
+  // [S127 item 6] Seeded 7-per-company by `companies_seed_holiday_rules`
+  // (20262134400000); FK to companies, NO ACTION — the same shape as the line
+  // above, so the same answer.
+  'company_holiday_rules',
   // s178-storage-trash seeds a probe company with files in a project owned by a
   // contact, and a killed run strands the chain. The FK order mirrors the proven
   // deletion.ts walk: files (→ file_categories, projects, contacts) FIRST, then

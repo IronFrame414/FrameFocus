@@ -6,6 +6,9 @@ import { EstimatingSettingsForm } from './estimating-settings-form';
 import { ProposalSettingsForm } from './proposal-settings-form';
 import { TimeTrackingSettingsForm } from './time-tracking-settings-form';
 import { WorkCalendarSettings, type HolidayRow, type WorkCalendarRow } from './work-calendar-settings';
+import type { StandardHolidayRow } from './standard-holidays-settings';
+import { companyToday } from '@framefocus/shared/utils/dates';
+import { resolveHolidayRule, ruleOfRow, type HolidayRuleRow } from '@framefocus/shared/utils/holiday-rules';
 import { GLMappingSettingsForm } from './gl-mapping-settings-form';
 import { AccountingPanel } from '@/components/quickbooks/accounting-panel';
 import { AccountSettings } from '@/components/quickbooks/account-settings';
@@ -210,14 +213,33 @@ export default async function SettingsPage({
 
   // [S122 Part 4] The working calendar and holidays (ruling 2; Q16-A). Read as
   // the caller — RLS scopes both to this company.
-  const [workCalendar, holidays] = await Promise.all([
+  const [workCalendar, holidays, holidayRules] = await Promise.all([
     supabase.from('company_work_calendars').select('id, work_days').eq('is_deleted', false).maybeSingle(),
     supabase
       .from('company_holidays')
       .select('id, holiday_date, name')
       .eq('is_deleted', false)
       .order('holiday_date', { ascending: true }),
+    // [S127 item 6] The standard holidays, as rules.
+    supabase
+      .from('company_holiday_rules')
+      .select('id, rule_key, name, enabled, kind, month, day, weekday, ordinal, offset_days')
+      .eq('is_deleted', false)
+      .order('month', { ascending: true })
+      .order('rule_key', { ascending: true }),
   ]);
+  // This year's date per rule, resolved by the ONE resolver (display only — the
+  // engine resolves its own years in lib/critical-path/load.ts).
+  const holidayYear = Number(
+    companyToday(((company as { timezone?: string | null } | null)?.timezone ?? null) || 'America/New_York').slice(0, 4)
+  );
+  const standardHolidays: StandardHolidayRow[] = ((holidayRules.data ?? []) as (HolidayRuleRow & {
+    id: string;
+    name: string;
+  })[]).map((r) => {
+    const rule = ruleOfRow(r);
+    return { id: r.id, name: r.name, enabled: r.enabled, thisYear: rule ? resolveHolidayRule(rule, holidayYear) : '—' };
+  });
 
   // §8.11.1 — the seven tabs. The Documents tab hosts the categories manager
   // (Entry 20's deferral) plus BOTH template forms; Notifications hosts the
@@ -247,6 +269,7 @@ export default async function SettingsPage({
         <WorkCalendarSettings
           calendar={(workCalendar.data as WorkCalendarRow | null) ?? null}
           holidays={(holidays.data ?? []) as HolidayRow[]}
+          standardHolidays={standardHolidays}
         />
       ),
     },

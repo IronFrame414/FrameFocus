@@ -252,6 +252,45 @@ export async function linkDailyLogPhoto(
   return { success: true };
 }
 
+/**
+ * [S127 item 5a] A CLIENT-FACING log photo: the same upload and log link as any
+ * log photo, then `client_visible = true` — the existing portal flag
+ * (`files_select_client`, `getPortalPhotos()`), no new schema. Reported as a
+ * failure if the flag did not land (row counted), so a photo the crew believes
+ * the client can see never silently stays internal.
+ */
+/**
+ * [S127 5a] The LINK half for a client-facing photo, for the desktop retry
+ * queue (`makeAttachWorker`): bind to the log AND share with the client in one
+ * write, row-counted.
+ */
+export async function linkClientFacingLogPhoto(
+  fileId: string,
+  logId: string
+): Promise<{ success: boolean; error?: string }> {
+  const supabase = createClient();
+  const link = { daily_log_id: logId, client_visible: true } as unknown as Database['public']['Tables']['files']['Update'];
+  const { data, error } = await supabase.from('files').update(link).eq('id', fileId).select('id');
+  if (error) return { success: false, error: error.message };
+  if (!applied(data)) return { success: false, error: DISCARDED };
+  return { success: true };
+}
+
+export async function uploadClientFacingLogPhoto(
+  file: File,
+  projectId: string,
+  logId: string
+): Promise<{ success: boolean; id?: string; error?: string }> {
+  const up = await uploadDailyLogPhoto(file, projectId, logId);
+  if (!up.success || !up.id) return up;
+  const supabase = createClient();
+  const flag = { client_visible: true } as unknown as Database['public']['Tables']['files']['Update'];
+  const { data, error } = await supabase.from('files').update(flag).eq('id', up.id).select('id');
+  if (error) return { success: false, id: up.id, error: `Photo saved but not shared with the client: ${error.message}` };
+  if (!applied(data)) return { success: false, id: up.id, error: `Photo saved but not shared with the client: ${DISCARDED}` };
+  return up;
+}
+
 /** Toggle files.client_visible (flag only in v1 — portal enforcement is M9). */
 export async function setFileClientVisible(
   fileId: string,
