@@ -10,3 +10,8 @@ The pre-S127 (S124 Part 2) original is in `docs/sessions/S124-sabotage-originals
 | ACL | `{postgres=X/postgres,service_role=X/postgres,supabase_auth_admin=X/postgres}` |
 
 `RESTORE.sql` re-creates it and its comment. The trigger `companies_qb_time_export_scope` is unchanged.
+
+**Run it with `npx supabase db query --linked -f RESTORE.sql`.** ⚠️ Passing its text as the argument fails: the
+leading `--` comment is parsed as a CLI flag and the CLI prints help and changes nothing. That happened once in S127,
+and the md5 read-back caught it: the "restored" md5 equalled the sabotage's. The bare `definition.sql` was then
+applied, and the md5 read back `c18819c27c3bb8d2be7219082119d241`, identical.

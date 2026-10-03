@@ -1414,6 +1414,9 @@ export type Database = {
           qb_reauth_required_after: string | null
           qb_refresh_lock_at: string | null
           qb_refresh_rotated_at: string | null
+          qb_time_export_auto_off_at: string | null
+          qb_time_export_auto_off_from_state: string | null
+          qb_time_export_auto_off_reason: string | null
           qb_time_export_enabled: boolean
           qb_time_export_enabled_at: string | null
           qb_time_export_enabled_by: string | null
@@ -1503,6 +1506,9 @@ export type Database = {
           qb_reauth_required_after?: string | null
           qb_refresh_lock_at?: string | null
           qb_refresh_rotated_at?: string | null
+          qb_time_export_auto_off_at?: string | null
+          qb_time_export_auto_off_from_state?: string | null
+          qb_time_export_auto_off_reason?: string | null
           qb_time_export_enabled?: boolean
           qb_time_export_enabled_at?: string | null
           qb_time_export_enabled_by?: string | null
@@ -1592,6 +1598,9 @@ export type Database = {
           qb_reauth_required_after?: string | null
           qb_refresh_lock_at?: string | null
           qb_refresh_rotated_at?: string | null
+          qb_time_export_auto_off_at?: string | null
+          qb_time_export_auto_off_from_state?: string | null
+          qb_time_export_auto_off_reason?: string | null
           qb_time_export_enabled?: boolean
           qb_time_export_enabled_at?: string | null
           qb_time_export_enabled_by?: string | null
