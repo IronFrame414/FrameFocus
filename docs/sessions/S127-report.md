@@ -547,3 +547,31 @@ Worth Properties `connected / switch off`; latest migration `20262134000000`. Dr
 3. `time_segments_z_reopen_on_hours_change` present and enabled.
 4. `time_clock_sessions` by status unchanged: approved 9, pending 10, NULL 6 (the migration corrects nothing, ruling
    #9).
+
+## ✅ ITEMS 1 + 7 MERGED: `5f05476a`. Both migrations are on production, verified by object.
+
+- **CI `37092221364`** on the stacked head `a1a79e1f`: **green**. Unit **172 files / 2,327 tests**, e2e **705 passed, 24
+  skipped, 0 failed** (34.7 m), alone on rebuild-test. The run before it (`37090127411`) was red only on the three unit
+  failures fixed above; its e2e half passed.
+- **Production, item 1** (`20262134100000`): the workdir's file was byte-identical to the tested one (`cmp`), and the
+  dry run listed exactly that file. **Every stated expectation matched (7/7):** history row; the 3 columns nullable with
+  no default; both constraints with the three reasons; allowlist **21**, all known; function md5
+  **`65284c5d…`**; **0** auto-off rows and **0** notifications of the new type; H&H `disconnected/off` and Worth
+  `connected/off`, unchanged.
+- **Production, item 7** (`20262134200000`): the dry run listed exactly that file. **4/4 matched:** history row; md5
+  **`044157b9…`**; ACL unchanged; trigger enabled (`O`); sessions approved 9 / pending 10 / NULL 6, unchanged (nothing
+  corrected, ruling #9).
+- **Merge:** a `--no-ff` merge of the tested head onto `main` `be5d8a0c`, carrying `[skip ci]`. **Tree-identity proof:**
+  `git diff --name-only a1a79e1f 5f05476a` → `docs/sessions/S127-report.md` only (`grep -v '^docs/' | wc -l` → 0).
+  No main run started (`gh run list` read back). Vercel deploys `main`.
+- ⚠️ **What this means live:** Worth Properties' switch is off, so nothing changes until an Owner turns it on. From now
+  on, if QuickBooks disconnects, is revoked or **its grant dies**, the switch turns off, records why, and the Owner is
+  notified once. On reconnect, the Accounting screen offers to turn it back on and says that the days missed will not
+  be sent.
+- **A CI fact for § 8 / Build C:** `ci.yml`'s concurrency group is `workflow + branch` with `cancel-in-progress`, so a
+  push to the SAME branch cancels that branch's earlier run (`37092220368`, cancelled by the next push). Runs on
+  DIFFERENT branches still share rebuild-test and still collide.
+
+## Next: P-1 (+P-6) + P-4 stacked on `main` `5f05476a`, CI `37094489407`
+
+Local first: `tsc` 0; unit **174 files / 2,343 tests**; `turbo lint` 0.
