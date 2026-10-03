@@ -575,3 +575,29 @@ Worth Properties `connected / switch off`; latest migration `20262134000000`. Dr
 ## Next: P-1 (+P-6) + P-4 stacked on `main` `5f05476a`, CI `37094489407`
 
 Local first: `tsc` 0; unit **174 files / 2,343 tests**; `turbo lint` 0.
+
+## ✅ P-1 (+P-6) + P-4 MERGED: `574d9aef`. CI `37094489407` green: unit 174 files, e2e **708 passed** / 24 skipped / 0 failed (44.6 m). No migration. Tree identity printed: the diff from the tested head `47e7417a` lists `docs/sessions/S127-report.md` only (0 non-docs paths). **The two must-land defects are on `main`.**
+
+## Sections on rebuild-test while the database was free (04:40Z)
+
+- **5a** `20262134300000`: dry run exactly one file; a nullable text column with no default; CHECK of the 4 reasons;
+  0 of 13 logs non-null. `database.ts` +3.
+- **6** `20262134400000`: dry run exactly one file; the dirty-marker original confirmed at md5 `460edf02…` before
+  the push; 10 companies × 7 = **70** rules, every company exactly 7, **0** wrong defaults, **0** projects dirtied by
+  the seed; dirty md5 `6904c573…`. Live `s127-holiday-rules.live.ts` **10/10**: the engine carries 84 vs 72 holiday
+  dates with Thanksgiving on/off (12 years); total role map on toggling (Owner/Admin only); the Owner cannot change the
+  rule itself (42501). **Engine sabotage** (rules ignored) **1 red**, restored md5 `c0eea7f8…`. `database.ts` +72.
+- **4e** `20262134500000`: dry run exactly one file; 2 tables with RLS on, 4 policies, 0 rows. `database.ts` +111.
+- CI `37097508084` started on the 5a + 6 stack (local first: unit 176 / 2,367, lint 0, tsc 0).
+
+## Production expectations for 5a and 6, STATED BEFORE THE QUERIES
+
+**Pre-state, read-only:** see the line below this section; the dirty-marker md5 is `460edf02…`.
+- **5a:** a history row; `daily_logs.client_photo_skip_reason` text, nullable, no default; CHECK with exactly the 4
+  reasons; **0** non-null of the 2 production logs.
+- **6:** a history row; **2 companies × 7 = 14 rules**, each company exactly 7. **Worth Properties all 7 `enabled =
+  false`** (it has a Critical Path project); **H&H all 7 `enabled = true`** (it has none). **0** projects newly marked
+  dirty (the seed runs with no `auth.uid()`). Dirty-marker md5 `6904c573…` (= rebuild-test). Trigger
+  `companies_seed_holiday_rules` present. 4 triggers on the table, 2 policies. `company_holidays` unchanged (0 rows).
+
+Pre-state read at 04:46Z: dirty-marker md5 `460edf02566fde6158f6896ce52215b3`; 2 companies (H&H: Critical Path never used; Worth Properties: used); 2 daily logs; 0 projects needing recompute; latest migration `20262134200000`.
