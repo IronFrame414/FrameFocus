@@ -2750,6 +2750,7 @@ export type Database = {
         Row: {
           author_member_id: string
           blockers: string | null
+          client_photo_skip_reason: string | null
           closeout_cords_clear: boolean | null
           closeout_cut_station_clean: boolean | null
           closeout_debris_hauled: boolean | null
@@ -2790,6 +2791,7 @@ export type Database = {
         Insert: {
           author_member_id?: string
           blockers?: string | null
+          client_photo_skip_reason?: string | null
           closeout_cords_clear?: boolean | null
           closeout_cut_station_clean?: boolean | null
           closeout_debris_hauled?: boolean | null
@@ -2830,6 +2832,7 @@ export type Database = {
         Update: {
           author_member_id?: string
           blockers?: string | null
+          client_photo_skip_reason?: string | null
           closeout_cords_clear?: boolean | null
           closeout_cut_station_clean?: boolean | null
           closeout_debris_hauled?: boolean | null
