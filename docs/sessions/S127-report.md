@@ -601,3 +601,37 @@ Local first: `tsc` 0; unit **174 files / 2,343 tests**; `turbo lint` 0.
   `companies_seed_holiday_rules` present. 4 triggers on the table, 2 policies. `company_holidays` unchanged (0 rows).
 
 Pre-state read at 04:46Z: dirty-marker md5 `460edf02566fde6158f6896ce52215b3`; 2 companies (H&H: Critical Path never used; Worth Properties: used); 2 daily logs; 0 projects needing recompute; latest migration `20262134200000`.
+
+---
+
+# RESUMED after the sixth Codespace timeout (2026-10-03, session `framefocus-42`)
+
+**`ListAgents`:** *"No reachable agents — no other Claude session is running on this machine right now."* No peer.
+
+**Re-established by object (not from this report):**
+- `origin/main` = **`c9aa76f0`**, as claimed. `git merge-base --is-ancestor` → **merged:** `qb-auto-off` (item 1),
+  `segment-type` (item 7), `p1-defects` (P-1, and P-6 `941fce30` beneath it), `p4-queries` (P-4), `report`.
+- **Migrations, `supabase_migrations.schema_migrations` read through the Management API:**
+  production `jwkcknyuyvcwcdeskrmz` tops at `20262134200000`, `20262134100000`, `20262134000000` → items 1 and 7 on
+  production, nothing later. Rebuild-test `nmyphyhmfttxkdoposvf` also has `20262134300000` (5a), `20262134400000` (6),
+  `20262134500000` (4e) and S124 Part 1's `20262135000000`. **As claimed.**
+- **Unmerged branch heads (local = origin on every one):** `member-removal` `fe131aca` (item 2, ruling #11, left
+  alone) · `photo-trash` `5f5014ce` (4a) · `photo-viewer` `63dfd789` (4b, **on 4a**) · `share-link` `b95661b1` (4e,
+  **on 4b on 4a**) · `clock-location` `9c08148c` (4c) · `daily-log-client-photo` `5f09865f` (5a) · `holidays`
+  `b143b57d` (6, **on 5a**) · `p5-request-user` `fba72d87` (P-5) · `p2-feedback` `52e00862` (P-2, **on P-5**) ·
+  `p3-thumb-proxy` `0c9f69db` (P-3, STOPPED WIP by the earlier half of this session).
+- ⚠️ **Not in this report until now — CI on the 5a + 6 stack:** run `37097508084` (`49971c9d`) was **red** on 3 e2e
+  that the client-photo gate overturned (706 passed). `b143b57d` updated those three in place, quoting the superseded
+  assertions, and touched `log-form.tsx` (+2). Run **`37099880575` on `b143b57d`: ✅ green** (05:27 → 06:01Z), on base
+  `574d9aef`. The two reds are not the same cause class as stop rule 5 counts: it was the change under test, fixed.
+
+## Train order, and why it deviates from the brief's
+
+The brief: *4b + 4e, then 4a, 4c, 5a, 6.* **I am shipping 5a + 6 first, then 4a + 4b, then 4e, then 4c.** Reasons:
+1. **Production migration order.** 5a is `…134300000`, 6 is `…134400000`, 4e is `…134500000`. Pushing 4e first puts
+   production out of timestamp order, and 5a/6 would need `--include-all` against production.
+2. **5a + 6 is the only built item with a green CI on today's tree.** `main` has moved only by docs since its base
+   (`574d9aef` → `c9aa76f0`). Merging anything with code first stales that run and costs another ~40 minutes.
+3. **4b cannot go before 4a.** 4b is built on 4a's commits. And § 8 rule 2 forbids stacking migration work (4e) with
+   work that carries none (4a, 4b). So the photo stack ships as **4a + 4b** (two deep, no migration), then **4e** alone.
+- **P-5 rides with P-2.** The brief does not name P-5, but P-2 is built on it. Both carry no migration, two deep.
