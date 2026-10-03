@@ -778,3 +778,19 @@ the active language's dictionary** (about −17 KB gz per page, roughly 8%). Tha
 and it is a change to how every string loads. **Not built this session.** It is proposed, with the measurement, for
 its own item. The heaviest desktop route is `/dashboard/estimates/[id]` at 300 KB first load. It is not a field
 screen, so it ranks low by the brief's own rule.
+
+## 4a + 4b: CI `37116585932` ❌ RED on 4b's own spec (1 failed, 712 passed, 24 skipped). Re-run `37118884675`
+
+**Not a collision:** the run had rebuild-test to itself (nothing else ran 10:29 → 11:04Z). One test failed, 3 tries:
+`desktop-photo-view-s127.spec.ts:76`.
+1. **Instrument defect:** `expect(maxH).toBe('calc(100vh - 240px)')`. Chromium reports the normalised
+   `calc(-240px + 100vh)`, so the assertion could never pass. It now asserts the two terms. Checked against both
+   spellings, plus a `100vw` control that must fail (it does). The superseded line is quoted in place.
+2. ⚠️ **A real defect behind it.** The failure at line 95 meant the rest of the test (previous/next and the RSC count)
+   **had never run in CI**. Run locally on a **production build** (`next build` + `next start`, rebuild-test), it went
+   red: **1 RSC request** while moving. The printed URL was `…/files/<next id>/markup?from=photos … prefetch=1`. The
+   "Mark up" `<Link>` gets a new `href` per photo, and production prefetches each one: one server round trip per
+   swipe, the cost 4b exists to remove (S125 finding 3). **Fix:** `prefetch={false}`, the grid tiles' H-5 call. After
+   it, the 3 photo specs pass **12/12** locally. The red-then-green on the RSC count is the control that the probe can
+   fail.
+- Same-cause count for stop rule 5: these are **different** causes from any earlier red.
