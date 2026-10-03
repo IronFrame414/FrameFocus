@@ -1052,3 +1052,26 @@ hidden, and the live harness proves the DB gate each bulk write actually meets.
 - **2.2:** being taken from run `37130101549`. Wall time, setup/test split and the slowest specs come **from its
   logs**. Database connections come **from an instrumented sampler** (`pg_stat_activity` every 15 s, read-only)
   running during that same run. Each number is labelled with its source below when it lands.
+
+## The ruling's migration on rebuild-test, the DB proofs, and 4d's own CI `37132765461` (15:18Z, `aba74575`)
+
+- **rebuild-test section:** the live md5 `6b1c44e8…` confirmed before the push; dry run (`--include-all`, workdir =
+  the branch's migrations + S124 Part 1's file) → **exactly** `20262134600000_s127_photo_share_perms.sql`. **By object:**
+  history row; md5 **`ec55121d75be49b48c42eb2162b08cf6`**; ACL unchanged; `files_column_scope` enabled (`O`).
+- **Live DB total maps, `s127-photo-perms.live.ts` 36/36**, every role, writes returning no rows, service-role
+  verdicts. Single share: O, A, PE, PM land; foreman, crew and sub are refused by the trigger's own message; the
+  client by RLS (0 rows). Single delete: O, A, PM, PE. Bulk share and bulk delete: the same DB gates per write. PM
+  refused a PDF, a contract-category image, and a relabel-then-share in one write; the Owner may still share a PDF.
+- **DB sabotages:** (A) the pre-ruling function → **4 red** (PE and PM, single and bulk share); (B) the trash arm
+  without PE → **2 red** (PE single and bulk delete). Each restored with `db query --linked -f`; md5 `ec55121d…` read
+  back; 36/36 again.
+- **Fixture honesty:** the PE's assignment on the fixture project was **soft-deleted** (2026-09-26). The harness and
+  the e2e revive it for the run and put it back with its **original** `deleted_at`, read back afterwards.
+- **UI e2e** (local production build): photo specs **15/15**, `m-photos` **43/43**. Unit **182 / 2,444**.
+
+### Production expectations for `20262134600000`, STATED BEFORE ITS SECTION
+
+Pre-state, read-only: latest `20262134500000`; function md5 `6b1c44e8…`; files 390; `client_visible` 0; deleted 7;
+trigger `O`. **After the push:** (1) a history row; (2) md5 **`ec55121d75be49b48c42eb2162b08cf6`** (= rebuild-test);
+(3) ACL identical to the captured production ACL; (4) `files_column_scope` enabled `O`; (5) files **390**,
+`client_visible` **0**, deleted **7**, all unchanged (a function replace changes no row).
