@@ -660,3 +660,16 @@ The brief: *4b + 4e, then 4a, 4c, 5a, 6.* **I am shipping 5a + 6 first, then 4a 
    `4a9d05a97b1312a683ef7d2614f026bf` (= rebuild-test).
 7. RLS on; **2 policies**; **4 user triggers** on the table; `companies_seed_holiday_rules` on `companies`.
 8. `company_holidays` unchanged: **0** rows.
+
+## ✅ 5a + 6 MERGED: `965b3f21`. Both migrations on production.
+
+- **Production, 6** (`20262134400000`): dry run **exactly** that file (`cmp` 0 against `b143b57d`), push exit 0.
+  **MATCH 8/8:** history row ✅ · **14** rules, each company 7 rows / 7 keys ✅ · **H&H 7 of 7 on, Worth Properties 0
+  of 7 on** ✅ · **0** dirty projects ✅ · dirty-marker md5 `6904c573…` + ACL unchanged ✅ · seed `c7537494…`, scope
+  `4a9d05a9…` ✅ · RLS on, 2 policies, 4 triggers, `companies_seed_holiday_rules` present ✅ · `company_holidays` 0 ✅.
+- **Merge:** `main` fast-forwarded over the docs-only report commits, then `git merge --no-ff b143b57d` → **`965b3f21`**,
+  `[skip ci]`. **Tree-identity proof:** `git diff --name-only b143b57d 965b3f21` → `docs/sessions/S127-report.md`;
+  `| grep -v '^docs/' | wc -l` → **0**. CI green on the tested head: `37099880575`.
+- ⚠️ **What this means live:** a daily log on either surface can no longer be SENT without at least one client-facing
+  photo or a stated reason. Editing a pre-S127 log is not blocked. Worth Properties' holidays are all OFF (its Critical
+  Path job is not re-dated); H&H's are all ON (it has no Critical Path dates to move).
