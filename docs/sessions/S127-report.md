@@ -839,3 +839,13 @@ Read from rebuild-test's catalog, where the same file is applied and verified:
   to the client: …"* (en + es).
 - Local `next start`: 5 chromium + **45** `/m` specs green (`m-logs`, `m-capture`, `s116-c5-desktop-log`,
   `desktop-clock-location-s127`, the new spec). Unit **179 / 2,382**. **0** fixture rows left behind.
+
+## ✅ 5a FIX + 4c MERGED: `879e869f`. No migration. **The live 5a defect is closed.**
+
+- CI **`37121504124` green** on the tested head `3c33742f`: unit **2,382**; e2e **717 passed, 0 failed** (0 `✘` lines),
+  including `log-client-photo-s127` and `desktop-clock-location-s127`.
+- **Tree-identity proof:** `git diff --name-only 3c33742f 879e869f` → `docs/sessions/S127-report.md`; non-docs **0**.
+- **Window of exposure:** 5a's broken client-photo write was on `main` from `965b3f21` (≈10:00Z) to `879e869f`
+  (≈12:40Z). Production had **0** logs and **0** photos created in that window when last read (10:00Z → 10:4xZ). It is
+  re-read below.
+- **Re-read at 12:37:44Z (production): 0 daily logs and 0 files created since 10:00Z.** Nobody hit the defect.
