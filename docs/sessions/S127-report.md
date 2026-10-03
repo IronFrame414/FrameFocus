@@ -265,3 +265,63 @@ member's own approved break) do not either.
   logo is `companies.logo_url`, a public URL in the public `company-logos` bucket.
 - **Item 1:** the switch's trigger already turns it off on a transition into `disconnected` or `revoked`, and records
   nothing. `needs_reauth` does **not** turn it off.
+
+---
+
+# PHASE 2 — THE PLAN (as presented, 2026-10-03)
+
+**1.4a, stated plainly: CONFIRMED.** Deactivating a member on `/m` ("Inactive") leaves them full company access at
+their role, with no time limit, including a fresh sign-in. Desktop team-page removal cuts everything immediately.
+**Production today: 0 people in the exposed state (latent), but the screen that creates it ships.** So item 2 goes
+first.
+
+## Build order
+
+| # | item | change | migrations | proof | could break |
+| --- | --- | --- | --- | --- | --- |
+| 1 | **Item 2: member removal** (BRANCH ONLY, never merged) | `/m` Inactive/Active goes through ONE server mechanism with desktop Remove: Inactive → `softDeleteTeamMember` (profile deleted + ban; the #160 trigger brings the member row); Active → profile restored + unbanned. The member-only write leaves the form. **`get_my_company_id()` is not touched.** | 0 | `s127-member-removal.live.ts` goes green (it is red on main); sabotage: put the member-only write back → red; a re-activation round trip; tsc/lint/unit/build | `/m` team edit for a sub-type member, whose profile links to a sub directory row (the #160 exemption) |
+| 2 | **Item 1: the switch's "turned itself off" state** | `companies.qb_time_export_auto_off_at` + `_auto_off_reason` (the real transition, e.g. `connection_revoked` from `connected`); a notification type `qb_time_export_auto_off`; the trigger writes both and notifies **the Owner only**, **only on an on→off change**; a human turning it on clears them; the Accounting screen states WHEN and WHY | 1 | live: Owner-only by **service-role row count**; already-off → **0 rows**, counted both ways; sabotage the notify arm → red; sabotage the already-off path → red; restore, md5 identical; production by object | the trigger replaced in place: captured original + RESTORE committed first |
+| 3 | **Item 7: segment type on an approved day** | the trigger's "hours unchanged" test adds `segment_type`; the self-skip narrows to **open** sessions; the supervisor path gets the shared "Hours changed" notice | 1 | live: reopen on every path in the 1.4c table, the note-only control stays approved, the self open-session clock flow still works, a negative per excluded role with no returned rows; 2 sabotages red | the live clock flow (self writes on an open session) |
+| 4 | **Item 3 P-1: the two defects** | clock-in: 23505 → "already clocked in" + refresh, busy held through navigation, an in-flight ref; punch: a client-held request id sent as `id`, with 23505 on that id read back as success, busy held through navigation; **both surfaces through the shared service** | 0 | unit tests on the mapping; an e2e double-tap per defect (1 session, 1 item); sabotage → red | `captureGps()` untouched by design |
+| 5 | **P-6** | correct `middleware.ts:389-394`, recording that it misled the 2026-09-29 reading | 0 | — | — |
+| 6 | **P-4: findings 5, 7, 8, 10** | bound and order `/m/logs` and the schedule window; today's sessions with segments embedded and scoped to the caller; React `cache()` on the per-request readers | 0 | a unit/live row count per query; the existing e2e | "up next" beyond the window |
+| 7 | **P-5 (16a)** | pages use the layout's `getRequestUser()` in place of their own `getUser()` | 0 | grep count 79 → 0 in scope; build; e2e | none intended (no security change) |
+| 8 | **P-2: feedback** | on my reading of Q-A below: `NavPending` extended to code-triggered navigation, and buttons kept disabled until the next screen arrives, on the field screens ranked by use (timeclock, clock-in landing, daily log, capture/photos, projects) | 0 | e2e on the pending state | — |
+| 9 | **Item 4a: photo trash** | a Trash entry on the Photos tab (desktop) and the `/m` photos grid, listing trashed photos (bounded, ordered by `deleted_at`), with restore; shared `lib/` reader | 0 | live restore round trip; role map | — |
+| 10 | **Item 4b: A-2..A-5** | a desktop single view: view mode first, markup behind a button, fitted to viewport **height**, date/time/by from a formatter **moved into `lib/` and shared with `/m`**, prev/next + arrow keys **without** re-running the server page per photo | 0 | e2e | — |
+| 11 | **Item 4c: B-1** | render `gps_in`/`gps_out` with three distinct states on the day review and week sheet | 0 | unit on the formatter; e2e | — |
+| 12 | **Item 5a: the client-facing photo** | box C's inputs hidden (columns kept, existing values still shown and printed); a dedicated "Client-facing photo" slot (≥1, no cap) whose files get `client_visible = true`, **or** a one-tap reason stored on the log; shown on the log and marked in the PDF; the documents-only and markup caveats on screen | 1 (`daily_logs.client_photo_skip_reason`, a new nullable column) | live + e2e | — |
+| 13 | **Item 6: standard holidays** | a new `company_holiday_rules` table (kind, month, day, weekday, ordinal, enabled), the seven seeded; the engine resolves years; settings with checkboxes, this year's date, and a consequence preview before applying | 1 | unit on resolution (incl. last Monday / 4th Thursday / Friday after); live; preview count | live Critical Path dates (the preview gates it) |
+| 14 | **Item 4d / 4e, P-3, P-7, P-8, P-9** | as specified | 4e: 1 | — | — |
+
+**Not going to reach, said now:** most likely **4e (the public share link), 4d (bulk), P-3 (thumbnail proxy), P-7
+(bundle), P-8 (upload queue), P-9 (caching)**. Each is large, and two carry hard gates (the payload proof, the
+cross-tenant cache test) that deserve a session rather than a tail. CI is ~50 minutes a run on one shared database, and
+it caps the queue more than the code does. **If the road runs out, items stop whole and unmerged, in the order above.**
+
+**Item 8 (`s114-c5`) is already decided: STOP.** The revert reason holds, and the branch is untouched.
+
+## Open questions, with the reading I am taking (not waiting)
+
+- **Q-A — P-2 vs S112 R2 ("DO NOT ADD app/m/loading.tsx").** Options: (A) honour R2: no `loading.tsx`; feedback via
+  the pending bar on code navigation plus busy-until-arrival; (B) reopen R2. **Reading: A.** R2 is a standing ruling
+  with a measured cost (`notFound()` → 200, 6 CI reds), and the prompt does not mention it, so it did not overturn it.
+  Breaks under A: no skeleton screen, only a bar and a held button. Breaks under B: the 404/redirect semantics R2
+  protected.
+- **Q-B — holiday defaults for an EXISTING company that has never used Critical Path.** The ruling says "off for every
+  existing company" and "on for any company that enables CP after this ships". H&H is both. **Reading: the stated reason
+  decides.** It protects live CP jobs from being re-dated at deploy. So a company **with a CP-enabled project at ship**
+  (Worth Properties) gets the seven **off**, and a company that **first enables CP after ship** (H&H, and every new
+  company) gets them **on**, seeded at first enable. Reversible: each is a checkbox. Breaks the other way: H&H's
+  first CP job would ignore Christmas until someone ticks it.
+- **Q-C — item 2's layer.** **Reading: the application layer** (the fix shape `#1-s109` already records): one mechanism
+  for both surfaces, `get_my_company_id()` untouched. A database-layer defence (the tenant gate also requiring a live
+  member row) is **proposed, not built**: clients and directory members do not uniformly have member rows, and a wrong
+  join there locks out every user. That is exactly what ruling #11 fences.
+- **Q-D — a deleted subcontractor whose directory row is linked to a login keeps that login and its access.** Same
+  class, different screen. **Reading: report, do not build.** It is not the ruled item, and the sub-login model has its
+  own exemptions (#160's ASK-160.C).
+- **Q-E — item 1's "real cause".** The switch only turns itself off on a transition into `disconnected` or `revoked`.
+  `needs_reauth` (Intuit's `invalid_grant`) leaves it on. **Reading: record the transition actually taken, with its
+  from-state, and do not add `needs_reauth` as a new off-trigger.** That would be a behaviour change nobody ruled.
+  Flagged so Josh can rule on it.
