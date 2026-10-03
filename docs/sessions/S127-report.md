@@ -809,3 +809,12 @@ Read from rebuild-test's catalog, where the same file is applied and verified:
 6. CHECKs `photo_share_links_expiry_check` and `photo_share_links_token_hash_check`; 7 indexes, including the unique
    `photo_share_links_token_hash_key`.
 7. Nothing else changes: `files` row count and `companies` unchanged (a pure addition).
+
+## ✅ 4a + 4b MERGED: `7f6627fe`. No migration.
+
+- CI **`37118884675` green** on the tested head `4d6775f0`: unit **178 files / 2,375**; e2e **713 passed, 24 skipped, 0
+  failed** (independent tally: **0** `✘` lines in the log). Alone on rebuild-test.
+- **Tree-identity proof:** `git diff --name-only 4d6775f0 7f6627fe` → `docs/sessions/S127-report.md`;
+  `| grep -v '^docs/' | wc -l` → **0**. `[skip ci]`.
+- **4d's gate is open:** 4a is merged, and its restore is proven by `desktop-photo-trash-s127.spec.ts` (desktop and `/m`
+  restore, each counted by the service role; crew refused), green in that run.
