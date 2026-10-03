@@ -794,3 +794,18 @@ screen, so it ranks low by the brief's own rule.
    it, the 3 photo specs pass **12/12** locally. The red-then-green on the RSC count is the control that the probe can
    fail.
 - Same-cause count for stop rule 5: these are **different** causes from any earlier red.
+
+## Production expectations for 4e (`20262134500000`), STATED BEFORE ITS SECTION
+
+Read from rebuild-test's catalog, where the same file is applied and verified:
+1. A history row for `20262134500000`.
+2. `photo_share_links` and `photo_share_link_views` exist, **RLS on for both**, **0 rows** each.
+3. **Exactly 4 policies:** `photo_share_link_views_select_owner_admin`, `photo_share_links_insert_owner_admin`,
+   `photo_share_links_select_owner_admin`, `photo_share_links_update_owner_admin`. **None for DELETE**, and none on views
+   for INSERT (the server writes views with the service role).
+4. **3 triggers** on `photo_share_links`: `_scope`, `_set_updated_by`, `_updated_at`.
+5. `enforce_photo_share_links_scope` md5 **`3b33475f24115d8bfe25a4f7e0d70a28`**; `set_photo_share_links_updated_by` md5
+   **`cbc12514b798744a2e8dfbed351e98ad`**.
+6. CHECKs `photo_share_links_expiry_check` and `photo_share_links_token_hash_check`; 7 indexes, including the unique
+   `photo_share_links_token_hash_key`.
+7. Nothing else changes: `files` row count and `companies` unchanged (a pure addition).
