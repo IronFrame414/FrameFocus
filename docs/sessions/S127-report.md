@@ -733,3 +733,26 @@ client-visible.** If Josh wants client photos approved by Owner/Admin first, tha
 - Live harness `s127-client-photo-share.live.ts`: a control that must fire (the foreman's own write is refused), a
   **total role map** judged by the service role, plus author/uploader/scope. **To be run when CI frees rebuild-test.**
 - **Train change:** this ships **next**, stacked with 4c (both carry no migration), ahead of 4e.
+
+## 4d built while CI ran: `feature/s127-photo-bulk` `25c8ad0d`. ⛔ GATED: not merged until 4a is merged and its restore proven
+
+- **What:** multi-select on **both** surfaces. **"Show to client"** sets `client_visible`, and its confirmation says a
+  documents-only client sees nothing and a marked-up photo shows its markup. **"Move to Trash"** is a SOFT delete,
+  and its confirmation says where the photos go. **Owner/Admin only** (ruling A-1a): `canBulkDeletePhotos` and
+  `canSharePhotosWithClient`. ⚠️ **`/m`'s existing bulk delete is NARROWED** from `canDeletePhoto` (Owner, Admin, PM,
+  PE) to Owner/Admin. PM and PE keep one-photo delete from the viewer. Both bars write through **one module**,
+  `lib/photos/bulk-actions.ts`, row-counted. **No "select all"**, deliberately. Mobile "text" share is `shareImages`,
+  unchanged (bytes, never a URL). Desktop has no OS share sheet; its share-out is 4e's link, one photo by ruling.
+- **Proofs so far:** unit **22/22** (total maps for both rules, junk fails closed, "narrower than one-photo delete", both
+  surfaces through the one module, both confirmations carry their caveats). **Sabotage:** bulk = `canDeletePhoto` →
+  **3 red**; restored md5 `78986269…` read back. Full unit **179 files / 2,398 tests**; tsc 0; lint: no new warnings.
+  The e2e `photo-bulk-s127.spec.ts` is written: Owner shows 2 and trashes 2 (each counted by the service role, with a
+  third photo outside the selection unchanged), cancel writes nothing, both come back from the Trash; a PM is offered
+  neither action on either surface; `/m` Owner "show to client" acts on the set. **It runs in CI after 4a+4b merge.**
+- Existing tests swept: `m-photos.spec` A-22e (Owner bulk delete) and the crew "not offered" check both still hold.
+  No existing test offered PM bulk delete.
+
+**Pre-existing, not this session's, recorded:** the desktop grid shows `PhotoVisibilityToggle` to **every staff
+role**, but the database refuses `client_visible` to everyone except Owner and Admin. So a PM's or foreman's toggle on
+a tile fails. It is the same render-vs-database gap as the 5a defect, in older code. Filed as **`#2-share`**, not
+fixed (outside the plan).
