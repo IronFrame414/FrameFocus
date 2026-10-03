@@ -1100,3 +1100,22 @@ trigger `O`. **After the push:** (1) a history row; (2) md5 **`ec55121d75be49b48
   `docs/claude/rules.md`. Where they lived before: `ci.yml` comments; `OPEN-WORK-BUNDLE.md` § 8 (a session bundle);
   and an **untracked** root file `ci-convenstions.md`. That one is not in git and not this session's; **left
   untouched**, and Josh can delete or keep it.
+
+## ✅ 4d (with the 2026-10-03 ruling) MERGED: `c1bfd059`. Migration `20262134600000` on PRODUCTION: MATCH 5/5
+
+- **CI `37132765461` green on the NEW tested head `aba74575`** (not the superseded `37130101549`): unit **2,444**; e2e
+  **730 passed, 0 failed** (0 `✘`), with all 7 `photo-bulk-s127` cases.
+- **Production section:** workdir = `main` `78eeeb30`'s migrations + the file from `aba74575` (`cmp` 0; 0 lines
+  different from the file applied on rebuild-test). Dry run → **exactly** `20262134600000_s127_photo_share_perms.sql`.
+  **Against the expectations stated before the section:** history row ✅ · md5 `ec55121d…` ✅ · ACL identical to the
+  captured production ACL ✅ · trigger `O` ✅ · files **390**, `client_visible` **0**, deleted **7**, unchanged ✅.
+- **Tree-identity proof, against the NEW tested head:** `git diff --name-only aba74575 c1bfd059` → `CLAUDE.md`,
+  `docs/claude/rules.md`, `docs/sessions/S127-report.md`. Outside `docs/` and root `*.md`: **0**. Nothing under
+  `apps/`, `packages/`, `scripts/`, `supabase/` or `.github/`.
+- **2.2, INSTRUMENTED, full run `37132765461`:** 195 samples, 15:19 → 15:54Z: connections **34–40 of 60**, active
+  ≤ 15, authenticator pool flat at 21, storage ≤ 4. **No exhaustion on a run that had the database to itself.** That
+  is consistent with test execution, not setup/teardown, being the cost. It does not explain the earlier
+  connection-exhaustion red (03:18Z on 2026-10-01), which one clean run cannot rule out.
+- ⚠️ **What this means live:** a PM or PE can now show or hide a **photo** to the client from the grid or the
+  daily-log page. PE also gets the multi-select "Show to client". Bulk delete stays Owner/Admin. Foreman and crew no
+  longer see a toggle the database refused them.
