@@ -55,6 +55,7 @@ const DELETE_DB: Record<CompanyRole, boolean> = { ...SHARE_DB };
 const session = {} as Record<CompanyRole, SupabaseClient>;
 let companyId = '';
 const tempAssignments: string[] = [];
+const revived: { id: string; deleted_at: string | null }[] = [];
 let n = 0;
 
 async function photo(opts: { mime?: string; category?: string } = {}): Promise<string> {
@@ -106,13 +107,22 @@ beforeAll(async () => {
       .eq('profile_id', p!.id)
       .eq('is_deleted', false)
       .single();
+    // A soft-deleted row still holds the unique (project, member) key: revive
+    // it for the run and put it back afterwards, rather than insert.
     const { data: existing } = await admin
       .from('project_assignments')
-      .select('id')
+      .select('id, is_deleted, deleted_at')
       .eq('project_id', PROJECT)
       .eq('member_id', m!.id)
-      .eq('is_deleted', false);
-    if (!existing?.length) {
+      .maybeSingle();
+    if (existing?.is_deleted) {
+      const { error } = await admin
+        .from('project_assignments')
+        .update({ is_deleted: false, deleted_at: null })
+        .eq('id', existing.id);
+      if (error) throw new Error(`revive ${role}: ${error.message}`);
+      revived.push({ id: existing.id as string, deleted_at: existing.deleted_at as string | null });
+    } else if (!existing) {
       const { data: a, error } = await admin
         .from('project_assignments')
         .insert({ company_id: companyId, project_id: PROJECT, member_id: m!.id })
@@ -130,6 +140,12 @@ afterAll(async () => {
   await admin.from('files').delete().like('file_path', `%/${MARK}-%`);
   if (tempAssignments.length)
     await admin.from('project_assignments').delete().in('id', tempAssignments);
+  // Put revived rows back EXACTLY as they were (their original deleted_at).
+  for (const r of revived)
+    await admin
+      .from('project_assignments')
+      .update({ is_deleted: true, deleted_at: r.deleted_at })
+      .eq('id', r.id);
   const { count } = await admin
     .from('files')
     .select('id', { count: 'exact', head: true })

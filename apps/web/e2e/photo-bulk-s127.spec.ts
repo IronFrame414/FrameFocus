@@ -17,6 +17,7 @@ const PM = 'josh+pm@worthprop.com';
 const PE = 'josh+qa-pe@worthprop.com';
 const CREW = 'josh+crew@worthprop.com';
 let tempPeAssignment: string | null = null;
+let revivedPe: { id: string; deleted_at: string | null } | null = null;
 const BUCKET = 'project-files';
 const RUN = `s127-bulk-${Date.now()}`;
 const PNG = Buffer.from(
@@ -82,11 +83,18 @@ test.beforeAll(async () => {
     .single();
   const { data: has } = await admin
     .from('project_assignments')
-    .select('id')
+    .select('id, is_deleted, deleted_at')
     .eq('project_id', projectId)
     .eq('member_id', peMember!.id)
-    .eq('is_deleted', false);
-  if (!has?.length) {
+    .maybeSingle();
+  if (has?.is_deleted) {
+    // A soft-deleted row holds the unique key: revive it, put it back after.
+    await admin
+      .from('project_assignments')
+      .update({ is_deleted: false, deleted_at: null })
+      .eq('id', has.id);
+    revivedPe = { id: has.id as string, deleted_at: has.deleted_at as string | null };
+  } else if (!has) {
     const { data: a, error: e } = await admin
       .from('project_assignments')
       .insert({ company_id: COMPANY_A, project_id: projectId, member_id: peMember!.id })
@@ -99,6 +107,11 @@ test.beforeAll(async () => {
 
 test.afterAll(async () => {
   if (tempPeAssignment) await admin.from('project_assignments').delete().eq('id', tempPeAssignment);
+  if (revivedPe)
+    await admin
+      .from('project_assignments')
+      .update({ is_deleted: true, deleted_at: revivedPe.deleted_at })
+      .eq('id', revivedPe.id);
   if (!seeded.length) return;
   await admin
     .from('files')
