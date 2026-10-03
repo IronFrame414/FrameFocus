@@ -52,6 +52,7 @@ async function uploadQueuedPhoto(payload: {
   project_id: string;
   id: string;
   daily_log_id: string | null;
+  client_visible?: boolean;
 }): Promise<{ success: boolean; error?: string }> {
   // §5.5.3 / A-20d — THROUGH uploadFile, never a raw bucket PUT: the HEIC→JPEG
   // conversion lives inside it, and bypassing it silently reopens #94 for
@@ -72,7 +73,8 @@ async function uploadQueuedPhoto(payload: {
     const supabase = createClient();
     const { error } = await supabase
       .from('files')
-      .update({ daily_log_id: payload.daily_log_id } as never)
+      // [S127 5a] A client-facing log photo is shared in the SAME write.
+      .update({ daily_log_id: payload.daily_log_id, ...(payload.client_visible ? { client_visible: true } : {}) } as never)
       .eq('id', uploaded.id);
     if (error) return { success: false, error: error.message };
   }

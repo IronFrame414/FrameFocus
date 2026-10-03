@@ -1,6 +1,7 @@
 'use client';
 
 import { useT } from '@/components/i18n/language-provider';
+import { DailyLogClientPhoto } from '@/components/field/daily-log-client-photo';
 import {
   CLOSEOUT_ITEMS,
   type CloseoutFields,
@@ -39,11 +40,16 @@ export function DailyLogCloseoutFields({
   onChange,
   needs,
   onNeedsChange,
+  clientPhotos,
+  onClientPhotosChange,
 }: {
   value: CloseoutFields;
   onChange: (next: CloseoutFields) => void;
   needs: MaterialNeedInput[];
   onNeedsChange: (next: MaterialNeedInput[]) => void;
+  /** [S127 5a] The dedicated client-facing photo slot (box C). */
+  clientPhotos?: File[];
+  onClientPhotosChange?: (next: File[]) => void;
 }) {
   const t = useT();
   const set = <K extends keyof CloseoutFields>(k: K, v: CloseoutFields[K]) =>
@@ -101,40 +107,20 @@ export function DailyLogCloseoutFields({
         </div>
       </section>
 
-      {/* C — the dates (tomorrow's TEXT is the existing tasks_tomorrow field) and the day after */}
-      <section className={box} data-testid="log-closeout-c">
-        <h3 className={head}>{t('field.lookahead.title')}</h3>
-        <label className="mb-1 block text-[13px] text-gray-700">
-          {t('field.lookahead.tomorrow')} — {t('field.lookahead.date')}
-        </label>
-        <input
-          type="date"
-          data-testid="lookahead-tomorrow-date"
-          className={field}
-          value={value.tasks_tomorrow_date ?? ''}
-          onChange={(e) => set('tasks_tomorrow_date', e.target.value || null)}
+      {/* C — [S127 5a, RULED Josh] THE CLIENT-FACING PHOTO, or a reason.
+          SUPERSEDED: "C — Next two days" — Tomorrow date (tasks_tomorrow_date),
+          Day after (tasks_day_after) and its date (tasks_day_after_date). Josh:
+          "the current contents are redundant or useless" — and on iOS an EMPTY
+          date input draws today's date, so both read as today (S127 1.4d). The
+          columns are KEPT (live data): existing values still show and print. */}
+      {clientPhotos && onClientPhotosChange ? (
+        <DailyLogClientPhoto
+          files={clientPhotos}
+          onFilesChange={onClientPhotosChange}
+          reason={value.client_photo_skip_reason}
+          onReasonChange={(r) => set('client_photo_skip_reason', r)}
         />
-        <label className="mb-1 mt-3 block text-[13px] text-gray-700">
-          {t('field.lookahead.dayAfter')}
-        </label>
-        <textarea
-          data-testid="lookahead-day-after"
-          className={field}
-          rows={2}
-          value={value.tasks_day_after ?? ''}
-          onChange={(e) => set('tasks_day_after', e.target.value || null)}
-        />
-        <label className="mb-1 mt-2 block text-[13px] text-gray-700">
-          {t('field.lookahead.dayAfter')} — {t('field.lookahead.date')}
-        </label>
-        <input
-          type="date"
-          data-testid="lookahead-day-after-date"
-          className={field}
-          value={value.tasks_day_after_date ?? ''}
-          onChange={(e) => set('tasks_day_after_date', e.target.value || null)}
-        />
-      </section>
+      ) : null}
 
       {/* D — needed on site, not here now (the 48-hour rule) */}
       <section className={box} data-testid="log-closeout-d">

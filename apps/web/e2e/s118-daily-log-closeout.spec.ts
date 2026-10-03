@@ -65,8 +65,14 @@ test.describe.serial('S118 item 12 · the paper close-out form, both surfaces', 
     await page.getByTestId('m-work-performed').fill(`${RUN} framed the back wall`);
     await page.getByTestId('closeout-closeout_floors_swept').check();
     await page.getByTestId('closeout-closeout_site_secured').check();
-    await page.getByTestId('lookahead-day-after').fill('Hang interior doors');
-    await page.getByTestId('lookahead-day-after-date').fill('2026-10-02');
+    // [S127 5a] SUPERSEDED — box C ("Next two days") was replaced by the
+    // client-facing photo: `lookahead-day-after` filled 'Hang interior doors'
+    // and `lookahead-day-after-date` '2026-10-02'. Those inputs no longer
+    // render; the send now needs a client photo OR a reason — this answers
+    // with a reason.
+    await expect(page.getByTestId('lookahead-day-after')).toHaveCount(0);
+    await expect(page.getByTestId('m-submit-log')).toBeDisabled();
+    await page.getByTestId('client-photo-reason-weather').click();
     await page.getByTestId('need-add').click();
     await page.getByTestId('need-item').fill('Drywall screws 1-5/8');
     await page.getByTestId('need-qty').fill('5');
@@ -86,8 +92,11 @@ test.describe.serial('S118 item 12 · the paper close-out form, both surfaces', 
       closeout_floors_swept: true,
       closeout_site_secured: true,
       closeout_debris_hauled: null, // untouched stays unanswered (NULL), not "no"
-      tasks_day_after: 'Hang interior doors',
-      tasks_day_after_date: '2026-10-02',
+      // [S127 5a] SUPERSEDED: tasks_day_after 'Hang interior doors',
+      // tasks_day_after_date '2026-10-02' — box C no longer collects them.
+      tasks_day_after: null,
+      tasks_day_after_date: null,
+      client_photo_skip_reason: 'weather',
       blockers: 'Electrical rough-in inspection not scheduled',
       office_reviewed_at: null,
     });

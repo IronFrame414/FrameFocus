@@ -22,12 +22,33 @@ export const CLOSEOUT_ITEMS = [
 export type CloseoutKey = (typeof CLOSEOUT_ITEMS)[number]['key'];
 
 /** The new daily-log columns the form writes (never the office_* ones). */
+/**
+ * [S127 item 5a] Why a log carries NO client-facing photo — one tap, stored on
+ * the log (`daily_logs.client_photo_skip_reason`, CHECK in 20262134300000).
+ * [RULED Josh: option B — a photo, or a reason; never a filler photo.]
+ */
+export const CLIENT_PHOTO_SKIP_REASONS = [
+  { value: 'inspection_day', labelKey: 'field.clientPhoto.reason.inspection_day' },
+  { value: 'weather', labelKey: 'field.clientPhoto.reason.weather' },
+  { value: 'no_site_access', labelKey: 'field.clientPhoto.reason.no_site_access' },
+  { value: 'no_visible_progress', labelKey: 'field.clientPhoto.reason.no_visible_progress' },
+] as const satisfies readonly { value: string; labelKey: MsgKey }[];
+
+export type ClientPhotoSkipReason = (typeof CLIENT_PHOTO_SKIP_REASONS)[number]['value'];
+
+/** The send gate both forms apply: at least one client-facing photo, or a reason. */
+export function clientPhotoSatisfied(clientPhotoCount: number, reason: ClientPhotoSkipReason | null): boolean {
+  return clientPhotoCount > 0 || reason !== null;
+}
+
 export type CloseoutFields = Record<CloseoutKey, boolean | null> & {
   photos_sent_at: string | null;
   tasks_tomorrow_date: string | null;
   tasks_day_after: string | null;
   tasks_day_after_date: string | null;
   blockers: string | null;
+  /** [S127 5a] NULL when the log has a client-facing photo. */
+  client_photo_skip_reason: ClientPhotoSkipReason | null;
 };
 
 export function emptyCloseout(): CloseoutFields {
@@ -42,6 +63,7 @@ export function emptyCloseout(): CloseoutFields {
     tasks_day_after: null,
     tasks_day_after_date: null,
     blockers: null,
+    client_photo_skip_reason: null,
   };
 }
 
@@ -103,5 +125,9 @@ export function closeoutFromLog(
   out.tasks_day_after = str(log.tasks_day_after);
   out.tasks_day_after_date = str(log.tasks_day_after_date);
   out.blockers = str(log.blockers);
+  const reason = str(log.client_photo_skip_reason);
+  out.client_photo_skip_reason = CLIENT_PHOTO_SKIP_REASONS.some((r) => r.value === reason)
+    ? (reason as ClientPhotoSkipReason)
+    : null;
   return out;
 }
