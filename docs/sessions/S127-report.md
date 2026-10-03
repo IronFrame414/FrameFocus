@@ -172,3 +172,96 @@ Cleanup left **0** marker contacts, and both subjects were removed.
   But M shows the database, not the Auth-server call, is what protects data; an Auth-server `getUser()` does not
   catch M either (the user isn't banned). **16b stays deferred as ruled.** It is not in this session, and its own
   session must take M's fix as a precondition.
+
+## 1.4c — The segment-type defect: every path (code, `origin/main`)
+
+The model: `time_segments.segment_type` ∈ work, material_run, warranty, travel, shop, break. A day is one
+`time_clock_sessions` row, and `status` ∈ pending/approved (NULL means an Owner session). Paid hours depend on type only
+through `break` (`breakMinutes`, `paidHours`, `paidHoursPerSession` against `breaks_paid` / `paid_break_cap_minutes`).
+A break↔work flip always changes `project_id` as well, because the project gate requires one and forbids the other.
+
+| path | who | can reach an approved day | reopens today? |
+| --- | --- | --- | --- |
+| week sheet → `edit_time_segment` RPC (also add/split) | Owner/Admin | yes | ✅ yes: `s121_time_reopen` runs unconditionally, and the notice shows |
+| day page, admin branch → `editSegmentFull` → the same RPC | Owner/Admin | yes | ✅ yes |
+| **day page, supervisor branch → `updateSubordinateSegment`**, a plain `.update()` whose `SEGMENT_ATTRIBUTION_COLUMNS` include `segment_type` | **PE, PM, foreman** over lower-ranked members | yes | ⛔ **NO** (audited, no notice) |
+| **direct PATCH by Owner/Admin** (RLS allows; the dead `updateSegment` has 0 callers) | Owner/Admin | yes | ⛔ **NO**, and unlogged on their own segment |
+| **direct PATCH by the segment's own member** (`is_my_recent_segment`; the UI exposes it only on the open session) | any role, own latest segment | **yes, via the API**: the latest ended segment of a closed approved day qualifies | ⛔ **NO**, and **not audited** |
+| clock in / switch / clock out / offline queue | self | — | they never change type |
+
+The root is `reopen_session_on_segment_hours()`. Its "attribution only" early return watches `segment_start`,
+`segment_end` and `is_deleted`, and **not `segment_type`**. Its self-skip exempts every non-Owner/Admin self writer, not
+just the open session. ⚠️ **So the brief's framing (an Owner/Admin flip) is slightly off.** The Owner/Admin UI already
+reopens. The UI path that does not is the **supervisor's**, and the two API paths (Owner/Admin own segment, and a crew
+member's own approved break) do not either.
+
+## 1.4d — The floating bottom bar (`/m` daily log close-out): cause found by reading, NOT proven
+
+- The shell is `relative flex h-[100dvh] flex-col overflow-hidden` (`app/m/mobile-shell.tsx:477`). The tab bar is a
+  flex child, not `fixed`. `<main>` is the scroller. **`html` and `body` have no height or overflow lock**
+  (`globals.css` sets only `bg-white`), and the safe-area inset is applied **once** (`mobile-shell.tsx:640`).
+- The close-out page adds nothing positional: no fixed/sticky element, no `vh`, no inset, no transform. Its only
+  distinguishing feature is **four native date/datetime pickers** in a very long form (`daily-log-closeout-fields.tsx`
+  `:82, :111, :131, :179`), the densest use of them in `/m`.
+- **Most likely cause:** after a native picker or the keyboard is dismissed, iOS leaves the **window** (not `<main>`)
+  scrolled. With `html`/`body` free to scroll, the 100dvh shell sits shifted up and the **white `body`** shows beneath the
+  tab bar. The band's colour fits, since the shell is `#f4f6fa`. Second most likely: `100dvh` mis-measured in
+  standalone after the keyboard closes. Ruled out by code: a double safe-area inset.
+- **Proposed fix (not built, per the prompt):** lock the document (`html, body { height:100%; overflow:hidden;
+  overscroll-behavior:none }`) or make the shell `fixed inset-0`, plus a `scrollTo(0,0)` on `focusout`/`visualViewport`
+  resize when `scrollY ≠ 0`. **It needs a real iPhone at 402px:** pick a date, dismiss it, and see whether the band
+  appears. Reading `window.scrollY` / `visualViewport.offsetTop` at that moment confirms the cause.
+- **Box C's "both dates show today":** production's 2 logs have `tasks_tomorrow_date` = the log date + 1, correctly,
+  and `tasks_day_after_date` NULL. **No code puts today into either field.** An **empty** `<input type="date">` on iOS
+  draws today's date while its value is `''`. So Josh's screenshot shows two **empty** fields, and the box is confusing
+  rather than corrupting data.
+
+## 1.4e — "It asks permission every time": **iOS behaviour, not something the app can stop**
+
+- `captureGps()` (`lib/gps.ts:50-77`) calls `getCurrentPosition` cold on every clock event (`maximumAge 60s`, timeout
+  10s mobile / 5s desktop), never queries the Permissions API, never rejects, and always records a reason.
+- Nothing in the app discards a grant: one origin, no iframe, no Permissions-Policy header, a service worker scoped to
+  `/m` that has no bearing on permissions. The manifest is `display: standalone`, `start_url: /m`.
+- **Plainly:** iOS asks a home-screen web app for location again per launch/session when the site's location setting is
+  "Ask" (Safari's default). **No app change makes iOS remember the grant.** What Josh can try on the device:
+  Settings → Apps → Safari → Location → **Allow**, and Privacy & Security → Location Services → Safari Websites →
+  **While Using the App**. Whether current iOS applies those to a home-screen app is unverified. That is B-2's
+  reproduction, and it needs his phone.
+- The one app-side change available is to query `permissions` first and record `permission_denied` without calling the
+  API when it is `denied`. **That saves no prompt** (a denied state doesn't prompt), so **nothing is planned.**
+- Parity note: desktop skips capture when `gps_clock_mode = 'off'`; `/m` never reads `gps_clock_mode` (A-7k4,
+  deliberate). Recorded, not changed.
+
+## 1.5 — Read before planning: what changes scope
+
+- **P-1 punch duplicates on production:** `punch_list_items` has **0 rows**, so **0 duplicates**, and no constraint
+  question arises. Even so, the fix goes in the **application layer** (a client-held request id sent as the row's `id`,
+  with a 23505 on that id read back as success). No unique index over production rows; stop rule 2 is not approached.
+- **P-1 clock-in:** the second tap hits `idx_time_clock_sessions_one_open_per_member` (unique partial, `member_id WHERE
+  clock_out IS NULL AND NOT is_deleted`). `clockIn()` returns the raw Postgres text. `setBusy(false)` runs **before**
+  `router.push`, and that gap is the window. `captureGps()` is already inside the busy window and is untouched.
+- ⚠️ **P-2 conflicts with a standing ruling.** `app/m/nav-pending.tsx:6-16` records **S112 R2 [Josh]: "drop
+  loading.tsx, keep the pending bar … DO NOT ADD app/m/loading.tsx."** A loading boundary makes every page under it
+  stream, so `notFound()` returns 200 and a server `redirect()` becomes client-side. That turned 6 CI tests red (run
+  36246627024). The prompt's "no `loading.tsx` and nothing streams" is true, and **it is true by ruling**.
+- **Box C:** box C's three inputs (`tasks_tomorrow_date`, `tasks_day_after`, `tasks_day_after_date`) are separate from
+  the older "Tomorrow" text field (`tasks_tomorrow`, its own disclosure on both forms). Consumers: the close-out view
+  (both surfaces) and the PDF's "C — Next two days" section. **Production: 2 of 2 logs carry box C values.**
+  ⚠️ **The bundle's "the close-out already requires 4–5 internal photos" is FALSE**: there is no photo minimum, slot or
+  category anywhere, and close-out validation is **client-only**.
+- **The photo viewer reloads the whole gallery on every swipe: CONFIRMED (mobile).** `goto()` → `router.push` to a new
+  `[fileId]` path re-runs the server page. That page re-reads every file and re-signs every original, derivative and
+  thumbnail in the project, then re-reads every uploader name (`viewer.tsx:161`, `page.tsx:52,75`). **Desktop has no
+  single view at all:** every tile links straight into the markup editor (A-2), sized by width only (A-3), with only the
+  file name as metadata (A-4).
+- **Holidays (§ 6): rule columns on the existing table, or a second table? → a SECOND TABLE**,
+  `company_holiday_rules`. `company_holidays` carries `holiday_date date NOT NULL`-style one-offs, a unique index on
+  `(company_id, holiday_date)`, and a mark-dirty trigger. Rule rows have no date, and making `holiday_date` nullable
+  plus kind/month/weekday/ordinal columns would put two shapes behind one table's constraints and every reader.
+  One-offs stay exactly as they are. **There is no company-level Critical Path flag:** it is per project
+  (`project_schedule_settings.enabled_at`). Production: **Worth Properties has 1 CP-enabled project (since
+  2026-10-02); H&H has none**, and there are 0 hand-entered holidays.
+- **Share-link precedent:** `/sign-co` and `/bid` store **plain-text** tokens; no token is hashed anywhere. The company
+  logo is `companies.logo_url`, a public URL in the public `company-logos` bucket.
+- **Item 1:** the switch's trigger already turns it off on a transition into `disconnected` or `revoked`, and records
+  nothing. `needs_reauth` does **not** turn it off.
