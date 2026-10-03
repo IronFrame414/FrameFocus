@@ -14,6 +14,7 @@ import {
 import { getDeliveriesForProjectDay } from '@/lib/services/deliveries';
 import { getMyMember } from '@/lib/services/members';
 import { FieldTabs } from '@/components/field/field-tabs';
+import { canSharePhotoWithClient } from '@/lib/photos/delete-permission';
 import { DeleteLogButton, DownloadPdfButton, PhotoGrid } from './detail-client';
 import { SIGNED_URL_TTL_SECONDS } from '@/lib/services/signed-url-ttl';
 
@@ -221,6 +222,7 @@ export default async function DailyLogDetailPage({
                 client_visible: p.client_visible,
                 signedUrl: urlByPath.get(p.file_path) ?? null,
               }))}
+              canShare={canSharePhotoWithClient(profile.role)}
             />
           </div>
         </div>

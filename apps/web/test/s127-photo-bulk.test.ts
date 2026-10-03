@@ -6,6 +6,7 @@ import { forEveryRole, JUNK_ROLES } from '@/test-support/role-matrix';
 import {
   canBulkDeletePhotos,
   canDeletePhoto,
+  canSharePhotoWithClient,
   canSharePhotosWithClient,
 } from '@/lib/photos/delete-permission';
 
@@ -47,8 +48,52 @@ describe('canBulkDeletePhotos — the multi-select "Delete" / "Move to Trash"', 
   });
 });
 
+// [S127, RULED Josh 2026-10-03] THE FINAL MATRIX — all four rows, one file.
+// Bulk share widened to PE. _Superseded, quoted:_ `forEveryRole(OWNER_ADMIN, …)`
+// for canSharePhotosWithClient (was: project_executive → not offered).
+const BULK_SHARE: Record<CompanyRole, boolean> = { ...OWNER_ADMIN, project_executive: true };
+const SINGLE_SHARE: Record<CompanyRole, boolean> = {
+  ...OWNER_ADMIN,
+  project_executive: true,
+  project_manager: true,
+};
+const SINGLE_DELETE: Record<CompanyRole, boolean> = {
+  ...OWNER_ADMIN,
+  project_executive: true,
+  project_manager: true,
+};
+
+describe('canSharePhotoWithClient — ONE photo\'s "Shared with client" toggle', () => {
+  forEveryRole(SINGLE_SHARE, (role, allowed) => {
+    it(`${role} → ${allowed ? 'offered' : 'not offered'}`, () => {
+      expect(canSharePhotoWithClient(role)).toBe(allowed);
+    });
+  });
+  it('fails closed on anything that is not a role', () => {
+    for (const junk of [...JUNK_ROLES, null, undefined])
+      expect(canSharePhotoWithClient(junk)).toBe(false);
+  });
+});
+
+describe("canDeletePhoto — ONE photo's delete, pinned UNCHANGED by the share widening", () => {
+  forEveryRole(SINGLE_DELETE, (role, allowed) => {
+    it(`${role} → ${allowed ? 'offered' : 'not offered'}`, () => {
+      expect(canDeletePhoto(role)).toBe(allowed);
+    });
+  });
+});
+
+describe('bulk share and bulk delete DIFFER ON PURPOSE (sharing is reversible, deleting is not)', () => {
+  it('PE may bulk-share but not bulk-delete; PM neither', () => {
+    expect(canSharePhotosWithClient('project_executive')).toBe(true);
+    expect(canBulkDeletePhotos('project_executive')).toBe(false);
+    expect(canSharePhotosWithClient('project_manager')).toBe(false);
+    expect(canBulkDeletePhotos('project_manager')).toBe(false);
+  });
+});
+
 describe('canSharePhotosWithClient — the multi-select "Show to client"', () => {
-  forEveryRole(OWNER_ADMIN, (role, allowed) => {
+  forEveryRole(BULK_SHARE, (role, allowed) => {
     it(`${role} → ${allowed ? 'offered' : 'not offered'}`, () => {
       expect(canSharePhotosWithClient(role)).toBe(allowed);
     });
@@ -87,6 +132,18 @@ describe('ONE mechanism, both surfaces [PARITY]', () => {
       expect(s, name).toContain('canSharePhotosWithClient(profile?.role)');
     }
     expect(M_PAGE).not.toMatch(/<PhotoGrid[^>]*canDelete=\{canDelete\}/);
+  });
+
+  it('every single-photo share toggle is drawn on canSharePhotoWithClient, never on "is staff"', () => {
+    expect(D_PAGE).toContain('const canShareOne = canSharePhotoWithClient(profile?.role);');
+    expect(D_PAGE.replace(/\{\/\*[\s\S]*?\*\/\}/g, '')).toMatch(
+      /\{canShareOne && \(\s*<PhotoVisibilityToggle/
+    );
+    expect(D_PAGE.replace(/\{\/\*[\s\S]*?\*\/\}/g, '')).not.toMatch(
+      /isStaff && \(\s*<PhotoVisibilityToggle/
+    );
+    const LOG = src('../app/dashboard/field-ops/[projectId]/daily-logs/[logId]/page.tsx');
+    expect(LOG).toContain('canShare={canSharePhotoWithClient(profile.role)}');
   });
 
   it('both confirmations say where deleted photos go and who will not see shared ones', () => {

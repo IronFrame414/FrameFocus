@@ -2,6 +2,7 @@ import Link from 'next/link';
 import {
   canBulkDeletePhotos,
   canDeletePhoto,
+  canSharePhotoWithClient,
   canSharePhotosWithClient,
 } from '@/lib/photos/delete-permission';
 import { getProjectPhotos } from '@/lib/services/photos';
@@ -94,6 +95,7 @@ export default async function ProjectPhotosPage({
   // Owner/Admin in the database). Every other role gets the grid unchanged.
   const canBulkDelete = canBulkDeletePhotos(profile?.role);
   const canShareWithClient = canSharePhotosWithClient(profile?.role);
+  const canShareOne = canSharePhotoWithClient(profile?.role);
 
   return (
     <div>
@@ -220,7 +222,12 @@ export default async function ProjectPhotosPage({
                       Marked up
                     </span>
                   )}
-                  {isStaff && (
+                  {/* [S127, RULED 2026-10-03] Drawn for exactly the roles the
+                      database lets change it (canSharePhotoWithClient).
+                      SUPERSEDED, quoted: {isStaff && (<PhotoVisibilityToggle … />)}
+                      — drawn for every staff role; a foreman's or crew's
+                      toggle was refused. */}
+                  {canShareOne && (
                     <PhotoVisibilityToggle fileId={p.id} initial={Boolean(p.client_visible)} />
                   )}
                 </Link>

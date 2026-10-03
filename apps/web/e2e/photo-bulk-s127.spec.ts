@@ -14,6 +14,9 @@ import { signInAs } from './sign-in-as';
 
 const OWNER = 'josh+test50@worthprop.com';
 const PM = 'josh+pm@worthprop.com';
+const PE = 'josh+qa-pe@worthprop.com';
+const CREW = 'josh+crew@worthprop.com';
+let tempPeAssignment: string | null = null;
 const BUCKET = 'project-files';
 const RUN = `s127-bulk-${Date.now()}`;
 const PNG = Buffer.from(
@@ -68,9 +71,34 @@ test.beforeAll(async () => {
     .single();
   if (error || !asg) throw new Error(`no Company A project assigned to crew: ${error?.message}`);
   projectId = asg.project_id as string;
+  // [S127, RULED 2026-10-03] The PE needs an assignment to reach the project
+  // (pe_on_project); a temporary one, removed in afterAll.
+  const { data: pe } = await admin.from('profiles').select('id').eq('email', PE).single();
+  const { data: peMember } = await admin
+    .from('company_members')
+    .select('id')
+    .eq('profile_id', pe!.id)
+    .eq('is_deleted', false)
+    .single();
+  const { data: has } = await admin
+    .from('project_assignments')
+    .select('id')
+    .eq('project_id', projectId)
+    .eq('member_id', peMember!.id)
+    .eq('is_deleted', false);
+  if (!has?.length) {
+    const { data: a, error: e } = await admin
+      .from('project_assignments')
+      .insert({ company_id: COMPANY_A, project_id: projectId, member_id: peMember!.id })
+      .select('id')
+      .single();
+    if (e) throw new Error(`PE assignment: ${e.message}`);
+    tempPeAssignment = a!.id as string;
+  }
 });
 
 test.afterAll(async () => {
+  if (tempPeAssignment) await admin.from('project_assignments').delete().eq('id', tempPeAssignment);
   if (!seeded.length) return;
   await admin
     .from('files')
@@ -148,6 +176,30 @@ test('desktop Owner: show two to the client, trash two, restore them — the thi
   expect([...after.values()].map((r) => r.is_deleted)).toEqual([false, false]);
 });
 
+// [S127, RULED 2026-10-03] The UI gate, asserted SEPARATELY from the database
+// gate (test/s127-photo-perms.live.ts): what each role is DRAWN.
+test('desktop PE: Select offers "Show to client" but NOT "Move to Trash"; the single toggle is drawn', async ({
+  page,
+}) => {
+  await seed('pe-desk');
+  await signInAs(page, PE);
+  await page.goto(`/dashboard/projects/${projectId}/photos`);
+  await expect(page.getByText('Photos ·')).toBeVisible();
+  await expect(page.getByTestId('photo-visibility-toggle').first()).toBeVisible();
+  await page.getByTestId('desktop-select-mode').click();
+  await expect(page.getByTestId('desktop-bulk-client')).toHaveCount(1);
+  await expect(page.getByTestId('desktop-bulk-trash')).toHaveCount(0);
+});
+
+test('desktop crew: no single toggle, no Select', async ({ page }) => {
+  await seed('crew-desk');
+  await signInAs(page, CREW);
+  await page.goto(`/dashboard/projects/${projectId}/photos`);
+  await expect(page.getByText('Photos ·')).toBeVisible();
+  await expect(page.getByTestId('photo-visibility-toggle')).toHaveCount(0);
+  await expect(page.getByTestId('desktop-select-mode')).toHaveCount(0);
+});
+
 test('desktop PM: no Select, so neither bulk action is offered', async ({ page }) => {
   await seed('pm-desk');
   await signInAs(page, PM);
@@ -155,6 +207,22 @@ test('desktop PM: no Select, so neither bulk action is offered', async ({ page }
   await expect(page.getByText('Photos ·')).toBeVisible();
   await expect(page.getByTestId('desktop-select-mode')).toHaveCount(0);
   await expect(page.getByTestId('desktop-bulk-trash')).toHaveCount(0);
+  // ...but the SINGLE toggle is drawn for a PM now, and it LANDS (counted).
+  const toggle = page.getByTestId('photo-visibility-toggle').first();
+  await expect(toggle).toBeVisible();
+});
+
+test('desktop PM: the single "Shared with client" toggle lands, counted by the service role', async ({
+  page,
+}) => {
+  const id = await seed('pm-toggle');
+  await signInAs(page, PM);
+  await page.goto(`/dashboard/projects/${projectId}/photos`);
+  const tileLink = page.locator(`a[href$="/photos/${id}"]`).first();
+  await tileLink.getByTestId('photo-visibility-toggle').click();
+  await expect
+    .poll(async () => (await rows([id])).get(id)?.client_visible, { timeout: 30_000 })
+    .toBe(true);
 });
 
 test('/m PM: Select still shares, but offers no bulk delete and no "show to client"', async ({
