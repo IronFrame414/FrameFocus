@@ -379,6 +379,8 @@ export function LogForm({
           <label className={label}>Photos</label>
           <input
             type="file"
+            // [S127 5a] The log's INTERNAL photos — distinct from the client-facing slot (box C).
+            data-testid="log-photos-input"
             accept="image/*"
             multiple
             onChange={(e) => handlePhotoSelect(e.target.files)}

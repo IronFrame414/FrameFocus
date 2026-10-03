@@ -519,6 +519,11 @@ test.describe('7c · M-21 daily log', () => {
     // Required field: nothing else enables submit.
     await expect(page.getByTestId('m-submit-log')).toBeDisabled();
     await page.getByTestId('m-work-performed').fill('Set trusses on the garage.');
+    // [S127 5a] SUPERSEDED, quoted: `await expect(page.getByTestId('m-submit-log')).toBeEnabled();`
+    // right after work performed. The send now ALSO needs a client-facing photo
+    // or a stated reason [RULED Josh, option B] — still disabled until one is given.
+    await expect(page.getByTestId('m-submit-log')).toBeDisabled();
+    await page.getByTestId('client-photo-reason-inspection_day').click();
     await expect(page.getByTestId('m-submit-log')).toBeEnabled();
 
     // The hazard toggle demands its notes (the DB CHECK behind the flag).

@@ -235,8 +235,15 @@ test.describe('S116 C-5 · desktop daily log — N photos, a forced LINK failure
     expect(await photoRows(), 'no photo rows with this tag before the run').toHaveLength(0);
 
     await page.getByPlaceholder('What was accomplished today').fill(MARKER);
-    const input = page.locator('input[type="file"]');
-    await expect(input, 'exactly one file input on the log form').toHaveCount(1);
+    // [S127 5a] SUPERSEDED, quoted: `page.locator('input[type="file"]')` with
+    // 'exactly one file input on the log form' — the form now has TWO: the
+    // internal photos (this test's subject) and box C's client-facing slot.
+    // Each is named, and each must exist exactly once.
+    const input = page.getByTestId('log-photos-input');
+    await expect(input, 'exactly one INTERNAL photos input on the log form').toHaveCount(1);
+    await expect(page.getByTestId('client-photo-input'), 'and one client-facing photo input').toHaveCount(1);
+    // A new log is sent with a client-facing photo OR a stated reason [RULED].
+    await page.getByTestId('client-photo-reason-weather').click();
     await input.setInputFiles(NAMES.map((name) => ({ name, mimeType: 'image/png', buffer: PNG })));
     for (const name of NAMES) await expect(page.getByText(name)).toBeVisible();
 

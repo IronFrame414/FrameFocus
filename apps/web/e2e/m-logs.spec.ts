@@ -134,6 +134,8 @@ test.describe('A-13d · a queued log shows Queued instead of a photo count', () 
     });
     await page.goto(`/m/logs/new?project=${PROJECT}`);
     await page.getByTestId('m-work-performed').fill(`QA A-13d ${Date.now()}`);
+    // [S127 5a] A log is sent with a client-facing photo or a stated reason.
+    await page.getByTestId('client-photo-reason-no_visible_progress').click();
     await page.getByTestId('m-submit-log').click();
     await expect(page.getByTestId('m-log-done')).toBeVisible({ timeout: 30_000 });
 
