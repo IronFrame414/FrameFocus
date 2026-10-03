@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase-server';
+import { createClient, getRequestUser } from '@/lib/supabase-server';
 import { redirect } from 'next/navigation';
 import { getContacts } from '@/lib/services/contacts';
 import { NewProjectForm } from './new-project-form';
@@ -7,9 +7,7 @@ import { contactNameWithCompany } from '@framefocus/shared/utils/contact-name';
 export default async function NewProjectPage() {
   const supabase = await createClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getRequestUser();
   if (!user) redirect('/sign-in');
 
   const { data: profile } = await supabase

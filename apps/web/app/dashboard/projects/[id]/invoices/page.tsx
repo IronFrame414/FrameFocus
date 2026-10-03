@@ -1,6 +1,6 @@
 import { notFound, redirect } from 'next/navigation';
 import { seesProjectMoney } from '@framefocus/shared/constants/roles';
-import { createClient } from '@/lib/supabase-server';
+import { createClient, getRequestUser } from '@/lib/supabase-server';
 import { getRevisedContract } from '@/lib/services/contract-value';
 import { getProject } from '@/lib/services/projects';
 import {
@@ -77,9 +77,7 @@ function Figure({
 
 export default async function InvoicesPage({ params }: { params: { id: string } }) {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getRequestUser();
   if (!user) redirect('/sign-in');
 
   const { data: profile } = await supabase

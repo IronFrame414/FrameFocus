@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { createClient } from '@/lib/supabase-server';
+import { getRequestUser } from '@/lib/supabase-server';
 import { getIncidents, type IncidentListItem } from '@/lib/services/safety';
 import { TypeBadge } from '@/components/field/incident-badges';
 
@@ -30,10 +30,7 @@ export default async function SafetyLogPage({
 }: {
   searchParams: { sel?: string };
 }) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getRequestUser();
   if (!user) redirect('/sign-in');
 
   const incidents = await getIncidents();

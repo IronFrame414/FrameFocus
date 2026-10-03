@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { createClient } from '@/lib/supabase-server';
+import { createClient, getRequestUser } from '@/lib/supabase-server';
 import { getTrialLifecycle, getTrialAcknowledgements, daysUntil } from '@/lib/services/trial';
 import { CopyPendingLegalReview } from '@/components/trial/copy-pending-legal-review';
 import { AcknowledgeButton } from './acknowledge-button';
@@ -21,9 +21,7 @@ import { AcknowledgeButton } from './acknowledge-button';
 export default async function TrialWarningPage() {
   const supabase = await createClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getRequestUser();
   if (!user) redirect('/sign-in');
 
   const { data: profile } = await supabase

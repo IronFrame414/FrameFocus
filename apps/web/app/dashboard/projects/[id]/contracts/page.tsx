@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase-server';
+import { createClient, getRequestUser } from '@/lib/supabase-server';
 import { redirect } from 'next/navigation';
 import { getClientContracts, getSubcontractorContracts } from '@/lib/services/contracts';
 import { getBillsAndCommitments, type PayableListItem } from '@/lib/services/payables';
@@ -8,9 +8,7 @@ import { ContractsPanel } from './contracts-panel';
 export default async function ProjectContractsPage({ params }: { params: { id: string } }) {
   const supabase = await createClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getRequestUser();
   if (!user) redirect('/sign-in');
 
   const { data: profile } = await supabase

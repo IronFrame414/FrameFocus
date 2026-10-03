@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
+import { usePendingNavigation } from '@/lib/navigation/pending-navigation';
 import { Image as ImageIcon } from 'lucide-react';
 import {
   createDailyLog,
@@ -103,6 +104,7 @@ export function LogForm({
   const [clientPhotos, setClientPhotos] = useState<File[]>([]);
   const [openRow, setOpenRow] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const doneNav = usePendingNavigation();
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<{
     logId: string;
@@ -327,11 +329,10 @@ export function LogForm({
         <button
           type="button"
           data-testid="m-log-done"
-          onClick={() => {
-            router.push('/m/logs');
-            router.refresh();
-          }}
-          className="mt-[12px] flex min-h-[52px] w-full items-center justify-center rounded-[14px] border border-m6m-border bg-m6m-card text-[15px] font-semibold text-m6m-navy"
+          // [S127 P-2] The bar shows and the button holds until the list lands.
+          disabled={doneNav.isPending}
+          onClick={() => doneNav.navigate('/m/logs')}
+          className="mt-[12px] flex min-h-[52px] w-full items-center justify-center rounded-[14px] border border-m6m-border bg-m6m-card text-[15px] font-semibold text-m6m-navy disabled:opacity-60"
         >
           {t('field.done')}
         </button>

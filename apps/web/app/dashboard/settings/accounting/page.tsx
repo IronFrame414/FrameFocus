@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation';
-import { createClient } from '@/lib/supabase-server';
+import { createClient, getRequestUser } from '@/lib/supabase-server';
 import {
   getQuickBooksConnection,
   getQuickBooksQueueSummary,
@@ -57,9 +57,7 @@ export default async function AccountingSettingsPage({
   searchParams?: { qb_error?: string; qb_connected?: string; qb_disconnected?: string };
 }) {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getRequestUser();
   if (!user) redirect('/sign-in');
 
   // Same gate as the Settings page itself: Owner and Admin only.

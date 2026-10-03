@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
-import { createClient } from '@/lib/supabase-server';
+import { getRequestUser } from '@/lib/supabase-server';
 import { getProject } from '@/lib/services/projects';
 import { loadSignoutRecord } from '@/lib/services/material-signouts';
 import { FieldTabs } from '@/components/field/field-tabs';
@@ -14,10 +14,7 @@ export default async function SignoutRecordPage({
 }: {
   params: { projectId: string; signoutId: string };
 }) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getRequestUser();
   if (!user) redirect('/sign-in');
 
   const [project, data] = await Promise.all([getProject(params.projectId), loadSignoutRecord(params.signoutId)]);

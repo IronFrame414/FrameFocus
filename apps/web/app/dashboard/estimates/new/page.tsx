@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase-server';
+import { createClient, getRequestUser } from '@/lib/supabase-server';
 import { redirect } from 'next/navigation';
 import { NewEstimateForm } from './new-estimate-form';
 import { canAuthorEstimates } from '@/lib/estimate-access';
@@ -6,9 +6,7 @@ import { canAuthorEstimates } from '@/lib/estimate-access';
 export default async function NewEstimatePage() {
   const supabase = await createClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getRequestUser();
   if (!user) redirect('/sign-in');
 
   const { data: profile } = await supabase

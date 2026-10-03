@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase-server';
+import { createClient, getRequestUser } from '@/lib/supabase-server';
 import { redirect } from 'next/navigation';
 import { listDeletedExpenses } from '@/lib/services/expenses';
 import { getProjects } from '@/lib/services/projects';
@@ -8,9 +8,7 @@ import { ExpensesTrashClient } from './trash-client';
 export default async function ExpensesTrashPage() {
   const supabase = await createClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getRequestUser();
   if (!user) redirect('/sign-in');
 
   const { data: profile } = await supabase

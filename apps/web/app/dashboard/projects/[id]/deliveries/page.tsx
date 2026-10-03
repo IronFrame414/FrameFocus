@@ -1,7 +1,7 @@
 import { managesProjectOperations } from '@framefocus/shared/constants/roles';
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
-import { createClient } from '@/lib/supabase-server';
+import { createClient, getRequestUser } from '@/lib/supabase-server';
 import { getProject } from '@/lib/services/projects';
 import { getOrderlessDeliveries, getPurchaseOrders } from '@/lib/services/deliveries';
 import { DeliveriesSections } from '@/components/field/deliveries-sections';
@@ -14,9 +14,7 @@ import { DeliveriesSections } from '@/components/field/deliveries-sections';
 
 export default async function ProjectDeliveriesPage({ params }: { params: { id: string } }) {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getRequestUser();
   if (!user) redirect('/sign-in');
 
   const { data: profile } = await supabase

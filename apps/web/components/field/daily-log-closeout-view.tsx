@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { usePendingNavigation } from '@/lib/navigation/pending-navigation';
 import { useT } from '@/components/i18n/language-provider';
 import {
   CLOSEOUT_ITEMS,
@@ -39,17 +39,19 @@ export function DailyLogCloseoutView({
   canOffice: boolean;
 }) {
   const t = useT();
-  const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
+  const nav = usePendingNavigation();
   const [error, setError] = useState<string | null>(null);
 
   async function act(key: string, fn: () => Promise<{ success: boolean; error?: string }>) {
     setBusy(key);
     setError(null);
     const r = await fn();
-    setBusy(null);
     if (!r.success) setError(r.error ?? null);
-    router.refresh();
+    // [S127 P-2] Held until the refreshed log has landed (S125 G-3: busy used
+    // to clear before the refresh, leaving the old state live).
+    nav.navigate(null);
+    setBusy(null);
   }
 
   const answered = CLOSEOUT_ITEMS.some((i) => closeout[i.key as CloseoutKey] !== null);
@@ -72,7 +74,7 @@ export function DailyLogCloseoutView({
           <button
             type="button"
             data-testid="log-review-toggle"
-            disabled={busy !== null}
+            disabled={busy !== null || nav.isPending}
             onClick={() => void act('review', () => markDailyLogReviewed(logId, !reviewedAt))}
             className="mt-2 rounded-[8px] border border-gray-300 px-3 py-[6px] text-[13px] font-semibold disabled:opacity-50"
           >
@@ -168,7 +170,7 @@ export function DailyLogCloseoutView({
                   <button
                     type="button"
                     data-testid="need-order-toggle"
-                    disabled={busy !== null}
+                    disabled={busy !== null || nav.isPending}
                     onClick={() =>
                       void act(n.id, () => setMaterialNeedOrdered(n.id, !n.ordered_at))
                     }

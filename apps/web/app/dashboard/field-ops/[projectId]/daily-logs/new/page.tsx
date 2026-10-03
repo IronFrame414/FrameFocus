@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
-import { createClient } from '@/lib/supabase-server';
+import { getRequestUser } from '@/lib/supabase-server';
 import { getProject } from '@/lib/services/projects';
 import { getMembers } from '@/lib/services/members';
 import { getProjectDayPresence } from '@/lib/services/daily-logs';
@@ -14,10 +14,7 @@ import { LogForm } from '../log-form';
 // editable, hours are never editable here.
 
 export default async function NewDailyLogPage({ params }: { params: { projectId: string } }) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getRequestUser();
   if (!user) redirect('/sign-in');
 
   const project = await getProject(params.projectId);

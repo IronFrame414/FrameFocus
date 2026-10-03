@@ -1,5 +1,5 @@
 import { notFound, redirect } from 'next/navigation';
-import { createClient } from '@/lib/supabase-server';
+import { createClient, getRequestUser } from '@/lib/supabase-server';
 import { getInvoiceDeliveries } from '@/lib/services/invoice-delivery';
 import { getContractBilling, getSelectionBilling } from '@/lib/services/contract-value';
 import { getEstimateLineBilling } from '@/lib/services/estimate-line-billing';
@@ -44,9 +44,7 @@ export default async function InvoiceDetailPage({
   params: { id: string; invoiceId: string };
 }) {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getRequestUser();
   if (!user) redirect('/sign-in');
 
   const { data: profile } = await supabase

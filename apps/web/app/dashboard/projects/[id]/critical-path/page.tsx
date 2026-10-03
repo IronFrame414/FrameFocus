@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@framefocus/shared/types/database';
-import { createClient } from '@/lib/supabase-server';
+import { createClient, getRequestUser } from '@/lib/supabase-server';
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
 import { getTasks, getPhases } from '@/lib/services/tasks';
 import { ensureScheduleFresh } from '@/lib/critical-path/recompute';
@@ -21,9 +21,7 @@ import { CriticalPathTab, type CpHistoryRow, type CpLostDay } from './critical-p
 
 export default async function CriticalPathPage({ params }: { params: { id: string } }) {
   const supabase = (await createClient()) as unknown as SupabaseClient<Database>;
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getRequestUser();
   if (!user) redirect('/sign-in');
 
   const { data: profile } = await supabase

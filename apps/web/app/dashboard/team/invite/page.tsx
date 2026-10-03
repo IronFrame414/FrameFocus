@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase-server';
+import { createClient, getRequestUser } from '@/lib/supabase-server';
 import { redirect } from 'next/navigation';
 import { getSeatUsage } from '@/lib/services/seats';
 import InviteForm from './invite-form';
@@ -6,9 +6,7 @@ import InviteForm from './invite-form';
 export default async function InvitePage() {
   const supabase = await createClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getRequestUser();
 
   if (!user) {
     redirect('/sign-in');

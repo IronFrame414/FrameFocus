@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { createClient } from '@/lib/supabase-server';
+import { createClient, getRequestUser } from '@/lib/supabase-server';
 import { getTeamMember } from '@/lib/services/team';
 import { getEmployeeDocuments } from '@/lib/services/employee-documents';
 import { EmployeeDocumentsPanel } from '@/components/employee-documents/employee-documents-panel';
@@ -15,9 +15,7 @@ import { EmployeeDocumentsPanel } from '@/components/employee-documents/employee
 // person. The database still decides every read and write (20262060000000).
 export default async function EmployeeDocumentsPage({ params }: { params: { id: string } }) {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getRequestUser();
   if (!user) redirect('/sign-in');
 
   const { data: caller } = await supabase

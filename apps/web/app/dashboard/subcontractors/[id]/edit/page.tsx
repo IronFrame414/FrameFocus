@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase-server';
+import { createClient, getRequestUser } from '@/lib/supabase-server';
 import { redirect } from 'next/navigation';
 import { getSubcontractor, getSubcontractorFinancials } from '@/lib/services/subcontractors';
 import { SubcontractorForm } from '../../subcontractor-form';
@@ -8,9 +8,7 @@ export default async function EditSubcontractorPage({ params }: { params: Promis
   const { id } = await params;
   const supabase = await createClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getRequestUser();
   if (!user) redirect('/sign-in');
 
   const { data: profile } = await supabase

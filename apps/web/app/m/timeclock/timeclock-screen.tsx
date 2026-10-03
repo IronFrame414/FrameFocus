@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { usePendingNavigation } from '@/lib/navigation/pending-navigation';
 import type { SessionWithSegments, TimeSegment } from '@/lib/services/time-tracking';
 import {
   clockIn,
@@ -450,6 +451,22 @@ function OnTheClock({
   const [note, setNote] = useState('');
   const [completion, setCompletion] = useState<Completion | null>(null);
   const [busy, setBusy] = useState(false);
+  // [S127 P-2] See submitClockOut: the refresh after a clock-out runs in a
+  // transition, and the button stays busy until it has landed.
+  const outNav = usePendingNavigation();
+  const outWasPending = useRef(false);
+  useEffect(() => {
+    if (outNav.isPending) {
+      outWasPending.current = true;
+      return;
+    }
+    if (!outWasPending.current) return;
+    outWasPending.current = false;
+    setBusy(false);
+    setConfirming(false);
+    setNote('');
+    setCompletion(null);
+  }, [outNav.isPending]);
   const [error, setError] = useState<string | null>(null);
 
   // An offline clock-out of THIS server-loaded session sits in the queue as an
@@ -543,15 +560,17 @@ function OnTheClock({
       gps_out: gps,
     });
 
-    setBusy(false);
     if (!result.success) {
+      setBusy(false);
       setError(result.error ?? t('field.clock.outFailed'));
       return;
     }
-    setConfirming(false);
-    setNote('');
-    setCompletion(null);
-    router.refresh();
+    // [S127 P-2] BUSY UNTIL THE REFRESHED SCREEN REPLACES THIS ONE. The old
+    // order cleared busy and closed the confirm before the refresh landed, so a
+    // live "Clock out" sat on a screen that had already clocked out. The
+    // transition's end (effect below) is what releases it — normally this view
+    // has unmounted by then, because the day is closed.
+    outNav.navigate(null);
   }
 
   return (

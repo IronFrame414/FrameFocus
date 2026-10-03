@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { createClient } from '@/lib/supabase-server';
+import { createClient, getRequestUser } from '@/lib/supabase-server';
 import { getDeletedContacts } from '@/lib/services/contacts';
 import ContactTrashRow from './trash-row';
 
@@ -32,9 +32,7 @@ import ContactTrashRow from './trash-row';
 export default async function ContactsTrashPage() {
   const supabase = await createClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getRequestUser();
   if (!user) redirect('/sign-in');
 
   const { data: profile } = await supabase

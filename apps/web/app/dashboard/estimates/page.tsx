@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase-server';
+import { createClient, getRequestUser } from '@/lib/supabase-server';
 import { redirect } from 'next/navigation';
 import { EstimatesList } from './estimates-list';
 import Link from 'next/link';
@@ -51,9 +51,7 @@ function SiteVisitsPanel({ visits }: { visits: SiteVisit[] }) {
 export default async function EstimatesPage() {
   const supabase = await createClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getRequestUser();
   if (!user) redirect('/sign-in');
 
   const { data: profile } = await supabase
