@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { getProjectPhotos } from '@/lib/services/photos';
 import { M_LIBRARY_INPUT_ID } from '@/app/m/library-input';
 import { getMyProfile } from '@/lib/services/profiles';
@@ -172,6 +173,17 @@ export default async function ProjectPhotosPage({
         >
           {t('photos.gallery.addPhotos')}
         </label>
+
+        {/* [S127 4a] A photo deleted here used to have NO way back on mobile. */}
+        {canDelete ? (
+          <Link
+            href={`/m/p/${params.projectId}/photos/trash`}
+            data-testid="m-photos-trash-link"
+            className="mt-[8px] flex min-h-[44px] w-full items-center justify-center text-[14px] font-semibold text-m6m-muted"
+          >
+            {t('photos.trash.link')}
+          </Link>
+        ) : null}
 
         <div className="mt-[12px]">
           <FilterChips

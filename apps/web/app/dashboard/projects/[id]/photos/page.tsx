@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { canDeletePhoto } from '@/lib/photos/delete-permission';
 import { getProjectPhotos } from '@/lib/services/photos';
 import { getMyProfile } from '@/lib/services/profiles';
 import { getCompanyTimeSettings } from '@/lib/services/company';
@@ -94,7 +95,20 @@ export default async function ProjectPhotosPage({
         </p>
         {/* [S111 Q16] Staff only: files_insert_non_client refuses a client, and a
             subcontractor never reaches /dashboard. */}
-        {isStaff && <AddPhotosButton projectId={params.id} />}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          {/* [S127 4a] The trash this tab never had — for the roles that may
+              trash and restore a photo (canDeletePhoto), as the database says. */}
+          {profile && canDeletePhoto(profile.role) && (
+            <Link
+              href={`${base}/trash`}
+              data-testid="photos-trash-link"
+              style={{ color: color.primary, fontSize: '13px', textDecoration: 'none' }}
+            >
+              Trash
+            </Link>
+          )}
+          {isStaff && <AddPhotosButton projectId={params.id} />}
+        </div>
       </div>
 
       {/* Provenance chips + the two newly surfaced filters. URL-param driven
