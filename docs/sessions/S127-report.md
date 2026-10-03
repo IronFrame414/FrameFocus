@@ -995,3 +995,8 @@ day-clock-edit and lists **16/16**; tsc 0; build 0; unit **181 / 2,402**; the P-
   the failure is a payroll display that is wrong without saying so, on top of the cross-tenant risk the brief names.
   **Josh's call** if he wants it anyway. The safe shape is the service role, `company_id` in the key, a short TTL, and
   invalidation from a server route that the settings forms call.
+
+## ✅ P-5 + P-2 MERGED: `78eeeb30`. No migration.
+
+- CI **`37126944240` green** on the tested head `3679dcd8`: unit **2,402**; e2e **723 passed, 0 failed** (0 `✘`).
+- **Tree-identity proof:** `git diff --name-only 3679dcd8 78eeeb30` → `docs/sessions/S127-report.md`; non-docs **0**.
