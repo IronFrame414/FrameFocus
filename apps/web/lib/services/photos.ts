@@ -178,6 +178,16 @@ async function resolveUrlsSingle(
  * call as the originals and derivatives: no extra Storage round trip per photo.
  * Opt-in only so callers that never render a tile do not sign paths they ignore.
  */
+/**
+ * [S127 P-3] A thumbnail's STABLE URL: the app proxy, versioned by the markup
+ * fingerprint (the stored thumbnail's own name carries it), so the browser may
+ * cache it and an edit to the markup changes the URL. Never a signed URL.
+ */
+export function thumbProxyUrl(fileId: string, markup: unknown): string {
+  const v = markup !== null && markup !== undefined ? markupFingerprint(markup) : 'o';
+  return `/api/photos/${fileId}/thumb?v=${v}`;
+}
+
 export async function getProjectPhotos(
   projectId: string,
   opts: {
@@ -211,7 +221,9 @@ export async function getProjectPhotos(
   for (const file of files) {
     signPaths.push(file.file_path);
     if (readMarkup(file.markup_data) !== null) signPaths.push(derivativePathFor(file.file_path));
-    if (opts.thumbnails) signPaths.push(thumbPathFor(file.file_path, file.markup_data));
+    // [S127 P-3] Thumbnails are no longer SIGNED here: they are a stable,
+    // cacheable app URL (thumbProxyUrl). SUPERSEDED, quoted:
+    // `if (opts.thumbnails) signPaths.push(thumbPathFor(file.file_path, file.markup_data));`
   }
   const urls = await getSignedUrls(signPaths);
 
@@ -242,9 +254,10 @@ export async function getProjectPhotos(
         // file. A slow tile is acceptable; an invisible photo is not. The
         // thumbnail's name carries the markup fingerprint, so a stale one can
         // never be picked — an absent one falls through to displayUrl.
-        thumbUrl: opts.thumbnails
-          ? (urls.get(thumbPathFor(file.file_path, file.markup_data)) ?? displayUrl)
-          : null,
+        // [S127 P-3] The proxy serves the stored thumbnail, and falls back to
+        // the display file itself — the same ruled fallback, now server-side.
+        // SUPERSEDED, quoted: `urls.get(thumbPathFor(…)) ?? displayUrl`.
+        thumbUrl: opts.thumbnails ? thumbProxyUrl(file.id, file.markup_data) : null,
       } satisfies PhotoRecord;
   });
 }
