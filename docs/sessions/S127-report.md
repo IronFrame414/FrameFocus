@@ -679,3 +679,24 @@ The brief: *4b + 4e, then 4a, 4c, 5a, 6.* **I am shipping 5a + 6 first, then 4a 
 `feature/s127-photo-viewer` rebased onto `main` `965b3f21` (clean, 4 commits; force-pushed with a lease on the old head
 `63dfd789`). Local first, on that tree: `tsc` exit 0 (0 lines) · `next lint` exit 0 · unit **178 files / 2,375 tests**
 exit 0. No migration.
+
+## ⚠️ 4e FINDING, fixed before it shipped: a link could serve another company's photo
+
+**Found reading 4e's code on resume, before its CI.** `photo_share_links.share_path` is set by the create route, but
+the INSERT policy checks only `file_id` (role, company, a live image), **not `share_path`**. The image route then
+downloaded `share_path` with the **service role**. So an Owner or Admin of **any** tenant (a fresh trial signup
+included), inserting a row through PostgREST around the route, could name **any object in `project-files`**, another
+company's included, and serve it publicly. Not on production (4e never shipped). It needs a known path, but a path is
+not a secret worth resting tenancy on.
+
+**Fix (`732fdf8e`, no migration change):** `resolveShareLink` now reads the link's own `files.file_path` and refuses a
+`share_path` that is not that original or its `.markup.jpg` derivative (`sharePathBelongsToFile`), logging the link id
+(never the token).
+- **Unit**, driven through `resolveShareLink` with a fake admin client: original ✅ served · derivative ✅ served ·
+  another company's object ✗ · another photo in the same company ✗ · another photo's derivative ✗. **9/9.**
+- **Sabotage** (check bypassed): **3 red** (exactly the three refusals). Restored; md5 `bc301276…` before and after.
+- **e2e** (`share-link-s127.spec.ts`, new case): a service-role row (a superset of the raw insert) naming another real
+  object → a cookie-less image request gets **404**, and the page says *"This link is no longer available."*
+- **Why not also in the policy:** the migration is already on rebuild-test and verified. The check belongs where the
+  service-role read happens, because that is what trusts the column. A DB-side `WITH CHECK` binding `share_path` to
+  the file is **proposed as defence in depth (`#1-share`)**, not built.
