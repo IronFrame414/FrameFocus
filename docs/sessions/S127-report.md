@@ -1190,3 +1190,94 @@ and `s127-photo-trash` `5f5014ce` (pre-rebase heads; merged through their stacks
 built), `#184` (gated on item 2), Part 2.3–2.6 (the ranked backlog in `CLAUDE.md` / `docs/claude/rules.md`).
 **CLI:** the checkout is linked to rebuild-test `nmyphyhmfttxkdoposvf`, read back. The production workdir was a
 scratch directory only. No local server is left running (port 3000 free, read back).
+
+---
+
+# AFTER CLOSE-OUT: R-8 check, item 2 rebased, R-9 (2026-10-03, from 16:46 ET)
+
+## R-8 (ruled A, photos-only; no work): the read-only check of the live function
+
+Production `enforce_files_column_scope()`: one overload; md5 `ec55121d75be49b48c42eb2162b08cf6`, the value stated before
+the query. Diffed against the captured original (`6b1c44e8…`): **only the `client_visible` arm differs.** The trash,
+Owner/Admin and recategorise-INTO arms are byte-identical. Trigger `files_column_scope` BEFORE UPDATE, enabled `O`.
+No S127 migration touched a `files` policy. **A shift was found and reported, not fixed:** money files can't be shared
+in one write, but a PM (`files_update_non_client`, invoices on a viewable project) or a PE (`files_update_project_executive`,
+anything but contracts and change orders) reaches invoice rows. Moving a file OUT of a money category was never blocked.
+So an image under invoices could be moved to photos, then shared. That was refused before 4d at the second write and
+admitted after it. Contracts and change orders: no PM/PE row reach, so no route. Production then held 3 money files,
+all PDFs (2 contracts, 1 invoice), so no live file could take the route. Asked as ASK-R9.
+
+## Item 2 rebased (NOT merged; ruling #11)
+
+`feature/s127-member-removal` rebased onto `origin/main` `643b8e89` **with no conflicts**. `git range-diff`: both
+commits `=` (patches unchanged). Pushed with `--force-with-lease` against `fe131aca`. **New head `650a2d13`; CI
+`37153108544`.** Its head commit carries no `[skip ci]`.
+
+## R-9 (ASK-R9 -> A): a PM or PE may not move a file OUT of a money category
+
+Branch `feature/s127-money-recat-lock`, from `643b8e89`.
+- **Captured first** (`docs/sessions/S127-sabotage-originals/enforce_files_column_scope_r9/`): the function as 4d left
+  it, md5 `ec55121d…` on BOTH databases, ACL identical, with RESTORE. That file is also the sabotage.
+- **Migration `20262134800000_s127_money_recat_lock.sql`:** ONE new arm, after the recategorise-INTO arm:
+  `NEW.category IS DISTINCT FROM OLD.category AND OLD.category = ANY (contracts, change_orders, invoices)` →
+  `42501`, "Moving a file out of contracts/change_orders/invoices is Owner/Admin only." The arm applies to every
+  non-Owner/Admin role, the same shape as its sibling. PM and PE are the only ones it changes, because every other role
+  has no UPDATE reach on these rows. **Diff vs the captured original: additions only** (the arm and its comment). The
+  one other diff line is the terminating `;` joining the `$function$` line. INSERT and moving INTO are unchanged.
+- **The UI condition (R-4: draw no control the DB refuses).** No surface recategorises an existing file. A sweep of
+  every `from('files').update(…)` / `.upsert(…)` in `app/`, `lib/`, `components/` and `packages/`: none sets `category`.
+  The variable-object writers set link columns, tags or `client_visible`. The only DB function that sets
+  `files.category` (`convert_estimate_to_project`) moves just `other` → `photos`, never out of money. The one client writer that
+  accepted `category`, `updateFile`, had no caller passing it. **`category` is removed from its type**, so any future
+  control must be written deliberately. `test/s127-money-recat.test.ts` pins this with `@ts-expect-error` under
+  `npm run type-check`. **Sabotage:** `category` restored in the type → `tsc` exit 2, exactly 1 error (TS2578 unused
+  directive). Restored, md5 read back.
+- **Existing tests swept** (the fix-session rule): `files_column_scope` / recategorise across `test/`, `e2e/`. The only
+  category write is S118's crew `photos -> other` (non-money, unaffected). No test asserted a PM/PE may move out of money.
+- Unit, local: **2,450 passed** (184 files) = 2,449 + 1. `tsc` 0, eslint 0, Prettier clean.
+
+**Expectations for the live proof on rebuild-test, stated before it runs** (`test/s127-money-recat.live.ts`):
+- Move-out maps, each category × 8 roles (24): Owner/Admin move; all others stay.
+- Reach control (8): a tag write on an invoices image lands for O/A/PE/PM only. PM and PE are refused at the move with
+  `42501` + "Moving a file out of".
+- Two-step: PM and PE fail AT THE MOVE (42501, still invoices); the share after it leaves `client_visible` false. The
+  Owner moves then shares → photos, true.
+- Unchanged (4): PM photos→other lands; PM →invoices refused; Owner →contracts lands; PM shares a photo.
+- **Total 39.** **Sabotage** (apply the captured original): exactly **5 red**: PM and PE on invoices in the map (2), the
+  42501 check (1), the two-step for PM and PE (2). Then re-apply the migration and read back its md5.
+- **Production expectations** (stated now): (1) a history row `20262134800000`; (2) the function md5 = the md5 read on
+  rebuild-test after its push; (3) one overload, ACL unchanged; (4) trigger `files_column_scope` enabled `O`; (5) money
+  files unchanged: **3, all `application/pdf`** (2 contracts, 1 invoice, none deleted).
+
+### R-9 on rebuild-test: built, proven, sabotaged
+
+- **Found on rebuild-test, not mine:** `20262135000000_s124_qb_time_activity_push` (S124 WIP, `feature/s124-p1-push`
+  `16858e87`), applied after R-2's dry run (~17:00Z). It adds `qb_employee_map` and a trigger on `time_clock_sessions`.
+  It touches no `files` object. Item 2's CI ran against a database carrying it. Its branch is untouched. To push, I used
+  a scratch workdir: this branch's migrations plus that one file read from git, so local history matched remote.
+  `--include-all` dry run → **exactly `20262134800000`**.
+- **Verified by object against the stated expectations:** history row 1 ✅ · 1 overload ✅ · live
+  `pg_get_functiondef` = the migration's function body (diff 0) ✅ · md5 **`a23b1830b05a02239844199079330fa8`** (≠
+  `ec55121d`) ✅ · trigger `O` ✅.
+- **Correction to my R-8 statement:** a PM reaches an invoices file only through an invoice they **authored**. UPDATE
+  must also pass `files_select_non_client`, whose invoices arm is `invoice_id` → `author_member_id = me`. "Any invoice
+  on a project they can view" was wrong. The route was real but narrower. The first live run caught it: 3 red, the PM
+  fixtures had no `invoice_id`, so RLS refused them and the arm was never met. PM invoices fixtures now hang off the
+  earliest live invoice the test PM authored (scoped to author and company, ordered).
+- **Count correction:** I stated 39 tests; the file has **40** (24 + 9 + 3 + 4). Arithmetic, not a change in scope.
+- **Live `s127-money-recat` 40/40.** 4d's `s127-photo-perms` **36/36** (4d unchanged).
+- **SABOTAGE** (captured original applied, md5 `ec55121d` read back): **exactly the 5 predicted red**. Invoices map
+  PM + PE, the 42501 check, two-step PM + PE. 35 green. **Restored** from the migration body, md5 `a23b1830` read back;
+  rerun **40/40**.
+
+## ✅ R-9 MERGED. Migration `20262134800000` on PRODUCTION: MATCH 5/5
+
+- CI **`37155478288` green** on the tested head `75c8e27f` (based on `main` `643b8e89`): unit **2,450**; e2e **731
+  passed**, 24 skipped, **0 `✘`**. (The first `gh run watch` died on a GitHub API 503 mid-run, not on the run. Re-polled
+  to completion.)
+- **Production:** scratch workdir = `git archive 643b8e89 supabase` + the file from `75c8e27f` (`cmp` 0), linked to
+  `jwkcknyuyvcwcdeskrmz`. Dry run → exactly `20262134800000`. **Against the expectations stated before it:** history
+  row ✅ · md5 **`a23b1830…`** (= rebuild-test) ✅ · 1 overload, ACL identical ✅ · trigger `O` ✅ · money files
+  unchanged, 3 PDFs (2 contracts, 1 invoice, none deleted) ✅.
+- **Tree-identity proof:** in the merge commit's message (`git diff --name-only 75c8e27f <merge>`).
+- The repo checkout remains linked to rebuild-test.
