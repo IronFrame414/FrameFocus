@@ -871,3 +871,19 @@ Read from rebuild-test's catalog, where the same file is applied and verified:
   after sharing, the public image changes with it; and a link made before any markup keeps serving the unmarked
   original. The pre-confirm preview shows what is public **at creation**. Filed as `#3-share` for a ruling: freeze a
   copy at share time, or keep it live.
+
+## ✅ 4e MERGED: `aff79789`. Migration `20262134500000` on PRODUCTION, verified by object: MATCH 7/7
+
+- CI **`37123905145` green** on the tested head `1658a215`: unit **2,397**; e2e **721 passed, 0 failed** (0 `✘`), with
+  all 4 `share-link-s127` cases (the payload proof on the bytes, the foreign-`share_path` negative, PM refused, the
+  preview writes nothing).
+- **Section:** workdir = `main` `879e869f`'s 301 migrations + the file from `1658a215` (`cmp` 0; 0 diff lines since it
+  was applied and verified on rebuild-test at `b95661b1`). Dry run → **exactly** `20262134500000_s127_photo_share_links.sql`.
+  Pre-state: latest `20262134400000`, neither table present, files 390, companies 2.
+- **Against the expectations stated before the section:** history row ✅ · both tables, RLS on, **0** rows ✅ · exactly
+  the 4 named policies ✅ · the 3 named triggers ✅ · scope md5 `3b33475f…` ✅ · updated-by md5 `cbc12514…` ✅ · both
+  CHECKs, **7** indexes incl. the unique token hash ✅ · files **390**, companies **2**, unchanged ✅.
+- **Tree-identity proof:** `git diff --name-only 1658a215 aff79789` → `docs/sessions/S127-report.md`; non-docs **0**.
+- ⚠️ **What this means live:** an Owner or Admin can now make a public link to one photo from the desktop single view.
+  The link is listed under **Public photo links** (reached from the Photos tab), and one click revokes it. **No link
+  exists until someone makes one.**
