@@ -700,3 +700,36 @@ not a secret worth resting tenancy on.
 - **Why not also in the policy:** the migration is already on rebuild-test and verified. The check belongs where the
   service-role read happens, because that is what trusts the column. A DB-side `WITH CHECK` binding `share_path` to
   the file is **proposed as defence in depth (`#1-share`)**, not built.
+
+## ⛔ 5a DEFECT, live since `965b3f21`, found after its merge by me. Fix built: `feature/s127-5a-client-photo-fix`
+
+**What is wrong on production now.** `client_visible` is **Owner/Admin only in the database**: `enforce_files_column_scope`
+raises *"client_visible is Owner/Admin only."* on any other role's UPDATE (read from production's definition), and
+`files_insert_non_client` refuses `client_visible = true` on their INSERT. 5a set the flag **through the caller's
+client** on all three paths. **So for a foreman or crew member (the people who write logs) a client-facing photo fails:**
+- **desktop:** the link write (`daily_log_id` + `client_visible`) is refused as a whole. The photo is uploaded but not on
+  the log, and the retry queue fails the same way every time.
+- **`/m` online:** the photo is saved and linked, then *"Photo saved but not shared with the client: …"*.
+- **`/m` offline:** the queued link is refused, and the entry keeps failing.
+
+An Owner or Admin is unaffected. The *reason* path works for everyone.
+**Impact so far: none.** Production has **0** daily logs and **0** photos created since the merge (10:00Z → now; the
+last log is 2026-10-02 19:41Z). **Why CI was green:** 5a's e2e chose a *reason* rather than attaching a client photo as a
+foreman, and its unit tests pinned the payload, not the write. **The flag path was never exercised by a non-Owner.**
+That is my gap: a write path proven by the shape of its payload, not by a row.
+
+**The fix (no migration, `f…` on `feature/s127-5a-client-photo-fix`).** One server mechanism,
+`lib/daily-logs/client-photo-share.ts`, reached through `POST /api/daily-logs/client-photo` from all three paths
+(PARITY). It reads the profile, the log and the file **through the caller's RLS** first. It admits the **log's author**
+(the table's own UPDATE rule) sharing **a photo they uploaded**, on the **same project**, not already on another log.
+Owner/Admin are exempt from author and uploader, since they may set the flag directly anyway. Then the **service role**
+writes `daily_log_id` + `client_visible = true` and counts exactly 1 row. This is the same admin-write shape the
+selection-spec PDF service already uses. **It is not a widening of who may flip `client_visible` on an arbitrary
+file.** It is the narrow act ruling #4 puts in the crew's hands (*"a crew member must never be unsure which pictures
+the client can see"*). **Reading taken, stated here: the ruling authorises the log's author to make their slot photos
+client-visible.** If Josh wants client photos approved by Owner/Admin first, that is a different feature.
+- Unit **8/8** (+3 pins: every surface reaches the one mechanism; no client code writes `client_visible: true`).
+  Sabotage (the old offline write put back): **2 red**; restored md5 `2dd98b1f…` read back.
+- Live harness `s127-client-photo-share.live.ts`: a control that must fire (the foreman's own write is refused), a
+  **total role map** judged by the service role, plus author/uploader/scope. **To be run when CI frees rebuild-test.**
+- **Train change:** this ships **next**, stacked with 4c (both carry no migration), ahead of 4e.
