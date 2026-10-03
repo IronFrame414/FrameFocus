@@ -1269,3 +1269,15 @@ Branch `feature/s127-money-recat-lock`, from `643b8e89`.
 - **SABOTAGE** (captured original applied, md5 `ec55121d` read back): **exactly the 5 predicted red**. Invoices map
   PM + PE, the 42501 check, two-step PM + PE. 35 green. **Restored** from the migration body, md5 `a23b1830` read back;
   rerun **40/40**.
+
+## ✅ R-9 MERGED. Migration `20262134800000` on PRODUCTION: MATCH 5/5
+
+- CI **`37155478288` green** on the tested head `75c8e27f` (based on `main` `643b8e89`): unit **2,450**; e2e **731
+  passed**, 24 skipped, **0 `✘`**. (The first `gh run watch` died on a GitHub API 503 mid-run, not on the run. Re-polled
+  to completion.)
+- **Production:** scratch workdir = `git archive 643b8e89 supabase` + the file from `75c8e27f` (`cmp` 0), linked to
+  `jwkcknyuyvcwcdeskrmz`. Dry run → exactly `20262134800000`. **Against the expectations stated before it:** history
+  row ✅ · md5 **`a23b1830…`** (= rebuild-test) ✅ · 1 overload, ACL identical ✅ · trigger `O` ✅ · money files
+  unchanged, 3 PDFs (2 contracts, 1 invoice, none deleted) ✅.
+- **Tree-identity proof:** in the merge commit's message (`git diff --name-only 75c8e27f <merge>`).
+- The repo checkout remains linked to rebuild-test.
