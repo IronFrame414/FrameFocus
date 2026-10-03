@@ -107,6 +107,11 @@ describe('§3j — the spec premise that turned out to be false', () => {
       // FINISH — ASK-A4 amended 2026-09-23); it emits THAT type and never
       // still_clocked_in.
       'supabase/migrations/20261650000000_site_visit.sql',
+      // S127 item 1 re-creates it an EIGHTH time, to add `qb_time_export_auto_off`.
+      // Its only emitter is the trigger function in the same migration
+      // (enforce_companies_qb_time_export), which writes THAT type, to the
+      // Owner, and never still_clocked_in.
+      'supabase/migrations/20262134100000_s127_qb_time_export_auto_off.sql',
     ]);
   });
 });

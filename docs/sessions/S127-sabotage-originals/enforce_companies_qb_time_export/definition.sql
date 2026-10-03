@@ -61,7 +61,7 @@ BEGIN
                  || 'accepting the connection — it needs to be reconnected. No hours are being sent. '
                  || 'After reconnecting, turn it on again on Settings → Accounting.'
                WHEN 'connection_revoked' THEN
-                 'Sending approved timesheets to QuickBooks was turned off because FrameFocus was '
+                 'Sending approved timesheets to QuickBooks was turned off because EZ Contractor Binder was '
                  || 'disconnected from inside QuickBooks. No hours are being sent. After reconnecting, '
                  || 'turn it on again on Settings → Accounting.'
                ELSE

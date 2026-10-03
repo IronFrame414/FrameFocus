@@ -11,6 +11,8 @@
  *   [Josh, RULED Q3]       "A toggle that could cause a paycheck must say so
  *                           where it is flipped, not only in a report."
  */
+import { brand } from '@/lib/brand';
+
 export const TIME_EXPORT_COPY = {
   title: 'Send approved timesheets to QuickBooks',
   what:
@@ -52,7 +54,7 @@ export type TimeExportAutoOffReason =
 function autoOffCause(reason: TimeExportAutoOffReason): string {
   switch (reason) {
     case 'connection_revoked':
-      return 'FrameFocus was disconnected from inside QuickBooks';
+      return `${brand.name} was disconnected from inside QuickBooks`;
     case 'connection_needs_reauth':
       return 'QuickBooks stopped accepting the connection';
     default:

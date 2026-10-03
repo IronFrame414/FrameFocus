@@ -68,7 +68,10 @@ describe('S124 Part 2 — what the switch says where it is flipped', () => {
       fileURLToPath(new URL('../components/quickbooks/time-export-settings.tsx', import.meta.url)),
       'utf8'
     );
-    const rendered = [...src.matchAll(/\{TIME_EXPORT_COPY\.(\w+)\}/g)].map((m) => m[1]).sort();
+    // [S127 item 1] De-duplicated: the title now renders on two branches (the
+    // disconnected "turned itself off" card as well). SUPERSEDED, quoted:
+    // `[...src.matchAll(…)].map((m) => m[1]).sort()` — which counted it twice.
+    const rendered = [...new Set([...src.matchAll(/\{TIME_EXPORT_COPY\.(\w+)\}/g)].map((m) => m[1]))].sort();
     expect(rendered).toEqual(['disconnect', 'noBackfill', 'offIsNotUndo', 'ownerOnly', 'payroll', 'title', 'what']);
   });
 });

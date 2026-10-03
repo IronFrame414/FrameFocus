@@ -1,5 +1,5 @@
 -- S127 item 1: restore enforce_companies_qb_time_export() to its 20262134100000 definition after a sabotage.
--- md5 of pg_get_functiondef: c18819c27c3bb8d2be7219082119d241. ACL: {postgres=X/postgres,service_role=X/postgres,supabase_auth_admin=X/postgres}. Comment is re-applied below.
+-- md5 of pg_get_functiondef: 65284c5df44f2980c736df045cc869ed. ACL: {postgres=X/postgres,service_role=X/postgres,supabase_auth_admin=X/postgres}. Comment is re-applied below.
 
 CREATE OR REPLACE FUNCTION public.enforce_companies_qb_time_export()
  RETURNS trigger
@@ -64,7 +64,7 @@ BEGIN
                  || 'accepting the connection — it needs to be reconnected. No hours are being sent. '
                  || 'After reconnecting, turn it on again on Settings → Accounting.'
                WHEN 'connection_revoked' THEN
-                 'Sending approved timesheets to QuickBooks was turned off because FrameFocus was '
+                 'Sending approved timesheets to QuickBooks was turned off because EZ Contractor Binder was '
                  || 'disconnected from inside QuickBooks. No hours are being sent. After reconnecting, '
                  || 'turn it on again on Settings → Accounting.'
                ELSE

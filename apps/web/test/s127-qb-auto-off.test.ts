@@ -91,7 +91,7 @@ describe('S127 item 1 — what the screen says', () => {
         'No hours are being sent. After reconnecting, turn it on again yourself.'
     );
     expect(timeExportAutoOffNotice('connection_revoked', 'Oct 3, 2026, 9:15 AM')).toBe(
-      'Turned off automatically when FrameFocus was disconnected from inside QuickBooks on Oct 3, 2026, ' +
+      'Turned off automatically when EZ Contractor Binder was disconnected from inside QuickBooks on Oct 3, 2026, ' +
         '9:15 AM. No hours are being sent. After reconnecting, turn it on again yourself.'
     );
   });
