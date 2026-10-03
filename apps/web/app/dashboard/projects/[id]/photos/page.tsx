@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { canDeletePhoto } from '@/lib/photos/delete-permission';
 import { getProjectPhotos } from '@/lib/services/photos';
 import { getMyProfile } from '@/lib/services/profiles';
 import { getCompanyTimeSettings } from '@/lib/services/company';
@@ -7,7 +8,6 @@ import { cardStyle, color, font, microLabelStyle } from '@/lib/theme';
 import PhotoVisibilityToggle from './photo-visibility-toggle';
 import { AddPhotosButton } from './add-photos-button';
 import { GridThumb } from './grid-thumb';
-import { markupHref } from '@/lib/markup/return-to';
 
 // Redesign 6.2 — the desktop gallery: A SURFACING JOB, NOT A BUILD. The data
 // derivation is the SAME `getProjectPhotos()` the mobile gallery uses (lib —
@@ -94,7 +94,20 @@ export default async function ProjectPhotosPage({
         </p>
         {/* [S111 Q16] Staff only: files_insert_non_client refuses a client, and a
             subcontractor never reaches /dashboard. */}
-        {isStaff && <AddPhotosButton projectId={params.id} />}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          {/* [S127 4a] The trash this tab never had — for the roles that may
+              trash and restore a photo (canDeletePhoto), as the database says. */}
+          {profile && canDeletePhoto(profile.role) && (
+            <Link
+              href={`${base}/trash`}
+              data-testid="photos-trash-link"
+              style={{ color: color.primary, fontSize: '13px', textDecoration: 'none' }}
+            >
+              Trash
+            </Link>
+          )}
+          {isStaff && <AddPhotosButton projectId={params.id} />}
+        </div>
       </div>
 
       {/* Provenance chips + the two newly surfaced filters. URL-param driven
@@ -146,7 +159,9 @@ export default async function ProjectPhotosPage({
                 <Link
                   key={p.id}
                   // [S122 0-B-5] ?from=photos — the markup screen's back link returns here.
-                  href={markupHref(params.id, p.id, 'photos')}
+                  // [S127 4b, A-2] VIEW first; markup is a button on the view.
+                  // SUPERSEDED: href={markupHref(params.id, p.id, 'photos')}.
+                  href={`${base}/${p.id}`}
                   // H-5 [S115] — one prefetch PER TILE ran the middleware for a
                   // 249 B payload with no page data; none now.
                   prefetch={false}

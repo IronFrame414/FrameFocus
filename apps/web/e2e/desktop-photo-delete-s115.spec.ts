@@ -276,7 +276,12 @@ test.describe('S122 0-B-5 · the markup screen returns to where the user came fr
     const photo = await seedPhoto('from-photos');
     await signInAs(page, OWNER);
     await page.goto(`/dashboard/projects/${projectId}/photos`);
-    await page.locator(`a[href*="/files/${photo.id}/markup"]`).first().click();
+    // [S127 4b, A-2] A tile now opens VIEW mode; markup is a button on the view.
+    // SUPERSEDED, quoted: `page.locator(\`a[href*="/files/${photo.id}/markup"]\`).first().click()`
+    // — the tile linked straight into the markup editor.
+    await page.locator(`a[href$="/photos/${photo.id}"]`).first().click();
+    await page.waitForURL(new RegExp(`/photos/${photo.id}$`), { timeout: 30_000 });
+    await page.getByTestId('photo-view-markup').click();
     await page.waitForURL(new RegExp(`/files/${photo.id}/markup\\?from=photos$`), {
       timeout: 30_000,
     });
