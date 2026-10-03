@@ -13,6 +13,11 @@ import { z } from 'zod';
 const uuid = z.string().uuid();
 
 export const punchItemCreateSchema = z.object({
+  // [S127 P-1] The client's idempotency key, used as the row's own id: a second
+  // tap sends the SAME id, the primary key refuses the second insert, and the
+  // server reads that back as the first request's success. Optional, so a
+  // caller that sends none still gets a database-generated id.
+  id: uuid.optional(),
   punch_list_id: uuid,
   project_id: uuid,
   title: z.string().trim().min(1, 'A title is required').max(200),

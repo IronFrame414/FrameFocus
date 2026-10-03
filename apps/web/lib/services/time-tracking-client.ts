@@ -16,9 +16,20 @@ export type {
   SessionWithSegments,
 };
 
-type Result<T = undefined> = { success: boolean; error?: string } & (T extends undefined
-  ? {}
-  : Partial<T>);
+type Result<T = undefined> = {
+  success: boolean;
+  error?: string;
+  /** [S127 P-1] A refusal the screen handles by name rather than by message. */
+  code?: 'already_clocked_in';
+} & (T extends undefined ? {} : Partial<T>);
+
+/**
+ * [S127 P-1] What a second clock-in tap gets instead of Postgres's own text.
+ * The first tap opened the session; `idx_time_clock_sessions_one_open_per_member`
+ * (one open session per member) refused the second. That is the truth about
+ * the state, not a failure, and the screen refreshes into it.
+ */
+export const ALREADY_CLOCKED_IN = 'You are already clocked in.';
 
 export interface GpsFix {
   lat: number;
@@ -121,6 +132,13 @@ export async function clockIn(input: {
     .select('id')
     .single();
   if (sessionError || !session) {
+    // ⚠️ [S127 P-1] A SECOND TAP, NOT A DATABASE ERROR. 23505 here can only be
+    // the one-open-session index (the session id is never client-supplied on
+    // this path except offline, where it is fresh per tap). Before this, the
+    // most-used action in the app showed the user the raw constraint text.
+    if (sessionError?.code === '23505') {
+      return { success: false, code: 'already_clocked_in', error: ALREADY_CLOCKED_IN };
+    }
     return { success: false, error: sessionError?.message ?? 'Failed to clock in.' };
   }
 

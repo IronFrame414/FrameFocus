@@ -43,6 +43,11 @@ export interface WriteResult {
   error?: string;
   /** Distinguishes "RLS said no" from "the row was malformed" for the route. */
   denied?: boolean;
+  /**
+   * [S127 P-1] This request repeated one that already landed (same client id).
+   * The route must not announce the item a second time.
+   */
+  replayed?: boolean;
 }
 
 /** Postgres codes that mean the policy refused, not that the data was bad. */
@@ -54,7 +59,9 @@ function isDenial(code: string | undefined): boolean {
 
 export async function insertPunchItemAsCaller(
   supabase: SupabaseClient<Database>,
-  input: PunchItemCreateInput
+  input: PunchItemCreateInput,
+  /** Required for the replay read-back below; harnesses that send no id omit it. */
+  callerUserId?: string
 ): Promise<WriteResult> {
   const { data, error } = await supabase
     .from('punch_list_items')
@@ -63,6 +70,21 @@ export async function insertPunchItemAsCaller(
     .single();
 
   if (error) {
+    // ⚠️ [S127 P-1] A SECOND TAP, NOT A FAILURE. The client sent the id it sent
+    // the first time (`useRequestId`), so the primary key refused the second
+    // insert. Read the row back through the CALLER's RLS and answer success
+    // only when it is visible AND the caller created it — a guessed or reused
+    // foreign id therefore gets an error, never someone else's row echoed back.
+    if (error.code === '23505' && input.id && callerUserId) {
+      const { data: existing } = await supabase
+        .from('punch_list_items')
+        .select('id, created_by')
+        .eq('id', input.id)
+        .maybeSingle();
+      if (existing && existing.created_by === callerUserId) {
+        return { success: true, id: existing.id, replayed: true };
+      }
+    }
     return { success: false, error: error.message, denied: isDenial(error.code) };
   }
   return { success: true, id: data.id };

@@ -82,6 +82,8 @@ export const en = {
   // ── /m/timeclock ──
   'field.clock.title': 'Timeclock',
   'field.clock.inFailed': 'Clock-in failed.',
+  // [S127 P-1] A second tap: the first one already clocked in.
+  'field.clock.alreadyIn': 'You are already clocked in.',
   'field.clock.outFailed': 'Clock-out failed.',
   'field.clock.notClockedIn': 'Not clocked in',
   'field.clock.segmentType': 'SEGMENT TYPE',
@@ -339,6 +341,7 @@ export const es: Record<keyof typeof en, string> = {
   'field.logDetail.noPhotos': 'No hay fotos en este reporte.',
   'field.clock.title': 'Reloj',
   'field.clock.inFailed': 'No se pudo marcar la entrada.',
+  'field.clock.alreadyIn': 'Ya marcaste tu entrada.',
   'field.clock.outFailed': 'No se pudo marcar la salida.',
   'field.clock.notClockedIn': 'Sin marcar entrada',
   'field.clock.segmentType': 'TIPO DE ACTIVIDAD',
