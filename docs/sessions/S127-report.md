@@ -1248,3 +1248,24 @@ Branch `feature/s127-money-recat-lock`, from `643b8e89`.
 - **Production expectations** (stated now): (1) a history row `20262134800000`; (2) the function md5 = the md5 read on
   rebuild-test after its push; (3) one overload, ACL unchanged; (4) trigger `files_column_scope` enabled `O`; (5) money
   files unchanged: **3, all `application/pdf`** (2 contracts, 1 invoice, none deleted).
+
+### R-9 on rebuild-test: built, proven, sabotaged
+
+- **Found on rebuild-test, not mine:** `20262135000000_s124_qb_time_activity_push` (S124 WIP, `feature/s124-p1-push`
+  `16858e87`), applied after R-2's dry run (~17:00Z). It adds `qb_employee_map` and a trigger on `time_clock_sessions`.
+  It touches no `files` object. Item 2's CI ran against a database carrying it. Its branch is untouched. To push, I used
+  a scratch workdir: this branch's migrations plus that one file read from git, so local history matched remote.
+  `--include-all` dry run → **exactly `20262134800000`**.
+- **Verified by object against the stated expectations:** history row 1 ✅ · 1 overload ✅ · live
+  `pg_get_functiondef` = the migration's function body (diff 0) ✅ · md5 **`a23b1830b05a02239844199079330fa8`** (≠
+  `ec55121d`) ✅ · trigger `O` ✅.
+- **Correction to my R-8 statement:** a PM reaches an invoices file only through an invoice they **authored**. UPDATE
+  must also pass `files_select_non_client`, whose invoices arm is `invoice_id` → `author_member_id = me`. "Any invoice
+  on a project they can view" was wrong. The route was real but narrower. The first live run caught it: 3 red, the PM
+  fixtures had no `invoice_id`, so RLS refused them and the arm was never met. PM invoices fixtures now hang off the
+  earliest live invoice the test PM authored (scoped to author and company, ordered).
+- **Count correction:** I stated 39 tests; the file has **40** (24 + 9 + 3 + 4). Arithmetic, not a change in scope.
+- **Live `s127-money-recat` 40/40.** 4d's `s127-photo-perms` **36/36** (4d unchanged).
+- **SABOTAGE** (captured original applied, md5 `ec55121d` read back): **exactly the 5 predicted red**. Invoices map
+  PM + PE, the 42501 check, two-step PM + PE. 35 green. **Restored** from the migration body, md5 `a23b1830` read back;
+  rerun **40/40**.
