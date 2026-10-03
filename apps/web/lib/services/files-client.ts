@@ -1,5 +1,5 @@
 import { createClient } from '@/lib/supabase-browser';
-import type { AnyFileCategory, FileCategory } from './files';
+import type { AnyFileCategory } from './files';
 import { applied, DISCARDED } from './mutation-result';
 import { SIGNED_URL_TTL_SECONDS } from './signed-url-ttl';
 import { uploadBlockedByCap, STORAGE_LIMIT_ERROR } from './storage-status-client';
@@ -407,7 +407,11 @@ export async function updateFile(
   id: string,
   updates: {
     file_name?: string;
-    category?: FileCategory;
+    // [S127 R-9, RULED Josh 2026-10-03] No `category`, on purpose. Moving a
+    // file OUT of contracts/change_orders/invoices is Owner/Admin only in the
+    // database (enforce_files_column_scope); moving one IN already was. No
+    // surface recategorises an existing file. One that does must offer a PM
+    // or PE no option the database refuses, and say why (R-4).
     tags?: string[];
     ai_tags?: string[] | null;
     markup_data?: Record<string, unknown> | null;
