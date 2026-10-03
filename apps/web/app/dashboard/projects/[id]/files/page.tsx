@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase-server';
+import { createClient, getRequestUser } from '@/lib/supabase-server';
 import { getDocumentFiles, getFileCategories } from '@/lib/services/files';
 import { getActiveTags } from '@/lib/services/tag-options';
 import FilesList from './files-list';
@@ -11,9 +11,7 @@ export default async function ProjectFilesPage({ params }: { params: Promise<{ i
   // The archive panel is Owner/Admin (spec §4 flow step 1); the role decides
   // whether it renders, the API route enforces the same rule underneath.
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getRequestUser();
   let role: string | null = null;
   if (user) {
     const { data: profile } = await supabase

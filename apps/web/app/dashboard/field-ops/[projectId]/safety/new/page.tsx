@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
-import { createClient } from '@/lib/supabase-server';
+import { getRequestUser } from '@/lib/supabase-server';
 import { getProject } from '@/lib/services/projects';
 import { getMembers } from '@/lib/services/members';
 import { getCompanyTimeSettings } from '@/lib/services/company';
@@ -19,10 +19,7 @@ export default async function NewProjectIncidentPage({
   params: { projectId: string };
   searchParams: { date?: string };
 }) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getRequestUser();
   if (!user) redirect('/sign-in');
 
   const project = await getProject(params.projectId);

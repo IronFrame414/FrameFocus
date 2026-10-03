@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { createClient } from '@/lib/supabase-server';
+import { createClient, getRequestUser } from '@/lib/supabase-server';
 import { getProjects } from '@/lib/services/projects';
 import { getProjectLogSummaries } from '@/lib/services/daily-logs';
 import { getCompanyTimeSettings } from '@/lib/services/company';
@@ -37,9 +37,7 @@ function ymdMinusDays(ymd: string, days: number): string {
 
 export default async function FieldOpsHubPage() {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getRequestUser();
   if (!user) redirect('/sign-in');
 
   const [projects, summaries, { timezone }] = await Promise.all([

@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
-import { createClient } from '@/lib/supabase-server';
+import { createClient, getRequestUser } from '@/lib/supabase-server';
 import { getSiteVisit, getSiteVisitAccess } from '@/lib/services/site-visits';
 import { SiteVisitRecord } from '@/components/site-visits/site-visit-record';
 import { SiteVisitOfficeActions } from './office-actions';
@@ -23,9 +23,7 @@ import { contactDisplayName } from '@framefocus/shared/utils/contact-name';
 
 export default async function DesktopSiteVisitPage({ params }: { params: { id: string } }) {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getRequestUser();
   if (!user) redirect('/sign-in');
   const { data: profile } = await supabase
     .from('profiles')

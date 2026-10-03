@@ -1,6 +1,6 @@
 import { notFound, redirect } from 'next/navigation';
 import { seesProjectMoney } from '@framefocus/shared/constants/roles';
-import { createClient } from '@/lib/supabase-server';
+import { createClient, getRequestUser } from '@/lib/supabase-server';
 import { getProject } from '@/lib/services/projects';
 import { getMyMember } from '@/lib/services/members';
 import { getCompanyTimeSettings } from '@/lib/services/company';
@@ -31,9 +31,7 @@ import { getReminderSettings } from '@/lib/services/reminders';
 
 export default async function PaymentsPage({ params }: { params: { id: string } }) {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getRequestUser();
   if (!user) redirect('/sign-in');
 
   const { data: profile } = await supabase

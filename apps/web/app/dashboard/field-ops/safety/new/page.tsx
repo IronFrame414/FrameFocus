@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { createClient } from '@/lib/supabase-server';
+import { getRequestUser } from '@/lib/supabase-server';
 import { getProjects } from '@/lib/services/projects';
 import { getMembers } from '@/lib/services/members';
 import { getCompanyTimeSettings } from '@/lib/services/company';
@@ -10,10 +10,7 @@ import { IncidentForm } from '@/components/field/incident-form';
 // (shop/yard)" (Phase 3 Q3). Any member files; RLS scopes the picker.
 
 export default async function NewIncidentPage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getRequestUser();
   if (!user) redirect('/sign-in');
 
   const [projects, members, { timezone }] = await Promise.all([

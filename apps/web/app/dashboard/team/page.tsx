@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase-server';
+import { createClient, getRequestUser } from '@/lib/supabase-server';
 import { redirect } from 'next/navigation';
 import { getSessionsForReview } from '@/lib/services/time-tracking';
 import { getCompanyTimeSettings } from '@/lib/services/company';
@@ -31,9 +31,7 @@ import TeamPageClient from './team-page-client';
 export default async function TeamPage() {
   const supabase = await createClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getRequestUser();
 
   if (!user) {
     redirect('/sign-in');

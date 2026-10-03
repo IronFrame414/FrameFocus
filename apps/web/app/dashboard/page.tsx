@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase-server';
+import { createClient, getRequestUser } from '@/lib/supabase-server';
 import Link from 'next/link';
 import { getCalendarEvents } from '@/lib/services/schedule';
 import { getMyMember } from '@/lib/services/members';
@@ -24,9 +24,7 @@ const DOT_COLORS = { amber: '#b45309', red: '#c0362c', blue: '#3b4ae0', green: '
 
 export default async function DashboardPage() {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getRequestUser();
 
   const { data: profile } = await supabase
     .from('profiles')

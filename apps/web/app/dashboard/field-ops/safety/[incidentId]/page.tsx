@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
-import { createClient } from '@/lib/supabase-server';
+import { createClient, getRequestUser } from '@/lib/supabase-server';
 import { getFailedIncidentEmails, getIncident, getIncidentPhotos } from '@/lib/services/safety';
 import { getMyMember } from '@/lib/services/members';
 import { TypeBadge, StatusBadge } from '@/components/field/incident-badges';
@@ -42,9 +42,7 @@ export default async function IncidentDetailPage({
   params: { incidentId: string };
 }) {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getRequestUser();
   if (!user) redirect('/sign-in');
 
   const { data: profile } = await supabase

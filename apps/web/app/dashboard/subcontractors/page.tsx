@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase-server';
+import { createClient, getRequestUser } from '@/lib/supabase-server';
 import { redirect } from 'next/navigation';
 import { getSubcontractors } from '@/lib/services/subcontractors';
 import { getBillsAndCommitments, getExpiringCompliance } from '@/lib/services/payables';
@@ -29,9 +29,7 @@ import { editsSubDirectory } from '@framefocus/shared/constants/roles';
 export default async function SubcontractorsPage() {
   const supabase = await createClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getRequestUser();
   if (!user) redirect('/sign-in');
 
   const { data: profile } = await supabase

@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase-server';
+import { createClient, getRequestUser } from '@/lib/supabase-server';
 import { redirect } from 'next/navigation';
 import { getSessionDetail, getSessionsForReview } from '@/lib/services/time-tracking';
 import { getMyMember } from '@/lib/services/members';
@@ -28,9 +28,7 @@ export default async function TimesheetDetailPage({
 }) {
   const supabase = await createClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getRequestUser();
   if (!user) redirect('/sign-in');
 
   const { data: profile } = await supabase

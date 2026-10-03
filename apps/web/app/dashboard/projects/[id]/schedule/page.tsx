@@ -1,5 +1,5 @@
 import { supervisesProjectWork } from '@framefocus/shared/constants/roles';
-import { createClient } from '@/lib/supabase-server';
+import { createClient, getRequestUser } from '@/lib/supabase-server';
 import { redirect } from 'next/navigation';
 import { getTasks, getPhases, getDependencies } from '@/lib/services/tasks';
 import { getCalendarEvents, getInspections } from '@/lib/services/schedule';
@@ -17,9 +17,7 @@ import type { CpInput } from '@framefocus/shared/utils/critical-path';
 export default async function ProjectSchedulePage({ params }: { params: { id: string } }) {
   const supabase = await createClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getRequestUser();
   if (!user) redirect('/sign-in');
 
   const { data: profile } = await supabase
