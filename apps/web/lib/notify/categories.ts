@@ -35,7 +35,8 @@ const CHIP_TYPES: Record<Exclude<NotificationChip, 'all'>, readonly Notification
   // configuring, not a figure that needs approving. The QuickBooks connection is
   // already treated as billing-adjacent (CLAUDE.md owner-only #4), which is the
   // same reasoning that puts trial_warning here.
-  account: ['trial_warning', 'qb_sync_blocked'],
+  // qb_time_export_auto_off [S127 item 1] is ACCOUNT for the same reason.
+  account: ['trial_warning', 'qb_sync_blocked', 'qb_time_export_auto_off'],
   // 'mention' and 'assignment' appear under Everything only — see above.
 };
 

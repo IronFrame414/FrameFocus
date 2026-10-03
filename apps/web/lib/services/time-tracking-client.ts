@@ -572,6 +572,19 @@ export async function updateSubordinateSession(
   return scopedUpdate('time_clock_sessions', id, updates, SESSION_CLOCK_COLUMNS);
 }
 
+/** The approval status of the day a segment belongs to, read as the caller. */
+async function statusOfSegmentDay(segmentId: string): Promise<string | null> {
+  const supabase = createClient();
+  const { data: seg } = await supabase.from('time_segments').select('session_id').eq('id', segmentId).maybeSingle();
+  if (!seg) return null;
+  const { data: day } = await supabase
+    .from('time_clock_sessions')
+    .select('status')
+    .eq('id', seg.session_id)
+    .maybeSingle();
+  return day?.status ?? null;
+}
+
 export async function updateSubordinateSegment(
   id: string,
   updates: {
@@ -581,8 +594,16 @@ export async function updateSubordinateSegment(
     note?: string | null;
     completion?: Completion | null;
   }
-): Promise<Result> {
-  return scopedUpdate('time_segments', id, updates, SEGMENT_ATTRIBUTION_COLUMNS);
+): Promise<Result<{ returnedToPending: boolean }>> {
+  // [S127 item 7] A work ↔ break change moves PAID time, so on an approved day
+  // the database now returns the day to pending (20262134200000) on this path
+  // too. Read the day's status either side of the write so the screen can show
+  // 0-B-4's shared "Hours changed" notice — reused, not a second one.
+  const before = await statusOfSegmentDay(id);
+  const res = await scopedUpdate('time_segments', id, updates, SEGMENT_ATTRIBUTION_COLUMNS);
+  if (!res.success) return res;
+  const after = await statusOfSegmentDay(id);
+  return { success: true, returnedToPending: before === 'approved' && after === 'pending' };
 }
 
 // ── 6A-2 §S-5: atomic week approval. One RPC, one guarded UPDATE; RLS still

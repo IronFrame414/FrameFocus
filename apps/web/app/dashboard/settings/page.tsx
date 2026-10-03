@@ -272,11 +272,15 @@ export default async function SettingsPage({
             isOwner={profile.role === 'owner'}
           />
           {/* [S124 Part 2] The time-export switch — the SAME component on both
-              surfaces (PARITY). Owner-only control; renders nothing when disconnected. */}
+              surfaces (PARITY). Owner-only control; when disconnected it renders only the
+                [S127] "turned itself off" notice, if there is one. */}
           <TimeExportSettings
             connected={qbConnection?.state === 'connected'}
             enabled={qbConnection?.timeExportEnabled ?? false}
             enabledAt={qbConnection?.timeExportEnabledAt ?? null}
+            autoOffAt={qbConnection?.timeExportAutoOffAt ?? null}
+            autoOffReason={qbConnection?.timeExportAutoOffReason ?? null}
+            missedDays={qbConnection?.timeExportMissedDays ?? null}
             isOwner={profile.role === 'owner'}
           />
           {/* ⚠️ RENDERS NOTHING WHEN DISCONNECTED [RULED Josh, S103]: "the GL
