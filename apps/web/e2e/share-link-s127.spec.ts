@@ -1,3 +1,4 @@
+import { createHash, randomBytes } from 'node:crypto';
 import { test, expect, request as pwRequest } from '@playwright/test';
 import { adminClient, COMPANY_A, CREW_MEMBER } from './hub-fixture';
 import { signInAs } from './sign-in-as';
@@ -145,6 +146,38 @@ test('the public page carries ONLY the photo, logo, company name and date — pr
   // An unknown token gets nothing.
   expect((await stranger.get(`/share/p/${'A'.repeat(43)}/image`)).status()).toBe(404);
   await stranger.dispose();
+});
+
+// [S127, resumed] share_path is a column an Owner/Admin INSERT can set through
+// PostgREST (the policy checks file_id, not share_path), and the bytes are read
+// with the service role. A row written AROUND the route — here by the service
+// role, a superset of what such an insert can do — naming a real object that is
+// not its own photo's must serve nothing.
+test('a link whose share_path is not its own photo serves nothing', async ({ page }) => {
+  const otherPath = `${COMPANY_A}/${projectId}/${RUN}-not-this-link.png`;
+  const up = await admin.storage.from(BUCKET).upload(otherPath, PNG, { contentType: 'image/png' });
+  if (up.error) throw new Error(up.error.message);
+  try {
+    const token = randomBytes(32).toString('base64url');
+    const { error } = await admin.from('photo_share_links').insert({
+      company_id: COMPANY_A,
+      file_id: fileId,
+      share_path: otherPath,
+      token_hash: createHash('sha256').update(token, 'utf8').digest('hex'),
+    });
+    expect(error).toBeNull();
+    await page.goto('/sign-in'); // any page on the app, for its origin
+    const stranger = await pwRequest.newContext({ baseURL: page.url() });
+    const img = await stranger.get(`/share/p/${token}/image`);
+    expect(img.status()).toBe(404);
+    expect((await img.body()).length).not.toBe(PNG.length);
+    expect(await (await stranger.get(`/share/p/${token}`)).text()).toContain(
+      'This link is no longer available.'
+    );
+    await stranger.dispose();
+  } finally {
+    await admin.storage.from(BUCKET).remove([otherPath]);
+  }
 });
 
 test('a PM cannot create a public link', async ({ page }) => {

@@ -73,7 +73,19 @@ export interface ActiveShareLink {
   payload: PublicSharePayload;
 }
 
-/** The live link for a token, or null (unknown, revoked, expired, or its photo deleted). */
+/**
+ * ⚠️ A link may serve ONLY its own photo: the original or that original's
+ * marked-up derivative. `share_path` is a column an Owner/Admin INSERT can set
+ * through PostgREST, and the bytes are read with the SERVICE ROLE, so a path
+ * not derived from the link's own `files` row would hand out any object in the
+ * bucket, another company's included. The route sets it correctly; this check
+ * is what makes a row written around the route harmless.
+ */
+export function sharePathBelongsToFile(sharePath: string, filePath: string): boolean {
+  return sharePath === filePath || sharePath === derivativePathFor(filePath);
+}
+
+/** The live link for a token, or null (unknown, revoked, expired, its photo deleted, or a path not its photo's). */
 export async function resolveShareLink(
   admin: SupabaseClient,
   token: string
@@ -95,7 +107,7 @@ export async function resolveShareLink(
   const [{ data: file }, { data: company }] = await Promise.all([
     admin
       .from('files')
-      .select('created_at, is_deleted, company_id')
+      .select('created_at, is_deleted, company_id, file_path')
       .eq('id', link.file_id)
       .maybeSingle(),
     admin
@@ -105,6 +117,12 @@ export async function resolveShareLink(
       .maybeSingle(),
   ]);
   if (!file || file.is_deleted || file.company_id !== link.company_id || !company) return null;
+  if (!sharePathBelongsToFile(link.share_path as string, file.file_path as string)) {
+    console.error(
+      `[share-link] refused link ${link.id as string}: share_path is not its own photo's path`
+    );
+    return null;
+  }
   const tz = (company.timezone as string | null) ?? 'America/New_York';
   const date = new Intl.DateTimeFormat('en-CA', {
     timeZone: tz,

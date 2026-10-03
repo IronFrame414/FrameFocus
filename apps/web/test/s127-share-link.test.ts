@@ -68,3 +68,54 @@ describe('S127 4e — what the public page may show (stop rule 10)', () => {
     expect(IMAGE).not.toMatch(/createSignedUrl|getPublicUrl|redirect\(/);
   });
 });
+
+describe('S127 4e — a link serves ONLY its own photo (resumed session finding)', () => {
+  // share_path is a column an Owner/Admin INSERT can set through PostgREST, and
+  // the bytes are read with the service role. Driven through resolveShareLink
+  // itself, with a fake admin client holding one link row and its file row.
+  const COMPANY = '11111111-1111-4111-8111-111111111111';
+  const FILE_PATH = `${COMPANY}/p/photo.jpg`;
+  function fakeAdmin(sharePath: string) {
+    const rows: Record<string, Record<string, unknown>> = {
+      photo_share_links: {
+        id: 'link-1',
+        company_id: COMPANY,
+        file_id: 'file-1',
+        share_path: sharePath,
+        expires_at: new Date(Date.now() + 86_400_000).toISOString(),
+        revoked_at: null,
+        is_deleted: false,
+      },
+      files: {
+        created_at: '2026-10-01T15:00:00Z',
+        is_deleted: false,
+        company_id: COMPANY,
+        file_path: FILE_PATH,
+      },
+      companies: { name: 'Co', logo_url: null, timezone: 'America/New_York' },
+    };
+    const chain = (table: string) => {
+      const q = {
+        select: () => q,
+        eq: () => q,
+        maybeSingle: async () => ({ data: rows[table] ?? null, error: null }),
+      };
+      return q;
+    };
+    return { from: chain } as unknown as import('@supabase/supabase-js').SupabaseClient;
+  }
+
+  it.each([
+    ['the original', FILE_PATH, true],
+    ['its marked-up derivative', `${FILE_PATH}.markup.jpg`, true],
+    ['another company’s object', '22222222-2222-4222-8222-222222222222/p/photo.jpg', false],
+    ['another photo in the same company', `${COMPANY}/p/other.jpg`, false],
+    ['a derivative of another photo', `${COMPANY}/p/other.jpg.markup.jpg`, false],
+  ])('share_path = %s (%s) → served: %s', async (_label, sharePath, served) => {
+    const { resolveShareLink, newShareToken } = await import('@/lib/photos/share-link');
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const link = await resolveShareLink(fakeAdmin(sharePath), newShareToken().token);
+    spy.mockRestore();
+    expect(link === null ? false : link.sharePath === sharePath).toBe(served);
+  });
+});
