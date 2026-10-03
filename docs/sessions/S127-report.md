@@ -325,3 +325,52 @@ it caps the queue more than the code does. **If the road runs out, items stop wh
   `needs_reauth` (Intuit's `invalid_grant`) leaves it on. **Reading: record the transition actually taken, with its
   from-state, and do not add `needs_reauth` as a new off-trigger.** That would be a behaviour change nobody ruled.
   Flagged so Josh can rule on it.
+
+---
+
+# PHASE 3 — BUILD
+
+## Item 2 — member removal: ✅ BUILT AND PROVEN ON `feature/s127-member-removal` (`fe131aca`). ⛔ NOT MERGED, by ruling #11.
+
+**What changed (0 migrations; `get_my_company_id()` untouched):**
+- `lib/team/team-access.ts`: `setTeamMemberLoginActive()`. For a member **with a login**, Inactive calls the **same
+  `softDeleteTeamMember()` desktop Remove calls** (profile deleted + 876000h ban), and #160's trigger brings the member
+  row. Active reverses it (profile restored through the caller's RLS with a 0-row check, ban lifted), and refuses in a
+  trial-locked company so a restore cannot lift the lock. A member with no login is a no-op; their member-only write
+  stays correct, because there is no token to cut.
+- `lib/team/team-access-actions.ts`: the thin server action (caller + service role).
+- `lib/team/team-edit-rules.ts`: `assertCanEditTeamMember`, **moved unchanged** from the desktop actions file so both
+  surfaces share one rule. Side effect, and a fix: **an Admin can no longer deactivate the Owner, another Admin or a PE
+  from `/m`** (desktop already refused that), and nobody can deactivate themselves.
+- `/m` team edit form: the login half runs **first**. If it fails, the roster half does **not** flip `is_deleted` (no
+  "hidden from pickers but can still sign in" state), and the failure is shown as its own note (en + es).
+
+**Proofs (rebuild-test, `mr6.log`, verbose):**
+
+| case | read | write | fresh download | signed URL | definer fn | `get_my_company_id` | new sign-in |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| before (control, 3 subjects) | 17 | 1 | > 0 | yes | 6 | company A | — |
+| P, desktop Remove | 0 | 0 | 0 | no | 0 | NULL | refused |
+| **M, `/m` Inactive (new mechanism)** | **0** | **0** | **0** | **no** | **0** | **NULL** | **refused** |
+| M, Active again | 17 | 1 | 3,654,530 | yes | 6 | company A | succeeds |
+| X, raw member-only API write (residual, `it.fails`) | 17 | 1 | 1,198,463 | yes | 6 | company A | succeeds |
+
+- Live: **5 passed, 1 expected fail** (6). Cross-tenant control: 0 bytes, *"Object not found"*. Cleanup: 0 marker
+  contacts left, 3 subjects removed.
+- **Sabotage:** `softDeleteTeamMember` call removed from the mechanism → **2 failed** (M Inactive, M Active) → restored
+  from the saved copy, md5 `9e67e0e6a7e4d1a64832f743e3273ff8` before and after.
+- `tsc` exit 0 (after clearing a stale `.next/types` left by the S124 Part 1 build) · eslint on the changed files exit 0
+  · unit **171 files / 2320 tests** exit 0 · `next build` exit 0.
+- CI run `37087311433` started on push, 01:45:29Z. Its result is recorded below when it lands.
+
+**⚠️ What it does NOT close (stated residuals):**
+1. **A raw member-only write through the API** (an Owner/Admin PATCHing `company_members.is_deleted`) still cuts
+   nothing (case X). Item 2 removes the screen that made it. The database-layer defence (the tenant gate also requiring
+   a live member row for staff roles) is **proposed, not built**. Ruling #11 fences `get_my_company_id()`, and a wrong
+   join there locks out every user, including clients, whose member-row coverage is not uniform.
+2. **Deleting a subcontractor whose directory row is linked to a login** keeps that login and its access (Q-D).
+3. **The form wiring is proven by type-check and build, not by an e2e:** the existing `/m` e2e never exercises
+   `m-team-edit-active`. The mechanism it calls is what the live test drives.
+
+**For Josh:** merge it yourself if you agree. It carries no migration. The live test is the regression guard: its X
+case flips red the day the database layer lands, as designed.
