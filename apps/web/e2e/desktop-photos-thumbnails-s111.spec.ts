@@ -149,3 +149,42 @@ test('[S111 D] the generation route: the owner generates on demand; an unassigne
   expect(refused.status()).toBe(403);
   await ctx.close();
 });
+
+// [S127 P-3] THE PROXY'S HARD CONDITION, read off REAL responses: every
+// response is `private` (a `public` one would let the CDN serve one company's
+// thumbnail to another), another company's Owner holding the exact URL gets
+// nothing, and no session gets nothing.
+test('[S127 P-3] the thumbnail proxy: private on every response; another company and no session get nothing', async ({
+  page,
+  browser,
+}) => {
+  test.setTimeout(120_000);
+  const fileId = withThumbs.fileIds[0];
+  const url = `/api/photos/${fileId}/thumb?v=o`;
+
+  await signInAs(page, OWNER);
+  const own = await page.request.get(url);
+  expect(own.status()).toBe(200);
+  expect(own.headers()['cache-control']).toBe('private, max-age=604800, immutable');
+  expect(own.headers()['x-thumb-source']).toBe('thumb');
+  const ownBytes = (await own.body()).length;
+  expect(ownBytes).toBeGreaterThan(0);
+
+  const ctx = await browser.newContext();
+  const other = await ctx.newPage();
+  await signInAs(other, 'josh+qa-b-owner@worthprop.com');
+  const foreign = await other.request.get(url);
+  console.log(`[S127 P-3] other company's owner: ${foreign.status()}`);
+  expect(foreign.status()).toBe(404);
+  expect(foreign.headers()['cache-control']).toBe('private, no-store');
+  expect(foreign.headers()['x-thumb-source']).toBeUndefined();
+  expect((await foreign.body()).length).not.toBe(ownBytes);
+  await ctx.close();
+
+  const anonCtx = await browser.newContext();
+  const anon = await anonCtx.request.get(new URL(url, page.url()).toString(), { maxRedirects: 0 });
+  console.log(`[S127 P-3] no session: ${anon.status()}`);
+  expect(anon.status()).not.toBe(200);
+  expect(anon.headers()['x-thumb-source']).toBeUndefined();
+  await anonCtx.close();
+});

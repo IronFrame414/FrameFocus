@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
 import { derivativePathFor, thumbPathFor } from '@framefocus/shared/utils/markup';
+import {
+  THUMB_CACHE_CONTROL,
+  THUMB_NOT_FOUND_CACHE_CONTROL,
+  THUMB_SOURCE_HEADER,
+  type ThumbSource,
+} from '@/lib/photos/thumb-proxy';
 
 // ============================================================================
 // S127 P-3 — PHOTO THUMBNAILS THROUGH A PROXY ROUTE (S125 finding 4, R2).
@@ -28,14 +34,21 @@ import { derivativePathFor, thumbPathFor } from '@framefocus/shared/utils/markup
 // decide too. No service role here.
 // ============================================================================
 
-export const THUMB_CACHE_CONTROL = 'private, max-age=604800, immutable';
+// The cache contract lives in lib/photos/thumb-proxy.ts: a route file may
+// export only its handlers and Next's config names.
+export const dynamic = 'force-dynamic';
 
 export async function GET(_request: NextRequest, { params }: { params: { fileId: string } }) {
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  if (!user) {
+    return NextResponse.json(
+      { error: 'Not authenticated' },
+      { status: 401, headers: { 'Cache-Control': THUMB_NOT_FOUND_CACHE_CONTROL } }
+    );
+  }
 
   const { data: file } = await supabase
     .from('files')
@@ -43,18 +56,21 @@ export async function GET(_request: NextRequest, { params }: { params: { fileId:
     .eq('id', params.fileId)
     .maybeSingle();
   if (!file || file.is_deleted || !String(file.mime_type ?? '').startsWith('image/')) {
-    return new NextResponse('Not found', { status: 404, headers: { 'Cache-Control': 'private, no-store' } });
+    return new NextResponse('Not found', {
+      status: 404,
+      headers: { 'Cache-Control': THUMB_NOT_FOUND_CACHE_CONTROL },
+    });
   }
 
   const marked = file.markup_data !== null && file.markup_data !== undefined;
   // The stored thumbnail first; then — the ruled fallback ("a slow tile is
   // acceptable, an invisible photo is not") — the full display file.
-  const candidates = [
-    thumbPathFor(file.file_path, file.markup_data),
-    ...(marked ? [derivativePathFor(file.file_path)] : []),
-    file.file_path,
+  const candidates: Array<[ThumbSource, string]> = [
+    ['thumb', thumbPathFor(file.file_path, file.markup_data)],
+    ...(marked ? [['derivative', derivativePathFor(file.file_path)] as [ThumbSource, string]] : []),
+    ['original', file.file_path],
   ];
-  for (const path of candidates) {
+  for (const [source, path] of candidates) {
     const { data } = await supabase.storage.from('project-files').download(path);
     if (data) {
       return new NextResponse(await data.arrayBuffer(), {
@@ -63,10 +79,14 @@ export async function GET(_request: NextRequest, { params }: { params: { fileId:
           'Content-Type': data.type || 'image/webp',
           'Cache-Control': THUMB_CACHE_CONTROL,
           'X-Content-Type-Options': 'nosniff',
+          [THUMB_SOURCE_HEADER]: source,
         },
       });
     }
   }
   console.error(`[photo-thumb] no readable object for file ${file.id} (user ${user.id})`);
-  return new NextResponse('Not found', { status: 404, headers: { 'Cache-Control': 'private, no-store' } });
+  return new NextResponse('Not found', {
+    status: 404,
+    headers: { 'Cache-Control': THUMB_NOT_FOUND_CACHE_CONTROL },
+  });
 }

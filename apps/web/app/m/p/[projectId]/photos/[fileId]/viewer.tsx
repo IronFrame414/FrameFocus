@@ -89,8 +89,13 @@ const MAX_ZOOM = 6;
  * full-file fallback yields to the image this tab just built.
  */
 function filmstripSrc(p: ViewerPhoto): string | null {
-  const isRealThumb = p.thumbUrl !== null && p.thumbUrl !== p.displayUrl;
-  if (isRealThumb) return p.thumbUrl;
+  // [S127 P-3] `thumbUrl` is now the app's thumbnail PROXY, which does the
+  // full-file fallback SERVER-side — so `thumbUrl !== displayUrl` can no longer
+  // tell a real thumbnail from the fallback. The image this tab just built
+  // costs no download at all, so it wins whenever it exists; otherwise the
+  // proxy. _Superseded, quoted:_
+  // `const isRealThumb = p.thumbUrl !== null && p.thumbUrl !== p.displayUrl;`
+  // `if (isRealThumb) return p.thumbUrl;`
   return localDerivativeFor(p.id, p.markupFingerprint) ?? p.thumbUrl ?? p.displayUrl;
 }
 

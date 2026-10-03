@@ -1,4 +1,4 @@
-import type { Page, Request } from '@playwright/test';
+import type { Page, Request, Response } from '@playwright/test';
 import { adminClient, COMPANY_A } from './hub-fixture';
 import { deleteProjects } from '../test-support/company-purge';
 import { thumbPathFor } from '@framefocus/shared/utils/markup';
@@ -135,9 +135,17 @@ export async function setupThumbFixture(
 }
 
 /**
- * Every storage IMAGE request the page makes, classified: a stored thumbnail
- * (`….thumb.webp`), a live `/render/image/` transform (the per-view route that
- * was ruled out — must stay ZERO), or a full file (original or derivative).
+ * Every IMAGE the page loads, classified: a stored thumbnail, a live
+ * `/render/image/` transform (the per-view route that was ruled out — must stay
+ * ZERO), or a full file (original or derivative).
+ *
+ * [S127 P-3] Tiles now load through the app's thumbnail PROXY
+ * (`/api/photos/{id}/thumb?v=…`), which says which object it served in
+ * `X-Thumb-Source` (thumb | derivative | original); those responses are
+ * classified by that header. Direct storage image requests are still watched
+ * and classified as before — a grid that went back to signed URLs would show
+ * up here. _Superseded, quoted:_ only `/storage/v1/` requests were watched,
+ * classified by URL (`.thumb.webp?` → thumbs; `/object/` → originals).
  */
 export function watchStorageImages(page: Page): { thumbs: string[]; originals: string[]; renders: string[] } {
   const seen = { thumbs: [] as string[], originals: [] as string[], renders: [] as string[] };
@@ -148,6 +156,13 @@ export function watchStorageImages(page: Page): { thumbs: string[]; originals: s
     if (u.includes('/storage/v1/render/image/')) seen.renders.push(u);
     else if (/\.thumb\.webp\?/.test(u)) seen.thumbs.push(u);
     else if (u.includes('/storage/v1/object/')) seen.originals.push(u);
+  });
+  page.on('response', (res: Response) => {
+    const u = res.url();
+    if (!/\/api\/photos\/[0-9a-f-]{36}\/thumb\?/.test(u) || res.status() !== 200) return;
+    const source = res.headers()['x-thumb-source'];
+    if (source === 'thumb') seen.thumbs.push(u);
+    else seen.originals.push(`${u} [${source ?? 'unlabelled'}]`);
   });
   return seen;
 }

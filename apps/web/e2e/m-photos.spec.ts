@@ -862,10 +862,19 @@ test.describe('the markup save', () => {
     const src = await tile(page, target.id)
       .getByTestId('m-tile-image')
       .getAttribute('src');
-    expect(src).toContain('/storage/v1/object/sign/project-files/');
-    expect(src).toContain(encodeURIComponent(COMPANY_A));
-    expect(src).toContain('token=');
-    expect(src).toMatch(/\.markup\.jpg\?|\.m[0-9a-f]{8}\.thumb\.webp\?/);
+    // [S127 P-3] The tile is the app's thumbnail PROXY, versioned by THIS
+    // markup's fingerprint, and what it serves must be the DERIVATIVE's pixels
+    // (the stored thumbnail of this markup, or the derivative itself — the ruled
+    // fallback), never the unmarked original. _Superseded, quoted:_
+    // `expect(src).toContain('/storage/v1/object/sign/project-files/');`
+    // `expect(src).toContain(encodeURIComponent(COMPANY_A));`
+    // `expect(src).toContain('token=');`
+    // `expect(src).toMatch(/\.markup\.jpg\?|\.m[0-9a-f]{8}\.thumb\.webp\?/);`
+    expect(src).toMatch(new RegExp(`^/api/photos/${target.id}/thumb\\?v=[0-9a-f]{8}$`));
+    const served = await page.request.get(src!);
+    expect(served.status()).toBe(200);
+    expect(served.headers()['cache-control']).toContain('private');
+    expect(['thumb', 'derivative']).toContain(served.headers()['x-thumb-source']);
 
     // Reset so the fixture's other assertions are unaffected by ordering.
     // [S111 D] Read the markup first: its thumbnail's name is derived from it.
