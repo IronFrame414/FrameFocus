@@ -58,7 +58,7 @@ function SharedPhoto({ token, payload }: { token: string; payload: PublicSharePa
     >
       <header style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
         {payload.logoUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element -- the company's own public logo URL
+          // eslint-disable-next-line @next/next/no-img-element -- the logo, streamed through the app (./logo)
           <img
             src={payload.logoUrl}
             alt=""

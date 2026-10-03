@@ -61,6 +61,11 @@ export async function resolveSharePath(
  */
 export interface PublicSharePayload {
   companyName: string;
+  /**
+   * The APP's path to the logo (`/share/p/<token>/logo`), never the storage
+   * URL: `companies.logo_url` is a public-bucket URL that names the storage
+   * host and the company's id. [S127, resumed: the payload e2e caught it.]
+   */
   logoUrl: string | null;
   /** YYYY-MM-DD in the company's timezone — the day the photo was taken. */
   date: string;
@@ -70,7 +75,25 @@ export interface ActiveShareLink {
   linkId: string;
   companyId: string;
   sharePath: string;
+  /** Server-only: the logo's object in `company-logos`, bound to this company. */
+  logoPath: string | null;
   payload: PublicSharePayload;
+}
+
+export const LOGO_BUCKET = 'company-logos';
+
+/**
+ * The logo's storage path from `companies.logo_url`, ONLY when it is this
+ * company's own object in the logos bucket; anything else is null (no logo),
+ * so the logo route can never be pointed at another object.
+ */
+export function logoStoragePath(logoUrl: string | null, companyId: string): string | null {
+  if (!logoUrl) return null;
+  const m = /\/storage\/v1\/object\/public\/company-logos\/([^?#]+)$/.exec(logoUrl);
+  if (!m) return null;
+  const path = decodeURIComponent(m[1]);
+  if (!path.startsWith(`${companyId}/`) || path.includes('..')) return null;
+  return path;
 }
 
 /**
@@ -130,13 +153,18 @@ export async function resolveShareLink(
     month: '2-digit',
     day: '2-digit',
   }).format(new Date(file.created_at as string));
+  const logoPath = logoStoragePath(
+    (company.logo_url as string | null) ?? null,
+    link.company_id as string
+  );
   return {
     linkId: link.id as string,
     companyId: link.company_id as string,
     sharePath: link.share_path as string,
+    logoPath,
     payload: {
       companyName: company.name as string,
-      logoUrl: (company.logo_url as string | null) ?? null,
+      logoUrl: logoPath ? `/share/p/${token}/logo` : null,
       date,
     },
   };

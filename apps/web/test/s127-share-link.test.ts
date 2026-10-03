@@ -119,3 +119,27 @@ describe('S127 4e — a link serves ONLY its own photo (resumed session finding)
     expect(link === null ? false : link.sharePath === sharePath).toBe(served);
   });
 });
+
+describe("S127 4e — the logo is served through the app, bound to the link's company", () => {
+  const CO = '11111111-1111-4111-8111-111111111111';
+  const BASE = 'https://ref.supabase.co/storage/v1/object/public/company-logos/';
+  it.each([
+    ['its own logo', `${BASE}${CO}/logo.png`, `${CO}/logo.png`],
+    ['another company\u2019s logo', `${BASE}22222222-2222-4222-8222-222222222222/logo.png`, null],
+    ['a path that climbs out', `${BASE}${CO}/../x/logo.png`, null],
+    [
+      'another bucket',
+      `https://ref.supabase.co/storage/v1/object/public/project-files/${CO}/a.png`,
+      null,
+    ],
+    ['no logo', null, null],
+  ])('%s → %s', async (_l, url, expected) => {
+    const { logoStoragePath } = await import('@/lib/photos/share-link');
+    expect(logoStoragePath(url as string | null, CO)).toBe(expected);
+  });
+
+  it('the payload carries the app path, never the storage URL', () => {
+    expect(LIB).toContain('logoUrl: logoPath ? `/share/p/${token}/logo` : null');
+    expect(LIB).not.toMatch(/logoUrl:\s*\(?company\.logo_url/);
+  });
+});

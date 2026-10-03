@@ -122,6 +122,20 @@ test('the public page carries ONLY the photo, logo, company name and date — pr
   // No address or client fields exist to leak; assert the labels never appear either.
   for (const label of ['Project', 'Address', 'Client']) expect(html).not.toContain(`>${label}<`);
 
+  // The LOGO comes through the app too, never as a storage URL (forbidden
+  // above). Shown only when the company has one.
+  const logoUrl = (await admin.from('companies').select('logo_url').eq('id', COMPANY_A).single())
+    .data?.logo_url as string | null;
+  if (logoUrl) {
+    expect(html).toContain(`${path}/logo`);
+    const logo = await stranger.get(`${path}/logo`);
+    expect(logo.status()).toBe(200);
+    expect(logo.headers()['cache-control']).toBe('private, no-store');
+    expect(logo.headers()['content-type']).toContain('image/');
+  } else {
+    expect(html).not.toContain(`${path}/logo`);
+  }
+
   const img = await stranger.get(`${path}/image`);
   expect(img.status()).toBe(200);
   expect(img.headers()['cache-control']).toBe('private, no-store');
@@ -142,6 +156,7 @@ test('the public page carries ONLY the photo, logo, company name and date — pr
   expect(revoked.status()).toBe(200);
   expect(await (await stranger.get(path)).text()).toContain('This link is no longer available.');
   expect((await stranger.get(`${path}/image`)).status()).toBe(404);
+  expect((await stranger.get(`${path}/logo`)).status()).toBe(404);
 
   // An unknown token gets nothing.
   expect((await stranger.get(`/share/p/${'A'.repeat(43)}/image`)).status()).toBe(404);
@@ -157,13 +172,14 @@ test('a link whose share_path is not its own photo serves nothing', async ({ pag
   const otherPath = `${COMPANY_A}/${projectId}/${RUN}-not-this-link.png`;
   const up = await admin.storage.from(BUCKET).upload(otherPath, PNG, { contentType: 'image/png' });
   if (up.error) throw new Error(up.error.message);
+  const token = randomBytes(32).toString('base64url');
+  const tokenHash = createHash('sha256').update(token, 'utf8').digest('hex');
   try {
-    const token = randomBytes(32).toString('base64url');
     const { error } = await admin.from('photo_share_links').insert({
       company_id: COMPANY_A,
       file_id: fileId,
       share_path: otherPath,
-      token_hash: createHash('sha256').update(token, 'utf8').digest('hex'),
+      token_hash: tokenHash,
     });
     expect(error).toBeNull();
     await page.goto('/sign-in'); // any page on the app, for its origin
@@ -176,6 +192,8 @@ test('a link whose share_path is not its own photo serves nothing', async ({ pag
     );
     await stranger.dispose();
   } finally {
+    // Its own row goes too: the PM test below counts live links on this photo.
+    await admin.from('photo_share_links').delete().eq('token_hash', tokenHash);
     await admin.storage.from(BUCKET).remove([otherPath]);
   }
 });
