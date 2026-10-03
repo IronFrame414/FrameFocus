@@ -100,6 +100,11 @@ export function DesktopPhotoView({
         </button>
         <Link
           href={markupHref(projectId, photo.id, 'photos')}
+          // Its href changes with every previous/next, and a production
+          // prefetch of each new one is a server round trip per photo, the
+          // cost this view exists to avoid (S125 finding 3; same call as the
+          // grid tiles, H-5 [S115]). The e2e counts 0 RSC requests while moving.
+          prefetch={false}
           data-testid="photo-view-markup"
           style={{ ...primaryButtonStyle, padding: '6px 14px', textDecoration: 'none' }}
         >

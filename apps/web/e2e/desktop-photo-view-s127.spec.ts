@@ -89,16 +89,26 @@ test('tile → view mode; fitted to height; taken + by; prev/next + arrows witho
     'href',
     `/dashboard/projects/${projectId}/files/${first.id}/markup?from=photos`
   );
+  // A-3: fitted to the viewport HEIGHT. The browser normalises the calc() it
+  // reports (CI run 37116585932 received "calc(-240px + 100vh)"), so the two
+  // terms are asserted, not the spelling. _Superseded, quoted:_
+  // `expect(maxH).toBe('calc(100vh - 240px)');`
   const maxH = await page
     .getByTestId('photo-view-image')
-    .evaluate((el) => (el as HTMLElement).style.maxHeight);
-  expect(maxH).toBe('calc(100vh - 240px)');
+    .evaluate((el) => (el as HTMLElement).style.maxHeight.replace(/\s+/g, ''));
+  expect(maxH).toMatch(/^calc\(/);
+  expect(maxH).toContain('100vh');
+  expect(maxH).toContain('-240px');
   await expect(page.getByTestId('photo-view-taken')).not.toHaveText('—');
   await expect(page.getByTestId('photo-view-by')).not.toHaveText('—');
 
   let rsc = 0;
+  const rscUrls: string[] = [];
   page.on('request', (r) => {
-    if (r.headers()['rsc'] === '1') rsc += 1;
+    if (r.headers()['rsc'] === '1') {
+      rsc += 1;
+      rscUrls.push(`${r.url()} prefetch=${r.headers()['next-router-prefetch'] ?? '-'}`);
+    }
   });
   const startId = await view.getAttribute('data-file-id');
   await page.getByTestId('photo-view-next').click();
@@ -109,5 +119,7 @@ test('tile → view mode; fitted to height; taken + by; prev/next + arrows witho
   await expect(view).toHaveAttribute('data-file-id', startId!);
   await page.keyboard.press('ArrowRight');
   await expect(view).toHaveAttribute('data-file-id', afterNext!);
-  expect(rsc, 'moving between photos must not re-run the server page').toBe(0);
+  expect(rsc, `moving between photos must not re-run the server page: ${rscUrls.join(' | ')}`).toBe(
+    0
+  );
 });
