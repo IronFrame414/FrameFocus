@@ -1,3 +1,4 @@
+import { describeGps } from '@framefocus/shared/utils/gps-display';
 import { createClient } from '@/lib/supabase-server';
 import { redirect } from 'next/navigation';
 import {
@@ -165,6 +166,9 @@ export default async function TimesheetsPage({
         // [S121 4-B] The week sheet shows every segment of every day.
         segments: s.segments,
         approverName: s.approver?.display_name ?? null,
+        // [S127 4c] Where the approver reviews hours, the location says what it says.
+        gpsIn: describeGps(s.gps_in),
+        gpsOut: describeGps(s.gps_out),
       }));
 
       return {

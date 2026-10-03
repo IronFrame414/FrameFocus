@@ -8,6 +8,7 @@
 // effective-dated pay-rate backend is a logged follow-up). "Approve selected"
 // is week-atomic PER MEMBER via the approve_member_week RPC.
 
+import type { GpsDisplay } from '@framefocus/shared/utils/gps-display';
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -37,6 +38,9 @@ export interface QueueSessionRow {
   /** [S121 4-B] Every live segment of the session, for the week sheet. */
   segments: TimeSegment[];
   approverName: string | null;
+  /** [S127 4c] Clock-in / clock-out location, in words; null = never attempted. */
+  gpsIn: GpsDisplay | null;
+  gpsOut: GpsDisplay | null;
 }
 
 export interface MemberWeekRow {
