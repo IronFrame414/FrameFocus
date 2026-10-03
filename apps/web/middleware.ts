@@ -386,12 +386,21 @@ export async function middleware(request: NextRequest) {
 // locked tenant's client portal going dark is the correct behaviour, and
 // `/locked` explains it.
 //
-// ⚠️ ADDING /api HERE IS A REAL COST AND A DELIBERATE TRADE. Every API request
-// now runs getUser() plus one `is_my_company_locked()` RPC. The alternative was
-// an opt-in helper called from each route, which is a list someone forgets to
-// add a route to — the exact failure mode the comment above describes for this
-// matcher. One enforcement point is worth the round trip; the guard fails OPEN
-// so a fault here cannot lock the product.
+// ⚠️ ADDING /api HERE WAS A DELIBERATE TRADE [S138]: one enforcement point (the
+// trial lock) for every API route, instead of an opt-in helper called from each
+// route — a list someone forgets to add a route to, the exact failure mode the
+// comment above describes for this matcher. The guard fails OPEN so a fault here
+// cannot lock the product.
+//
+// ⚠️ CORRECTED [S127 P-6]. This comment used to say "Every API request now runs
+// getUser() plus one `is_my_company_locked()` RPC." That has been FALSE since
+// S116: identity here is `getClaims()` — a LOCAL JWT check against the cached
+// JWKS, ~1 ms, no Auth-server call (only /sign-in and /sign-up keep getUser(),
+// see H-1b at the top) — and the lock RPC is skipped for LOCK_OK_TTL_S (30 s)
+// behind a signed, user-bound cookie (S120 3-B, lib/trial/lock-cookie.ts).
+// ⚠️ THE STALE SENTENCE MISLED THE 2026-09-29 PERFORMANCE READING, which took
+// it at its word and costed an Auth-server round trip plus an RPC into every
+// API request. Measure the code, not the comment above it.
 //
 // The routes that must survive a lock (payment above all) are exempted by
 // path in lib/trial/lock-guard.ts, not by being left out of the matcher —
