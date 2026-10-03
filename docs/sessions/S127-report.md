@@ -1139,3 +1139,26 @@ trigger `O`. **After the push:** (1) a history row; (2) md5 **`ec55121d75be49b48
   Outside `docs/` and root `*.md`: **0**.
 - ⚠️ **What this means live:** a tile's URL is now stable, so the browser keeps thumbnails (7 days, its own cache
   only). A markup edit changes the URL. The first visit costs the same; repeat visits stop re-downloading the grid.
+
+## R-2 (Josh, 2026-10-03: build it): `share_path` bound to its own photo IN THE DATABASE
+
+- **Branch `feature/s127-share-path-check`, migration `20262134700000`:** `ALTER POLICY photo_share_links_insert_owner_admin`
+  adds `share_path = f.file_path OR share_path = f.file_path || '.markup.jpg'`, the only values the create route
+  writes. UPDATE cannot change `share_path` (scope trigger 42501), so INSERT is the only door. The original
+  `WITH CHECK` was captured from both databases first (md5 `f5b0625d…`, identical) with a RESTORE, committed before
+  any change.
+- **rebuild-test:** original confirmed live; dry run → exactly that file; **by object:** history row; INSERT /
+  `authenticated` / PERMISSIVE / no USING, unchanged; `with_check` md5 **`fa91727d7a3a5ed24790f1d66da3b869`** with the
+  binding present.
+- **Live `s127-share-path-check` 10/10:** Owner and Admin each write link rows directly, **without returning rows**,
+  counted by the service role by `token_hash`. Own original 1, own derivative 1; another company's object, another
+  photo's path, and another photo's derivative each **0 rows** (42501).
+- **Sabotage:** the captured RESTORE applied (it reproduced md5 `f5b0625d…` exactly) → **6 red**, every refusal.
+  Re-applied, `fa91727d…` read back, 10/10.
+
+### Production expectations for `20262134700000`, STATED BEFORE ITS SECTION
+
+Pre-state, read-only: latest `20262134600000`; `with_check` md5 `f5b0625d…`; `photo_share_links` 0 rows; 3 policies
+on the table. **After the push:** (1) a history row; (2) `with_check` md5 **`fa91727d7a3a5ed24790f1d66da3b869`**
+(= rebuild-test); (3) the policy is still `INSERT`, `{authenticated}`, PERMISSIVE, no USING; (4) still **3** policies on
+the table; (5) `photo_share_links` still **0** rows.
