@@ -373,3 +373,74 @@ formats; a CO has none. (ASK-A2.)
   the "outside-click closer" it blamed does not exist in the code).
 - **Reproduce-first is still owed:** the new spec will be run against `main`'s code (expected red) before the fix is
   claimed, once rebuild-test is free.
+
+## 1a — MERGED: `900da564`. Migration `20262136000000` on PRODUCTION, verified by object: MATCH 6/6
+
+- CI **`37169805941` green** on the tested head `276aaed1` (based on `main` `d2c052a0`, which was still `main`):
+  unit **2,464**; e2e **735 passed**, 24 skipped, **0 `✘`**.
+- **Production** (scratch workdir = `origin/main`'s migrations + the file from `276aaed1`, `cmp` 0; linked to
+  `jwkcknyuyvcwcdeskrmz`): dry run → exactly `20262136000000`. **Against the expectations stated before the push:**
+  history 1 ✅ · `numeric|YES|none` ✅ · 0 non-null ✅ · 1 overload ✅ · md5 **`c63ff7e3…`** (= rebuild-test) ✅ · ACL
+  `{postgres=X, service_role=X, supabase_admin=X}` unchanged ✅.
+- **Tree identity:** the tested head's base was this `main`; `git diff --name-only 276aaed1 900da564` → **0 paths**.
+
+## 1c — G: reproduced on `main`, fixed, proven — rebased on `900da564`; CI queued after 1b
+
+- **Reproduced first, on `main`'s code** (a repro spec using only what `main` renders): at 1280×720 and 1280×600,
+  scrolled to the page end, "Delete estimate" sat at y=656/536 and **`elementFromPoint` at its centre returned the
+  totals bar** ("Subtotal $0.00 Tax $0.00 Discount …") — the bar paints over the item. **The old
+  `desktop-confirms` test 6 hid this with `dispatchEvent`.**
+- On the fix: `s128-more-actions` **2/2** + `desktop-confirms` **8/8** with test 6 now a real click (10/10).
+- **Sabotage** (no flip, z 10): **2 red** ("Expected ≤ 675, Received 693.25" — the item under the bar), restored md5
+  `7718c780…`.
+
+## 1b — E-1: rebased on `900da564`; CI `37172089666` running
+
+- e2e local: `s128-sub-bid-lines` + `desktop-confirms` + `s118-bid-documents` **11/11** (3 SUB lines counted by the
+  service role = 3 cards on the page).
+- **e2e sabotage** (first sub line per section): **red** — "Expected 3, Received 2" cards; restored md5 `dd04a65d…`.
+
+## 2+3 — A + C: rebased on `900da564`; migration `20262137000000` on REBUILD-TEST, verified by object
+
+- **Against the expectations stated before the push:** history 1 ✅ · `description` `text|YES|none` on BOTH line tables
+  ✅ · both `…_description_length` constraints ✅ (2) · 0 non-null ✅ · `clone_estimate_line` 1 overload, copies
+  `r.description`, ACL unchanged ✅ · new md5 `c1772b3c…`. The 1a version captured first (`s128-1a.sql`, md5
+  `c63ff7e3…`). `database.ts` +6 lines, only this migration's.
+- `tsc` 0 · lint 0 · unit **2,503 / 187 files**.
+- **Payload gate, on serialised data, all 13 stored formats** (`s128-line-description-gate.test.tsx`): the row
+  description is in the trimmed payload on exactly the four formats and **absent** on the other nine, with a control
+  that the untrimmed data carries it on every format; the signing page draws it on the four; the **PDF text** carries it
+  on the four and not on the others (each PDF first proven to have extractable text). The render plan's
+  `rowDescriptions` is true on exactly `summary_with_descriptions`, `itemized_with_descriptions`, `cost_plus_itemized`,
+  `time_and_materials_itemized`. Section description (A-3): still keyed on `plan.descriptions` alone (cost plus still
+  hides it), editor control unchanged.
+- **Sabotages:** trim carries row descriptions on every format → **4 red** (the four hidden formats whose shape carries
+  lines at all; the other five carry no lines, so cannot leak); PDF plan gate removed → **3 red**; both restored by md5.
+- The cookie-less byte proof (`e2e/s128-line-description-payload.spec.ts`, `/sign/{token}` HTML + `/api/sign/{token}`
+  JSON, 8 formats, plus the internal note on all 8) and the sheet e2e run when rebuild-test is free.
+
+### ⚠️ Found and fixed on the way: `test/pdf-text.ts` could make a `not.toContain` pass on an EMPTY PDF
+
+`pdfText` cut each PDF stream at the `endstream` keyword with `/stream\r?\n([\s\S]*?)\r?\nendstream/`. When the deflate
+data's last byte is `0x0D`, the pattern takes it for the CR before `endstream`, inflate fails, and the page's text
+stream is **silently dropped** → `pdfText` returns `''`. Whether that byte is `0x0D` depends on content — a colour, a
+padding, a font size flipped it. Found on the Cost Plus proposal (a complete, valid 3,531-byte PDF with 19 objects
+extracting to `''`); proven by slicing the same stream by its `/Length 1811` (last byte `\r`), which inflates and
+contains the text. The helper's own header claimed a decoding failure "can only make a `not.toContain` fail" — **false:
+an empty result makes every absence assertion pass**. Now sliced by `/Length` (`ece95662`); all 6 `pdfText` users re-run
+**86/86**. **Gap stated:** absence assertions written against PDFs before this fix may have passed vacuously on some
+content; they all pass with the fix, so none was hiding a leak *today*.
+
+## Part H — in progress on `feature/s128-h-divisions` (branch only; nothing on rebuild-test yet)
+
+- Pure arithmetic and cost codes done and proven: **23/23**, five sabotages red (multiply-not-solve 3, division read as
+  a number 2, no 100% refusal 1, mode-2 in a mode-1 base 2, round-nearest 2), restored by md5.
+- Migrations written (`20262138000000`, `20262138100000`), client service and the divisions editor written; they compile
+  only once Part C is on `main`. Seed rates GC Fee 10% / GL 2% (mode 2) / Builders Risk 1% are **placeholders** (ASK-H1).
+
+## Part F — in progress on `feature/s128-f-covers` (migration written, NOT applied anywhere)
+
+- **ASK-F2 corrected:** the Photos screens read `PHOTO_VIEW_FILTER` (category `photos`, plus daily-log and safety
+  IMAGES), not only `photos`. A cover candidate is an image that view shows.
+- **Backfill expectation, stated before any push:** production **6** (8 projects, 6 with a qualifying photo);
+  rebuild-test 6 at 02:57Z (re-counted before its push — CI fixtures add projects).
