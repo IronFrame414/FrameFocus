@@ -81,11 +81,31 @@ export function pdfText(buf: Buffer): string {
     return out;
   };
 
+  // ⚠️ [S128] SLICE EACH STREAM BY ITS DECLARED /Length, NOT BY THE `endstream`
+  // KEYWORD. _Superseded: `/stream\r?\n([\s\S]*?)\r?\nendstream/`._ That pattern
+  // treats a final 0x0D byte of the COMPRESSED data as the CR of the CRLF before
+  // `endstream`, cuts it off, and inflate then fails with "unexpected end of
+  // file" — so the page's text stream was silently dropped and pdfText returned
+  // ''. Whether the last compressed byte is 0x0D depends on the content, so it
+  // came and went with a colour, a padding or a font size (found S128 on the
+  // Cost Plus proposal). ⚠️ And it did NOT "err the safe way" (see below): an
+  // empty result makes every `not.toContain` PASS. /Length is exact; the old
+  // pattern is kept only as a fallback for a stream with no direct /Length.
+  const slices: Buffer[] = [];
+  const withLength = /\/Length (\d+)(?![\d ]*R)[^>]*>>\s*stream\r?\n/g;
+  let lm: RegExpExecArray | null;
+  while ((lm = withLength.exec(bin)) !== null) {
+    const start = lm.index + lm[0].length;
+    slices.push(Buffer.from(bin.slice(start, start + Number(lm[1])), 'latin1'));
+  }
+  if (slices.length === 0) {
+    const re = /stream\r?\n([\s\S]*?)\r?\nendstream/g;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(bin)) !== null) slices.push(Buffer.from(m[1], 'latin1'));
+  }
+
   let streams = '';
-  const re = /stream\r?\n([\s\S]*?)\r?\nendstream/g;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(bin)) !== null) {
-    const raw = Buffer.from(m[1], 'latin1');
+  for (const raw of slices) {
     let decoded: string;
     try {
       decoded = zlib.inflateSync(raw).toString('latin1');
