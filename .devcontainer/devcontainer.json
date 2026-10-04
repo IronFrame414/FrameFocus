@@ -11,7 +11,12 @@
   "features": {
     "ghcr.io/devcontainers/features/github-cli:1": {}
   },
-  "postCreateCommand": "npm install && npm install -g @anthropic-ai/claude-code",
+  // S128: `uv` in post-create. The serena MCP server (.mcp.json) launches via
+  // `uvx`, and the base image has no `uv`, so every rebuild broke serena while
+  // the `npx`/http servers survived. Astral's own installer puts it in
+  // ~/.local/bin, which ~/.profile adds to PATH when the directory exists.
+  // Downloaded then run, not piped: `curl | sh` exits 0 on a failed download.
+  "postCreateCommand": "npm install && npm install -g @anthropic-ai/claude-code && curl -LsSf https://astral.sh/uv/install.sh -o /tmp/uv-install.sh && sh /tmp/uv-install.sh",
   "forwardPorts": [3000, 8081],
   // ⚠️ PORT 3000 DEFAULTS TO **PRIVATE** ON REBUILD, AND IS DELIBERATELY MADE
   // PUBLIC BY HAND WHEN OAUTH IS BEING EXERCISED. TWO STATES, ON PURPOSE.
