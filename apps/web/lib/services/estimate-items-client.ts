@@ -361,6 +361,8 @@ export type CreateLineRowInput = Pick<
   | 'total_override'
   // [S128 Part B] the base the typed total was set against (display marker only).
   | 'total_override_basis'
+  // [S128 Part A] the LINE's own description (not the section's).
+  | 'description'
   | 'apply_tax'
   | 'rate'
   | 'quantity'

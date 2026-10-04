@@ -86,6 +86,8 @@ function fixture(pricingLevel: ProposalPricingLevel): ProposalData {
               {
                 name: 'Carpenter',
                 total: 1999.19,
+                // [S128 Part A] a ROW description — parity must hold with it present.
+                description: 'Rough framing, two days',
                 rowType: 'labor',
                 cost: openBook ? 1500.15 : null,
                 rate: openBook ? 75.5 : null,
@@ -94,12 +96,14 @@ function fixture(pricingLevel: ProposalPricingLevel): ProposalData {
               {
                 name: 'Studs',
                 total: 2321.9,
+                description: null,
                 rowType: 'material',
                 cost: openBook ? 1501.08 : null,
                 rate: null,
                 hours: null,
               },
             ],
+            describedRows: [{ name: 'Carpenter', description: 'Rough framing, two days' }],
           },
         ],
       },
@@ -119,12 +123,14 @@ function fixture(pricingLevel: ProposalPricingLevel): ProposalData {
               {
                 name: 'Board',
                 total: 4567.89,
+                description: '5/8 type X on the garage wall',
                 rowType: 'material',
                 cost: openBook ? 3333.33 : null,
                 rate: null,
                 hours: null,
               },
             ],
+            describedRows: [{ name: 'Board', description: '5/8 type X on the garage wall' }],
           },
         ],
       },
@@ -267,10 +273,33 @@ describe('[S112, RULED Josh] Summary with Descriptions SHOWS its line descriptio
 
   it('a line WITHOUT a description is neither drawn nor carried', () => {
     const f = fixture('summary_with_descriptions');
-    f.categories[0].lines.push({ ...f.categories[0].lines[0], name: 'Undescribed extra', description: null });
+    // [S128] "without a description" now means neither the SECTION's nor any ROW's:
+    // a section with a described row is drawn (Part A). _Superseded setup: the
+    // copy kept line 0's rows, which now carry a description._
+    f.categories[0].lines.push({
+      ...f.categories[0].lines[0],
+      name: 'Undescribed extra',
+      description: null,
+      describedRows: [],
+    });
     expect(html(f)).not.toContain('Undescribed extra');
     const carried = trimProposalForClient(f).categories.flatMap((c) => c.lines.map((l) => l.name));
     expect(carried).not.toContain('Undescribed extra');
     expect(carried).toContain('Walls');
+  });
+
+  it('[S128 Part A] a section with no description of its own but a DESCRIBED ROW is drawn and carried', () => {
+    const f = fixture('summary_with_descriptions');
+    f.categories[0].lines.push({
+      ...f.categories[0].lines[0],
+      name: 'Row-described only',
+      description: null,
+      describedRows: [{ name: 'Trim carpenter', description: 'Casing at every door' }],
+    });
+    for (const d of [f, trimProposalForClient(f)]) {
+      const page = html(d);
+      expect(page).toContain('Row-described only');
+      expect(page).toContain('Casing at every door');
+    }
   });
 });

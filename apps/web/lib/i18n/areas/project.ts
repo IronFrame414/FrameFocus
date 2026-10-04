@@ -180,6 +180,11 @@ export const en = {
   'project.coEditor.unitCost': 'Unit cost',
   'project.coEditor.amount': 'Amount',
   'project.coEditor.saveRow': 'Save row',
+  // [S128 Part A] A CO LINE's description. Staff-only (ASK-A2): a change order has no
+  // proposal format, so no client read path carries it.
+  'project.coEditor.rowDescription': 'Description',
+  'project.coEditor.rowDescriptionHint':
+    'Optional. Change orders do not send line descriptions to the client.',
   'project.coEditor.unit': 'Unit',
   'project.coEditor.creditHint': 'A negative value records a credit.',
   // [S112 R5b] On the title AND description, on both surfaces — see co-editor.tsx.
@@ -443,6 +448,9 @@ export const es: Record<keyof typeof en, string> = {
   'project.coEditor.unitCost': 'Costo unitario',
   'project.coEditor.amount': 'Monto',
   'project.coEditor.saveRow': 'Guardar fila',
+  'project.coEditor.rowDescription': 'Descripción',
+  'project.coEditor.rowDescriptionHint':
+    'Opcional. Las órdenes de cambio no envían las descripciones de las líneas al cliente.',
   'project.coEditor.unit': 'Unidad',
   'project.coEditor.creditHint': 'Un valor negativo registra un crédito.',
   'project.coEditor.noPriceHint': 'El personal de obra puede leer esto. No incluyas precios ni montos.',

@@ -113,19 +113,27 @@ export interface ProposalRenderPlan {
   linePrices: boolean;
   /** Show line descriptions (the *_with_descriptions variants). */
   descriptions: boolean;
+  /** [S128 Part A, Josh 2026-10-03] Show each ROW's own description (Josh's
+   *  "line" — estimate_line_rows.description). "the description is only visible
+   *  to clients when the format selected is 'summary with description',
+   *  'itemized with description', 'cost plus', 'time and material'." Distinct
+   *  from `descriptions` (the SECTION description, unchanged — A-3). The client
+   *  read path (client-proposal.ts) carries row descriptions ONLY when this is
+   *  true, so the other formats never receive them. */
+  rowDescriptions: boolean;
   /** Open book — cost (and thus markup) is printed. */
   showsCost: boolean;
 }
 
 const RENDER_PLAN: Record<CanonicalProposalFormat, ProposalRenderPlan> = {
-  total_only:                 { layout: 'total',    showLines: false, linePrices: false, descriptions: false, showsCost: false },
-  summary:                    { layout: 'category', showLines: false, linePrices: false, descriptions: false, showsCost: false },
-  summary_with_descriptions:  { layout: 'category', showLines: false, linePrices: false, descriptions: true,  showsCost: false },
-  itemized:                   { layout: 'itemized', showLines: true,  linePrices: true,  descriptions: false, showsCost: false },
-  itemized_with_descriptions: { layout: 'itemized', showLines: true,  linePrices: true,  descriptions: true,  showsCost: false },
-  itemized_no_unit_pricing:   { layout: 'itemized', showLines: true,  linePrices: false, descriptions: false, showsCost: false },
-  cost_plus_itemized:         { layout: 'cost_plus', showLines: true, linePrices: true,  descriptions: false, showsCost: true },
-  time_and_materials_itemized:{ layout: 'time_and_materials', showLines: true, linePrices: true, descriptions: false, showsCost: true },
+  total_only:                 { layout: 'total',    showLines: false, linePrices: false, descriptions: false, rowDescriptions: false, showsCost: false },
+  summary:                    { layout: 'category', showLines: false, linePrices: false, descriptions: false, rowDescriptions: false, showsCost: false },
+  summary_with_descriptions:  { layout: 'category', showLines: false, linePrices: false, descriptions: true,  rowDescriptions: true,  showsCost: false },
+  itemized:                   { layout: 'itemized', showLines: true,  linePrices: true,  descriptions: false, rowDescriptions: false, showsCost: false },
+  itemized_with_descriptions: { layout: 'itemized', showLines: true,  linePrices: true,  descriptions: true,  rowDescriptions: true,  showsCost: false },
+  itemized_no_unit_pricing:   { layout: 'itemized', showLines: true,  linePrices: false, descriptions: false, rowDescriptions: false, showsCost: false },
+  cost_plus_itemized:         { layout: 'cost_plus', showLines: true, linePrices: true,  descriptions: false, rowDescriptions: true,  showsCost: true },
+  time_and_materials_itemized:{ layout: 'time_and_materials', showLines: true, linePrices: true, descriptions: false, rowDescriptions: true, showsCost: true },
 };
 
 /** Resolve a CANONICAL format code to its render plan. Callers must pass a

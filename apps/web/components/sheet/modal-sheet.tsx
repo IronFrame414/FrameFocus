@@ -42,6 +42,7 @@ export function ModalSheet({
   actions,
   children,
   testId,
+  zIndex = 60,
 }: {
   open: boolean;
   onClose: () => void;
@@ -50,6 +51,10 @@ export function ModalSheet({
   actions?: ReactNode;
   children: ReactNode;
   testId?: string;
+  /** [S128] Stacking layer. Default 60 (above the chat launcher). A sheet opened
+   *  from inside another fixed sheet (the estimate add-items sheet, z 70) passes
+   *  a higher layer so it is not drawn underneath. */
+  zIndex?: number;
 }) {
   const panelRef = useRef<HTMLDivElement | null>(null);
   const restoreRef = useRef<HTMLElement | null>(null);
@@ -108,7 +113,10 @@ export function ModalSheet({
   if (!open || typeof document === 'undefined') return null;
 
   return createPortal(
-    <div className="fixed inset-0 z-[60] flex items-stretch justify-center sm:items-center sm:p-6">
+    <div
+      className="fixed inset-0 flex items-stretch justify-center sm:items-center sm:p-6"
+      style={{ zIndex }}
+    >
       <button
         type="button"
         aria-label={t('shell.close')}

@@ -30,6 +30,7 @@ import {
   updateEstimateLineItem,
   updateEstimateLineRow,
   updateEstimateSubcategory,
+  type UpdateLineRowInput,
 } from '@/lib/services/estimate-items-client';
 import {
   addInstrumentRate,
@@ -65,6 +66,11 @@ import { CatalogPicker } from './catalog-picker';
 import { useConfirm } from '@/components/confirm/confirm-provider';
 import { EstimateHealthStrip } from './estimate-health-panel';
 import { AddItemsSheet } from './add-items-sheet';
+import {
+  LineDetailSheet,
+  type LineField,
+  type LineFieldValue,
+} from '@/components/estimating/line-detail-sheet';
 import { font } from '@/lib/theme';
 import type { TabProps } from './estimate-builder';
 
@@ -210,6 +216,8 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
     setSheetOpen(true);
   }
   const [pickerForRow, setPickerForRow] = useState<EstimateLineRow | null>(null);
+  // [S128 Part C] The line whose full record is open in the detail sheet.
+  const [detailRowId, setDetailRowId] = useState<string | null>(null);
   const [defaultLaborRate, setDefaultLaborRate] = useState<number | null>(null);
   // 9b — category collapse. PRESENTATIONAL only, persists nothing (the subtotal
   // rides the header so it survives collapse). Not an autosave concern.
@@ -847,6 +855,101 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
     return <span style={rowLabel}>—</span>;
   }
 
+  // ── S128 Part C — the line detail sheet's fields and save, for an ESTIMATE line.
+  // The sheet (components/estimating/line-detail-sheet.tsx) owns no shape; this is
+  // where an estimate line's columns are named, and where Part B's rule is kept:
+  // a typed total wins over a typed markup, and each clears the other.
+  function rowDetailFields(row: EstimateLineRow): LineField[] {
+    const fields: LineField[] = [
+      { key: 'name', label: 'Name', kind: 'text', value: row.name, required: true, maxLength: 200 },
+      { key: 'type', label: 'Type', kind: 'readonly', value: ROW_TYPE_LABELS[row.row_type] },
+    ];
+    if (row.row_type === 'labor') {
+      fields.push(
+        { key: 'rate', label: 'Rate', kind: 'number', value: row.rate, min: 0 },
+        { key: 'quantity', label: 'Hours', kind: 'number', value: row.quantity, min: 0 }
+      );
+    } else if (row.row_type === 'material' || row.row_type === 'allowance') {
+      fields.push(
+        { key: 'unit_cost', label: 'Unit cost', kind: 'number', value: row.unit_cost, min: 0 },
+        { key: 'quantity', label: 'Quantity', kind: 'number', value: row.quantity, min: 0 },
+        {
+          key: 'unit_of_measure',
+          label: 'Unit',
+          kind: 'select',
+          value: row.unit_of_measure,
+          options: materialUnitsOfMeasure.map((u) => ({ value: u, label: UNIT_LABELS[u] })),
+        }
+      );
+    } else {
+      fields.push({ key: 'amount', label: 'Amount', kind: 'number', value: row.amount, min: 0 });
+    }
+    fields.push(
+      {
+        key: 'markup_percent',
+        label: `${modeNoun === 'markup' ? 'Markup' : 'Margin'} %`,
+        kind: 'number',
+        value: row.total_override != null ? null : row.markup_percent,
+        allowNull: true,
+        placeholder:
+          row.total_override != null
+            ? `${formatDerivedPercent(derivedMarkup(row))} (from the total set by hand)`
+            : `${estimateDefaultMarkup(row.row_type) ?? 0} (estimate default)`,
+        help: 'Typing one releases a total set by hand.',
+      },
+      {
+        key: 'total_override',
+        label: 'Total set by hand',
+        kind: 'number',
+        value: row.total_override,
+        allowNull: true,
+        placeholder: `${fmtMoney(row.total)} (calculated)`,
+        help: 'The number typed always wins. Leave blank to calculate from cost and markup.',
+      }
+    );
+    if (row.row_type !== 'labor') {
+      fields.push({ key: 'apply_tax', label: 'Taxable', kind: 'checkbox', value: !!row.apply_tax });
+    }
+    fields.push({
+      key: 'description',
+      label: 'Description',
+      kind: 'textarea',
+      value: row.description,
+      maxLength: 2000,
+      placeholder: 'Optional',
+      help:
+        'Reaches the client only on the Summary with Descriptions, Itemized with Descriptions, ' +
+        'Cost Plus and Time & Materials proposals. The section description is separate.',
+    });
+    return fields;
+  }
+
+  function saveRowDetail(row: EstimateLineRow, changes: Record<string, LineFieldValue>) {
+    const input: UpdateLineRowInput = {};
+    if ('name' in changes) input.name = String(changes.name);
+    for (const k of ['rate', 'quantity', 'unit_cost', 'amount'] as const) {
+      if (k in changes) input[k] = changes[k] as number | null;
+    }
+    if ('unit_of_measure' in changes) {
+      input.unit_of_measure = changes.unit_of_measure as MaterialUnitOfMeasure;
+    }
+    if ('apply_tax' in changes) input.apply_tax = Boolean(changes.apply_tax);
+    if ('description' in changes) input.description = changes.description as string | null;
+    // Part B: the typed total wins if both were typed; each clears the other.
+    if ('total_override' in changes) {
+      const v = changes.total_override as number | null;
+      input.total_override = v;
+      input.markup_percent = null;
+      // The base the total was typed against, measured on the line AS SAVED.
+      input.total_override_basis =
+        v == null ? null : rowBase({ ...row, ...input } as EstimateLineRow);
+    } else if ('markup_percent' in changes) {
+      input.markup_percent = changes.markup_percent as number | null;
+      input.total_override = null;
+    }
+    return mutate(() => updateEstimateLineRow(row.id, input), true);
+  }
+
   function lineRowTr(row: EstimateLineRow) {
     return (
       // #3 — rule between rows.
@@ -913,6 +1016,25 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
                 : Promise.resolve({ success: false, error: 'Name required' })
             }
           />
+          {/* [S128 Part A] A line's description, one muted line, ONLY when it has one —
+              a line without one looks exactly as it did (no box, no placeholder). */}
+          {row.description && (
+            <span
+              data-testid="row-description"
+              title={row.description}
+              style={{
+                display: 'block',
+                maxWidth: '22rem',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+                fontSize: '0.75rem',
+                color: '#7b8699',
+              }}
+            >
+              {row.description}
+            </span>
+          )}
         </td>
         <td data-testid="row-price" style={{ padding: '0.25rem 0.5rem' }}>{rowPriceCell(row)}</td>
         <td style={{ padding: '0.25rem 0.5rem' }}>{rowQtyCell(row)}</td>
@@ -1023,7 +1145,18 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
             </button>
           )}
         </td>
-        <td style={{ padding: '0.25rem 0.5rem' }}>
+        <td style={{ padding: '0.25rem 0.5rem', whiteSpace: 'nowrap' }}>
+          {/* [S128 Part C] The full record. It ADDS to the inline cells, never replaces them. */}
+          <button
+            type="button"
+            data-testid="open-line-detail"
+            aria-label={`Open details for ${row.name || ROW_TYPE_LABELS[row.row_type]}`}
+            title="Open the full line"
+            onClick={() => setDetailRowId(row.id)}
+            style={{ ...smallButton, marginRight: '0.25rem' }}
+          >
+            Details
+          </button>
           {canEdit && (
             <TrashButton
               label="Delete row"
@@ -1798,8 +1931,26 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
           initialCategoryId={sheetCategoryId ?? undefined}
           initialLineItemId={sheetLineItemId ?? undefined}
           onClose={() => setSheetOpen(false)}
+          onOpenLine={(rowId) => setDetailRowId(rowId)}
         />
       )}
+      {(() => {
+        const row = detailRowId ? rows.find((r) => r.id === detailRowId) : undefined;
+        if (!row) return null;
+        const section = lineItems.find((l) => l.id === row.line_item_id);
+        return (
+          <LineDetailSheet
+            open
+            onClose={() => setDetailRowId(null)}
+            title={row.name || ROW_TYPE_LABELS[row.row_type]}
+            subtitle={section ? `Section: ${section.name}` : undefined}
+            fields={rowDetailFields(row)}
+            readOnly={!canEdit}
+            onSave={(changes) => saveRowDetail(row, changes)}
+            aboveSheet={sheetOpen}
+          />
+        );
+      })()}
       {error && (
         <div
           style={{

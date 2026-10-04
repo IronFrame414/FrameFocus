@@ -46,6 +46,10 @@ export type ProposalPricingLevel =
 export interface ProposalRow {
   name: string;
   total: number;
+  /** [S128 Part A] The ROW's own description (Josh's "line"), or null. Always
+   *  read here; the client read path keeps it only on the four formats whose
+   *  render plan has `rowDescriptions` (client-proposal.ts). */
+  description: string | null;
   /** Row instrument type ('labor' | 'material' | …). Harmless to carry; the
    *  T&M layout partitions on it. */
   rowType: string;
@@ -79,6 +83,11 @@ export interface ProposalLine {
    * them only at the detail / open-book levels.
    */
   rows: ProposalRow[];
+  /** [S128 Part A] The rows that carry a description, in order — what the
+   *  layouts that print no rows (summary/itemized/cost plus) draw under the
+   *  section when the plan's `rowDescriptions` is on. A blank description is
+   *  not a described row: it renders nothing. */
+  describedRows: { name: string; description: string }[];
 }
 
 export interface ProposalCategory {
@@ -224,7 +233,7 @@ export async function getProposalData(
       ? await supabase
           .from('estimate_line_rows')
           .select(
-            'line_item_id, row_type, name, total, unit_of_measure, unit_cost, quantity, rate, amount, markup_percent, total_override, apply_tax, sort_order'
+            'line_item_id, row_type, name, total, unit_of_measure, unit_cost, quantity, rate, amount, markup_percent, total_override, apply_tax, sort_order, description'
           )
           .in('line_item_id', lineIds)
           .order('sort_order', { ascending: true })
@@ -244,6 +253,7 @@ export async function getProposalData(
     total_override: number | null;
     apply_tax: boolean;
     sort_order: number;
+    description: string | null;
   };
   const rowsByLine = new Map<string, ProposalRowRec[]>();
   for (const r of (allRows ?? []) as ProposalRowRec[]) {
@@ -296,6 +306,7 @@ export async function getProposalData(
           return {
             name: r.name,
             total: r.total,
+            description: r.description?.trim() ? r.description : null,
             rowType: r.row_type,
             cost,
             rate: showsCost && r.row_type === 'labor' ? r.rate : null,
@@ -348,6 +359,9 @@ export async function getProposalData(
           cost: lineCost,
           markupPercent: lineMarkup,
           rows,
+          describedRows: rows
+            .filter((r): r is ProposalRow & { description: string } => r.description != null)
+            .map((r) => ({ name: r.name, description: r.description })),
         };
       });
 

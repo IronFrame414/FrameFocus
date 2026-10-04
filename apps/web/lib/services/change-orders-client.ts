@@ -386,6 +386,8 @@ export type CreateCoLineRowInput = Pick<
   | 'unit_cost'
   | 'amount'
   | 'subcontractor_id'
+  // [S128 Part A] the CO LINE's description — staff-only (ASK-A2).
+  | 'description'
 > & {
   row_type: CoRowType;
   labor_unit?: CoLaborUnit | null;

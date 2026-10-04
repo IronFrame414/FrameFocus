@@ -33,6 +33,9 @@ import type { ProposalData, ProposalLine, ProposalRow } from './proposal-data';
 export interface ClientProposalRow {
   name: string;
   total: number | null;
+  /** [S128 Part A] A row's description — kept ONLY on the four formats Josh named
+   *  (plan.rowDescriptions); null on every other format. */
+  description: string | null;
   rowType: string;
   /** Always null in trimmed output; typed wider so the renderer can take either shape. */
   cost: number | null;
@@ -49,6 +52,9 @@ export interface ClientProposalLine {
   cost: number | null;
   markupPercent: number | null;
   rows: ClientProposalRow[];
+  /** [S128 Part A] Described rows drawn under the section — EMPTY on every
+   *  format whose plan lacks rowDescriptions, so the text never reaches them. */
+  describedRows: { name: string; description: string }[];
 }
 
 export interface ClientProposalCategory {
@@ -72,8 +78,13 @@ type Shape = {
   rows: 'none' | 'names' | 'names_prices' | 'time_and_materials';
   openBook: boolean;
   /** [S112] Carry only lines that have a description — the category layout
-   *  draws a line ONLY to show its description (Summary with Descriptions). */
+   *  draws a line ONLY to show its description (Summary with Descriptions).
+   *  [S128] …or a described ROW, which it now draws too. */
   onlyDescribedLines?: boolean;
+  /** [S128 Part A] Row descriptions are carried (the render plan's
+   *  rowDescriptions — exactly Josh's four formats). False everywhere else,
+   *  including every legacy level. */
+  rowDescriptions: boolean;
 };
 
 function shapeFor(stored: string): Shape {
@@ -88,6 +99,7 @@ function shapeFor(stored: string): Shape {
           descriptions: false,
           rows: 'none',
           openBook: false,
+          rowDescriptions: false,
         };
       case 'category_with_price':
         return {
@@ -97,6 +109,7 @@ function shapeFor(stored: string): Shape {
           descriptions: false,
           rows: 'none',
           openBook: false,
+          rowDescriptions: false,
         };
       case 'category_no_price':
         return {
@@ -106,6 +119,7 @@ function shapeFor(stored: string): Shape {
           descriptions: false,
           rows: 'none',
           openBook: false,
+          rowDescriptions: false,
         };
       case 'detail_with_price_qty':
         return {
@@ -115,6 +129,7 @@ function shapeFor(stored: string): Shape {
           descriptions: true,
           rows: 'names_prices',
           openBook: false,
+          rowDescriptions: false,
         };
       case 'detail_no_price':
         return {
@@ -124,6 +139,7 @@ function shapeFor(stored: string): Shape {
           descriptions: true,
           rows: 'names',
           openBook: false,
+          rowDescriptions: false,
         };
     }
   }
@@ -137,6 +153,7 @@ function shapeFor(stored: string): Shape {
         descriptions: false,
         rows: 'none',
         openBook: false,
+        rowDescriptions: plan.rowDescriptions,
       };
     case 'category':
       // [S112, RULED Josh] Summary with Descriptions SHOWS its line
@@ -153,6 +170,7 @@ function shapeFor(stored: string): Shape {
             rows: 'none',
             openBook: false,
             onlyDescribedLines: true,
+            rowDescriptions: plan.rowDescriptions,
           }
         : {
             categories: 'names',
@@ -161,6 +179,7 @@ function shapeFor(stored: string): Shape {
             descriptions: false,
             rows: 'none',
             openBook: false,
+            rowDescriptions: plan.rowDescriptions,
           };
     case 'itemized':
       return {
@@ -170,6 +189,7 @@ function shapeFor(stored: string): Shape {
         descriptions: plan.descriptions,
         rows: 'none',
         openBook: false,
+        rowDescriptions: plan.rowDescriptions,
       };
     case 'cost_plus':
       return {
@@ -179,6 +199,7 @@ function shapeFor(stored: string): Shape {
         descriptions: plan.descriptions,
         rows: 'none',
         openBook: true,
+        rowDescriptions: plan.rowDescriptions,
       };
     case 'time_and_materials':
       return {
@@ -188,6 +209,7 @@ function shapeFor(stored: string): Shape {
         descriptions: false,
         rows: 'time_and_materials',
         openBook: true,
+        rowDescriptions: plan.rowDescriptions,
       };
   }
 }
@@ -196,6 +218,9 @@ function trimRow(r: ProposalRow, s: Shape): ClientProposalRow {
   const tm = s.rows === 'time_and_materials';
   return {
     name: r.name,
+    // [S128 Part A] rows are only carried at all on T&M (and the legacy detail
+    // levels, whose shape has rowDescriptions false).
+    description: s.rowDescriptions ? r.description : null,
     rowType: tm ? r.rowType : '',
     total: s.rows === 'names_prices' || tm ? r.total : null,
     cost: null,
@@ -215,6 +240,8 @@ function trimLine(l: ProposalLine, s: Shape): ClientProposalLine {
     cost: s.openBook && !tm ? l.cost : null,
     markupPercent: s.openBook && !tm ? l.markupPercent : null,
     rows: s.rows === 'none' ? [] : l.rows.map((r) => trimRow(r, s)),
+    // [S128 Part A] T&M draws a row's description on the row itself.
+    describedRows: s.rowDescriptions && !tm ? l.describedRows : [],
   };
 }
 
@@ -230,7 +257,14 @@ export function trimProposalForClient(data: ProposalData): ClientProposalData {
           subtotal: s.subtotals ? c.subtotal : null,
           lines:
             s.categories === 'full'
-              ? c.lines.filter((l) => !s.onlyDescribedLines || l.description).map((l) => trimLine(l, s))
+              ? c.lines
+                  .filter(
+                    (l) =>
+                      !s.onlyDescribedLines ||
+                      l.description ||
+                      (s.rowDescriptions && l.describedRows.length > 0)
+                  )
+                  .map((l) => trimLine(l, s))
               : [],
         }));
   return {

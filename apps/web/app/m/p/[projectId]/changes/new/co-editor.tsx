@@ -32,6 +32,7 @@ import {
   OfflineNotice,
   PrimaryButton,
   SecondaryButton,
+  TextAreaField,
   TextField,
   useOnline,
 } from '../../../../write-ui';
@@ -523,14 +524,18 @@ function RowBlock({
   const [quantity, setQuantity] = useState(row.quantity === null ? '' : String(row.quantity));
   const [unitCost, setUnitCost] = useState(row.unit_cost === null ? '' : String(row.unit_cost));
   const [amount, setAmount] = useState(row.amount === null ? '' : String(row.amount));
+  // [S128 Part A] The line's description — the SAME column desktop writes (PARITY).
+  const [rowDescription, setRowDescription] = useState(row.description ?? '');
 
   function save() {
-    const patch =
+    const priced =
       row.row_type === 'labor'
         ? { name: name.trim(), rate: num(rate), quantity: num(quantity) }
         : row.row_type === 'material' || row.row_type === 'allowance' // [S170] material shape
           ? { name: name.trim(), unit_cost: num(unitCost), quantity: num(quantity) }
           : { name: name.trim(), amount: num(amount) };
+    // Blank is NULL: a line without a description stays exactly as it was.
+    const patch = { ...priced, description: rowDescription.trim() ? rowDescription.trimEnd() : null };
 
     return write(() => updateCoLineRow(row.id, patch), { reprice: true });
   }
@@ -550,6 +555,14 @@ function RowBlock({
       >
         <span className="min-w-0 flex-1">
           <span className="block truncate text-[14px] font-semibold text-m6m-navy">{row.name}</span>
+          {row.description ? (
+            <span
+              data-testid="m-co-row-description-preview"
+              className="block truncate text-[12px] text-m6m-muted"
+            >
+              {row.description}
+            </span>
+          ) : null}
           <span className="block font-mono text-[10px] uppercase text-m6m-muted">
             {row.row_type}
           </span>
@@ -614,6 +627,14 @@ function RowBlock({
               inputMode="decimal"
             />
           )}
+
+          <TextAreaField
+            label={t('project.coEditor.rowDescription')}
+            value={rowDescription}
+            onChange={setRowDescription}
+            testId="m-co-row-description"
+            hint={t('project.coEditor.rowDescriptionHint')}
+          />
 
           <div className="mt-[12px] flex items-center gap-[8px]">
             <button

@@ -17,6 +17,9 @@
 //   · No Optional toggle, no per-row description/note: neither exists at row
 //     level in the schema, and rendering editors that silently target the
 //     shared line item would mislead (inventory A2.4/A2.5).
+//     [S128] A row description now exists (Part A); it is written in the line
+//     detail sheet, which this sheet's "already here" list opens (Part C-2).
+//     The tray still does not edit it — a line is added, then described.
 //   · Sources: the five catalog types + manual (R-Q7). No assemblies (R-Q8).
 //
 // Favorites write immediately (a catalog write, not an estimate write — the
@@ -84,10 +87,13 @@ export function AddItemsSheet({
   onClose,
   initialCategoryId,
   initialLineItemId,
+  onOpenLine,
 }: Pick<TabProps, 'data' | 'reload'> & {
   onClose: () => void;
   initialCategoryId?: string;
   initialLineItemId?: string;
+  /** [S128 C-2] Open an existing line's full record (the line detail sheet). */
+  onOpenLine?: (rowId: string) => void;
 }) {
   const { estimate, categories, lineItems, rows } = data;
 
@@ -119,6 +125,29 @@ export function AddItemsSheet({
     (initialCategoryId && lineItems.find((li) => li.category_id === initialCategoryId)?.id) ||
     lineItems[0]?.id ||
     '';
+
+  // [S128 C-2, Josh] "when clicking 'add line' on a category that already has line
+  // items added, the existing line items should be listed in the sheet that opens."
+  // The category is the TARGET section's category; its lines are listed grouped by
+  // section, and each one is LIVE — it opens that line's detail (reading taken,
+  // never confirmed by Josh; stated in the S128 report).
+  const existingLines = useMemo(() => {
+    const target = lineItems.find((li) => li.id === defaultLineItemId);
+    if (!target) return [];
+    const sections = lineItems
+      .filter((li) => li.category_id === target.category_id)
+      .sort((a, b) => a.sort_order - b.sort_order);
+    return sections.flatMap((sec) =>
+      rows
+        .filter((r) => r.line_item_id === sec.id)
+        .sort((a, b) => a.sort_order - b.sort_order)
+        .map((r) => ({ id: r.id, section: sec.name, name: r.name, total: r.total }))
+    );
+  }, [lineItems, rows, defaultLineItemId]);
+  const existingCategoryName = useMemo(() => {
+    const target = lineItems.find((li) => li.id === defaultLineItemId);
+    return categories.find((c) => c.id === target?.category_id)?.name ?? null;
+  }, [lineItems, categories, defaultLineItemId]);
 
   const lineItemLabel = useMemo(() => {
     const byId = new Map<string, string>();
@@ -485,6 +514,57 @@ export function AddItemsSheet({
         {error && (
           <div style={{ margin: '10px 22px 0', padding: '8px 12px', borderRadius: '8px', backgroundColor: '#fdf1f0', color: color.danger, fontSize: '13px' }}>
             {error}
+          </div>
+        )}
+
+        {/* [S128 C-2] What is already in this category — each line opens its detail. */}
+        {step === 1 && existingLines.length > 0 && (
+          <div
+            data-testid="sheet-existing-lines"
+            style={{
+              margin: '10px 22px 0',
+              border: `1px solid ${color.cardBorder}`,
+              borderRadius: '8px',
+              maxHeight: '9.5rem',
+              overflowY: 'auto',
+            }}
+          >
+            <div style={{ ...groupHeader, padding: '6px 12px' }}>
+              <span>
+                Already in {existingCategoryName ?? 'this category'} · {existingLines.length}{' '}
+                {existingLines.length === 1 ? 'line' : 'lines'}
+              </span>
+            </div>
+            {existingLines.map((l) => (
+              <button
+                key={l.id}
+                type="button"
+                data-testid="sheet-existing-line"
+                onClick={() => onOpenLine?.(l.id)}
+                disabled={!onOpenLine}
+                title="Open this line"
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  gap: '0.75rem',
+                  width: '100%',
+                  padding: '6px 12px',
+                  border: 'none',
+                  borderTop: `1px solid ${color.cardBorder}`,
+                  background: 'none',
+                  textAlign: 'left',
+                  fontSize: '12.5px',
+                  cursor: onOpenLine ? 'pointer' : 'default',
+                  color: color.navy,
+                }}
+              >
+                <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  <span style={{ color: color.muted }}>{l.section} · </span>
+                  {l.name}
+                </span>
+                <span style={{ fontFamily: font.mono, flexShrink: 0 }}>{fmtMoney(l.total)}</span>
+              </button>
+            ))}
           </div>
         )}
 

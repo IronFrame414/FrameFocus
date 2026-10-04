@@ -29,6 +29,11 @@ import {
 } from '@/lib/services/change-orders-client';
 import { CoRateSection } from './co-rate-section';
 import {
+  LineDetailSheet,
+  type LineField,
+  type LineFieldValue,
+} from '@/components/estimating/line-detail-sheet';
+import {
   laborUnitLabel,
   laborUnitLabels,
   laborUnits,
@@ -1015,31 +1020,48 @@ function RowLine({
 }) {
   const confirm = useConfirm();
   const [editing, setEditing] = useState(false);
-
-  if (editing && editable) {
-    return (
-      <tr>
-        <td colSpan={7} style={{ padding: '0.5rem' }}>
-          <RowFields
-            rowType={row.row_type}
-            initial={row}
-            busy={busy}
-            subcontractors={subcontractors}
-            submitLabel="Save Row"
-            onSubmit={async (fields) => {
-              const ok = await onSave(fields);
-              if (ok) setEditing(false);
-            }}
-            onCancel={() => setEditing(false)}
-          />
-        </td>
-      </tr>
-    );
-  }
+  // [S128 Part C] "Edit" opens the SHARED line detail sheet — the same component the
+  // estimate grid uses (C-3: one mechanism, not two). _Superseded: an inline
+  // RowFields form in the table row._ RowFields still serves the ADD form.
+  // `busy` is the page's write lock; the sheet carries its own saving state.
+  void busy;
 
   return (
     <tr style={{ borderBottom: '1px solid #f3f4f6' }}>
-      <td style={{ padding: '0.375rem 0.5rem', fontSize: '0.8125rem' }}>{row.name}</td>
+      <td style={{ padding: '0.375rem 0.5rem', fontSize: '0.8125rem' }}>
+        {row.name}
+        {/* [S128 Part A] Only when it has one — no box, no placeholder otherwise. */}
+        {row.description && (
+          <span
+            data-testid="co-row-description"
+            title={row.description}
+            style={{
+              display: 'block',
+              maxWidth: '22rem',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              fontSize: '0.75rem',
+              color: '#6b7280',
+            }}
+          >
+            {row.description}
+          </span>
+        )}
+        {editing && editable && (
+          <LineDetailSheet
+            open
+            onClose={() => setEditing(false)}
+            title={row.name}
+            subtitle={ROW_TYPE_LABELS[row.row_type]}
+            fields={coRowDetailFields(row, subcontractors)}
+            onSave={async (changes) => {
+              const ok = await onSave(coRowChanges(changes));
+              return ok ? { success: true } : { success: false, error: 'Save failed' };
+            }}
+          />
+        )}
+      </td>
       <td style={{ padding: '0.375rem 0.5rem', fontSize: '0.8125rem', color: '#6b7280' }}>
         {ROW_TYPE_LABELS[row.row_type]}
       </td>
@@ -1110,6 +1132,90 @@ function RowEntrySummary({ row }: { row: ChangeOrderLineRow }) {
     default:
       return <>—</>;
   }
+}
+
+// ── S128 Part C — a CO line in the shared line detail sheet ──
+// The sheet owns no shape; a CO line's columns are named here. Values are SIGNED
+// (a negative is a credit, D-2), so no minimum is set.
+function coRowDetailFields(
+  row: ChangeOrderLineRow,
+  subcontractors: Array<{ id: string; name: string }>
+): LineField[] {
+  const fields: LineField[] = [
+    { key: 'name', label: 'Row name', kind: 'text', value: row.name, required: true, maxLength: 200 },
+    { key: 'type', label: 'Type', kind: 'readonly', value: ROW_TYPE_LABELS[row.row_type] },
+  ];
+  if (row.row_type === 'labor') {
+    fields.push(
+      { key: 'rate', label: 'Rate ($)', kind: 'number', value: row.rate },
+      { key: 'quantity', label: 'Qty', kind: 'number', value: row.quantity },
+      {
+        key: 'labor_unit',
+        label: 'Unit',
+        kind: 'select',
+        value: row.labor_unit ?? 'hours',
+        options: laborUnits.map((u) => ({ value: u, label: laborUnitLabels[u] })),
+      }
+    );
+  } else if (row.row_type === 'material' || row.row_type === 'allowance') {
+    fields.push(
+      { key: 'unit_cost', label: 'Unit cost ($)', kind: 'number', value: row.unit_cost },
+      { key: 'quantity', label: 'Qty', kind: 'number', value: row.quantity },
+      {
+        key: 'unit_of_measure',
+        label: 'Unit',
+        kind: 'select',
+        value: row.unit_of_measure ?? 'each',
+        options: UNIT_OF_MEASURE_OPTIONS.map((u) => ({ value: u, label: u.replace(/_/g, ' ') })),
+      }
+    );
+  } else {
+    fields.push({ key: 'amount', label: 'Amount ($)', kind: 'number', value: row.amount });
+  }
+  if (row.row_type === 'subcontractor') {
+    fields.push({
+      key: 'subcontractor_id',
+      label: 'Subcontractor',
+      kind: 'select',
+      value: row.subcontractor_id ?? '',
+      options: [{ value: '', label: '— none —' }, ...subcontractors.map((x) => ({ value: x.id, label: x.name }))],
+    });
+  }
+  fields.push({
+    key: 'markup_percent',
+    label: 'Markup %',
+    kind: 'number',
+    value: row.markup_percent,
+    allowNull: true,
+    placeholder: 'default',
+  });
+  if (row.row_type !== 'labor') {
+    fields.push({ key: 'apply_tax', label: 'Tax', kind: 'checkbox', value: !!row.apply_tax });
+  }
+  fields.push({
+    key: 'description',
+    label: 'Description',
+    kind: 'textarea',
+    value: row.description,
+    maxLength: 2000,
+    placeholder: 'Optional',
+    help: 'Change orders do not send line descriptions to the client.',
+  });
+  return fields;
+}
+
+function coRowChanges(changes: Record<string, LineFieldValue>): UpdateCoLineRowInput {
+  const input: UpdateCoLineRowInput = {};
+  if ('name' in changes) input.name = String(changes.name);
+  for (const k of ['rate', 'quantity', 'unit_cost', 'amount', 'markup_percent'] as const) {
+    if (k in changes) input[k] = changes[k] as number | null;
+  }
+  if ('labor_unit' in changes) input.labor_unit = changes.labor_unit as CoLaborUnit;
+  if ('unit_of_measure' in changes) input.unit_of_measure = changes.unit_of_measure as string | null;
+  if ('subcontractor_id' in changes) input.subcontractor_id = (changes.subcontractor_id as string | null) || null;
+  if ('apply_tax' in changes) input.apply_tax = Boolean(changes.apply_tax);
+  if ('description' in changes) input.description = changes.description as string | null;
+  return input;
 }
 
 // ── Shared field editor for add + edit ──

@@ -17,3 +17,11 @@
 
 then read back `md5(pg_get_functiondef('public.clone_estimate_line(estimate_line_items,uuid,uuid,uuid,uuid)'::regprocedure))`
 and expect `c93289708a15f1de5223db5da9b5acb5`.
+
+## The S128 1a version (before A+C replaces it again)
+
+`s128-1a.sql` — captured 2026-10-04 from rebuild-test after migration `20262136000000`:
+`md5(pg_get_functiondef)` = **`c63ff7e33a77e545849fa602dd9d5846`**. It copies `total_override` and
+`total_override_basis`. Part A's migration (`20262137000000`) adds `description` to the copied columns; restore the
+1a version with `npx supabase db query --linked -f docs/sessions/S128-sabotage-originals/clone_estimate_line/s128-1a.sql`
+and expect `c63ff7e3…`.

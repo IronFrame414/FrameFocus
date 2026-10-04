@@ -316,7 +316,12 @@ export function ProposalHtml({ data }: { data: ProposalData | ClientProposalData
                   </div>
                   {labor.map((r, k) => (
                     <div key={k} style={row}>
-                      <span style={{ flex: 1 }}>{r.name}</span>
+                      <span style={{ flex: 1 }}>
+                        {r.name}
+                        {plan.rowDescriptions && r.description && (
+                          <RowDescriptionText text={r.description} />
+                        )}
+                      </span>
                       <span style={{ width: '5rem', textAlign: 'right' }}>
                         {r.rate != null ? fmtMoney(r.rate) : '—'}
                       </span>
@@ -337,7 +342,12 @@ export function ProposalHtml({ data }: { data: ProposalData | ClientProposalData
                   </div>
                   {material.map((r, k) => (
                     <div key={k} style={row}>
-                      <span style={{ flex: 1 }}>{r.name}</span>
+                      <span style={{ flex: 1 }}>
+                        {r.name}
+                        {plan.rowDescriptions && r.description && (
+                          <RowDescriptionText text={r.description} />
+                        )}
+                      </span>
                       <span style={{ width: '6rem', textAlign: 'right' }}>{fmtMoney(r.total)}</span>
                     </div>
                   ))}
@@ -380,6 +390,7 @@ export function ProposalHtml({ data }: { data: ProposalData | ClientProposalData
                         {line.description}
                       </span>
                     )}
+                    {plan.rowDescriptions && <DescribedRows rows={line.describedRows} />}
                   </span>
                   {isCostPlus ? (
                     <>
@@ -411,17 +422,26 @@ export function ProposalHtml({ data }: { data: ProposalData | ClientProposalData
                 draws no lines, so the descriptions were never reached above
                 (they sit inside `plan.showLines`). Each described line: its name
                 and description, NO price (the format prices categories only). */}
+            {/* [S128 Part A] …and each described ROW under its section, when the
+                plan's rowDescriptions is on. Same filter as the client trim. */}
             {!plan.showLines &&
-              plan.descriptions &&
+              (plan.descriptions || plan.rowDescriptions) &&
               cat.lines
-                .filter((line) => line.description)
+                .filter(
+                  (line) =>
+                    (plan.descriptions && line.description) ||
+                    (plan.rowDescriptions && line.describedRows.length > 0)
+                )
                 .map((line, j) => (
                   <div key={`d${j}`} data-testid="proposal-line-description" style={row}>
                     <span style={{ flex: 1 }}>
                       {line.name}
-                      <span style={{ display: 'block', fontSize: '0.75rem', color: '#6b7280' }}>
-                        {line.description}
-                      </span>
+                      {plan.descriptions && line.description && (
+                        <span style={{ display: 'block', fontSize: '0.75rem', color: '#6b7280' }}>
+                          {line.description}
+                        </span>
+                      )}
+                      {plan.rowDescriptions && <DescribedRows rows={line.describedRows} />}
                     </span>
                   </div>
                 ))}
@@ -490,5 +510,34 @@ export function ProposalHtml({ data }: { data: ProposalData | ClientProposalData
         </div>
       )}
     </div>
+  );
+}
+
+// [S128 Part A] A ROW's (Josh's "line's") description. Blank never reaches here:
+// callers render it only when the text exists, so a row without one looks exactly
+// as it did. pre-wrap keeps the author's line breaks — the PDF's <Text> does too.
+function RowDescriptionText({ text }: { text: string }) {
+  return (
+    <span
+      data-testid="proposal-row-description"
+      style={{ display: 'block', fontSize: '0.75rem', color: '#6b7280', whiteSpace: 'pre-wrap' }}
+    >
+      {text}
+    </span>
+  );
+}
+
+// [S128 Part A] The described rows of a section, on the layouts that print no rows.
+function DescribedRows({ rows }: { rows: { name: string; description: string }[] }) {
+  if (rows.length === 0) return null;
+  return (
+    <span style={{ display: 'block', marginTop: '0.25rem', paddingLeft: '0.75rem' }}>
+      {rows.map((r, k) => (
+        <span key={k} style={{ display: 'block', marginTop: '0.125rem' }}>
+          <span style={{ display: 'block', fontSize: '0.8125rem', color: '#374151' }}>{r.name}</span>
+          <RowDescriptionText text={r.description} />
+        </span>
+      ))}
+    </span>
   );
 }

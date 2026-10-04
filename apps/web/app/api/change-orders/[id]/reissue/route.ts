@@ -219,6 +219,8 @@ export async function POST(
       unit_cost: r.unit_cost,
       amount: r.amount,
       subcontractor_id: r.subcontractor_id,
+      // [S128 Part A] A reissue keeps each line's description.
+      description: r.description,
     }));
     const { error: rowInsertError } = await supabase
       .from('change_order_line_rows')

@@ -28,7 +28,19 @@ function fmtDate(iso: string | null): string {
   });
 }
 
+// [S128 Part A] A section's described rows, one unbreakable View each — name,
+// then the description in the muted 8pt the section description already uses.
+function describedRowViews(rows: { name: string; description: string }[], keyPrefix: string) {
+  return rows.map((r, k) => (
+    <View key={`${keyPrefix}${k}`} style={{ paddingLeft: 12, marginBottom: 3 }} wrap={false}>
+      <Text style={{ fontSize: 9 }}>{r.name}</Text>
+      <Text style={styles.rowDescription}>{r.description}</Text>
+    </View>
+  ));
+}
+
 const styles = StyleSheet.create({
+  rowDescription: { fontSize: 8, color: '#6b7280' },
   page: {
     paddingTop: 40,
     paddingBottom: 56,
@@ -358,7 +370,12 @@ export function ProposalDocument({ data }: { data: ProposalData }) {
                     </View>
                     {labor.map((r, k) => (
                       <View key={k} style={styles.row} wrap={false}>
-                        <Text style={{ flex: 1 }}>{r.name}</Text>
+                        <View style={{ flex: 1, paddingRight: 12 }}>
+                          <Text>{r.name}</Text>
+                          {plan.rowDescriptions && r.description && (
+                            <Text style={styles.rowDescription}>{r.description}</Text>
+                          )}
+                        </View>
                         <Text style={{ width: 70, textAlign: 'right' }}>
                           {r.rate != null ? fmtMoney(r.rate) : '—'}
                         </Text>
@@ -379,7 +396,12 @@ export function ProposalDocument({ data }: { data: ProposalData }) {
                     </View>
                     {material.map((r, k) => (
                       <View key={k} style={styles.row} wrap={false}>
-                        <Text style={{ flex: 1 }}>{r.name}</Text>
+                        <View style={{ flex: 1, paddingRight: 12 }}>
+                          <Text>{r.name}</Text>
+                          {plan.rowDescriptions && r.description && (
+                            <Text style={styles.rowDescription}>{r.description}</Text>
+                          )}
+                        </View>
                         <Text style={{ width: 80, textAlign: 'right' }}>{fmtMoney(r.total)}</Text>
                       </View>
                     ))}
@@ -434,22 +456,38 @@ export function ProposalDocument({ data }: { data: ProposalData }) {
                       )
                     )}
                   </View>
-                ))}
+                )).flatMap((lineView, j) => {
+                  const line = cat.lines[j];
+                  // [S128 Part A] The section's described ROWS, each its own
+                  // unbreakable block so a long list flows across pages.
+                  return plan.rowDescriptions && line.describedRows.length > 0
+                    ? [lineView, ...describedRowViews(line.describedRows, `r${j}`)]
+                    : [lineView];
+                })}
               {/* [S112, RULED Josh] Same fix as proposal-html.tsx (PARITY): a
                   "Summary with Descriptions" PDF shows each described line's
                   name and description, no price — matching the signing page. */}
+              {/* [S128 Part A] …and its described ROWS, when rowDescriptions is on —
+                  the same filter as proposal-html.tsx and the client trim. */}
               {!plan.showLines &&
-                plan.descriptions &&
+                (plan.descriptions || plan.rowDescriptions) &&
                 cat.lines
-                  .filter((line) => line.description)
-                  .map((line, j) => (
+                  .filter(
+                    (line) =>
+                      (plan.descriptions && line.description) ||
+                      (plan.rowDescriptions && line.describedRows.length > 0)
+                  )
+                  .flatMap((line, j) => [
                     <View key={`d${j}`} style={[styles.row, { borderBottomWidth: 0 }]} wrap={false}>
                       <View style={{ flex: 1, paddingRight: 12 }}>
                         <Text>{line.name}</Text>
-                        <Text style={{ fontSize: 8, color: '#6b7280' }}>{line.description}</Text>
+                        {plan.descriptions && line.description && (
+                          <Text style={{ fontSize: 8, color: '#6b7280' }}>{line.description}</Text>
+                        )}
                       </View>
-                    </View>
-                  ))}
+                    </View>,
+                    ...(plan.rowDescriptions ? describedRowViews(line.describedRows, `d${j}r`) : []),
+                  ])}
             </View>
           ));
         })()}
