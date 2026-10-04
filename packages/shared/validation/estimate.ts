@@ -52,6 +52,9 @@ export const declineReasonCodes = [
 export const termsSectionSchema = z.object({
   name: z.string().min(1, 'Section name is required').max(100),
   content: z.string(),
+  // [S128 Part D] 'rich' = written with the six-format editor (packages/shared/utils/terms-text.ts).
+  // Absent = plain text, rendered exactly as before.
+  format: z.literal('rich').optional(),
 });
 
 // contact_address_id became required in 4D — the /new form requires

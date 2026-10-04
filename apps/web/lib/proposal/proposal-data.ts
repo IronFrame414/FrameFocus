@@ -125,7 +125,7 @@ export interface ProposalData {
     coverLetter: string | null;
     scopeSummary: string | null;
     scopeSections: ProposalScopeSection[];
-    termsSections: Array<{ name: string; content: string }>;
+    termsSections: Array<{ name: string; content: string; format?: 'rich' }>;
     subtotal: number;
     taxTotal: number;
     discountTotal: number;
@@ -401,7 +401,7 @@ export async function getProposalData(
       scopeSections:
         (estimate.scope_sections as unknown as ProposalScopeSection[] | null) ?? [],
       termsSections:
-        (estimate.terms_sections as Array<{ name: string; content: string }> | null) ?? [],
+        (estimate.terms_sections as Array<{ name: string; content: string; format?: 'rich' }> | null) ?? [],
       subtotal: estimate.subtotal,
       taxTotal: estimate.tax_total,
       discountTotal: estimate.discount_total,

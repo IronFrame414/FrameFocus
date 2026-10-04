@@ -1,5 +1,6 @@
 'use client';
 
+import { TermsContentEditor } from '@/components/estimating/terms-content-editor';
 import { useRef, useState } from 'react';
 import {
   EstimatingSettings,
@@ -215,7 +216,7 @@ export function EstimatingSettingsForm({ settings }: EstimatingSettingsFormProps
 
   function addSection() {
     // New sections save once they have a name (Zod requires ≥ 1 char)
-    setTerms([...terms, { name: '', content: '' }]);
+    setTerms([...terms, { name: '', content: '', format: 'rich' }]);
   }
 
   // Next number preview: sequence is system-managed, read-only.
@@ -538,13 +539,15 @@ export function EstimatingSettingsForm({ settings }: EstimatingSettingsFormProps
                 ✕
               </button>
             </div>
-            <textarea
+            {/* [S128 Part D] The shared six-format editor (also the estimate's Terms tab). */}
+            <TermsContentEditor
               value={section.content}
-              onChange={(e) => updateSection(i, { content: e.target.value })}
-              onBlur={() => saveTerms(terms)}
-              rows={4}
-              placeholder="Section content (plain text)"
-              style={{ ...inputStyle, resize: 'vertical', fontFamily: 'inherit' }}
+              format={section.format}
+              onChange={(content, format) => updateSection(i, { content, format })}
+              onCommit={(content, format) =>
+                saveTerms(terms.map((s, j) => (j === i ? { ...s, content, format } : s)))
+              }
+              testId={`default-terms-editor-${i}`}
             />
           </div>
         ))}

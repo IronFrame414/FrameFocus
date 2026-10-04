@@ -1,6 +1,7 @@
 import type { ProposalData } from './proposal-data';
 import type { ClientProposalCategory, ClientProposalData } from './client-proposal';
 import { ScopeTextHtml } from './scope-text-html';
+import { TermsTextHtml } from './terms-text-html';
 import { formatDocumentPercent } from '@framefocus/shared/utils/estimate-totals';
 import {
   resolveProposalFormat,
@@ -482,9 +483,15 @@ export function ProposalHtml({ data }: { data: ProposalData | ClientProposalData
           {visibleTerms.map((section, i) => (
             <div key={i} style={{ marginBottom: '0.75rem' }}>
               <div style={{ fontWeight: 700, fontSize: '0.875rem' }}>{section.name}</div>
-              <div style={{ whiteSpace: 'pre-wrap', fontSize: '0.875rem', color: '#374151' }}>
-                {section.content}
-              </div>
+              {/* [S128 Part D] Rich only when saved by the rich editor; every older section
+                  renders exactly as before (D-4). */}
+              {section.format === 'rich' ? (
+                <TermsTextHtml text={section.content} />
+              ) : (
+                <div style={{ whiteSpace: 'pre-wrap', fontSize: '0.875rem', color: '#374151' }}>
+                  {section.content}
+                </div>
+              )}
             </div>
           ))}
         </div>

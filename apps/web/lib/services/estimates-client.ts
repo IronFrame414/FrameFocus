@@ -88,6 +88,8 @@ export type DeclineReasonCode =
 export type TermsSection = {
   name: string;
   content: string;
+  /** [S128 Part D] 'rich' = six-format markup; absent = plain text, as always. */
+  format?: 'rich';
 };
 
 type EstimateRow = Database['public']['Tables']['estimates']['Row'];

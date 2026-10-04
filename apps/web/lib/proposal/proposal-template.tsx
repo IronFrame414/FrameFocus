@@ -1,6 +1,7 @@
 import { Document, Image, Page, StyleSheet, Text, View } from '@react-pdf/renderer';
 import type { ProposalData } from './proposal-data';
 import { ScopeTextPdf } from './scope-text-pdf';
+import { TermsTextPdf } from './terms-text-pdf';
 import { formatDocumentPercent } from '@framefocus/shared/utils/estimate-totals';
 import { resolveProposalFormat, proposalRenderPlan } from '@framefocus/shared/utils/proposal-format';
 
@@ -503,7 +504,12 @@ export function ProposalDocument({ data }: { data: ProposalData }) {
                   <Text style={{ fontFamily: 'Helvetica-Bold', fontSize: 9, marginBottom: 2 }}>
                     {section.name}
                   </Text>
-                  <Text style={[styles.paragraph, { fontSize: 9 }]}>{section.content}</Text>
+                  {/* [S128 Part D] Rich only when saved by the rich editor (D-4). */}
+                  {section.format === 'rich' ? (
+                    <TermsTextPdf text={section.content} />
+                  ) : (
+                    <Text style={[styles.paragraph, { fontSize: 9 }]}>{section.content}</Text>
+                  )}
                 </View>
               ))}
           </View>

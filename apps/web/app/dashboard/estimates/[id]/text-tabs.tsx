@@ -17,6 +17,7 @@ import { fmtMoney } from '../labels';
 import Link from 'next/link';
 import { ProposalFormatPicker } from './proposal-format-picker';
 import { ScopeTextHtml } from '@/lib/proposal/scope-text-html';
+import { TermsContentEditor } from '@/components/estimating/terms-content-editor';
 import type { TabProps } from './estimate-builder';
 
 const inputStyle: React.CSSProperties = {
@@ -356,21 +357,23 @@ export function TermsTab({ data, canEdit, reload }: TabProps) {
               ✕
             </button>
           </div>
-          <textarea
+          {/* [S128 Part D] The shared six-format editor (also Settings → Estimating). */}
+          <TermsContentEditor
             value={section.content}
+            format={section.format}
             disabled={!canEdit}
-            onChange={(e) => update(i, { content: e.target.value })}
-            onBlur={() => persist(terms)}
-            rows={4}
-            placeholder="Section content (plain text)"
-            style={{ ...inputStyle, resize: 'vertical', fontFamily: 'inherit' }}
+            onChange={(content, format) => update(i, { content, format })}
+            onCommit={(content, format) =>
+              persist(terms.map((s, j) => (j === i ? { ...s, content, format } : s)))
+            }
+            testId={`terms-editor-${i}`}
           />
         </div>
       ))}
       {canEdit && (
         <button
           type="button"
-          onClick={() => setTerms([...terms, { name: '', content: '' }])}
+          onClick={() => setTerms([...terms, { name: '', content: '', format: 'rich' }])}
           style={buttonStyle}
         >
           + Add Section
