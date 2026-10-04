@@ -29,6 +29,7 @@ import { fmtMoney } from '../labels';
 import { useAlert, useConfirm } from '@/components/confirm/confirm-provider';
 import type { TabProps } from './estimate-builder';
 import { useFileSheet } from '@/components/files/file-sheet';
+import { subBidEntries } from '@/lib/estimates/sub-bid-entries';
 
 // 4D-rev Bidding tab — grouped by line item that carries a
 // subcontractor row across the whole estimate. Winner selection is
@@ -89,11 +90,16 @@ export function BiddingTab({ data, canEdit, reload, companyTimeZone }: TabProps)
 
   // A line is biddable once it carries a subcontractor row, or already
   // has bids recorded (set_winning_bid upserts the sub row on win).
-  const subRowFor = (lineItemId: string) =>
-    rows.find((r) => r.line_item_id === lineItemId && r.row_type === 'subcontractor');
-  const biddableLines = lineItems.filter(
-    (l) => subRowFor(l.id) != null || subBids.some((b) => b.line_item_id === l.id)
+  // [S128 E-1] EVERY sub line of a section is listed — see subBidEntries.
+  // _Superseded: `rows.find(...)` surfaced only a section's FIRST sub line._
+  const entries = subBidEntries(
+    lineItems,
+    rows,
+    subBids.map((b) => b.line_item_id)
   );
+  const biddableLines = entries.map((e) => e.section);
+  const subLinesFor = (lineItemId: string) =>
+    entries.find((e) => e.section.id === lineItemId)?.subLines ?? [];
   const subName = (id: string | null) =>
     subs.find((s) => s.id === id)?.company_name ?? 'Unknown sub';
 
@@ -282,7 +288,7 @@ export function BiddingTab({ data, canEdit, reload, companyTimeZone }: TabProps)
       ) : (
         biddableLines.map((line) => {
           const bids = subBids.filter((b) => b.line_item_id === line.id);
-          const subRow = subRowFor(line.id);
+          const subLines = subLinesFor(line.id);
           const winner = bids.find((b) => b.is_winner);
           return (
             <div
@@ -310,7 +316,16 @@ export function BiddingTab({ data, canEdit, reload, companyTimeZone }: TabProps)
                     flexWrap: 'wrap',
                   }}
                 >
-                  <span style={{ fontWeight: 600, fontSize: '0.9375rem' }}>{line.name}</span>
+                  {/* [S128 E-1] With no sub line (bids only) the section names the card,
+                      as before. Otherwise every sub line is listed below by its own name. */}
+                  {subLines.length === 0 && (
+                    <span style={{ fontWeight: 600, fontSize: '0.9375rem' }}>{line.name}</span>
+                  )}
+                  {subLines.length > 0 && (
+                    <span style={{ fontSize: '0.75rem', color: '#7b8699' }}>
+                      Section: {line.name}
+                    </span>
+                  )}
                   {/* #113a — durable award summary, visible before conversion */}
                   {winner && (
                     <span
@@ -328,10 +343,47 @@ export function BiddingTab({ data, canEdit, reload, companyTimeZone }: TabProps)
                     </span>
                   )}
                 </span>
-                <span style={{ fontSize: '0.8125rem', color: '#7b8699' }}>
-                  Current sub bid: <strong>{subRow ? fmtMoney(subRow.amount) : '—'}</strong>
-                </span>
+                {subLines.length === 0 && (
+                  <span style={{ fontSize: '0.8125rem', color: '#7b8699' }}>
+                    Current sub bid: <strong>—</strong>
+                  </span>
+                )}
               </div>
+
+              {/* [S128 E-1] One entry per SUB line: its own name, its own amount. */}
+              {subLines.map((sl) => (
+                <div
+                  key={sl.rowId}
+                  data-testid="sub-line-card"
+                  data-row-id={sl.rowId}
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    gap: '0.75rem',
+                    padding: '0.5rem 0.75rem',
+                    marginBottom: '0.5rem',
+                    border: '1px solid #e4e8ef',
+                    borderRadius: '0.375rem',
+                    backgroundColor: '#fafbfc',
+                  }}
+                >
+                  <span style={{ fontWeight: 600, fontSize: '0.9375rem' }}>{sl.name}</span>
+                  <span style={{ fontSize: '0.8125rem', color: '#7b8699' }}>
+                    Current sub bid: <strong>{fmtMoney(sl.amount)}</strong>
+                  </span>
+                </div>
+              ))}
+              {subLines.length >= 2 && (
+                <p
+                  data-testid="section-bids-note"
+                  style={{ fontSize: '0.75rem', color: '#b45309', marginBottom: '0.75rem' }}
+                >
+                  This section has {subLines.length} sub lines. Bids, requests and the award below
+                  cover the whole section, and a winner cannot be picked while it holds more than
+                  one sub line. Bidding each line on its own comes with the sub-bids build.
+                </p>
+              )}
 
               {bids.length === 0 ? (
                 <p style={{ fontSize: '0.8125rem', color: '#9aa4b8', marginBottom: '0.75rem' }}>
