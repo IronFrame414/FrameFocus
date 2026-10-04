@@ -140,6 +140,11 @@ interface InlineNumberProps {
   allowNull?: boolean;
   placeholder?: string;
   width?: string;
+  /** [S128 Part B] The text the edit box opens with. Default String(value). A
+   *  derived figure opens rounded ("20.50", not "20.496666666666673"), and an
+   *  UNCHANGED draft never saves — so opening and leaving the cell can never
+   *  commit the rounded figure over the number a person typed. */
+  draftFormat?: (value: number) => string;
 }
 
 export function InlineNumber({
@@ -151,15 +156,18 @@ export function InlineNumber({
   allowNull,
   placeholder,
   width,
+  draftFormat,
 }: InlineNumberProps) {
+  const seed = (v: number | null) => (v == null ? '' : draftFormat ? draftFormat(v) : String(v));
   const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(value == null ? '' : String(value));
+  const [draft, setDraft] = useState(seed(value));
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
-    if (!editing) setDraft(value == null ? '' : String(value));
+    if (!editing) setDraft(seed(value));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- seed derives from draftFormat, a render-time formatter
   }, [value, editing]);
 
   useEffect(() => {
@@ -168,6 +176,13 @@ export function InlineNumber({
 
   async function save() {
     const raw = draft.trim();
+    // [S128 Part B] Nothing typed → nothing saved. Compared on the TEXT, not the
+    // parsed number: a rounded seed parses to a different number than `value`.
+    if (raw === seed(value).trim()) {
+      setEditing(false);
+      setError(null);
+      return;
+    }
     let parsed: number | null;
     if (raw === '') {
       if (!allowNull) {
@@ -208,7 +223,7 @@ export function InlineNumber({
   }
 
   function cancel() {
-    setDraft(value == null ? '' : String(value));
+    setDraft(seed(value));
     setEditing(false);
     setError(null);
   }

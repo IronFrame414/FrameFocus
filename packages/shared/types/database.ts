@@ -3860,6 +3860,7 @@ export type Database = {
           subcontractor_id: string | null
           total: number
           total_override: number | null
+          total_override_basis: number | null
           unit_cost: number | null
           unit_of_measure: string | null
           updated_at: string | null
@@ -3885,6 +3886,7 @@ export type Database = {
           subcontractor_id?: string | null
           total?: number
           total_override?: number | null
+          total_override_basis?: number | null
           unit_cost?: number | null
           unit_of_measure?: string | null
           updated_at?: string | null
@@ -3910,6 +3912,7 @@ export type Database = {
           subcontractor_id?: string | null
           total?: number
           total_override?: number | null
+          total_override_basis?: number | null
           unit_cost?: number | null
           unit_of_measure?: string | null
           updated_at?: string | null
