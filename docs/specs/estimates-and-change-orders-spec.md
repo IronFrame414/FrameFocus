@@ -229,7 +229,22 @@ be proven neutralised in the rendered page's bytes.**
 
 ---
 
-# PART E — SUB BIDS: A MISSING LINE, AND BID PACKAGES
+# PART E — SUB BIDS
+
+> **⚠️ [Josh, 2026-10-03 21:12]** *"sub bids, recording expenses to cost codes, project conversion
+> should be a separate build with a new interview."*
+
+⚠️ **E-2 THROUGH E-6 ARE DEFERRED to that separate build — see § SEPARATE BUILD at the end of this
+file. They are kept here in full because the rulings behind them stand; they are simply not built
+here.**
+
+⚠️ **E-1 STAYS IN THIS BUILD.** ⚠️ **Reading taken, flagged:** it is a live defect on a money screen,
+not a feature — a sub line that does not appear at all. **If Josh wants it to travel with the rest,
+say so and it moves.**
+
+---
+
+## The missing line, and bid packages
 
 ## ⚠️ E-1 — THE DEFECT: a SUB line is missing from the Sub Bids tab
 
@@ -321,6 +336,25 @@ same cookie-less fetch proof S127 used on the public share page.**
   link to a scope that has since changed is the trap here.**
 - **The W-9 banner** — *"a subcontractor without a W-9 on file can bid, but cannot be paid"* — applies
   per package the same as per line. **Do not lose it.**
+
+## ⚠️ E-6 — A bid can only attach an UPLOADED PDF. It must also take what is already here.
+
+> **[Josh, 2026-10-03]** *"'sub bids' only has the ability to add pdfs via upload. I should also be
+> able to select anything from the files or photos that are tied to the estimate within the system."*
+
+⚠️ **THIS APPLIES TO BOTH ESTIMATE FORMATS — line-item and division — and it is part of this build.**
+
+**The "Bid PDF (optional)" control gains a second path: pick from the files and photos already
+attached to this estimate.** Uploading stays.
+
+- ⚠️ **It must be a REFERENCE to the existing file, not a copy.** A second copy drifts from the
+  original and doubles storage.
+- ⚠️ **Attaching a file to a bid does NOT make it client-visible**, and must not touch
+  `client_visible` in either direction. Assert both.
+- ⚠️ **A bid request goes to an outside party (E-4).** What the sub receives is the attached file and
+  nothing else — **not the rest of the estimate's files.** Prove it on the payload.
+- **A file deleted or trashed after it was attached** must not leave the bid pointing at nothing. Say
+  what happens.
 - **Whether the package carries Part A's line descriptions to the sub.** They are scope language, so
   probably yes — ⚠️ **but that is a deliberate decision about what leaves the company, not an
   inheritance. State it.**
@@ -447,6 +481,306 @@ has a non-null `cover_file_id`. **Projects with no photos stay NULL.**
 
 ---
 
+# PART G — "MORE ACTIONS" OPENS OFF-SCREEN
+
+**Observed 2026-10-03 on the estimate Details page.** The **"More actions"** menu opens **downward**
+and its contents fall below the visible area — "Clone this estimate" is partly readable and "Delete
+estimate" is cut off by the sticky bottom totals bar.
+
+⚠️ **NOT DIAGNOSED. Do not start from a theory.** Reproduce it first.
+
+**Worth checking, none of them assertions:**
+
+- **Does the menu flip upward when there is no room below?** Most menu primitives do this by default,
+  which would mean either collision detection is off or the container's bounds are wrong.
+- ⚠️ **Does the repo already have a menu that DOES flip correctly?** If so, **this instance is not
+  using the shared one, and the fix is to use it — not to write a second behaviour.** *"Two paths, two
+  rules, one dataset"* has already cost this project twice (0-B-4, and the `captureGps` formatter).
+- **The sticky bottom totals bar** (Subtotal / Tax / Discount / Grand Total) is a candidate: an
+  overflow or stacking context on it, or on the page container, can clip a menu that is positioned
+  correctly.
+
+⚠️ **CHECK WHETHER THIS IS ONE SCREEN OR MANY.** Any menu opened near the bottom of a page with a
+sticky footer is a candidate. **Report the list before fixing one of them** — a single-page fix on a
+shared component leaves the others broken and looks finished.
+
+**Proof:** the menu's last item is reachable and clickable at the viewport sizes the repo already
+tests, **with the sticky bar present**. ⚠️ **A test that opens the menu but never asserts the last item
+is visible proves nothing** — it is the "page that never rendered" shape.
+
+---
+
+# PART H — DIVISION BUDGETING
+
+**A toggle on the estimate's Details page. Ruled by Josh 2026-10-03 from his own live sheet,
+"Leonado Beach Sails 2.xlsx" (the Best Western conversion).**
+
+⚠️ **THIS IS THE LARGEST PART OF THIS FILE AND MAY DESERVE ITS OWN SESSION.** Read H-13 before
+planning: the conversion-to-project half is explicitly NOT in this build.
+
+## H-1 — The structure
+
+**Division → Section (optional) → Line.** A division's lines may sit directly under it, or be grouped
+into sections that total on their own.
+
+⚠️ **"Section" is the CSI name for the level**, confirmed against MasterFormat and against the
+competitor's estimate in Sheet2 of Josh's own workbook. **Do not call it a sub-division.**
+
+**Buttons:** `+ Add division` at the top; `+ Line` and `+ Section` on each division; `+ Line` on each
+section. ⚠️ **There is no top-level "Add line".**
+
+**Default division set: the 16-division (MasterFormat 1995) list, which the user may add to or remove
+from** [Josh]. ⚠️ **See H-12 — a started estimate does not follow later changes to that list.**
+
+## ⚠️ H-2 — COST CODES. Verify the format before importing anything.
+
+> **[Josh, 2026-10-03]** *"that should be imported with this build. This will allow us to enter a code
+> with an expense and the system will be able to automatically put it in the right section/category."*
+
+**The format, read off Sheet2 of Josh's workbook ("Itasca Estimate revised (compare)"): CSI
+MasterFormat 1995 section numbers, FIVE digits, `DDSSS`** — two digits of division, three of section.
+`02110` Site Clearing · `02510` Paving & Curbing · `04220` Concrete Unit Masonry · `01000` General
+Conditions.
+
+⚠️⚠️ **THE SHEET SHOWS THEM FOUR DIGITS WIDE BECAUSE EXCEL STORED THEM AS NUMBERS AND DROPPED THE
+LEADING ZERO.** `01000` appears as `1000`.
+
+- ⚠️ **Store the code as TEXT, zero-padded to 5.** Never as a number.
+- ⚠️ **Read the division from the FIRST TWO CHARACTERS.** If `01000` is read as the number `1000`, the
+  first two characters are `10` and General Conditions files itself under Division 10 Specialties,
+  **silently and wrongly.** That is the whole feature failing quietly.
+- **An importer must zero-pad on the way in** and refuse a code that is not 5 digits after padding.
+- **Seed the standard MF95 section list** so a code entered on an expense resolves to a division and
+  section without the user typing names.
+
+## ⚠️ H-3 — Cost CODES, not cost types. RULED.
+
+> **[Josh, 2026-10-03]** *"this should be codes not types. I want more detail that sub, labor,
+> material, etc."*
+
+⚠️ **Do not build a labor / material / subcontract / equipment enum.** The code carries the detail.
+
+⚠️ **Stated consequence, for the record, not an argument to reopen:** without a type axis the system
+cannot answer "how much of this job is labor" across divisions. Every line is coded by *what work*,
+never by *what kind of money*. **If that question is ever asked, it is a new build.**
+
+## H-4 — The line
+
+**Fields: name · quantity · cost · description · internal notes · cost code · out-to-bid · alternate.**
+
+- **Quantity defaults to 1; the amount is qty × cost.**
+- ⚠️ **NO unit of measure** [Josh]. Do not add one.
+- **Description and internal notes are separate fields.** ⚠️ **The description may reach the client
+  under the formats in H-9. The internal note NEVER does, under any format.** That is Part A-2's rule
+  and it is proven the same way — on the payload.
+
+## H-5 — Opening and editing a line
+
+> **[Josh, 2026-10-03]** *"add line should create the same sheet popup as the existing estimating
+> platform."*
+
+- **`+ Line` opens the SAME sheet the line-item estimator uses.** ⚠️ **The same component, not a
+  second one that looks like it.** *"Two paths, two rules, one dataset"* is how 0-B-4 was made.
+- **Hovering a line shows its description.** ⚠️ **Hover is not the only way to reach it** — it does
+  not exist on touch. The sheet shows it too.
+- **Double-click any figure on a line → edit that figure in place.**
+- **Double-click anywhere on a line that is NOT a figure → the full line sheet, description included.**
+- **Alternates and add-deducts are chosen in that sheet** [Josh], not in a separate screen.
+
+## H-6 — Every line can go out to bid. ⚠️ DEFERRED to the separate build.
+
+> **[Josh, 2026-10-03]** *"95% of the work in jobs of this size will be subcontracted. I should be able
+> to send any line out to bid."*
+
+**Not a type, a flag: any line, in any division or section, can be sent to bid.** It feeds the same Sub
+Bids mechanism as Part E.
+
+⚠️ **NOT BUILT HERE** — sub bids moved to the separate build [Josh, 21:12]. ⚠️ **But carry the flag's
+column now if it costs nothing**, so lines written before that build can be marked later without a
+migration over live rows.
+
+## H-7 — Below the divisions: an editable block
+
+> **[Josh, 2026-10-03]** *"the 'below the divisions' should be editable, including adding and removing
+> items. Bond would be added for a project the size of the hotel/restaurant"*
+
+**A company template seeds it (Sub Total, GC Fee, GL Insurance, Builders Risk, Total Construction).
+Each estimate may then add, remove and reorder its own lines.**
+
+**Line kinds: a flat amount · a percentage · contingency · allowance · bond.**
+
+⚠️ **CONTINGENCY AND ALLOWANCE ARE PLACEMENT CASES, NOT VALUES.** Whether the GC fee is charged on the
+contingency, and whether insurance is, changes the number materially and is defensible either way.
+**Each is set by its base, the same as every other line, and the screen states it in words.**
+
+## ⚠️ H-8 — How a line is charged: two modes, and the gross-up
+
+**Mode 1 — a percentage of what the user picks.** The pick list is: **Sub Total (all divisions)**,
+**each division individually**, and **any line above it in the block**. ⚠️ **Picking Sub Total clears
+the individual divisions and vice versa**, or the divisions count twice.
+
+**Mode 2 — a percentage of the FINAL TOTAL, with this charge inside it.** [Josh, 2026-10-03:
+*"GL bills 2% of gross revenue. That means the money i use to pay the insurance is also charged 2%."*]
+
+⚠️ **This is a gross-up and it is SOLVED, never multiplied:**
+
+```
+Total  =  Cost ÷ (1 − Σ rates of every mode-2 line)
+line   =  Total × its own rate
+```
+
+- ⚠️ **Multiplying the cost by the rate is WRONG and leaves the company short.** On the mock's figures,
+  $1,368,540 × 2% = $27,371, but the correct charge is $27,929 — a $559 gap that scales with the job.
+- ⚠️ **Several mode-2 lines solve TOGETHER**, against the sum of their rates. **Bond is the second real
+  instance** — a payment and performance bond is normally a percentage of the contract including the
+  bond.
+- ⚠️⚠️ **IF THE MODE-2 RATES SUM TO 100% OR MORE THERE IS NO SOLUTION. REFUSE AND SAY SO ON SCREEN.
+  Never print a number.** A division by zero or a negative total in a money path is a stop.
+- ⚠️ **A mode-1 line may NOT pick a mode-2 line as its base.** That is a true circle with no solution,
+  unlike mode 2's self-reference, which has one. **Report it; never loop.** Same rule as the Critical
+  Path cycle guard.
+## ⚠️ H-8a — PLACEMENT IS LITERAL. Dragging a line changes what it is charged on.
+
+> **[Josh, 2026-10-03 21:12]** *"allow user to drag the items up or down. the literal placement will
+> determine if the % is charged."*
+
+**The block is drag-ordered, and a line's position decides what feeds it.**
+
+- ⚠️ **A line can only be fed by what sits ABOVE it.** Nothing below is ever available.
+- **So moving contingency above the GC Fee makes the fee charge on it; moving it below does not.**
+  That is the whole mechanism — no separate setting decides it.
+- ⚠️ **Dragging a line must re-check every base in the block and SAY what it broke**, never silently
+  zero a base that is now below its dependant. **Show the consequence before the drop lands**, the
+  same way the holiday preview does.
+- ⚠️ **Mode-2 lines (H-8, the gross-up) are not positional** — they are charged on the final total
+  whatever their position, because the final total includes everything. **Draw them so that reads
+  clearly**, or someone will drag one expecting its base to change.
+
+### ⚠️ RULED [Josh, 2026-10-03 21:15]: position CONSTRAINS, it does not replace the picker — with "everything above it" as the DEFAULT.
+
+**A new line in the block starts charged on EVERYTHING ABOVE IT.** Nothing to configure, and that is
+what a drag changes.
+
+**The checkboxes exist only to make an EXCEPTION** — to drop something above it out of its base.
+
+⚠️ **EVERY ROW STATES ITS BASIS IN WORDS, ON THE ROW, ALWAYS.** Not in a panel, not on hover. **A
+narrowed base must be readable without opening anything**, or the failure mode this design exists to
+avoid — a forgotten tick quietly under-charging a fee — becomes invisible again.
+
+**Why not position alone:** the order would then carry two jobs at once, how the document READS and
+what charges WHAT. They conflict. Builders Risk belongs next to GL Insurance on the page because both
+are insurance, but that placement would force GL to charge on it, and the only escape would be moving
+Builders Risk somewhere it does not belong. **The reading order of a document a client signs must not
+be dictated by the arithmetic.**
+
+⚠️ **Individual DIVISION selection is unaffected** — that was ruled separately, and divisions are not
+in the block.
+
+## ⚠️ H-9 — Rounding: UP. RULED, with one consequence to settle.
+
+> **[Josh, 2026-10-03]** *"round fractions up"*
+
+⚠️ **`money-representation.md` governs; this lands inside it.**
+
+⚠️ **If every line rounds up independently, the rounded parts can exceed a rounded whole.** **Reading
+taken, flagged: the displayed total is the SUM OF THE ROUNDED LINES, so what is shown always adds up.**
+**State it, and prove it by test on a figure that rounds in both directions.**
+
+## H-10 — What the client sees
+
+**Format-selectable, as the line-item estimator already is** [Josh, answer 7 = C].
+
+⚠️ **Internal notes never reach the client on any format** (H-4). ⚠️ **Prove it on the payload, not the
+screen** — same gate as Part A-2.
+
+## H-11 — Percent of job
+
+**A "% of job" figure on each division total.** Cheap, and it catches an outlier faster than reading
+dollars.
+
+## H-12 — The division template does not follow a started estimate
+
+> **[Josh, 2026-10-03]** *"there is a default template but once an estimate is started, nothing outside
+> of that impacts it."*
+
+⚠️ **The estimate SNAPSHOTS its divisions and its bottom block at creation.** Later edits to the
+company template change new estimates only. **Same shape as the holiday rules.** Otherwise removing a
+division silently re-totals a proposal that has already been sent.
+
+## H-13 — Excel import and export
+
+**Both directions** [Josh]. ⚠️ **This feature competes with the spreadsheet, and the people Josh trades
+numbers with send spreadsheets** — his own workbook carries a competitor's estimate on Sheet2 for
+comparison. **An import must handle H-2's leading-zero trap.**
+
+## H-14 — Who can see it
+
+**Owner and Admin see every division budget. A Project Executive is selected per estimate**, the same
+as the existing "Project Executive access" control [Josh].
+
+⚠️ **A division budget is MONEY. The Financial Visibility Floor (`#136`) applies**: a role that may
+not see it does not receive it in the payload. **Proven on the bytes.**
+
+## H-15 — Lifecycle: unchanged
+
+**Lock on send. Void and reissue. A reissue creates a new estimate version number.** ⚠️ **Exactly as
+already built for line-item estimates** [Josh] — **reuse that mechanism, do not write a second one.**
+
+## ⚠️ H-16 — NOT IN THIS BUILD: the conversion to a project budget. See § SEPARATE BUILD.
+
+> **[Josh, 2026-10-03]** *"it is also the budget that we work against. when converted to project. I
+> should be able to breakdown the lines with more sub-lines and expense against them."*
+
+⚠️ **This is job costing: budget lines become cost codes, actual costs accrue against them, and it
+touches `project_financials`, expenses, invoicing and the QuickBooks push. It is larger than Critical
+Path was.**
+
+**The division ESTIMATE ships without it. The conversion half is its own module with its own spec.**
+⚠️ **Do not half-build it as a tail of this one.** H-2's code format is the hinge it will turn on, so
+get that right here.
+
+## Open — for the build to decide and state, or for Josh
+
+- **Whether empty divisions print on the proposal.** His sheet carries several (DIV 4, 13, 14 empty).
+  **Recommend: shown in the editor, hidden on the proposal.**
+- **Escalation and material sales tax** — both are further placement cases. Not ruled.
+- **Whether a section's code is entered by hand or picked from the seeded MF95 list.**
+
+---
+
+# ⚠️ SEPARATE BUILD — NOT THIS ONE. IT NEEDS ITS OWN INTERVIEW FIRST.
+
+> **[Josh, 2026-10-03 21:12]** *"sub bids, recording expenses to cost codes, project conversion should
+> be a separate build with a new interview."*
+
+⚠️ **NOTHING BELOW IS BUILT IN THIS SESSION. Do not start any of it, and do not half-build a piece of
+it as a tail.** The three are one subject: money leaving the estimate and becoming actual cost.
+
+**1 — SUB BIDS.** Part E's E-2 to E-6, kept in this file in full: bid packages across divisions, the
+per-line / lump allocation ruled at option A, the sub-facing payload gate, and E-6's attaching of
+files already in the system. ⚠️ **E-1, the missing sub-bid line, is a DEFECT and stays in this
+build.** Plus H-6's out-to-bid flag on a division line.
+
+**2 — RECORDING EXPENSES TO COST CODES.** An expense carries a cost code (H-2's 5-digit text) and the
+system files it into the right division and section by itself.
+
+> **⚠️ [Josh, 2026-10-03 21:12]** *"add checkbox to expenses that are entered to indicate if it in
+> house labor"*
+
+⚠️ **A single boolean on the EXPENSE: in-house labor, yes or no.** That is the one distinction wanted
+— **NOT a labor/material/sub/equipment enum, which was ruled against at H-3.** Recorded here now so it
+is not lost between builds.
+
+**3 — PROJECT CONVERSION.** H-16: the division budget becomes the budget the job is run against, lines
+break into sub-lines, and actual costs accrue against them. ⚠️ **Job costing. It touches
+`project_financials`, expenses, invoicing and the QuickBooks push, and it is larger than Critical Path
+was.**
+
+⚠️ **The hinge is H-2's cost code format.** Get the zero-padded text right in THIS build and that one
+has something to attach to; get it wrong and every code written in between is wrong.
+
+---
+
 # ORDER WITHIN THIS BUILD
 
 1. **A-0, B-0, D-0, E-0 and F-2 — the five verifications.** Findings only. ⚠️ **Each may shrink or grow
@@ -456,9 +790,13 @@ has a non-null `cover_file_id`. **Projects with no photos stay NULL.**
 3. **Part B.** Small, a live defect, no new UI.
 4. **Part A**, with its payload proof.
 5. **Part C** — the sheet. Largest UI change on this surface.
-6. **E-2 to E-4 — bid packages.** ⚠️ **A new outward-facing payload, so it carries E-4's gate.**
+6. ~~**E-2 to E-6 — bid packages.**~~ ⚠️ **MOVED to the separate build. Only E-1, the missing line, is
+   built here.**
 7. **Part F — cover pictures.** ⚠️ **Gated on F-2's answer if a client can see the projects list.**
 8. **Part D** — may ship separately, and its size is unknown until D-0.
+9. **Part G** — the clipped menu. Small, and it may be several screens rather than one.
+10. ⚠️ **Part H — division budgeting. THE LARGEST ITEM HERE, and it may deserve its own session.**
+    Its conversion-to-project half (H-16) is explicitly NOT in this build.
 
 ---
 
@@ -477,7 +815,13 @@ has a non-null `cover_file_id`. **Projects with no photos stay NULL.**
 10. ⚠️ **A cover picture reaching a client's payload** (F-2), or served by anything but the `private`
     thumbnail proxy.
 11. ⚠️ **Setting a cover changing `client_visible` on that file.**
-12. A sabotage that does not go red.
+12. ⚠️ **A cost code stored as a number rather than zero-padded text** (H-2).
+13. ⚠️ **A gross-up multiplied instead of solved, or a total printed when the mode-2 rates reach
+    100%** (H-8).
+14. ⚠️ **A mode-1 line taking a mode-2 line as its base** (H-8).
+15. ⚠️ **An internal note reaching a client payload** (H-4, H-10).
+16. ⚠️ **A division budget reaching a role that may not see it** (H-14).
+17. A sabotage that does not go red.
 
 ---
 
