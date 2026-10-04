@@ -731,6 +731,7 @@ export function EstimateBuilder({
 
       {/* Sticky totals footer */}
       <div
+        data-testid="estimate-totals-bar"
         style={{
           position: 'fixed',
           bottom: 0,

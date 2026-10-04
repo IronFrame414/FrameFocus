@@ -505,10 +505,12 @@ test('6 · delete estimate — the confirm soft-deletes the draft', async ({ pag
   await page.goto(`/dashboard/estimates/${estimateId}`);
   // The control lives on the Details tab, inside the "⋯ More actions" menu.
   await page.getByRole('button', { name: /more actions/i }).click();
-  // The menu carries an outside-click closer, so pointer movement toward the
-  // item closes it mid-click. dispatchEvent fires the React onClick without
-  // moving the mouse; the confirm dialog + DB poll below are the assertions.
-  await page.getByRole('button', { name: /delete estimate/i }).dispatchEvent('click');
+  // [S128 G] A REAL click. _Superseded: "The menu carries an outside-click
+  // closer, so pointer movement toward the item closes it mid-click.
+  // dispatchEvent fires the React onClick without moving the mouse."_ The menu
+  // has no outside-click closer (read S128); what a real click met was the
+  // fixed totals bar painting over the item — the Part G defect this hid.
+  await page.getByRole('button', { name: /delete estimate/i }).click();
   await page.getByTestId('confirm-accept').click();
 
   await expect

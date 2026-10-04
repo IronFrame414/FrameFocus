@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { computeEstimateHealth, marginTargetGap } from '@/lib/estimate-health';
 import { createClient } from '@/lib/supabase-browser';
@@ -106,6 +106,23 @@ export function DetailsTab({
 }: DetailsTabProps) {
   const { estimate, lineItems } = data;
   const [menuOpen, setMenuOpen] = useState(false);
+  // [S128 G] The menu opens DOWN, and near the bottom of the page its last items
+  // fell under the fixed totals bar (z 40) or off the screen ("Delete estimate"
+  // unreachable). Measured on open: if the panel's bottom passes the bar's top
+  // (or the viewport's), it flips UP. It also stacks above the bar (z 41).
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  const [menuUp, setMenuUp] = useState(false);
+  useLayoutEffect(() => {
+    if (!menuOpen) {
+      setMenuUp(false);
+      return;
+    }
+    const panel = menuRef.current;
+    if (!panel) return;
+    const bar = document.querySelector('[data-testid="estimate-totals-bar"]');
+    const limit = bar ? bar.getBoundingClientRect().top : window.innerHeight;
+    if (panel.getBoundingClientRect().bottom > limit) setMenuUp(true);
+  }, [menuOpen]);
   const [error, setError] = useState<string | null>(null);
   // 19b/R10 — estimator is READ-ONLY, resolved SERVER-SIDE (page.tsx →
   // getUploaderNames) and passed as a prop. It was formerly fetched here, but
@@ -632,17 +649,21 @@ export function DetailsTab({
           </button>
           {menuOpen && (
             <div
+              ref={menuRef}
+              data-testid="more-actions-menu"
+              data-placement={menuUp ? 'up' : 'down'}
               style={{
                 position: 'absolute',
-                top: '100%',
+                ...(menuUp
+                  ? { bottom: '100%', marginBottom: '0.25rem' }
+                  : { top: '100%', marginTop: '0.25rem' }),
                 left: 0,
                 right: 0,
-                marginTop: '0.25rem',
                 backgroundColor: '#fff',
                 border: '1px solid #d5dae4',
                 borderRadius: '0.375rem',
                 boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
-                zIndex: 10,
+                zIndex: 41,
               }}
             >
               {onClone && (
