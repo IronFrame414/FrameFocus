@@ -6,6 +6,9 @@ import type { ProposalData, ProposalPricingLevel } from '@/lib/proposal/proposal
 import { ProposalHtml } from '@/lib/proposal/proposal-html';
 import { trimProposalForClient } from '@/lib/proposal/client-proposal';
 import { proposalRenderPlan } from '@framefocus/shared/utils/proposal-format';
+import { renderToBuffer } from '@react-pdf/renderer';
+import { ProposalDocument } from '@/lib/proposal/proposal-template';
+import { pdfText } from './pdf-text';
 
 // S128 Part A — A-2 (docs/specs/estimates-and-change-orders-spec.md).
 // [Josh, 2026-10-03] "the description is only visible to clients when the format selected is
@@ -191,4 +194,22 @@ describe('S128 A-3 — the SECTION description path is untouched', () => {
     expect(src).toContain('Description (shown on proposal): ');
     expect(src).toContain('updateEstimateLineItem(line.id, { description');
   });
+});
+
+// The PDF is rendered from the FULL data (it is bytes the renderer draws, not data a client can
+// read past — client-proposal.ts header), so its gate is the render plan. Read the PDF's text.
+describe('S128 A-2 — the PDF (ProposalDocument → renderToBuffer) prints a row description on the four formats only', () => {
+  for (const f of SHOWS) {
+    it(`${f} — in the PDF text`, async () => {
+      const text = pdfText(await renderToBuffer(<ProposalDocument data={fixture(f)} />));
+      expect(text).toContain(SENTINEL);
+    });
+  }
+  for (const f of HIDES) {
+    it(`⚠️ ${f} — NOT in the PDF text`, async () => {
+      const text = pdfText(await renderToBuffer(<ProposalDocument data={fixture(f)} />));
+      expect(text).toContain('Drywall Repair and Trim'.slice(0, 7)); // the PDF has text at all
+      expect(text).not.toContain(SENTINEL);
+    });
+  }
 });
