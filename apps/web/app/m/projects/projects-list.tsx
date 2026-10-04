@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useMemo, useState } from 'react';
 import { useT } from '@/components/i18n/language-provider';
+import { ProjectCover } from '@/components/projects/project-cover';
 
 // M6M §4.2 — M-2's search field and card list.
 //
@@ -34,6 +35,8 @@ export type ProjectCard = {
   punchCallout: string;
   /** §4.2 — the project the caller's OPEN SEGMENT names. Zero or one card. */
   onSite: boolean;
+  /** [S128 Part F] The cover's thumbnail-proxy URL, or null for the empty state. */
+  coverSrc: string | null;
 };
 
 export function ProjectsList({ cards }: { cards: ProjectCard[] }) {
@@ -99,41 +102,46 @@ function Card({ card }: { card: ProjectCard }) {
           {card.subLine ? (
             <p className="mt-[3px] truncate font-mono text-[11px] text-m6m-muted">{card.subLine}</p>
           ) : null}
-        </div>
-
-        <div className="flex shrink-0 flex-col items-end gap-[4px]">
-          {/* §4.2 — "status pill top-right (ALWAYS CARRIES TEXT, never colour
-              alone)". A-10b. Deliberately untinted: a text label needs no fill
-              to be read, and a fill would be a second, weaker signal. */}
-          <span
-            data-testid="m-status-pill"
-            className="rounded-full border border-m6m-border bg-m6m-card px-[8px] py-[2px] font-mono text-[11px] font-semibold text-m6m-muted"
-          >
-            {card.statusLabel}
-          </span>
           {/* §4.2 — the "On site" pill rides with the blue border, never alone.
               A-8 asserts BOTH on the same card; A-8b asserts that on a break /
-              travel / shop segment NEITHER appears on any card. */}
+              travel / shop segment NEITHER appears on any card. [S128 F-4] It moved
+              under the name when the cover took the top-right corner. */}
           {card.onSite ? (
             <span
               data-testid="m-on-site"
-              className="rounded-full border border-m6m-blue bg-m6m-card px-[8px] py-[2px] font-mono text-[11px] font-semibold text-m6m-blue"
+              className="mt-[5px] inline-block rounded-full border border-m6m-blue bg-m6m-card px-[8px] py-[2px] font-mono text-[11px] font-semibold text-m6m-blue"
             >
               {t('field.projects.onSite')}
             </span>
           ) : null}
         </div>
+
+        {/* [S128 F-4, Josh] The cover on the RIGHT of the row — a fixed box, so a card
+            with no photos is the same height as one with a cover. */}
+        <ProjectCover src={card.coverSrc} size={52} testId="m-project-cover" />
       </div>
 
       {/* §4.2 as amended by D-19 — THE FOOTER IS DAYS-LEFT AND THE CALLOUT.
           There is NO progress bar and NO percentage: the card lost a row of
           height rather than gaining filler, and A-10d fails a build that puts
           either back. Do not add one. */}
-      <div className="mt-[10px] flex items-center justify-between">
+      {/* [S128 F-4, Josh] "the status pill moves to the BOTTOM CENTRE of the row."
+          _Superseded (§4.2): "status pill top-right"._ It still ALWAYS CARRIES TEXT,
+          never colour alone (A-10b), deliberately untinted. */}
+      <div className="mt-[10px] grid grid-cols-[1fr_auto_1fr] items-center gap-[8px]">
         <span data-testid="m-days-left" className="font-mono text-[13px] text-m6m-muted">
           {card.daysLeftLabel}
         </span>
-        <span data-testid="m-punch-callout" className="font-mono text-[13px] text-m6m-muted">
+        <span
+          data-testid="m-status-pill"
+          className="justify-self-center rounded-full border border-m6m-border bg-m6m-card px-[8px] py-[2px] font-mono text-[11px] font-semibold text-m6m-muted"
+        >
+          {card.statusLabel}
+        </span>
+        <span
+          data-testid="m-punch-callout"
+          className="justify-self-end font-mono text-[13px] text-m6m-muted"
+        >
           {card.punchCallout}
         </span>
       </div>

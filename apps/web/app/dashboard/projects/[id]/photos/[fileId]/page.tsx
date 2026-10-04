@@ -4,6 +4,8 @@ import { getMyProfile } from '@/lib/services/profiles';
 import { dateLocale } from '@/lib/i18n/dates';
 import { formatTakenAt } from '@/lib/photos/format-taken';
 import { DesktopPhotoView, type DesktopViewPhoto } from './desktop-photo-view';
+import { getProjectCoverFileId } from '@/lib/services/project-covers';
+import { canSetProjectCover } from '@/lib/projects/cover-access';
 
 // S127 item 4b — THE DESKTOP SINGLE VIEW (A-2 … A-5).
 //
@@ -24,9 +26,10 @@ export default async function DesktopPhotoPage({
 }: {
   params: { id: string; fileId: string };
 }) {
-  const [gallery, profile] = await Promise.all([
+  const [gallery, profile, coverFileId] = await Promise.all([
     getProjectPhotos(params.id, { photoView: true }),
     getMyProfile(),
+    getProjectCoverFileId(params.id),
   ]);
   const index = gallery.findIndex((p) => p.id === params.fileId);
   if (index === -1) notFound();
@@ -49,5 +52,14 @@ export default async function DesktopPhotoPage({
   // [S127 4e] Owner/Admin may create a public link (RLS is the real gate).
   const canShare = profile?.role === 'owner' || profile?.role === 'admin';
 
-  return <DesktopPhotoView projectId={params.id} photos={photos} initialIndex={index} canShare={canShare} />;
+  return (
+    <DesktopPhotoView
+      projectId={params.id}
+      photos={photos}
+      initialIndex={index}
+      canShare={canShare}
+      canSetCover={canSetProjectCover(profile?.role)}
+      coverFileId={coverFileId}
+    />
+  );
 }

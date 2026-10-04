@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { markupHref } from '@/lib/markup/return-to';
 import { ShareLinkButton } from './share-link-dialog';
+import { setProjectCover } from '@/lib/services/project-covers-client';
 import {
   cardStyle,
   color,
@@ -35,13 +36,21 @@ export function DesktopPhotoView({
   photos,
   initialIndex,
   canShare = false,
+  canSetCover = false,
+  coverFileId = null,
 }: {
   projectId: string;
   photos: DesktopViewPhoto[];
   initialIndex: number;
   canShare?: boolean;
+  /** [S128 Part F] lib/projects/cover-access.ts — the same rule /m reads. */
+  canSetCover?: boolean;
+  coverFileId?: string | null;
 }) {
   const [index, setIndex] = useState(initialIndex);
+  const [cover, setCover] = useState<string | null>(coverFileId);
+  const [coverError, setCoverError] = useState<string | null>(null);
+  const [coverBusy, setCoverBusy] = useState(false);
   const photo = photos[index];
   const base = `/dashboard/projects/${projectId}/photos`;
 
@@ -104,6 +113,37 @@ export function DesktopPhotoView({
           Next →
         </button>
         {canShare ? <ShareLinkButton photo={photo} /> : null}
+        {/* [S128 F-1] Choose the cover. A cover is an internal label: it never changes
+            whether the client can see the photo (client_visible is not touched). */}
+        {canSetCover ? (
+          cover === photo.id ? (
+            <span data-testid="photo-view-is-cover" style={{ fontSize: '13px', color: color.success }}>
+              ✓ Project cover
+            </span>
+          ) : (
+            <button
+              type="button"
+              data-testid="photo-view-set-cover"
+              disabled={coverBusy}
+              onClick={async () => {
+                setCoverBusy(true);
+                setCoverError(null);
+                const r = await setProjectCover(projectId, photo.id);
+                setCoverBusy(false);
+                if (r.success) setCover(photo.id);
+                else setCoverError(r.error ?? 'Could not set the cover');
+              }}
+              style={{ ...secondaryButtonStyle, padding: '6px 12px' }}
+            >
+              Set as cover
+            </button>
+          )
+        ) : null}
+        {coverError ? (
+          <span role="alert" style={{ fontSize: '12px', color: color.danger }}>
+            {coverError}
+          </span>
+        ) : null}
         <Link
           href={markupHref(projectId, photo.id, 'photos')}
           // Its href changes with every previous/next, and a production

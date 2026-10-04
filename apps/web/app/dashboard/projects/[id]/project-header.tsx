@@ -1,6 +1,8 @@
 'use client';
 
 import Link from 'next/link';
+import { ProjectCover } from '@/components/projects/project-cover';
+import { coverThumbSrc } from '@/lib/projects/cover';
 import { usePathname } from 'next/navigation';
 import type { ProjectWithContact } from '@/lib/services/projects';
 import { PROJECT_STATUS_LABELS } from '@/lib/services/projects-client';
@@ -183,6 +185,11 @@ export function ProjectHeader({ project, canManage, role }: ProjectHeaderProps) 
 
   return (
     <div style={{ marginBottom: '20px' }}>
+      {/* [S128 F-4] The cover sits LEFT of the project number and name, at the top; the
+          two shift right by its width. Staff only — this header is a dashboard surface. */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: '14px' }}>
+      <ProjectCover src={coverThumbSrc(project.cover)} size={56} testId="project-header-cover" />
+      <div style={{ flex: 1, minWidth: 0 }}>
       {/* Breadcrumb (ui-04 §4) */}
       <div style={{ marginBottom: '8px' }}>
         <Link
@@ -226,6 +233,8 @@ export function ProjectHeader({ project, canManage, role }: ProjectHeaderProps) 
             + Change Order
           </Link>
         )}
+      </div>
+      </div>
       </div>
 
       {/* Section bar — README "Tab hierarchy (project detail only)": primary

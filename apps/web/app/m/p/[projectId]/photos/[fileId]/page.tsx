@@ -5,6 +5,8 @@ import { PhotoViewer, type ViewerPhoto } from './viewer';
 import { getMobileT } from '@/lib/i18n/server';
 import type { T } from '@/lib/i18n/messages';
 import { canDeletePhoto } from '@/lib/photos/delete-permission';
+import { canSetProjectCover } from '@/lib/projects/cover-access';
+import { getProjectCoverFileId } from '@/lib/services/project-covers';
 
 // M6M §4.9 — M-9 · Photo viewer.
 //
@@ -116,6 +118,8 @@ export default async function PhotoViewerPage({
       // rule is enforced independently by getPhoto()'s category filter, so a
       // hand-typed /markup URL 404s rather than relying on a hidden control.
       canMarkup={receipt === null}
+      canSetCover={receipt === null && canSetProjectCover(profile?.role)}
+      coverFileId={receipt === null ? await getProjectCoverFileId(params.projectId) : null}
     />
   );
 }

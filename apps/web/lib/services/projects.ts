@@ -1,6 +1,7 @@
 import { cache } from 'react';
 import { createClient } from '@/lib/supabase-server';
 import type { Database } from '@framefocus/shared/types/database';
+import { PROJECT_COVER_SELECT, type ProjectCoverJoin } from '@/lib/projects/cover';
 
 type ProjectRow = Database['public']['Tables']['projects']['Row'];
 
@@ -22,6 +23,8 @@ export type ProjectWithContact = Project & {
     email: string | null;
     phone: string | null;
   } | null;
+  /** [S128 Part F] Staff only — RLS returns null for a client or subcontractor. */
+  cover?: ProjectCoverJoin;
 };
 
 // Presentation constants live in the client-safe sibling so client components
@@ -30,6 +33,8 @@ export type ProjectWithContact = Project & {
 export { PROJECT_STATUS_LABELS, PROJECT_TYPE_LABELS } from './projects-client';
 
 const CONTACT_JOIN = 'contact:contacts(id, first_name, last_name, company_name, email, phone)';
+// [S128 Part F] One embedded read — the cover rides the list query, never a read per row (F-3).
+const STAFF_JOINS = `${CONTACT_JOIN}, ${PROJECT_COVER_SELECT}`;
 
 export async function getProjects(filters?: {
   status?: ProjectStatus;
@@ -38,7 +43,7 @@ export async function getProjects(filters?: {
 
   let query = supabase
     .from('projects')
-    .select(`*, ${CONTACT_JOIN}`)
+    .select(`*, ${STAFF_JOINS}`)
     .eq('is_deleted', false)
     .order('created_at', { ascending: false });
 
@@ -65,7 +70,7 @@ export const getProject = cache(async (id: string): Promise<ProjectWithContact |
 
   const { data } = await supabase
     .from('projects')
-    .select(`*, ${CONTACT_JOIN}`)
+    .select(`*, ${STAFF_JOINS}`)
     .eq('id', id)
     .single();
 

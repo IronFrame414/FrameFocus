@@ -1,3 +1,4 @@
+import { coverThumbSrc } from '@/lib/projects/cover';
 import { getProjects } from '@/lib/services/projects';
 import { getMyAssignedProjectIds } from '@/lib/services/project-assignments';
 import { getOpenPunchCounts } from '@/lib/services/punch';
@@ -135,6 +136,8 @@ export default async function MobileProjectsPage({
           ? t(open === 1 ? 'field.projects.openPunchOne' : 'field.projects.openPunch', { n: open })
           : '—',
       onSite: onSiteProjectId !== null && p.id === onSiteProjectId,
+      // [S128 Part F] null for a subcontractor (RLS) or a project with no cover.
+      coverSrc: coverThumbSrc(p.cover),
     };
   });
 

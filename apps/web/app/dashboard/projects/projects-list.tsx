@@ -1,6 +1,8 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { ProjectCover } from '@/components/projects/project-cover';
+import { coverThumbSrc } from '@/lib/projects/cover';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import type { ProjectStatus, ProjectWithContact } from '@/lib/services/projects';
@@ -259,8 +261,11 @@ export function ProjectsList({
                 }}
               >
                 {/* Project — number folded beneath the name (§8.1). The Type
-                    column is dropped; project_type still marks projected rows. */}
-                <span>
+                    column is dropped; project_type still marks projected rows.
+                    [S128 F-4] The cover on the LEFT of the row, a fixed box. */}
+                <span style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
+                  <ProjectCover src={coverThumbSrc(p.cover)} size={40} />
+                  <span style={{ minWidth: 0 }}>
                   <span
                     style={{
                       display: 'block',
@@ -281,6 +286,7 @@ export function ProjectsList({
                     }}
                   >
                     {p.project_number}
+                  </span>
                   </span>
                 </span>
                 <span style={{ fontSize: '13px', color: color.bodyAlt }}>

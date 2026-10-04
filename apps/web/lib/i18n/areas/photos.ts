@@ -48,6 +48,9 @@ export const en = {
   'photos.viewer.position': '{n} of {total}',
   'photos.viewer.more': 'More',
   'photos.viewer.markup': 'Markup',
+  // [S128 Part F] Choose the project's cover (staff only; never changes client visibility).
+  'photos.viewer.setCover': 'Set as cover',
+  'photos.viewer.isCover': 'Cover ✓',
   'photos.viewer.setAsCover': 'Set as cover',
   'photos.viewer.move': 'Move',
   'photos.viewer.report': 'Report',
@@ -302,6 +305,8 @@ export const es: Record<keyof typeof en, string> = {
   'photos.viewer.position': '{n} de {total}',
   'photos.viewer.more': 'Más',
   'photos.viewer.markup': 'Marcar',
+  'photos.viewer.setCover': 'Usar de portada',
+  'photos.viewer.isCover': 'Portada ✓',
   'photos.viewer.setAsCover': 'Usar como portada',
   'photos.viewer.move': 'Mover',
   'photos.viewer.report': 'Reportar',

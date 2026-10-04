@@ -178,15 +178,10 @@ async function resolveUrlsSingle(
  * call as the originals and derivatives: no extra Storage round trip per photo.
  * Opt-in only so callers that never render a tile do not sign paths they ignore.
  */
-/**
- * [S127 P-3] A thumbnail's STABLE URL: the app proxy, versioned by the markup
- * fingerprint (the stored thumbnail's own name carries it), so the browser may
- * cache it and an edit to the markup changes the URL. Never a signed URL.
- */
-export function thumbProxyUrl(fileId: string, markup: unknown): string {
-  const v = markup !== null && markup !== undefined ? markupFingerprint(markup) : 'o';
-  return `/api/photos/${fileId}/thumb?v=${v}`;
-}
+// [S127 P-3] A thumbnail's STABLE URL — now in lib/photos/thumb-url.ts (pure, so
+// client components can use it); re-exported here for every existing caller.
+import { thumbProxyUrl } from '@/lib/photos/thumb-url';
+export { thumbProxyUrl };
 
 export async function getProjectPhotos(
   projectId: string,

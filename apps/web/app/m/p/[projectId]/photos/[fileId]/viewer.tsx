@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight, X, MoreVertical } from 'lucide-react';
 import { softDeleteFile } from '@/lib/services/files-client';
+import { setProjectCover } from '@/lib/services/project-covers-client';
 import type { MarkupData } from '@framefocus/shared/types/markup';
 import { localDerivativeFor } from '@/lib/photos/local-derivative';
 import { shareFailureNote, shareImages, shareSupported } from '@/lib/share-image';
@@ -105,11 +106,17 @@ export function PhotoViewer({
   projectId,
   canDelete,
   canMarkup = true,
+  canSetCover = false,
+  coverFileId = null,
 }: {
   photos: ViewerPhoto[];
   index: number;
   projectId: string;
   canDelete: boolean;
+  /** [S128 Part F] lib/projects/cover-access.ts — the SAME rule desktop reads. False for a
+   *  receipt (a receipt is not a project photo). */
+  canSetCover?: boolean;
+  coverFileId?: string | null;
   /**
    * False for a RECEIPT [S107]. Markup is a photo-only act: a receipt is a
    * document to read, not a surface to annotate, and M-10 writes a
@@ -133,6 +140,8 @@ export function PhotoViewer({
   const [loaded, setLoaded] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [cover, setCover] = useState<string | null>(coverFileId);
+  const [coverBusy, setCoverBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
   // [S112 R1] Save / Share build their bytes first (a full-res rebuild takes
   // 1.5–3 s on a phone), so each tile shows a busy state while it does.
@@ -770,6 +779,24 @@ export function PhotoViewer({
           />
         ) : (
           <span data-testid="m-action-markup-absent" className="hidden" />
+        )}
+        {/* [S128 F-1] The same write as desktop (set_project_cover). Absent for a role that
+            may not choose a cover; never touches client_visible. */}
+        {canSetCover ? (
+          <ActionTile
+            testId={cover === photo.id ? 'm-action-is-cover' : 'm-action-set-cover'}
+            label={cover === photo.id ? t('photos.viewer.isCover') : t('photos.viewer.setCover')}
+            disabled={cover === photo.id || coverBusy}
+            busy={coverBusy}
+            onClick={async () => {
+              setCoverBusy(true);
+              const r = await setProjectCover(projectId, photo.id);
+              setCoverBusy(false);
+              if (r.success) setCover(photo.id);
+            }}
+          />
+        ) : (
+          <span data-testid="m-action-set-cover-absent" className="hidden" />
         )}
         {/* A-25d — absent entirely for a role files_delete_owner_admin refuses. */}
         {canDelete ? (
