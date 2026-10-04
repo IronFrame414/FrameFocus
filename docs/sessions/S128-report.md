@@ -9,15 +9,89 @@
 
 ## WHAT JOSH DOES WHEN HE'S BACK
 
-_(filled at phase 2 and kept current)_
+1. **Part H walkthrough on the dev server** — the command, address, sign-in and click list are in Part H's entry
+   (filled when Part H reaches rebuild-test).
+2. Answer the rulings below (ASK-0 … ASK-UV), or let the recommendations stand.
+3. Merge `feature/devcontainer-uv` (`94a08353`) — one `.devcontainer` commit, `[skip ci]`.
+4. Reconnect the QuickBooks sandbox (carried from S127; S124 Parts 1 and 3 wait on it).
+5. (Carried from S127, 5b) On a real iPhone at 402 px: on `/m`, open a daily log's close-out, tap a date field, pick a
+   date, dismiss the picker, and say whether a white band appears under the tab bar.
+6. (Carried from S127, B-2) On the same iPhone: Settings → Apps → Safari → Location → Allow, and Privacy & Security →
+   Location Services → Safari Websites → While Using the App; clock in twice from the home-screen app and say whether
+   it still asks.
 
 ## What Josh must RULE
 
-_(filled at phase 2)_
+Each is built on the **recommendation** unless it says STOPPED. Every one is reversible before its merge.
+
+- **ASK-0 — production migration authority.** S127's prompt granted it in words ("MERGE AND PRODUCTION AUTHORITY IS
+  GRANTED"). S128's says A/B/C/D/E-1/F/G "ship the normal way: … merged, migrations to production", against `CLAUDE.md`
+  (S180: "applying a migration to production is still Josh's action"). **My reading: granted for those parts, as in S127,
+  and never for Part H.** If wrong: I stop before each production push and the merges wait on you.
+- **ASK-A1 — where a LINE description prints on formats that print no lines.** Summary-with-descriptions, Itemized-with-
+  descriptions and Cost Plus print sections only (phase 1, A-2). Options: **A) under its section, a short list of the
+  described lines only, "Line name — description"; lines without one print nothing (recommended)**; B) only T&M (the one
+  format that prints lines) — contradicts your list of four. Breaks under A: nothing existing; the section description
+  stays exactly where it is.
+- **ASK-A2 — change-order line descriptions and the client.** A CO has no proposal format. **A) staff-only until COs get a
+  format: stored, editable, never in the client payload (recommended — the safe side of stop rule 4)**; B) always shown
+  to the client on the CO; C) follow the project's source estimate's format. Breaks under A: a description written on a
+  CO does not reach the client yet; the field says so.
+- **ASK-B1 — clearing the red manual total.** **Recommended: three paths, all existing words —** retype the total (takes
+  the new cost, red clears); type a markup (releases the line, as today); and an explicit **"↺"** control titled
+  *"Set by hand — click to revert to the computed total"* (the section override's own wording). Red always carries a
+  title, never colour alone. **Existing hand-set totals have no recorded cost basis, so they are never red until
+  retyped** — a stated gap, not a guess.
+- **ASK-E1 — how far E-1 goes.** Bids, requests and the winner are keyed per SECTION in the schema, and award refuses a
+  section with 2+ sub lines. **A) display fix (recommended): one card per SUB line, titled by the line, its section as
+  context, its own amount; a single-sub-line section behaves exactly as today; on a section with 2+ sub lines the
+  per-line award stays refused (as the database already does) with that said on the card.** B) re-key bids per line
+  now — a schema redesign of the bid tables and the public `/bid` page, which is the separate build's interview subject.
+- **ASK-F1 — where the cover lives.** **A) a staff-only `project_covers` table (recommended)**: a client has SELECT on
+  `projects`, so a `projects.cover_file_id` column is readable through the REST API whatever the pages select, and
+  `projects_column_scope` would meet a crew member's upload. B) the spec's `projects.cover_file_id` column.
+- **ASK-F2 — which photos can become the default cover.** **A) images in category `photos` — what the Photos tab shows
+  and what the picker offers (recommended)**; B) any image on the project (receipts, invoice scans, daily-log photos).
+- **ASK-F3 — who SEES covers.** **Recommended: the staff roles including crew, on projects they can view; never client,
+  never subcontractor** (a sub reaches `/m/projects`; the ruling names only the client).
+- **ASK-A4 — catalog prefill and a length cap.** **Recommended: no prefill** — `cost_catalog` has only INTERNAL `notes`;
+  prefilling from them would put internal text on a proposal. **Cap: 2,000 characters**, enforced in the database and the
+  form; the PDF wraps it.
+- **ASK-D1 — how Terms are edited.** **A) reuse Scope of Work's proven markdown subset (extended: italic, underline,
+  indent, nested lists; no headings), with a toolbar for the six formats, and stored text marked per section so every
+  existing plain section renders byte-identically (recommended)**; B) a WYSIWYG HTML editor with a server-side
+  sanitizer — new mechanism, the PDF is the hard half.
+- **ASK-UV — merge `feature/devcontainer-uv` (`94a08353`).** One commit; outside the S180 exemption, so it is yours.
 
 ## The phase 2 plan, and deviations
 
-_(filled at phase 2)_
+**Build order (the prompt's), with what changes, migrations, proof, and risk.** Every migration number is above
+rebuild-test's `20262135000000`. CI runs against rebuild-test, so live harnesses and CI never overlap.
+
+| # | item | branch | migrations | what it proves | what could break |
+| --- | --- | --- | --- | --- | --- |
+| 1a | **Part B** + the two B-0 defects | `feature/s128-b-manual-total` | **1**: `estimate_line_rows.total_override_basis numeric` (NULL on every existing row) + `clone_estimate_line` copies `total_override` and the basis (original captured + RESTORE committed first) | $600 / $722.98 holds through display (20.50%) and a no-change blur; cost change → total holds, red, titled; ↺ releases; clone keeps a typed total (live); Cost Plus prints the effective markup at 2 dp; sabotage: recompute-from-rounded goes red | a blur committing the rounded draft (tested) |
+| 1b | **E-1** | `feature/s128-e1-sub-lines` | 0 | SUB lines counted = cards counted, one section holding two sub lines; sabotage: `.find` restored → red | the award/request controls on multi-line sections (ASK-E1) |
+| 1c | **G** | `feature/s128-g-menu` | 0 | e2e: menu's LAST item inside the viewport, above the bar, `elementFromPoint` = the item, a REAL click opens the confirm; the old `dispatchEvent` test made honest; sabotage: old positioning → red | other menus: none on a page with a bottom bar (phase 1) |
+| 2+3 | **Part A + Part C** — one branch, as the spec says ("A, B and C ship together"); A's editing surface IS C's sheet | `feature/s128-ac-line-sheet` | **1**: `description text` (≤ 2,000) on `estimate_line_rows` and `change_order_line_rows` | payload: cookie-less fetch of `/sign/[token]` on all 8 formats, sentinel present on exactly 4; the PDF's text likewise; sabotage: narrowing removed → red; section description untouched (byte test); the sheet opens from any line, Add Line lists existing lines, live | the CO surfaces (desktop + `/m`, PARITY) |
+| 4 | ⚠️ **Part H** — rebuild-test ONLY, no merge, no CI | `feature/s128-h-divisions` (from `main` after 2+3) | one per section: cost codes + division template; estimate divisions/sections/lines + bottom block | normalizer (`1000`→`01000`, 5-char kept, else refused); solver (gross-up solved, 100% refused, mode-1-on-mode-2 refused, round up, total = sum of rounded, both-ways figure); snapshot; role map on bytes | its size |
+| 5 | **Part F** | `feature/s128-f-covers` | **1**: `project_covers` + `files` trigger + RPC + backfill (count stated first) | 2nd photo does not move it; hand-set survives a 3rd; role map; `client_visible` untouched both ways; client payload on every portal surface; proxy only | the trigger on every photo insert |
+| 6 | **Part D** | `feature/s128-d-terms` | 0 | PDF generated and read for all six incl. indent + nested lists; script tag neutralised in bytes; existing terms byte-identical | PDF parity |
+
+**C before H; A before C** — H-5's `+ Line` opens the sheet C builds; the sheet shows A's description.
+
+**Part H, how much I expect to reach:** H-1 (structure), H-2 (codes, seeded), H-3, H-4 (line fields incl. out-to-bid
+and alternate as columns), H-5 (the shared sheet; hover + double-click), H-7/H-8/H-8a (the block, both modes, the
+gross-up, basis in words on every row, drag with the consequence shown before the drop), H-9 (round up, sum of rounded),
+H-11 (% of job), H-12 (snapshot), H-14 (RLS + payload). ⚠️ **NOT expected: H-10 (the client/PDF rendering of a division
+estimate), H-13 (Excel import/export), and H-15's reissue copy of division data** (lock-on-send comes free from the
+estimate's status). H-6's flag is a column only; H-16 is not in this session at all.
+
+⚠️ **Items I expect NOT to reach: Part D likely; Part F possibly.** They come after Part H in the prompt's order. If
+they are not reached they are written up as not started, not half-built.
+
+**Deviations so far:** 2 and 3 are one branch (the spec's own instruction); 1a carries the two B-0 defects (a typed
+total moved by clone; a wrong markup on a client document) because they are Part B's rule failing elsewhere.
 
 ---
 
