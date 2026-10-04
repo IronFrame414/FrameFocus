@@ -312,3 +312,64 @@ formats; a CO has none. (ASK-A2.)
 - **Project Executive access** is `estimate_assignments` (one live PE per estimate), helper `pe_assigned_estimate(id)`;
   H-14 reuses it.
 - `project_executive` is a real role (`profiles_role_check`).
+
+---
+
+# PHASE 3 — BUILD (in progress; appended as it lands)
+
+## 1a — Part B: `feature/s128-b-manual-total` — built and proven on rebuild-test; CI running
+
+- **Migration `20262136000000_s128_manual_total_basis`** (on rebuild-test, verified by object, every value stated before
+  the query): history row 1 ✅ · `estimate_line_rows.total_override_basis` `numeric | nullable | no default` ✅ · 0
+  non-null rows ✅ · `clone_estimate_line` 1 overload ✅, body copies `r.total_override, r.total_override_basis` ✅, ACL
+  identical to the captured one ✅, new md5 **`c63ff7e3…`**. Original captured first (both databases `c9328970…`),
+  committed with its RESTORE at `c0f98b17`. Dry run listed exactly that one file (workdir = branch + S124's
+  `20262135000000` read from git). `database.ts` +3 lines, only this column (the 60-line S124 `qb_employee_map` block
+  the generator emits from rebuild-test was stripped).
+- **What changed:** the derived markup on a hand-set line displays at **2 dp** (`20.50%`) and is never stored; the edit
+  box opens at `20.50` and an **unchanged draft never saves** (compared on the text, so the rounded seed cannot commit
+  $723.00); a typed total records the base it was typed against; a later cost change leaves the total and turns it
+  **red with a title** ("Set by hand — the cost has changed since, so this total is no longer cost × markup"); **"↺"**
+  releases it, its title stating the result first ("…revert to the computed total (cost × 20.50%)").
+  - **B-3 decided (ASK-B1):** red clears by retyping the total, typing a markup, or ↺. ↺ releases at the markup the typed
+    total implied **against its recorded base**, at 2 dp — so a red line keeps the person's effective markup on the new
+    cost. Totals typed before S128 have no recorded base and are never red until retyped (stated gap).
+  - **B-0 defect 1 fixed:** the Cost Plus proposal now prints a hand-set line's real effective markup (it printed the
+    estimate default), at 2 dp at most (`formatDocumentPercent`: "20%" / "20.50%").
+  - **B-0 defect 2 fixed:** `clone_estimate_line` copies the typed total — **clone and REISSUE** both go through it.
+- **Proofs (ref `276aaed1`, rebuild-test):** unit `s128-manual-total.test.ts` **11/11**; full unit suite **2,464 / 185
+  files**; live `s128-manual-total.live.ts` **3/3** (3 fixture rows read back, not vacuous); e2e
+  `s128-manual-total.spec.ts` **4/4**; `tsc` 0; lint 0; **`next build` exit 0** (read from the log).
+- **Sabotages, each red, each restored by md5:**
+
+  | sabotage | result | restored |
+  | --- | --- | --- |
+  | `clone_estimate_line` ← the captured original | live: **1 failed** (`expected +0 to be 722.98`) | md5 `c63ff7e3…`, 3/3 |
+  | proposal-data's derived-markup branch disabled | live: **1 failed** (`expected 20 to be close to 20.4966…`) | `a1d8cf79…` |
+  | InlineNumber's unchanged-draft no-op removed | e2e: **test 2 failed** ("leaving the cell released the typed total") | `3485553a…` |
+  | the stale (red) marker forced off | e2e: **test 3 failed** (`data-stale` absent) | `f08d4d15…`, 4/4 |
+  | `computeRowPricing` prices from the rounded markup | unit: **2 failed** (723 and 722.96 vs 722.98) | `cb2351e6…`, 11/11 |
+
+- **CI:** run `37169805941` on `276aaed1` (based on `main` `d2c052a0`, the current `main`). Result appended below.
+
+## 1b — E-1: `feature/s128-e1-sub-lines` `17d4740d` — built; e2e waits for rebuild-test
+
+- **ASK-E1 taken as option A (display fix).** `subBidEntries` lists every SUB line of every section, each entry titled by
+  the LINE with its own amount, the section as context ("Section: Rough Phase"). A section holding 2+ sub lines says
+  that bids, requests and the award still cover the whole section and that a winner cannot be picked while it holds more
+  than one sub line — **verified against the live `set_winning_bid` on both databases** (one overload; its body carries
+  "requires 0 or 1").
+- Unit `s128-sub-bid-entries.test.ts` **6/6** on EST-115's shape (**3 SUB lines = 3 entries**, Plumbing $850 present);
+  sabotage (first line per section only, the old `.find`) **4 red**, restored md5 `dd04a65d…`. e2e
+  `s128-sub-bid-lines.spec.ts` counts the cards on the page against the service-role count of SUB lines — runs when
+  rebuild-test is free.
+
+## 1c — G: `feature/s128-g-menu` `1641028f` — built; e2e waits for rebuild-test
+
+- The panel is measured on open and flips UP when its bottom passes the totals bar's top (or the viewport's); it stacks
+  at z 41 over the bar's 40. e2e `s128-more-actions.spec.ts` (1280×720 and 1280×600, scrolled to the page end): the last
+  item's box is inside the viewport and above the bar, `elementFromPoint` at its centre IS the item, and a REAL click
+  opens the confirm. `desktop-confirms` test 6 now clicks for real (its `dispatchEvent` comment quoted as superseded —
+  the "outside-click closer" it blamed does not exist in the code).
+- **Reproduce-first is still owed:** the new spec will be run against `main`'s code (expected red) before the fix is
+  claimed, once rebuild-test is free.
