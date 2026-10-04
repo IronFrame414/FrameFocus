@@ -1,6 +1,7 @@
 import type { ProposalData } from './proposal-data';
 import type { ClientProposalCategory, ClientProposalData } from './client-proposal';
 import { ScopeTextHtml } from './scope-text-html';
+import { formatDocumentPercent } from '@framefocus/shared/utils/estimate-totals';
 import {
   resolveProposalFormat,
   proposalRenderPlan,
@@ -386,7 +387,9 @@ export function ProposalHtml({ data }: { data: ProposalData | ClientProposalData
                         {line.cost != null ? fmtMoney(line.cost) : '—'}
                       </span>
                       <span style={{ width: '4rem', textAlign: 'right' }}>
-                        {line.markupPercent != null ? `${line.markupPercent}%` : '—'}
+                        {line.markupPercent != null
+                          ? formatDocumentPercent(line.markupPercent)
+                          : '—'}
                       </span>
                       <span style={{ width: '6rem', textAlign: 'right' }}>
                         {fmtMoney(line.total)}

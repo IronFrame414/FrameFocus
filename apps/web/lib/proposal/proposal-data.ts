@@ -4,7 +4,9 @@ import {
   roundMoney,
   computeRowCost,
   resolveRowMarkupPercent,
+  derivedRowMarkupPercent,
   type DiscountType,
+  type PricingMode,
   type RowType,
 } from '@framefocus/shared/utils/estimate-totals';
 import { proposalFormatShowsCost } from '@framefocus/shared/utils/proposal-format';
@@ -222,7 +224,7 @@ export async function getProposalData(
       ? await supabase
           .from('estimate_line_rows')
           .select(
-            'line_item_id, row_type, name, total, unit_of_measure, unit_cost, quantity, rate, amount, markup_percent, apply_tax, sort_order'
+            'line_item_id, row_type, name, total, unit_of_measure, unit_cost, quantity, rate, amount, markup_percent, total_override, apply_tax, sort_order'
           )
           .in('line_item_id', lineIds)
           .order('sort_order', { ascending: true })
@@ -239,6 +241,7 @@ export async function getProposalData(
     rate: number | null;
     amount: number | null;
     markup_percent: number | null;
+    total_override: number | null;
     apply_tax: boolean;
     sort_order: number;
   };
@@ -308,10 +311,28 @@ export async function getProposalData(
         let lineMarkup: number | null = null;
         if (showsCost && recs.length > 0) {
           lineCost = roundMoney(rows.reduce((sum, r) => sum + (r.cost ?? 0), 0));
+          // [S128 Part B] A hand-set row's effective markup is the one its typed
+          // total implies (markup_percent is NULL there by the one-override CHECK).
+          // _Superseded: it fell back to the estimate default, so the open-book
+          // column could disagree with the price printed beside it._
           const markups = recs
             .filter((r) => (ROW_TYPES as readonly string[]).includes(r.row_type))
             .map((r) =>
-              resolveRowMarkupPercent(r.row_type as RowType, r.markup_percent, markupDefaults)
+              r.total_override != null
+                ? derivedRowMarkupPercent(
+                    {
+                      row_type: r.row_type as RowType,
+                      rate: r.rate,
+                      quantity: r.quantity,
+                      unit_cost: r.unit_cost,
+                      amount: r.amount,
+                      apply_tax: r.apply_tax,
+                      total_override: r.total_override,
+                    },
+                    estimate.tax_rate,
+                    estimate.pricing_mode as PricingMode
+                  )
+                : resolveRowMarkupPercent(r.row_type as RowType, r.markup_percent, markupDefaults)
             );
           const first = markups[0] ?? null;
           lineMarkup =

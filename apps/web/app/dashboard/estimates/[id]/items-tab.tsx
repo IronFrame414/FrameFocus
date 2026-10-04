@@ -54,8 +54,9 @@ import {
 } from '@/lib/estimate-line-order';
 import {
   backsolveMarkupPercent,
-  computeRowCost,
-  roundMoney,
+  formatDerivedPercent,
+  isManualTotalStale,
+  rowPricingBase,
 } from '@framefocus/shared/utils/estimate-totals';
 import { companyToday } from '@framefocus/shared/utils/dates';
 import { InlineNumber, InlineText } from '../inline-edit';
@@ -503,24 +504,47 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
   // S106 Part B — a row's pricing base (cost + tax), the value applyPricing/back-solve
   // operate on. Same shape computeRowPricing uses, so a total typed here back-solves to
   // exactly the markup the recompute would apply.
+  // [S128] The shared rowPricingBase, so the editor, the red marker and the proposal
+  // read one definition of a row's base.
   function rowBase(row: EstimateLineRow): number {
-    const cost = computeRowCost({
-      row_type: row.row_type as RowType,
-      rate: row.rate,
-      quantity: row.quantity,
-      unit_of_measure: row.unit_of_measure,
-      unit_cost: row.unit_cost,
-      amount: row.amount,
-    });
-    const taxable = row.row_type !== 'labor' && !!row.apply_tax;
-    return cost + (taxable ? roundMoney(cost * ((estimate.tax_rate ?? 0) / 100)) : 0);
+    return rowPricingBase(
+      {
+        row_type: row.row_type as RowType,
+        rate: row.rate,
+        quantity: row.quantity,
+        unit_of_measure: row.unit_of_measure,
+        unit_cost: row.unit_cost,
+        amount: row.amount,
+        apply_tax: row.apply_tax,
+      },
+      estimate.tax_rate
+    );
   }
 
   // The markup shown for a TOTAL-edited row is derived from its pinned total (markup_percent
   // is NULL by the mutual-exclusion CHECK). NULL base → no derivable markup.
+  // [S128 Part B] DISPLAY ONLY, at 2 dp (formatDerivedPercent). Never saved: the typed
+  // total stays authoritative, so $722.98 never becomes 600 × 20.50% = $723.00.
   function derivedMarkup(row: EstimateLineRow): number | null {
     if (row.total_override == null) return null;
     return backsolveMarkupPercent(row.total_override, rowBase(row), mode);
+  }
+
+  // [S128 Part B, Josh] "leave manual total when the cost changes but change the text
+  // to red." The typed total no longer equals cost × markup once the base moves.
+  function manualTotalStale(row: EstimateLineRow): boolean {
+    return isManualTotalStale(row.total_override, row.total_override_basis, rowBase(row));
+  }
+
+  // [S128 Part B] "↺" releases a typed total back to calculated. The markup it
+  // releases to is the one the person's total implied when they typed it (its
+  // recorded base; the current base for a total typed before S128), at 2 dp —
+  // so the title can state the exact result before the click.
+  function releaseMarkup(row: EstimateLineRow): number | null {
+    if (row.total_override == null) return null;
+    const base = row.total_override_basis ?? rowBase(row);
+    const m = backsolveMarkupPercent(row.total_override, Number(base), mode);
+    return m == null ? null : Math.round(m * 100) / 100;
   }
 
   async function addCategory() {
@@ -890,17 +914,24 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
             }
           />
         </td>
-        <td style={{ padding: '0.25rem 0.5rem' }}>{rowPriceCell(row)}</td>
+        <td data-testid="row-price" style={{ padding: '0.25rem 0.5rem' }}>{rowPriceCell(row)}</td>
         <td style={{ padding: '0.25rem 0.5rem' }}>{rowQtyCell(row)}</td>
-        <td style={{ padding: '0.25rem 0.5rem', textAlign: 'right', fontFamily: font.mono }}>
+        <td data-testid="row-markup" style={{ padding: '0.25rem 0.5rem', textAlign: 'right', fontFamily: font.mono }}>
           <InlineNumber
             value={row.total_override != null ? derivedMarkup(row) : row.markup_percent}
             disabled={!canEdit}
             allowNull
             placeholder={`${estimateDefaultMarkup(row.row_type) ?? 0}`}
+            // [S128 Part B] A DERIVED markup (typed-total row) shows and opens at 2 dp;
+            // a typed markup shows as typed. An unchanged draft never saves.
             format={(v) =>
-              v == null ? `(${fmtPercent(estimateDefaultMarkup(row.row_type))})` : fmtPercent(v)
+              row.total_override != null
+                ? formatDerivedPercent(v)
+                : v == null
+                  ? `(${fmtPercent(estimateDefaultMarkup(row.row_type))})`
+                  : fmtPercent(v)
             }
+            draftFormat={row.total_override != null ? (v) => v.toFixed(2) : undefined}
             validate={percentValidator}
             // S106: editing the margin switches the row to margin-mode — clears the pinned
             // total (mutual exclusion) so the two definitions of "edited" never disagree.
@@ -936,18 +967,61 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
           {/* S106 Part B — a row's total is editable: typing one pins it (total_override)
               and back-solves/clears the markup. NO ≥0 validation — a negative is a credit /
               allowance / rebate line. Clearing (blank) reverts to the computed total. */}
-          <InlineNumber
-            value={row.total_override}
-            disabled={!canEdit}
-            allowNull
-            format={() => fmtMoney(row.total)}
-            onSave={(v) =>
-              mutate(
-                () => updateEstimateLineRow(row.id, { total_override: v, markup_percent: null }),
-                true
-              )
+          {/* [S128 Part B] Red = typed by hand and the cost has moved since: the total
+              HOLDS (the typed number always wins) and is marked. Never colour alone —
+              the title says it, and "↺" releases it (the section override's words). */}
+          <span
+            data-testid="row-total"
+            data-stale={manualTotalStale(row) ? 'true' : undefined}
+            title={
+              manualTotalStale(row)
+                ? 'Set by hand — the cost has changed since, so this total is no longer cost × markup'
+                : row.total_override != null
+                  ? 'Set by hand'
+                  : undefined
             }
-          />
+            style={manualTotalStale(row) ? { color: '#dc2626' } : undefined}
+          >
+            <InlineNumber
+              value={row.total_override}
+              disabled={!canEdit}
+              allowNull
+              format={() => fmtMoney(row.total)}
+              onSave={(v) =>
+                mutate(
+                  () =>
+                    updateEstimateLineRow(row.id, {
+                      total_override: v,
+                      markup_percent: null,
+                      // The base this total was typed against — the red marker's reference.
+                      total_override_basis: v == null ? null : rowBase(row),
+                    }),
+                  true
+                )
+              }
+            />
+          </span>
+          {row.total_override != null && canEdit && (
+            <button
+              type="button"
+              aria-label="Revert to the computed total"
+              title={`Set by hand — click to revert to the computed total (cost × ${formatDerivedPercent(releaseMarkup(row))})`}
+              onClick={async () => {
+                const r = await mutate(
+                  () =>
+                    updateEstimateLineRow(row.id, {
+                      total_override: null,
+                      markup_percent: releaseMarkup(row),
+                    }),
+                  true
+                );
+                if (!r.success) setError(r.error || 'Save failed');
+              }}
+              style={{ ...smallButton, marginLeft: '0.25rem', color: '#b45309' }}
+            >
+              ↺
+            </button>
+          )}
         </td>
         <td style={{ padding: '0.25rem 0.5rem' }}>
           {canEdit && (

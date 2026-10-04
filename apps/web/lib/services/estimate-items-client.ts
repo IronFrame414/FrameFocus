@@ -359,6 +359,8 @@ export type CreateLineRowInput = Pick<
   | 'sort_order'
   | 'markup_percent'
   | 'total_override'
+  // [S128 Part B] the base the typed total was set against (display marker only).
+  | 'total_override_basis'
   | 'apply_tax'
   | 'rate'
   | 'quantity'
@@ -493,11 +495,16 @@ export async function updateEstimateLineRow(
 ): Promise<Result> {
   const supabase = createClient();
 
+  // [S128 Part B] A basis only means something beside a typed total: clearing the
+  // total (or switching the row to a markup) clears it, whatever the caller sent.
+  const payload =
+    input.total_override === null ? { ...input, total_override_basis: null } : input;
+
   // BEFORE UPDATE trigger handles updated_by. `total` is recomputed by
   // recalculateEstimateTotals, which the caller invokes after.
   const { data, error } = await supabase
     .from('estimate_line_rows')
-    .update(input)
+    .update(payload)
     .eq('id', id)
     .select('id');
 

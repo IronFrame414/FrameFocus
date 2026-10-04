@@ -69,8 +69,10 @@ export function applyPricing(
 }
 
 // S106 Part B [RULED Josh] — the EXACT inverse of applyPricing. Editing a row's
-// TOTAL back-solves the markup that produces it, so total-editing and margin-editing
-// drive the SAME stored value (markup_percent) and agree by construction. `base` is
+// TOTAL back-solves the markup that produces it. [S128] _Superseded: "so total-editing
+// and margin-editing drive the SAME stored value (markup_percent)"_ — since S106
+// Option B the typed total is stored (total_override) and this result is DISPLAY
+// ONLY: it is never stored and never feeds money (see formatDerivedPercent). `base` is
 // what applyPricing was called with — the row's cost basis PLUS its tax (see
 // rowLineTotal); the caller computes that, this function only inverts the pricing.
 //
@@ -91,6 +93,60 @@ export function backsolveMarkupPercent(
     return (1 - base / total) * 100;
   }
   return (total / base - 1) * 100;
+}
+
+// ── S128 Part B — the manually set total ────────────────────────────────────
+// [Josh, 2026-10-03] "the number manually entered always wins on estimates and
+// change orders." A typed total (total_override) is authoritative; the markup it
+// implies is DERIVED and DISPLAY ONLY, at 2 dp. Nothing below feeds money.
+
+/** The base a row's markup applies to: its cost plus its tax (labor is never
+ *  taxed). The same figure computeRowPricing marks up, so a total back-solved
+ *  against it gives exactly the markup the recompute would apply. */
+export function rowPricingBase(row: RowPricingInput, taxRate: number | null | undefined): number {
+  const cost = computeRowCost(row);
+  const taxable = row.row_type !== 'labor' && !!row.apply_tax;
+  return cost + (taxable ? roundMoney(cost * ((taxRate ?? 0) / 100)) : 0);
+}
+
+/** The markup a hand-set total implies, unrounded. NULL when the row has no
+ *  typed total or the total cannot be expressed as a markup of its base. For
+ *  DISPLAY (formatDerivedPercent) and comparison only — never store it, never
+ *  multiply a cost by it: 600 x 20.50% = 723.00, and the typed figure was 722.98. */
+export function derivedRowMarkupPercent(
+  row: RowPricingInput,
+  taxRate: number | null | undefined,
+  mode: PricingMode
+): number | null {
+  if (row.total_override == null) return null;
+  return backsolveMarkupPercent(row.total_override, rowPricingBase(row, taxRate), mode);
+}
+
+/** A derived percentage as shown: 2 decimal places, always ("20.50%"). */
+export function formatDerivedPercent(value: number | null | undefined): string {
+  if (value == null || !Number.isFinite(value)) return '—';
+  return `${(Math.round(value * 100) / 100).toFixed(2)}%`;
+}
+
+/** A percentage on a client document (the Cost Plus markup column): rounded to
+ *  2 dp, whole numbers bare — a typed 20 prints "20%", a derived 20.4966… prints
+ *  "20.50%", never the raw float. */
+export function formatDocumentPercent(value: number): string {
+  const r = Math.round(value * 100) / 100;
+  return Number.isInteger(r) ? `${r}%` : `${r.toFixed(2)}%`;
+}
+
+/** [Josh] "leave manual total when the cost changes but change the text to red."
+ *  True when a typed total's recorded base (total_override_basis, S128) no longer
+ *  matches the row's current base — the total is no longer cost x markup. A total
+ *  typed before S128 has no recorded basis and is never stale (a stated gap). */
+export function isManualTotalStale(
+  totalOverride: number | null | undefined,
+  basis: number | null | undefined,
+  currentBase: number
+): boolean {
+  if (totalOverride == null || basis == null) return false;
+  return Math.round(Number(basis) * 100) !== Math.round(currentBase * 100);
 }
 
 export function applyDiscount(

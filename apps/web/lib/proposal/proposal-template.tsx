@@ -1,6 +1,7 @@
 import { Document, Image, Page, StyleSheet, Text, View } from '@react-pdf/renderer';
 import type { ProposalData } from './proposal-data';
 import { ScopeTextPdf } from './scope-text-pdf';
+import { formatDocumentPercent } from '@framefocus/shared/utils/estimate-totals';
 import { resolveProposalFormat, proposalRenderPlan } from '@framefocus/shared/utils/proposal-format';
 
 // Spec 2 (4E) — branded React-PDF proposal. Rendered server-side
@@ -419,7 +420,7 @@ export function ProposalDocument({ data }: { data: ProposalData }) {
                           {line.cost != null ? fmtMoney(line.cost) : '—'}
                         </Text>
                         <Text style={{ width: 55, textAlign: 'right' }}>
-                          {line.markupPercent != null ? `${line.markupPercent}%` : '—'}
+                          {line.markupPercent != null ? formatDocumentPercent(line.markupPercent) : '—'}
                         </Text>
                         <Text style={{ width: 80, textAlign: 'right' }}>{fmtMoney(line.total)}</Text>
                       </>
