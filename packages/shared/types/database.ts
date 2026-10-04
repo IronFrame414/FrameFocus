@@ -272,6 +272,7 @@ export type Database = {
           company_id: string
           created_at: string | null
           created_by: string | null
+          description: string | null
           id: string
           labor_unit: string | null
           line_item_id: string
@@ -294,6 +295,7 @@ export type Database = {
           company_id?: string
           created_at?: string | null
           created_by?: string | null
+          description?: string | null
           id?: string
           labor_unit?: string | null
           line_item_id: string
@@ -316,6 +318,7 @@ export type Database = {
           company_id?: string
           created_at?: string | null
           created_by?: string | null
+          description?: string | null
           id?: string
           labor_unit?: string | null
           line_item_id?: string
@@ -3848,6 +3851,7 @@ export type Database = {
           company_id: string
           created_at: string | null
           created_by: string | null
+          description: string | null
           id: string
           labor_unit: string | null
           line_item_id: string
@@ -3874,6 +3878,7 @@ export type Database = {
           company_id?: string
           created_at?: string | null
           created_by?: string | null
+          description?: string | null
           id?: string
           labor_unit?: string | null
           line_item_id: string
@@ -3900,6 +3905,7 @@ export type Database = {
           company_id?: string
           created_at?: string | null
           created_by?: string | null
+          description?: string | null
           id?: string
           labor_unit?: string | null
           line_item_id?: string
